@@ -1,0 +1,17 @@
+pkgbase = fatal-lyrics-git
+	pkgdesc = Synced Spotify lyrics as glitchy Win95 error dialogs (Wayland overlay)
+	pkgver = r2.ffa98cb
+	pkgrel = 1
+	url = https://github.com/FeroxShark/fatal-lyrics
+	arch = any
+	license = MIT
+	makedepends = git
+	depends = quickshell
+	depends = playerctl
+	depends = python
+	provides = fatal-lyrics
+	conflicts = fatal-lyrics
+	source = git+https://github.com/FeroxShark/fatal-lyrics.git
+	sha256sums = SKIP
+
+pkgname = fatal-lyrics-git

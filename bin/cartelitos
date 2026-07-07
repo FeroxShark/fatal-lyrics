@@ -1,13 +1,24 @@
 #!/bin/bash
-# cartelitos — toggle de letras de Spotify como diálogos de Windows
+# fatal-lyrics — letras de Spotify como diálogos de error de Windows.
+# Relocatable: funciona desde el repo clonado o instalado en /usr/share/fatal-lyrics.
+SELF="$(readlink -f "$0")"
+BASE="${CARTELITOS_HOME:-$(dirname "$(dirname "$SELF")")}"
+QML="$BASE/shell/shell.qml"
+DAEMON="$BASE/cartelitos.py"
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/cartelitos/config.toml"
+
 QS_PID=/tmp/cartelitos-qs.pid
 D_PID=/tmp/cartelitos-daemon.pid
 
 running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
 start() {
+    if [ ! -f "$QML" ] || [ ! -f "$DAEMON" ]; then
+        echo "no encuentro los archivos de fatal-lyrics en $BASE" >&2
+        exit 1
+    fi
     if ! running $QS_PID; then
-        qs -c cartelitos >/tmp/cartelitos-qs.log 2>&1 &
+        qs -p "$QML" >/tmp/cartelitos-qs.log 2>&1 &
         echo $! > $QS_PID
     fi
     # esperar a que el overlay levante el socket antes de arrancar el daemon
@@ -17,7 +28,7 @@ start() {
         sleep 0.2
     done
     if ! running $D_PID; then
-        python3 "$HOME/cartelitos/cartelitos.py" >/tmp/cartelitos.log 2>&1 &
+        python3 "$DAEMON" >/tmp/cartelitos.log 2>&1 &
         echo $! > $D_PID
     fi
     echo "cartelitos ON"
@@ -34,7 +45,9 @@ stop() {
 case "${1:-toggle}" in
     on|start)  start ;;
     off|stop)  stop ;;
+    restart)   stop; sleep 0.5; start ;;
     status)    running $D_PID && echo ON || echo OFF ;;
     toggle)    running $D_PID && stop || start ;;
-    *)         echo "uso: cartelitos [on|off|toggle|status]" ;;
+    config)    ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: cartelitos restart" ;;
+    *)         echo "uso: cartelitos [on|off|toggle|restart|status|config]" ;;
 esac

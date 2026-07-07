@@ -1,0 +1,31 @@
+# Maintainer: FeroxShark <feroxshark@gmail.com>
+pkgname=fatal-lyrics-git
+pkgver=r1.0000000
+pkgrel=1
+pkgdesc="Synced Spotify lyrics as glitchy Win95 error dialogs (Wayland overlay)"
+arch=('any')
+url="https://github.com/FeroxShark/fatal-lyrics"
+license=('MIT')
+depends=('quickshell' 'playerctl' 'python')
+makedepends=('git')
+provides=('fatal-lyrics')
+conflicts=('fatal-lyrics')
+source=("git+https://github.com/FeroxShark/fatal-lyrics.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd fatal-lyrics
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+  cd fatal-lyrics
+  install -d "$pkgdir/usr/share/fatal-lyrics/shell"
+  install -Dm644 shell/shell.qml "$pkgdir/usr/share/fatal-lyrics/shell/shell.qml"
+  install -Dm755 cartelitos.py "$pkgdir/usr/share/fatal-lyrics/cartelitos.py"
+  install -Dm755 bin/cartelitos "$pkgdir/usr/share/fatal-lyrics/bin/cartelitos"
+  install -d "$pkgdir/usr/bin"
+  ln -s /usr/share/fatal-lyrics/bin/cartelitos "$pkgdir/usr/bin/cartelitos"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

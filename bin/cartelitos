@@ -51,5 +51,6 @@ case "${1:-toggle}" in
     status)    running $D_PID && echo ON || echo OFF ;;
     toggle)    running $D_PID && stop || start ;;
     config)    ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: cartelitos restart" ;;
-    *)         echo "uso: cartelitos [on|off|toggle|restart|status|config]" ;;
+    setup)     python3 "$DAEMON" --setup ;;
+    *)         echo "uso: cartelitos [on|off|toggle|restart|status|config|setup]" ;;
 esac

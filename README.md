@@ -11,9 +11,11 @@ que van apareciendo en tu escritorio. Inspirado en el video de
   (tearing real) y mueren con un colapso estilo CRT.
 - Al cambiar de canción aparece una **funda de vinilo**: caja cuadrada con la
   portada del álbum y borde estilo Windows clásico. Sale grande en el centro y
-  a los segundos se estaciona chiquita en una esquina (configurable), con una
-  **barra de progreso Win95** que avanza con la canción. Click = esconderla
-  hasta el próximo tema.
+  a los segundos se estaciona chiquita en una esquina (configurable, o siempre
+  centrada), con una **barra de progreso Win95** que avanza con la canción.
+  Se puede arrastrar a donde quieras; click seco = esconderla hasta el próximo tema.
+- **Multi-monitor**: `screen = "all"` (o una lista) muestra los carteles en
+  varias pantallas a la vez, cada monitor con sus propias posiciones random.
 - Los carteles muertos dejan una **sombra quemada** (burn-in CRT) que se
   desvanece en un par de segundos.
 - Íconos de Windows random: error, advertencia, pregunta, info.
@@ -55,17 +57,20 @@ cartelitos            # toggle on/off
 cartelitos on|off     # explícito
 cartelitos restart    # reiniciar (aplica cambios de config)
 cartelitos status     # ON / OFF
+cartelitos setup      # menú interactivo de configuración (recomendado)
 cartelitos config     # abre la config en $EDITOR
 ```
 
 ## Configuración
 
 La primera vez se crea `~/.config/cartelitos/config.toml` con defaults.
-Editala (`cartelitos config`) y aplicá con `cartelitos restart`.
+Lo más fácil es `cartelitos setup` (menú interactivo que detecta tus monitores
+y reinicia solo). También podés editarla a mano (`cartelitos config`) y aplicar
+con `cartelitos restart`.
 
 | Sección    | Opción               | Qué hace                                                       | Default     |
 |------------|----------------------|----------------------------------------------------------------|-------------|
-| `display`  | `screen`             | Monitor: `"auto"` (primero) o nombre exacto (`hyprctl monitors`) | `"auto"`   |
+| `display`  | `screen`             | `"auto"` (primero), `"all"` (todos), nombre (`"DP-1"`) o lista (`["DP-1", "DP-2"]`) | `"auto"`   |
 | `display`  | `max_dialogs`        | Máximo de carteles vivos a la vez                              | `12`        |
 | `display`  | `scale`              | Tamaño base de todos los carteles                              | `1.0`       |
 | `display`  | `current_scale`      | Factor extra del cartel de la línea actual                     | `1.3`       |
@@ -77,7 +82,7 @@ Editala (`cartelitos config`) y aplicá con `cartelitos restart`.
 | `effects`  | `max_lifetime`       | Vida máxima por cartel en segundos (`0` = sin límite)          | `60`        |
 | `effects`  | `burn_in`            | Los carteles muertos dejan una sombra quemada que se desvanece | `true`      |
 | `behavior` | `now_playing`        | Funda de vinilo con la portada al cambiar de canción           | `true`      |
-| `behavior` | `np_corner`          | Esquina donde se estaciona: `top-left`/`top-right`/`bottom-left`/`bottom-right` | `"top-right"` |
+| `behavior` | `np_corner`          | Dónde se estaciona: `top-left`/`top-right`/`bottom-left`/`bottom-right`/`center` | `"top-right"` |
 | `behavior` | `np_margin`          | Píxeles libres contra los bordes (por si hay una barra/panel)  | `14`        |
 | `behavior` | `troll_no`           | El botón `No` duplica el cartel                                | `true`      |
 | `behavior` | `click_through`      | Los carteles no capturan el mouse                              | `false`     |

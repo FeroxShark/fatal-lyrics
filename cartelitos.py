@@ -29,7 +29,7 @@ DEFAULT_CONFIG = """\
 # Aplicar cambios con: cartelitos restart
 
 [display]
-screen = "auto"        # "auto" (primer monitor) o nombre exacto ("DP-1", hyprctl monitors)
+screen = "auto"        # "auto" (primer monitor) | "all" (todas) | "DP-1" | ["DP-1", "DP-2"]
 max_dialogs = 12       # máximo de carteles vivos a la vez
 scale = 1.0            # tamaño base de todos los carteles
 current_scale = 1.3    # factor extra del cartel de la línea actual
@@ -46,7 +46,7 @@ burn_in = true         # los carteles muertos dejan una sombra quemada que se de
 
 [behavior]
 now_playing = true     # funda de vinilo con la portada al cambiar de canción
-np_corner = "top-right"  # esquina donde se estaciona la funda: top-left | top-right | bottom-left | bottom-right
+np_corner = "top-right"  # dónde se estaciona la funda: top-left | top-right | bottom-left | bottom-right | center
 np_margin = 14         # píxeles libres contra los bordes (por si hay una barra/panel)
 troll_no = true        # el botón "No" duplica el cartel; false = solo cierra
 click_through = false  # true = los carteles no capturan el mouse (clicks pasan de largo)
@@ -246,6 +246,177 @@ def clear():
     send({"cmd": "clear"})
 
 
+# --------------------------------------------------------------- setup TUI
+
+def _toml_val(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        return f'"{v}"'
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_val(x) for x in v) + "]"
+    return str(v)
+
+
+def _save_config(changes):
+    """Pisa claves puntuales del TOML preservando comentarios y el resto.
+    changes: {clave: (sección, valor)} — las claves son únicas en el archivo."""
+    with open(CONFIG_PATH) as f:
+        lines = f.read().split("\n")
+    section = None
+    pending = dict(changes)
+    key_re = re.compile(r"^(\s*)([a-z_]+)(\s*=\s*)([^#]*?)(\s*#.*)?$")
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s.startswith("[") and s.endswith("]"):
+            section = s[1:-1]
+            continue
+        m = key_re.match(line)
+        if m and m.group(2) in pending and pending[m.group(2)][0] == section:
+            _, val = pending.pop(m.group(2))
+            lines[i] = f"{m.group(1)}{m.group(2)}{m.group(3)}{_toml_val(val)}{m.group(5) or ''}"
+    for key, (sec, val) in pending.items():
+        # clave que no estaba: al final de su sección (o en una nueva)
+        starts = [i for i, l in enumerate(lines) if l.strip() == f"[{sec}]"]
+        if starts:
+            end = next((j for j in range(starts[0] + 1, len(lines))
+                        if lines[j].strip().startswith("[")), len(lines))
+            while end > starts[0] + 1 and not lines[end - 1].strip():
+                end -= 1
+            lines.insert(end, f"{key} = {_toml_val(val)}")
+        else:
+            lines += [f"[{sec}]", f"{key} = {_toml_val(val)}", ""]
+    with open(CONFIG_PATH, "w") as f:
+        f.write("\n".join(lines))
+
+
+def _monitors():
+    """Monitores conectados vía hyprctl; lista vacía si no es Hyprland."""
+    try:
+        out = subprocess.run(["hyprctl", "monitors", "-j"],
+                             capture_output=True, text=True, timeout=3)
+        if out.returncode == 0:
+            mons = []
+            for m in json.loads(out.stdout):
+                shape = "vertical" if m.get("transform", 0) % 2 else "horizontal"
+                mons.append((m["name"], f"{m['width']}x{m['height']} {shape}"))
+            return mons
+    except Exception:
+        pass
+    return []
+
+
+def _pick(title, options, current):
+    """Menú numerado; enter = dejar el valor actual. options: [(etiqueta, valor)]."""
+    print(f"\n{title}   (ahora: {current})")
+    for i, (label, _) in enumerate(options, 1):
+        print(f"  {i}) {label}")
+    while True:
+        raw = input("> ").strip()
+        if not raw:
+            return None
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            return options[int(raw) - 1][1]
+        print("  número de la lista, o enter para dejarlo")
+
+
+def _ask_num(title, current, lo, hi):
+    print(f"\n{title}   (ahora: {current}, enter = dejar)")
+    while True:
+        raw = input("> ").strip().replace(",", ".")
+        if not raw:
+            return None
+        try:
+            v = float(raw)
+            if lo <= v <= hi:
+                return v
+        except ValueError:
+            pass
+        print(f"  número entre {lo} y {hi}")
+
+
+def setup():
+    """Asistente interactivo: pregunta lo importante y escribe el TOML."""
+    cfg = load_config()
+    d, e, b = cfg["display"], cfg["effects"], cfg["behavior"]
+    ch = {}
+    print("fatal-lyrics — setup. Enter en cualquier pregunta = dejar como está.")
+
+    mons = _monitors()
+    opts = [("auto (primer monitor)", "auto"), ("todas las pantallas", "all")]
+    opts += [(f"solo {n}  ({info})", n) for n, info in mons]
+    if len(mons) > 1:
+        opts.append(("varias (elegir cuáles)", "__multi__"))
+    v = _pick("¿En qué pantalla(s) aparecen los carteles?", opts, d["screen"])
+    if v == "__multi__":
+        for i, (n, info) in enumerate(mons, 1):
+            print(f"  {i}) {n}  ({info})")
+        raw = input("números separados por coma (ej: 1,3) > ").strip()
+        picked = [mons[int(t) - 1][0] for t in (t.strip() for t in raw.split(","))
+                  if t.isdigit() and 1 <= int(t) <= len(mons)]
+        if picked:
+            ch["screen"] = ("display", picked)
+    elif v is not None and v != d["screen"]:
+        ch["screen"] = ("display", v)
+
+    v = _pick("Funda de vinilo (portada al cambiar de tema)",
+              [("sí", True), ("no", False)], b["now_playing"])
+    if v is not None and v != b["now_playing"]:
+        ch["now_playing"] = ("behavior", v)
+    if ch.get("now_playing", (None, b["now_playing"]))[1]:
+        v = _pick("¿Dónde se estaciona la funda?", [
+            ("arriba a la izquierda", "top-left"),
+            ("arriba a la derecha", "top-right"),
+            ("abajo a la izquierda", "bottom-left"),
+            ("abajo a la derecha", "bottom-right"),
+            ("siempre centrada (se achica en el lugar)", "center"),
+        ], b["np_corner"])
+        if v is not None and v != b["np_corner"]:
+            ch["np_corner"] = ("behavior", v)
+
+    v = _pick("Nivel de glitch", [
+        ("off (carteles sanos)", "off"), ("soft", "soft"),
+        ("normal", "normal"), ("aggressive (GPU muriéndose)", "aggressive"),
+    ], e["glitch"])
+    if v is not None and v != e["glitch"]:
+        ch["glitch"] = ("effects", v)
+
+    v = _pick("Zona donde aparecen", [
+        ("toda la pantalla", "full"), ("arriba", "top"), ("abajo", "bottom"),
+        ("izquierda", "left"), ("derecha", "right"),
+        ("bordes (no tapa el centro)", "edges"),
+    ], d["spawn_area"])
+    if v is not None and v != d["spawn_area"]:
+        ch["spawn_area"] = ("display", v)
+
+    v = _ask_num("Escala de los carteles", d["scale"], 0.5, 3.0)
+    if v is not None and v != d["scale"]:
+        ch["scale"] = ("display", v)
+
+    for key, sec, label, cur in [
+        ("tearing", "effects", "Ventana partida en carteles viejos", e["tearing"]),
+        ("burn_in", "effects", "Sombra quemada al morir (burn-in)", e["burn_in"]),
+        ("troll_no", "behavior", 'Botón "No" duplica el cartel', b["troll_no"]),
+        ("click_through", "behavior", "Carteles fantasma (los clicks pasan de largo)", b["click_through"]),
+    ]:
+        v = _pick(label, [("sí", True), ("no", False)], cur)
+        if v is not None and v != cur:
+            ch[key] = (sec, v)
+
+    if not ch:
+        print("\nSin cambios.")
+        return
+    _save_config(ch)
+    print(f"\nGuardado en {CONFIG_PATH}:")
+    for key, (sec, val) in ch.items():
+        print(f"  {sec}.{key} = {_toml_val(val)}")
+    raw = input("¿Reiniciar cartelitos para aplicar? [S/n] > ").strip().lower()
+    if raw in ("", "s", "si", "sí", "y", "yes"):
+        launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "cartelitos")
+        cmd = [launcher] if os.path.exists(launcher) else ["cartelitos"]
+        subprocess.run(cmd + ["restart"])
+
+
 def current_line_index(lyrics, pos):
     idx = -1
     for i, (ts, _) in enumerate(lyrics):
@@ -351,6 +522,12 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--setup" in sys.argv[1:]:
+        try:
+            setup()
+        except (KeyboardInterrupt, EOFError):
+            print("\nlisto, me voy")
+        sys.exit(0)
     try:
         main()
     except KeyboardInterrupt:

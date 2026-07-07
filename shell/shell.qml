@@ -803,6 +803,10 @@ ShellRoot {
         readonly property real bigW: Math.round(300 * root.cfgScale * root.cfgCurrentScale)
         readonly property real smallW: Math.round(170 * root.cfgScale)
 
+        // un solo parámetro anima posición y tamaño juntos → trayectoria recta
+        property real dockT: docked ? 1 : 0
+        Behavior on dockT { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+
         function present() {
             docked = false;
             dockTimer.restart();
@@ -820,19 +824,22 @@ ShellRoot {
             readonly property int pad: Math.round(8 * f)
             readonly property int barH: Math.round(16 * f)
 
-            width: npWin.docked ? npWin.smallW : npWin.bigW
-            height: width + Math.round(4 * f) + barH + pad
-            x: npWin.docked
-               ? (root.npCorner.indexOf("left") >= 0 ? root.npMargin : npWin.width - width - root.npMargin)
-               : (npWin.width - width) / 2
-            y: npWin.docked
-               ? (root.npCorner.indexOf("top") === 0 ? root.npMargin : npWin.height - height - root.npMargin)
-               : (npWin.height - height) / 2
-            color: "#c0c0c0"
+            // extremos del recorrido calculados con el tamaño de cada punta;
+            // x/y/width interpolan con el mismo t → va directo, sin curva
+            function hFor(w) {
+                const g = w / 300;
+                return w + Math.round(4 * g) + Math.round(16 * g) + Math.round(8 * g);
+            }
+            readonly property real cx0: (npWin.width - npWin.bigW) / 2
+            readonly property real cy0: (npWin.height - hFor(npWin.bigW)) / 2
+            readonly property real cx1: root.npCorner.indexOf("left") >= 0 ? root.npMargin : npWin.width - npWin.smallW - root.npMargin
+            readonly property real cy1: root.npCorner.indexOf("top") === 0 ? root.npMargin : npWin.height - hFor(npWin.smallW) - root.npMargin
 
-            Behavior on x { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
-            Behavior on y { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
-            Behavior on width { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+            width: npWin.bigW + (npWin.smallW - npWin.bigW) * npWin.dockT
+            height: width + Math.round(4 * f) + barH + pad
+            x: cx0 + (cx1 - cx0) * npWin.dockT
+            y: cy0 + (cy1 - cy0) * npWin.dockT
+            color: "#c0c0c0"
 
             // bevel exterior clásico
             Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 2; color: "#ffffff" }

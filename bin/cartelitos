@@ -1,0 +1,40 @@
+#!/bin/bash
+# cartelitos — toggle de letras de Spotify como diálogos de Windows
+QS_PID=/tmp/cartelitos-qs.pid
+D_PID=/tmp/cartelitos-daemon.pid
+
+running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+
+start() {
+    if ! running $QS_PID; then
+        qs -c cartelitos >/tmp/cartelitos-qs.log 2>&1 &
+        echo $! > $QS_PID
+    fi
+    # esperar a que el overlay levante el socket antes de arrancar el daemon
+    SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos.sock"
+    for _ in $(seq 1 25); do
+        [ -S "$SOCK" ] && break
+        sleep 0.2
+    done
+    if ! running $D_PID; then
+        python3 "$HOME/cartelitos/cartelitos.py" >/tmp/cartelitos.log 2>&1 &
+        echo $! > $D_PID
+    fi
+    echo "cartelitos ON"
+}
+
+stop() {
+    for f in $D_PID $QS_PID; do
+        running "$f" && kill "$(cat "$f")" 2>/dev/null
+        rm -f "$f"
+    done
+    echo "cartelitos OFF"
+}
+
+case "${1:-toggle}" in
+    on|start)  start ;;
+    off|stop)  stop ;;
+    status)    running $D_PID && echo ON || echo OFF ;;
+    toggle)    running $D_PID && stop || start ;;
+    *)         echo "uso: cartelitos [on|off|toggle|status]" ;;
+esac

@@ -26,6 +26,16 @@ ShellRoot {
     property int maxLifetime: 60
     property bool clickThrough: false
     property bool trollNo: true
+    property bool burnIn: true
+    property string npCorner: "top-right"
+    property int npMargin: 14
+
+    // estado del Now Playing (ventana propia, no es un diálogo)
+    property bool npShown: false
+    property string npTitle: ""
+    property string npInfo: ""
+    property string npArt: ""
+    property real npProgress: 0
 
     // multiplicadores según nivel de glitch
     readonly property real gProb: glitchLevel === "off" ? 0 : glitchLevel === "soft" ? 0.5 : glitchLevel === "aggressive" ? 1.6 : 1
@@ -89,16 +99,21 @@ ShellRoot {
     }
 
     function show(text, title, icon) {
-        pushDialog({ kind: "lyric", text: text, title: title || "Spotify", icon: icon || randomIcon(), art: "" }, true);
+        pushDialog({ text: text, title: title || "Spotify", icon: icon || randomIcon() }, true);
     }
 
     function nowPlaying(title, artist, album, art) {
-        pushDialog({ kind: "np", text: artist + (album ? " — " + album : ""), title: title || "Now Playing", icon: "info", art: art || "" }, true);
+        npTitle = title || "Now Playing";
+        npInfo = artist + (album ? " — " + album : "");
+        npArt = art || "";
+        npProgress = 0;
+        npShown = true;
+        npWin.present();
     }
 
     // botón "No" (si troll_no): duplica el cartel, el original queda
     function duplicate(d) {
-        pushDialog({ kind: d.kind, text: d.text, title: d.title, icon: d.icon, art: d.art }, false);
+        pushDialog({ text: d.text, title: d.title, icon: d.icon }, false);
     }
 
     function dismiss(serial) {
@@ -119,6 +134,9 @@ ShellRoot {
         maxLifetime = ev.max_lifetime ?? maxLifetime;
         clickThrough = ev.click_through ?? clickThrough;
         trollNo = ev.troll_no ?? trollNo;
+        burnIn = ev.burn_in ?? burnIn;
+        npCorner = ev.np_corner ?? npCorner;
+        npMargin = ev.np_margin ?? npMargin;
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear
@@ -134,9 +152,12 @@ ShellRoot {
                             root.show(ev.text, ev.title, ev.icon);
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
-                        else if (ev.cmd === "clear")
+                        else if (ev.cmd === "pos")
+                            root.npProgress = ev.l > 0 ? Math.min(ev.p / ev.l, 1) : 0;
+                        else if (ev.cmd === "clear") {
                             root.dialogList = [];
-                        else if (ev.cmd === "config")
+                            root.npShown = false;
+                        } else if (ev.cmd === "config")
                             root.applyConfig(ev);
                     } catch (e) {
                         console.log("cartelitos: evento inválido:", message);
@@ -157,8 +178,8 @@ ShellRoot {
             readonly property int age: root.serial - modelData.serial - 1
             readonly property bool current: modelData.serial === root.currentLyricSerial
             readonly property real glitchiness: Math.min(age / 5, 1)
-            readonly property bool isNp: modelData.kind === "np"
             property bool dying: false
+            property bool ghosting: false
 
             // factor de tamaño: config global + extra del cartel actual
             readonly property real k: root.cfgScale * (current ? root.cfgCurrentScale : 1.0)
@@ -199,15 +220,13 @@ ShellRoot {
                 font.pixelSize: Math.round(13 * win.k)
             }
 
-            // Now Playing = caja cuadrada tipo funda de vinilo; el resto, diálogo normal
-            readonly property int dlgW: isNp ? Math.round(300 * k) : Math.max(300 * k, Math.min(tm.width, 360 * k) + (iconW + 78) * k)
+            readonly property int dlgW: Math.max(300 * k, Math.min(tm.width, 360 * k) + (iconW + 78) * k)
 
             implicitWidth: dlgW + tearPad * 2
             implicitHeight: content.height
 
-            // posición base: Now Playing siempre centrado, el resto random
-            readonly property real baseX: isNp ? (screen.width - implicitWidth) / 2 : modelData.rx * (screen.width - implicitWidth)
-            readonly property real baseY: isNp ? (screen.height - implicitHeight) / 2 : modelData.ry * (screen.height - 200)
+            readonly property real baseX: modelData.rx * (screen.width - implicitWidth)
+            readonly property real baseY: modelData.ry * (screen.height - 200)
 
             // arrastre: delta clampeado contra la base (si no, en los bordes el acumulado
             // se dispara) y jitter fuera de los márgenes mientras se arrastra — el jitter
@@ -362,13 +381,26 @@ ShellRoot {
             Timer {
                 interval: 45
                 repeat: true
-                running: win.dying
+                running: win.dying && !win.ghosting
                 onTriggered: win.scramble(1.6)
             }
             Timer {
                 id: deathEnd
-                interval: 380
+                interval: root.burnIn ? 2900 : 380
                 onTriggered: root.dismiss(win.modelData.serial)
+            }
+
+            // burn-in: tras el colapso queda una sombra quemada estática que se apaga
+            Timer {
+                interval: 370
+                running: win.dying && root.burnIn
+                onTriggered: {
+                    win.ghosting = true;
+                    win.burst = false;
+                    win.jx = 0;
+                    win.jy = 0;
+                    ghostFade.start();
+                }
             }
 
             property real deathScale: 1
@@ -390,12 +422,13 @@ ShellRoot {
                 y: 0
                 width: win.dlgW
                 height: frame.implicitHeight
+                visible: !win.ghosting
 
                 // marco con bevel clásico
                 Rectangle {
                     id: frame
                     anchors.fill: parent
-                    implicitHeight: win.isNp ? win.dlgW : column.implicitHeight + 4
+                    implicitHeight: column.implicitHeight + 4
                     color: "#c0c0c0"
                     clip: true
                     opacity: win.burstOpacity * win.deathOpacity * win.holoOpacity
@@ -411,7 +444,6 @@ ShellRoot {
 
                     Column {
                         id: column
-                        visible: !win.isNp
                         anchors { fill: parent; margins: 2 }
 
                         // barra de título (arrastrable)
@@ -615,98 +647,6 @@ ShellRoot {
                         }
                     }
 
-                    // Now Playing: funda de vinilo cuadrada — portada a full con bevel hundido
-                    Item {
-                        visible: win.isNp
-                        anchors { fill: parent; margins: Math.round(8 * win.k) }
-
-                        Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 2; color: "#404040" }
-                        Rectangle { anchors { top: parent.top; left: parent.left; bottom: parent.bottom } width: 2; color: "#404040" }
-                        Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right } height: 2; color: "#ffffff" }
-                        Rectangle { anchors { top: parent.top; right: parent.right; bottom: parent.bottom } width: 2; color: "#ffffff" }
-
-                        Rectangle {
-                            anchors { fill: parent; margins: 2 }
-                            color: "#3a3a3a"
-                            clip: true
-
-                            Image {
-                                anchors.fill: parent
-                                visible: win.modelData.art !== ""
-                                source: win.modelData.art
-                                fillMode: Image.PreserveAspectCrop
-                            }
-
-                            // sin portada: nota sobre gris oscuro
-                            Text {
-                                visible: win.modelData.art === ""
-                                anchors.centerIn: parent
-                                text: "♪"
-                                color: "#c0c0c0"
-                                font.pixelSize: Math.round(96 * win.k)
-                            }
-
-                            // banda inferior: tema — artista
-                            Rectangle {
-                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                                height: npText.implicitHeight + Math.round(14 * win.k)
-                                color: "#000000"
-                                opacity: 0.62
-                            }
-                            Column {
-                                id: npText
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    bottom: parent.bottom
-                                    leftMargin: Math.round(10 * win.k)
-                                    rightMargin: Math.round(10 * win.k)
-                                    bottomMargin: Math.round(8 * win.k)
-                                }
-                                spacing: Math.round(2 * win.k)
-
-                                Text {
-                                    width: parent.width
-                                    text: win.modelData.title
-                                    color: "#ffffff"
-                                    font.pixelSize: Math.round(15 * win.k)
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    width: parent.width
-                                    text: win.modelData.text
-                                    color: "#d8d8d8"
-                                    font.pixelSize: Math.round(12 * win.k)
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
-                    }
-
-                    // Now Playing: arrastrable desde cualquier lado, click = cerrar
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: win.isNp && !win.torn
-                        property real px: 0
-                        property real py: 0
-                        property bool moved: false
-                        onPressed: m => { px = m.x; py = m.y; moved = false; win.dragHeld = true; }
-                        onReleased: win.dragHeld = false
-                        onCanceled: win.dragHeld = false
-                        onPositionChanged: m => {
-                            if (!pressed)
-                                return;
-                            if (Math.abs(m.x - px) + Math.abs(m.y - py) > 3)
-                                moved = true;
-                            win.dragBy(m.x - px, m.y - py);
-                        }
-                        onClicked: {
-                            if (!moved)
-                                root.dismiss(win.modelData.serial);
-                        }
-                    }
-
                     // fringe cromático (aberración RGB de holograma), solo viejos
                     Rectangle {
                         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
@@ -777,10 +717,47 @@ ShellRoot {
                 }
             }
 
+            // burn-in: silueta quemada del cartel, estática, que se desvanece
+            Item {
+                id: ghost
+                x: win.tearPad
+                width: win.dlgW
+                height: content.height
+                visible: win.ghosting
+                opacity: 0
+
+                Rectangle { anchors.fill: parent; color: "#e8d5ff"; opacity: 0.10 }
+                Rectangle { width: parent.width; height: Math.round(26 * win.k) + 2; color: "#b9a4ff"; opacity: 0.16 }
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    border.width: 1
+                    border.color: "#d9c9ff"
+                    opacity: 0.35
+                }
+                // resto de la línea del colapso CRT
+                Rectangle {
+                    y: parent.height / 2 - 1
+                    width: parent.width
+                    height: 2
+                    color: "#ffffff"
+                    opacity: 0.5
+                }
+            }
+            NumberAnimation {
+                id: ghostFade
+                target: ghost
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: 2400
+                easing.type: Easing.OutQuad
+            }
+
             // input de carteles viejos (torn): click = cerrar, título = arrastrar
             MouseArea {
                 anchors.fill: parent
-                enabled: win.torn
+                enabled: win.torn && !win.ghosting
                 property real px: 0
                 property real py: 0
                 property bool dragging: false
@@ -801,6 +778,177 @@ ShellRoot {
                     if (!dragging)
                         root.dismiss(win.modelData.serial);
                 }
+            }
+        }
+    }
+
+    // Now Playing: funda de vinilo — aparece grande en el centro al cambiar de
+    // canción y a los segundos se estaciona chiquita en una esquina, con barra
+    // de progreso Win95. Ventana propia full-screen con máscara solo en la funda.
+    PanelWindow {
+        id: npWin
+        visible: root.npShown
+        screen: root.screenByName(root.targetScreen)
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "cartelitos-np"
+        exclusionMode: ExclusionMode.Ignore
+        color: "transparent"
+        anchors { left: true; right: true; top: true; bottom: true }
+
+        Region { id: npCardMask; item: npCard }
+        Region { id: npEmptyMask }
+        mask: root.clickThrough ? npEmptyMask : npCardMask
+
+        property bool docked: false
+        readonly property real bigW: Math.round(300 * root.cfgScale * root.cfgCurrentScale)
+        readonly property real smallW: Math.round(170 * root.cfgScale)
+
+        function present() {
+            docked = false;
+            dockTimer.restart();
+        }
+
+        Timer {
+            id: dockTimer
+            interval: 4000
+            onTriggered: npWin.docked = true
+        }
+
+        Rectangle {
+            id: npCard
+            readonly property real f: width / 300
+            readonly property int pad: Math.round(8 * f)
+            readonly property int barH: Math.round(16 * f)
+
+            width: npWin.docked ? npWin.smallW : npWin.bigW
+            height: width + Math.round(4 * f) + barH + pad
+            x: npWin.docked
+               ? (root.npCorner.indexOf("left") >= 0 ? root.npMargin : npWin.width - width - root.npMargin)
+               : (npWin.width - width) / 2
+            y: npWin.docked
+               ? (root.npCorner.indexOf("top") === 0 ? root.npMargin : npWin.height - height - root.npMargin)
+               : (npWin.height - height) / 2
+            color: "#c0c0c0"
+
+            Behavior on x { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+            Behavior on y { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+            Behavior on width { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+
+            // bevel exterior clásico
+            Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 2; color: "#ffffff" }
+            Rectangle { anchors { top: parent.top; left: parent.left; bottom: parent.bottom } width: 2; color: "#ffffff" }
+            Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right } height: 2; color: "#404040" }
+            Rectangle { anchors { top: parent.top; right: parent.right; bottom: parent.bottom } width: 2; color: "#404040" }
+
+            // portada con bevel hundido
+            Item {
+                id: npArtBox
+                x: npCard.pad
+                y: npCard.pad
+                width: npCard.width - npCard.pad * 2
+                height: width
+
+                Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 2; color: "#404040" }
+                Rectangle { anchors { top: parent.top; left: parent.left; bottom: parent.bottom } width: 2; color: "#404040" }
+                Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right } height: 2; color: "#ffffff" }
+                Rectangle { anchors { top: parent.top; right: parent.right; bottom: parent.bottom } width: 2; color: "#ffffff" }
+
+                Rectangle {
+                    anchors { fill: parent; margins: 2 }
+                    color: "#3a3a3a"
+                    clip: true
+
+                    Image {
+                        anchors.fill: parent
+                        visible: root.npArt !== ""
+                        source: root.npArt
+                        fillMode: Image.PreserveAspectCrop
+                    }
+
+                    // sin portada: nota sobre gris oscuro
+                    Text {
+                        visible: root.npArt === ""
+                        anchors.centerIn: parent
+                        text: "♪"
+                        color: "#c0c0c0"
+                        font.pixelSize: Math.round(96 * npCard.f)
+                    }
+
+                    // banda inferior: tema — artista
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                        height: npText.implicitHeight + Math.round(14 * npCard.f)
+                        color: "#000000"
+                        opacity: 0.62
+                    }
+                    Column {
+                        id: npText
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            bottom: parent.bottom
+                            leftMargin: Math.round(10 * npCard.f)
+                            rightMargin: Math.round(10 * npCard.f)
+                            bottomMargin: Math.round(8 * npCard.f)
+                        }
+                        spacing: Math.round(2 * npCard.f)
+
+                        Text {
+                            width: parent.width
+                            text: root.npTitle
+                            color: "#ffffff"
+                            font.pixelSize: Math.max(9, Math.round(15 * npCard.f))
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            width: parent.width
+                            text: root.npInfo
+                            color: "#d8d8d8"
+                            font.pixelSize: Math.max(8, Math.round(12 * npCard.f))
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+
+            // barra de progreso Win95: bloques azules en canaleta hundida
+            Rectangle {
+                id: npBar
+                x: npCard.pad
+                y: npArtBox.y + npArtBox.height + Math.round(4 * npCard.f)
+                width: npArtBox.width
+                height: npCard.barH
+                color: "#c0c0c0"
+
+                Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 1; color: "#404040" }
+                Rectangle { anchors { top: parent.top; left: parent.left; bottom: parent.bottom } width: 1; color: "#404040" }
+                Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right } height: 1; color: "#ffffff" }
+                Rectangle { anchors { top: parent.top; right: parent.right; bottom: parent.bottom } width: 1; color: "#ffffff" }
+
+                Row {
+                    id: npBlocks
+                    x: 3
+                    y: 3
+                    spacing: 2
+                    readonly property int blockW: Math.max(4, Math.round(9 * npCard.f))
+                    readonly property int total: Math.max(1, Math.floor((npBar.width - 4) / (blockW + 2)))
+
+                    Repeater {
+                        model: Math.round(root.npProgress * npBlocks.total)
+                        Rectangle {
+                            width: npBlocks.blockW
+                            height: npBar.height - 6
+                            color: "#000080"
+                        }
+                    }
+                }
+            }
+
+            // click = esconder hasta la próxima canción
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.npShown = false
             }
         }
     }

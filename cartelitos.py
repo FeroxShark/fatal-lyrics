@@ -42,9 +42,12 @@ tearing = true         # los carteles viejos quedan con la ventana partida
 death_age_min = 3      # un cartel muere entre N…
 death_age_max = 7      # …y M carteles después de aparecer
 max_lifetime = 60      # vida máxima en segundos por cartel; 0 = sin límite
+burn_in = true         # los carteles muertos dejan una sombra quemada que se desvanece
 
 [behavior]
-now_playing = true     # cartel con la portada al cambiar de canción
+now_playing = true     # funda de vinilo con la portada al cambiar de canción
+np_corner = "top-right"  # esquina donde se estaciona la funda: top-left | top-right | bottom-left | bottom-right
+np_margin = 14         # píxeles libres contra los bordes (por si hay una barra/panel)
 troll_no = true        # el botón "No" duplica el cartel; false = solo cierra
 click_through = false  # true = los carteles no capturan el mouse (clicks pasan de largo)
 pause_clear = 15       # segundos en pausa antes de limpiar todo; 0 = nunca
@@ -61,9 +64,11 @@ DEFAULTS = {
     "effects": {
         "glitch": "normal", "effects_on_current": False, "tearing": True,
         "death_age_min": 3, "death_age_max": 7, "max_lifetime": 60,
+        "burn_in": True,
     },
     "behavior": {
-        "now_playing": True, "troll_no": True, "click_through": False,
+        "now_playing": True, "np_corner": "top-right", "np_margin": 14,
+        "troll_no": True, "click_through": False,
         "pause_clear": 15, "player": "spotify", "offset": 0.15,
         "game_procs": ["cs2"],
     },
@@ -186,6 +191,7 @@ def fetch_lyrics(track):
 
 
 _sock = None
+_last_np = None
 
 
 def _config_event():
@@ -198,13 +204,18 @@ def _config_event():
         "glitch": e["glitch"], "effects_on_current": e["effects_on_current"],
         "tearing": e["tearing"], "death_age_min": e["death_age_min"],
         "death_age_max": e["death_age_max"], "max_lifetime": e["max_lifetime"],
+        "burn_in": e["burn_in"],
         "click_through": b["click_through"], "troll_no": b["troll_no"],
+        "np_corner": b["np_corner"], "np_margin": b["np_margin"],
     }
 
 
 def send(event):
-    """Manda un evento JSON al overlay; en cada reconexión manda la config primero."""
-    global _sock
+    """Manda un evento JSON al overlay; en cada reconexión manda la config primero
+    y reenvía el último Now Playing (el overlay nuevo arranca sin estado)."""
+    global _sock, _last_np
+    if event.get("cmd") == "np":
+        _last_np = event
     data = (json.dumps(event, ensure_ascii=False) + "\n").encode()
     for _ in range(2):
         try:
@@ -213,6 +224,8 @@ def send(event):
                 s.settimeout(2)
                 s.connect(SOCK_PATH)
                 s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
+                if _last_np is not None and _last_np is not event:
+                    s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
                 _sock = s
             _sock.sendall(data)
             return
@@ -251,6 +264,8 @@ def main():
     last_game_check = 0.0
     pause_started = None
     pause_cleared = False
+    resend_np = False
+    last_pos_sent = 0.0
     pause_clear_s = CFG["behavior"]["pause_clear"]
     offset = CFG["behavior"]["offset"]
     log("cartelitos daemon arrancó")
@@ -292,11 +307,18 @@ def main():
             elif pause_clear_s > 0 and not pause_cleared and now - pause_started > pause_clear_s:
                 clear()
                 pause_cleared = True
+                resend_np = True
                 idx = -1
                 log("pausa larga: carteles limpiados")
         else:
             pause_started = None
             pause_cleared = False
+            # la pausa larga escondió la funda: al retomar, mostrarla de nuevo
+            if resend_np:
+                resend_np = False
+                if CFG["behavior"]["now_playing"] and t["title"]:
+                    send({"cmd": "np", "title": t["title"], "artist": t["artist"],
+                          "album": t["album"], "art": t["art"]})
 
         if t["id"] != track_id:
             track_id = t["id"]
@@ -311,6 +333,12 @@ def main():
                 log(f"letra sincronizada: {len(lyrics)} líneas")
             else:
                 log("sin letra sincronizada (sin carteles)")
+
+        # progreso de la canción para la barra de la funda (1 evento por segundo)
+        if (CFG["behavior"]["now_playing"] and t["status"] == "Playing"
+                and t["length"] > 0 and now - last_pos_sent >= 1.0):
+            last_pos_sent = now
+            send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
 
         if lyrics and t["status"] == "Playing":
             i = current_line_index(lyrics, t["pos"] + offset)

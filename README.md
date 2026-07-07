@@ -9,7 +9,9 @@ que van apareciendo en tu escritorio. Inspirado en el video de
 - Los carteles viejos vibran como hologramas, se glitchean con artefactos tipo
   GPU rota (bloques magenta/verde/morado), quedan con la **ventana partida**
   (tearing real) y mueren con un colapso estilo CRT.
-- Al cambiar de canción aparece un cartel *Now Playing* con la portada del álbum.
+- Al cambiar de canción aparece una **funda de vinilo**: caja cuadrada centrada
+  con la portada del álbum a pantalla completa y borde estilo Windows clásico.
+  Se arrastra desde cualquier lado; click = cerrar.
 - Íconos de Windows random: error, advertencia, pregunta, info.
 - Los carteles se pueden **arrastrar** desde la barra de título.
 - En el cartel actual: `Yes` / `Cancel` / `✕` cierran, `No` lo **duplica** (como
@@ -69,7 +71,7 @@ Editala (`cartelitos config`) y aplicá con `cartelitos restart`.
 | `effects`  | `tearing`            | Los viejos quedan con la ventana partida                       | `true`      |
 | `effects`  | `death_age_min/max`  | Un cartel muere entre N y M carteles después                   | `3` / `7`   |
 | `effects`  | `max_lifetime`       | Vida máxima por cartel en segundos (`0` = sin límite)          | `60`        |
-| `behavior` | `now_playing`        | Cartel con portada al cambiar de canción                       | `true`      |
+| `behavior` | `now_playing`        | Funda de vinilo centrada con la portada al cambiar de canción  | `true`      |
 | `behavior` | `troll_no`           | El botón `No` duplica el cartel                                | `true`      |
 | `behavior` | `click_through`      | Los carteles no capturan el mouse                              | `false`     |
 | `behavior` | `pause_clear`        | Segundos en pausa antes de limpiar todo (`0` = nunca)          | `15`        |

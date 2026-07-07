@@ -162,7 +162,7 @@ ShellRoot {
 
             // factor de tamaño: config global + extra del cartel actual
             readonly property real k: root.cfgScale * (current ? root.cfgCurrentScale : 1.0)
-            readonly property real iconW: isNp ? 72 : 32
+            readonly property real iconW: 32
             readonly property bool fx: !current || root.effectsOnCurrent
 
             // tearing: la ventana partida en franjas desplazadas (solo viejos)
@@ -199,15 +199,29 @@ ShellRoot {
                 font.pixelSize: Math.round(13 * win.k)
             }
 
-            readonly property int dlgW: Math.max(300 * k, Math.min(tm.width, 360 * k) + (iconW + 78) * k)
+            // Now Playing = caja cuadrada tipo funda de vinilo; el resto, diálogo normal
+            readonly property int dlgW: isNp ? Math.round(300 * k) : Math.max(300 * k, Math.min(tm.width, 360 * k) + (iconW + 78) * k)
 
             implicitWidth: dlgW + tearPad * 2
             implicitHeight: content.height
 
+            // posición base: Now Playing siempre centrado, el resto random
+            readonly property real baseX: isNp ? (screen.width - implicitWidth) / 2 : modelData.rx * (screen.width - implicitWidth)
+            readonly property real baseY: isNp ? (screen.height - implicitHeight) / 2 : modelData.ry * (screen.height - 200)
+
+            // arrastre: delta clampeado contra la base (si no, en los bordes el acumulado
+            // se dispara) y jitter fuera de los márgenes mientras se arrastra — el jitter
+            // metido en la posición realimentaba el delta y la ventana "salía volando"
+            property bool dragHeld: false
+            function dragBy(ddx, ddy) {
+                dx = Math.max(-baseX, Math.min(dx + ddx, screen.width - 80 - baseX));
+                dy = Math.max(-baseY, Math.min(dy + ddy, screen.height - 60 - baseY));
+            }
+
             anchors { left: true; top: true }
             margins {
-                left: Math.min(Math.max(0, Math.round(modelData.rx * (win.screen.width - win.implicitWidth) + win.dx + win.jx)), win.screen.width - 80)
-                top: Math.min(Math.max(0, Math.round(modelData.ry * (win.screen.height - 200) + win.dy + win.jy)), win.screen.height - 60)
+                left: Math.round(Math.min(Math.max(0, win.baseX + win.dx + (win.dragHeld ? 0 : win.jx)), win.screen.width - 80))
+                top: Math.round(Math.min(Math.max(0, win.baseY + win.dy + (win.dragHeld ? 0 : win.jy)), win.screen.height - 60))
             }
 
             // paleta tipo GPU muriéndose: magenta, verde, morado, cyan, rosa
@@ -381,7 +395,7 @@ ShellRoot {
                 Rectangle {
                     id: frame
                     anchors.fill: parent
-                    implicitHeight: column.implicitHeight + 4
+                    implicitHeight: win.isNp ? win.dlgW : column.implicitHeight + 4
                     color: "#c0c0c0"
                     clip: true
                     opacity: win.burstOpacity * win.deathOpacity * win.holoOpacity
@@ -397,6 +411,7 @@ ShellRoot {
 
                     Column {
                         id: column
+                        visible: !win.isNp
                         anchors { fill: parent; margins: 2 }
 
                         // barra de título (arrastrable)
@@ -414,12 +429,12 @@ ShellRoot {
                                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                 property real px: 0
                                 property real py: 0
-                                onPressed: m => { px = m.x; py = m.y; }
+                                onPressed: m => { px = m.x; py = m.y; win.dragHeld = true; }
+                                onReleased: win.dragHeld = false
+                                onCanceled: win.dragHeld = false
                                 onPositionChanged: m => {
-                                    if (!pressed)
-                                        return;
-                                    win.dx += m.x - px;
-                                    win.dy += m.y - py;
+                                    if (pressed)
+                                        win.dragBy(m.x - px, m.y - py);
                                 }
                             }
 
@@ -459,24 +474,14 @@ ShellRoot {
                             }
                         }
 
-                        // cuerpo: ícono (o portada) + texto
+                        // cuerpo: ícono + texto
                         Row {
                             width: parent.width
                             padding: Math.round(14 * win.k)
                             spacing: Math.round(14 * win.k)
 
-                            // portada de álbum (solo Now Playing)
-                            Image {
-                                visible: win.isNp && win.modelData.art !== ""
-                                width: Math.round(72 * win.k)
-                                height: Math.round(72 * win.k)
-                                source: win.isNp ? win.modelData.art : ""
-                                fillMode: Image.PreserveAspectCrop
-                            }
-
                             // ícono estilo Windows (error/advertencia/pregunta/info)
                             Canvas {
-                                visible: !win.isNp || win.modelData.art === ""
                                 width: Math.round(32 * win.k)
                                 height: Math.round(32 * win.k)
                                 onWidthChanged: requestPaint()
@@ -551,19 +556,18 @@ ShellRoot {
                                 text: win.modelData.text
                                 color: "#000000"
                                 font.pixelSize: Math.round(13 * win.k)
-                                font.bold: win.isNp
                                 wrapMode: Text.Wrap
                             }
                         }
 
-                        // botones: Yes/Cancel cierran, "No" duplica (si troll_no); Now Playing solo OK
+                        // botones: Yes/Cancel cierran, "No" duplica (si troll_no)
                         Row {
                             anchors.horizontalCenter: parent.horizontalCenter
                             spacing: Math.round(8 * win.k)
                             bottomPadding: Math.round(12 * win.k)
 
                             Repeater {
-                                model: win.isNp ? ["OK"] : ["Yes", "No", "Cancel"]
+                                model: ["Yes", "No", "Cancel"]
 
                                 Rectangle {
                                     required property string modelData
@@ -608,6 +612,98 @@ ShellRoot {
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    // Now Playing: funda de vinilo cuadrada — portada a full con bevel hundido
+                    Item {
+                        visible: win.isNp
+                        anchors { fill: parent; margins: Math.round(8 * win.k) }
+
+                        Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 2; color: "#404040" }
+                        Rectangle { anchors { top: parent.top; left: parent.left; bottom: parent.bottom } width: 2; color: "#404040" }
+                        Rectangle { anchors { bottom: parent.bottom; left: parent.left; right: parent.right } height: 2; color: "#ffffff" }
+                        Rectangle { anchors { top: parent.top; right: parent.right; bottom: parent.bottom } width: 2; color: "#ffffff" }
+
+                        Rectangle {
+                            anchors { fill: parent; margins: 2 }
+                            color: "#3a3a3a"
+                            clip: true
+
+                            Image {
+                                anchors.fill: parent
+                                visible: win.modelData.art !== ""
+                                source: win.modelData.art
+                                fillMode: Image.PreserveAspectCrop
+                            }
+
+                            // sin portada: nota sobre gris oscuro
+                            Text {
+                                visible: win.modelData.art === ""
+                                anchors.centerIn: parent
+                                text: "♪"
+                                color: "#c0c0c0"
+                                font.pixelSize: Math.round(96 * win.k)
+                            }
+
+                            // banda inferior: tema — artista
+                            Rectangle {
+                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                                height: npText.implicitHeight + Math.round(14 * win.k)
+                                color: "#000000"
+                                opacity: 0.62
+                            }
+                            Column {
+                                id: npText
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                    leftMargin: Math.round(10 * win.k)
+                                    rightMargin: Math.round(10 * win.k)
+                                    bottomMargin: Math.round(8 * win.k)
+                                }
+                                spacing: Math.round(2 * win.k)
+
+                                Text {
+                                    width: parent.width
+                                    text: win.modelData.title
+                                    color: "#ffffff"
+                                    font.pixelSize: Math.round(15 * win.k)
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: win.modelData.text
+                                    color: "#d8d8d8"
+                                    font.pixelSize: Math.round(12 * win.k)
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+
+                    // Now Playing: arrastrable desde cualquier lado, click = cerrar
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: win.isNp && !win.torn
+                        property real px: 0
+                        property real py: 0
+                        property bool moved: false
+                        onPressed: m => { px = m.x; py = m.y; moved = false; win.dragHeld = true; }
+                        onReleased: win.dragHeld = false
+                        onCanceled: win.dragHeld = false
+                        onPositionChanged: m => {
+                            if (!pressed)
+                                return;
+                            if (Math.abs(m.x - px) + Math.abs(m.y - py) > 3)
+                                moved = true;
+                            win.dragBy(m.x - px, m.y - py);
+                        }
+                        onClicked: {
+                            if (!moved)
+                                root.dismiss(win.modelData.serial);
                         }
                     }
 
@@ -692,12 +788,14 @@ ShellRoot {
                     dragging = m.y < Math.round(26 * win.k) + 6;
                     px = m.x;
                     py = m.y;
+                    if (dragging)
+                        win.dragHeld = true;
                 }
+                onReleased: win.dragHeld = false
+                onCanceled: win.dragHeld = false
                 onPositionChanged: m => {
-                    if (dragging && pressed) {
-                        win.dx += m.x - px;
-                        win.dy += m.y - py;
-                    }
+                    if (dragging && pressed)
+                        win.dragBy(m.x - px, m.y - py);
                 }
                 onClicked: {
                     if (!dragging)

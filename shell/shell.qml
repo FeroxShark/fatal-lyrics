@@ -59,6 +59,10 @@ ShellRoot {
     property int currentLyricSerial: -1
     property var dialogList: []
 
+    // generación de líneas de letra: los carteles envejecen por líneas NUEVAS,
+    // no por duplicados del botón "No" (spamear No no mata a los demás)
+    property int lyricGen: 0
+
     // cascada: cada incremento dispara la muerte en cadena de los carteles vivos
     property int clearGen: 0
 
@@ -121,11 +125,15 @@ ShellRoot {
         entry.rx = pos.rx;
         entry.ry = pos.ry;
         entry.deathAge = root.deathAgeMin + Math.floor(Math.random() * (root.deathAgeMax - root.deathAgeMin + 1));
-        if (markCurrent)
+        if (markCurrent) {
+            root.lyricGen++;
             root.currentLyricSerial = entry.serial;
+        }
+        entry.gen = root.lyricGen;
         let arr = root.dialogList.slice();
         arr.push(entry);
-        while (arr.length > root.maxDialogs)
+        // max_dialogs = 0: sin límite (igual los carteles mueren por edad/TTL)
+        while (root.maxDialogs > 0 && arr.length > root.maxDialogs)
             arr.shift();
         root.dialogList = arr;
     }
@@ -230,8 +238,9 @@ ShellRoot {
                     id: win
                     required property var modelData
 
-                    // edad = cuántos carteles aparecieron después de éste
-                    readonly property int age: root.serial - modelData.serial - 1
+                    // edad = cuántas líneas de letra aparecieron después de éste
+                    // (los duplicados del "No" no envejecen a nadie)
+                    readonly property int age: root.lyricGen - modelData.gen
                     readonly property bool current: modelData.serial === root.currentLyricSerial
                     readonly property real glitchiness: Math.min(age / 5, 1)
                     property bool dying: false

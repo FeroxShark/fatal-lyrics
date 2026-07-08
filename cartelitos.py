@@ -30,7 +30,7 @@ DEFAULT_CONFIG = """\
 
 [display]
 screen = "auto"        # "auto" (primer monitor) | "all" (todas) | "DP-1" | ["DP-1", "DP-2"]
-max_dialogs = 12       # máximo de carteles vivos a la vez
+max_dialogs = 0        # máximo de carteles vivos a la vez; 0 = sin límite
 scale = 1.0            # tamaño base de todos los carteles
 current_scale = 1.3    # factor extra del cartel de la línea actual
 spawn_area = "full"    # full | top | bottom | left | right | edges (bordes, no tapa el centro)
@@ -61,7 +61,7 @@ game_procs = ["cs2"]   # si alguno de estos procesos corre, pausa automática
 
 DEFAULTS = {
     "display": {
-        "screen": "auto", "max_dialogs": 12, "scale": 1.0,
+        "screen": "auto", "max_dialogs": 0, "scale": 1.0,
         "current_scale": 1.3, "spawn_area": "full", "karaoke": False,
     },
     "effects": {

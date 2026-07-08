@@ -76,7 +76,7 @@ con `cartelitos restart`.
 | Sección    | Opción               | Qué hace                                                       | Default     |
 |------------|----------------------|----------------------------------------------------------------|-------------|
 | `display`  | `screen`             | `"auto"` (primero), `"all"` (todos), nombre (`"DP-1"`) o lista (`["DP-1", "DP-2"]`) | `"auto"`   |
-| `display`  | `max_dialogs`        | Máximo de carteles vivos a la vez                              | `12`        |
+| `display`  | `max_dialogs`        | Máximo de carteles vivos a la vez (`0` = sin límite)           | `0`         |
 | `display`  | `scale`              | Tamaño base de todos los carteles                              | `1.0`       |
 | `display`  | `current_scale`      | Factor extra del cartel de la línea actual                     | `1.3`       |
 | `display`  | `spawn_area`         | Zona de aparición: `full`/`top`/`bottom`/`left`/`right`/`edges` | `"full"`   |

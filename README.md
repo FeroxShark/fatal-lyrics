@@ -14,6 +14,11 @@ que van apareciendo en tu escritorio. Inspirado en el video de
   a los segundos se estaciona chiquita en una esquina (configurable, o siempre
   centrada), con una **barra de progreso Win95** que avanza con la canción.
   Se puede arrastrar a donde quieras; click seco = esconderla hasta el próximo tema.
+- De la funda asoma un **disco de vinilo girando**, con la portada de etiqueta.
+- Al cambiar de canción los carteles viejos no se esfuman: mueren **en cadena**,
+  un dominó de colapsos CRT del más viejo al más nuevo.
+- Modo **karaoke** opcional: la línea actual se va pintando palabra por palabra
+  a medida que se canta (timing estimado — lrclib da tiempos por línea).
 - **Multi-monitor**: `screen = "all"` (o una lista) muestra los carteles en
   varias pantallas a la vez, cada monitor con sus propias posiciones random.
 - Los carteles muertos dejan una **sombra quemada** (burn-in CRT) que se
@@ -75,15 +80,18 @@ con `cartelitos restart`.
 | `display`  | `scale`              | Tamaño base de todos los carteles                              | `1.0`       |
 | `display`  | `current_scale`      | Factor extra del cartel de la línea actual                     | `1.3`       |
 | `display`  | `spawn_area`         | Zona de aparición: `full`/`top`/`bottom`/`left`/`right`/`edges` | `"full"`   |
+| `display`  | `karaoke`            | La línea actual se pinta palabra por palabra                   | `false`     |
 | `effects`  | `glitch`             | Intensidad: `off`/`soft`/`normal`/`aggressive`                 | `"normal"`  |
 | `effects`  | `effects_on_current` | El cartel actual también vibra/glitchea                        | `false`     |
 | `effects`  | `tearing`            | Los viejos quedan con la ventana partida                       | `true`      |
 | `effects`  | `death_age_min/max`  | Un cartel muere entre N y M carteles después                   | `3` / `7`   |
 | `effects`  | `max_lifetime`       | Vida máxima por cartel en segundos (`0` = sin límite)          | `60`        |
 | `effects`  | `burn_in`            | Los carteles muertos dejan una sombra quemada que se desvanece | `true`      |
+| `effects`  | `cascade`            | Al cambiar de canción los carteles mueren en cadena (dominó)   | `true`      |
 | `behavior` | `now_playing`        | Funda de vinilo con la portada al cambiar de canción           | `true`      |
 | `behavior` | `np_corner`          | Dónde se estaciona: `top-left`/`top-right`/`bottom-left`/`bottom-right`/`center` | `"top-right"` |
 | `behavior` | `np_margin`          | Píxeles libres contra los bordes (por si hay una barra/panel)  | `14`        |
+| `behavior` | `np_vinyl`           | Disco de vinilo que asoma girando de la funda                  | `true`      |
 | `behavior` | `troll_no`           | El botón `No` duplica el cartel                                | `true`      |
 | `behavior` | `click_through`      | Los carteles no capturan el mouse                              | `false`     |
 | `behavior` | `pause_clear`        | Segundos en pausa antes de limpiar todo (`0` = nunca)          | `15`        |

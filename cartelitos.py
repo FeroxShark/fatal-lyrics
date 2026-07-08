@@ -34,6 +34,7 @@ max_dialogs = 12       # máximo de carteles vivos a la vez
 scale = 1.0            # tamaño base de todos los carteles
 current_scale = 1.3    # factor extra del cartel de la línea actual
 spawn_area = "full"    # full | top | bottom | left | right | edges (bordes, no tapa el centro)
+karaoke = false        # la línea actual se pinta palabra por palabra (timing estimado)
 
 [effects]
 glitch = "normal"      # off | soft | normal | aggressive
@@ -43,11 +44,13 @@ death_age_min = 3      # un cartel muere entre N…
 death_age_max = 7      # …y M carteles después de aparecer
 max_lifetime = 60      # vida máxima en segundos por cartel; 0 = sin límite
 burn_in = true         # los carteles muertos dejan una sombra quemada que se desvanece
+cascade = true         # al cambiar de canción los carteles mueren en cadena (dominó CRT)
 
 [behavior]
 now_playing = true     # funda de vinilo con la portada al cambiar de canción
 np_corner = "top-right"  # dónde se estaciona la funda: top-left | top-right | bottom-left | bottom-right | center
 np_margin = 14         # píxeles libres contra los bordes (por si hay una barra/panel)
+np_vinyl = true        # disco de vinilo que asoma girando de la funda
 troll_no = true        # el botón "No" duplica el cartel; false = solo cierra
 click_through = false  # true = los carteles no capturan el mouse (clicks pasan de largo)
 pause_clear = 15       # segundos en pausa antes de limpiar todo; 0 = nunca
@@ -59,16 +62,16 @@ game_procs = ["cs2"]   # si alguno de estos procesos corre, pausa automática
 DEFAULTS = {
     "display": {
         "screen": "auto", "max_dialogs": 12, "scale": 1.0,
-        "current_scale": 1.3, "spawn_area": "full",
+        "current_scale": 1.3, "spawn_area": "full", "karaoke": False,
     },
     "effects": {
         "glitch": "normal", "effects_on_current": False, "tearing": True,
         "death_age_min": 3, "death_age_max": 7, "max_lifetime": 60,
-        "burn_in": True,
+        "burn_in": True, "cascade": True,
     },
     "behavior": {
         "now_playing": True, "np_corner": "top-right", "np_margin": 14,
-        "troll_no": True, "click_through": False,
+        "np_vinyl": True, "troll_no": True, "click_through": False,
         "pause_clear": 15, "player": "spotify", "offset": 0.15,
         "game_procs": ["cs2"],
     },
@@ -200,13 +203,14 @@ def _config_event():
         "cmd": "config",
         "screen": d["screen"], "max_dialogs": d["max_dialogs"],
         "scale": d["scale"], "current_scale": d["current_scale"],
-        "spawn_area": d["spawn_area"],
+        "spawn_area": d["spawn_area"], "karaoke": d["karaoke"],
         "glitch": e["glitch"], "effects_on_current": e["effects_on_current"],
         "tearing": e["tearing"], "death_age_min": e["death_age_min"],
         "death_age_max": e["death_age_max"], "max_lifetime": e["max_lifetime"],
-        "burn_in": e["burn_in"],
+        "burn_in": e["burn_in"], "cascade": e["cascade"],
         "click_through": b["click_through"], "troll_no": b["troll_no"],
         "np_corner": b["np_corner"], "np_margin": b["np_margin"],
+        "np_vinyl": b["np_vinyl"],
     }
 
 
@@ -238,8 +242,10 @@ def send(event):
             _sock = None
 
 
-def show(text, title):
-    send({"cmd": "show", "text": text, "title": title})
+def show(text, title, t0=0.0, t1=0.0):
+    # t0/t1: comienzo y fin estimado de la línea, para el karaoke del overlay
+    send({"cmd": "show", "text": text, "title": title,
+          "t0": round(t0, 2), "t1": round(t1, 2)})
 
 
 def clear():
@@ -373,6 +379,15 @@ def setup():
         ], b["np_corner"])
         if v is not None and v != b["np_corner"]:
             ch["np_corner"] = ("behavior", v)
+        v = _pick("Disco de vinilo asomando de la funda",
+                  [("sí", True), ("no", False)], b["np_vinyl"])
+        if v is not None and v != b["np_vinyl"]:
+            ch["np_vinyl"] = ("behavior", v)
+
+    v = _pick("Karaoke (la línea actual se pinta palabra por palabra)",
+              [("sí", True), ("no", False)], d["karaoke"])
+    if v is not None and v != d["karaoke"]:
+        ch["karaoke"] = ("display", v)
 
     v = _pick("Nivel de glitch", [
         ("off (carteles sanos)", "off"), ("soft", "soft"),
@@ -396,6 +411,7 @@ def setup():
     for key, sec, label, cur in [
         ("tearing", "effects", "Ventana partida en carteles viejos", e["tearing"]),
         ("burn_in", "effects", "Sombra quemada al morir (burn-in)", e["burn_in"]),
+        ("cascade", "effects", "Muerte en cascada al cambiar de canción", e["cascade"]),
         ("troll_no", "behavior", 'Botón "No" duplica el cartel', b["troll_no"]),
         ("click_through", "behavior", "Carteles fantasma (los clicks pasan de largo)", b["click_through"]),
     ]:
@@ -505,8 +521,9 @@ def main():
             else:
                 log("sin letra sincronizada (sin carteles)")
 
-        # progreso de la canción para la barra de la funda (1 evento por segundo)
-        if (CFG["behavior"]["now_playing"] and t["status"] == "Playing"
+        # progreso de la canción: barra de la funda + karaoke (1 evento por segundo)
+        if ((CFG["behavior"]["now_playing"] or CFG["display"]["karaoke"])
+                and t["status"] == "Playing"
                 and t["length"] > 0 and now - last_pos_sent >= 1.0):
             last_pos_sent = now
             send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
@@ -516,7 +533,8 @@ def main():
             if i != idx:
                 idx = i
                 if i >= 0 and lyrics[i][1]:
-                    show(lyrics[i][1], t["title"])
+                    t1 = lyrics[i + 1][0] if i + 1 < len(lyrics) else lyrics[i][0] + 5
+                    show(lyrics[i][1], t["title"], lyrics[i][0], t1)
 
         time.sleep(POLL)
 

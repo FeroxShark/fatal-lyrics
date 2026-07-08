@@ -7,6 +7,7 @@
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Widgets
 import QtQuick
 
 ShellRoot {
@@ -28,8 +29,11 @@ ShellRoot {
     property bool clickThrough: false
     property bool trollNo: true
     property bool burnIn: true
+    property bool cascadeDeath: true
+    property bool karaokeOn: false
     property string npCorner: "top-right"
     property int npMargin: 14
+    property bool npVinyl: true
 
     // estado del Now Playing (ventana propia, no es un diálogo);
     // compartido entre pantallas para que la animación vaya sincronizada
@@ -54,6 +58,17 @@ ShellRoot {
     property int serial: 0
     property int currentLyricSerial: -1
     property var dialogList: []
+
+    // cascada: cada incremento dispara la muerte en cadena de los carteles vivos
+    property int clearGen: 0
+
+    // posición de la canción (eventos "pos" a 1 Hz) para el karaoke;
+    // se extrapola con el reloj local, con tope por si el player se pausó
+    property real posAbs: 0
+    property double posAt: 0
+    function songPos() {
+        return posAbs + Math.min((Date.now() - posAt) / 1000, 1.5);
+    }
 
     // pantallas donde corre el overlay según la config
     function matchScreens(v) {
@@ -115,8 +130,11 @@ ShellRoot {
         root.dialogList = arr;
     }
 
-    function show(text, title, icon) {
-        pushDialog({ text: text, title: title || "Spotify", icon: icon || randomIcon() }, true);
+    function show(text, title, icon, t0, t1) {
+        pushDialog({
+            text: text, title: title || "Spotify", icon: icon || randomIcon(),
+            t0: t0 ?? 0, t1: t1 ?? 0,
+        }, true);
     }
 
     function nowPlaying(title, artist, album, art) {
@@ -154,8 +172,11 @@ ShellRoot {
         clickThrough = ev.click_through ?? clickThrough;
         trollNo = ev.troll_no ?? trollNo;
         burnIn = ev.burn_in ?? burnIn;
+        cascadeDeath = ev.cascade ?? cascadeDeath;
+        karaokeOn = ev.karaoke ?? karaokeOn;
         npCorner = ev.np_corner ?? npCorner;
         npMargin = ev.np_margin ?? npMargin;
+        npVinyl = ev.np_vinyl ?? npVinyl;
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear
@@ -168,14 +189,20 @@ ShellRoot {
                     try {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
-                            root.show(ev.text, ev.title, ev.icon);
+                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1);
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
-                        else if (ev.cmd === "pos")
+                        else if (ev.cmd === "pos") {
                             root.npProgress = ev.l > 0 ? Math.min(ev.p / ev.l, 1) : 0;
-                        else if (ev.cmd === "clear") {
-                            root.dialogList = [];
+                            root.posAbs = ev.p;
+                            root.posAt = Date.now();
+                        } else if (ev.cmd === "clear") {
                             root.npShown = false;
+                            // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
+                            if (root.cascadeDeath && root.dialogList.length > 0)
+                                root.clearGen++;
+                            else
+                                root.dialogList = [];
                         } else if (ev.cmd === "config")
                             root.applyConfig(ev);
                     } catch (e) {
@@ -214,6 +241,49 @@ ShellRoot {
                     readonly property real k: root.cfgScale * (current ? root.cfgCurrentScale : 1.0)
                     readonly property real iconW: 32
                     readonly property bool fx: !current || root.effectsOnCurrent
+
+                    // karaoke: la línea actual se pinta palabra por palabra; el timing
+                    // por palabra se estima proporcional al largo (lrclib solo da líneas)
+                    readonly property bool karaokeActive: root.karaokeOn && current
+                        && (modelData.t1 || 0) > (modelData.t0 || 0)
+                    property string karaokeText: ""
+                    function htmlEsc(s) {
+                        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    }
+                    function updateKaraoke() {
+                        const words = modelData.text.split(" ").filter(w => w.length > 0);
+                        if (words.length === 0)
+                            return;
+                        // termina de pintar ~1 s antes del próximo cartel: si no, la
+                        // última palabra nunca llega a verse pintada (t1 = ya la reemplazó)
+                        const dur = modelData.t1 - modelData.t0;
+                        const lead = Math.min(1.0, dur * 0.35);
+                        const f = Math.max(0, Math.min(
+                            (root.songPos() - modelData.t0) / Math.max(dur - lead, 0.5), 1));
+                        let total = 0;
+                        const weights = words.map(w => { const n = w.length + 1; total += n; return n; });
+                        let acc = 0, cut = 0;
+                        for (let i = 0; i < words.length; i++) {
+                            acc += weights[i];
+                            if (acc <= f * total + 0.001)
+                                cut = i + 1;
+                        }
+                        let out = "";
+                        if (cut > 0)
+                            out = '<font color="#000080">' + htmlEsc(words.slice(0, cut).join(" ")) + "</font>";
+                        if (cut > 0 && cut < words.length)
+                            out += " ";
+                        if (cut < words.length)
+                            out += htmlEsc(words.slice(cut).join(" "));
+                        karaokeText = out;
+                    }
+                    Timer {
+                        interval: 120
+                        repeat: true
+                        running: win.karaokeActive
+                        triggeredOnStart: true
+                        onTriggered: win.updateKaraoke()
+                    }
 
                     // tearing: la ventana partida en franjas desplazadas (solo viejos)
                     readonly property int tearPad: 22
@@ -392,6 +462,24 @@ ShellRoot {
                         interval: Math.max(1000, root.maxLifetime * 1000)
                         running: root.maxLifetime > 0 && !win.dying
                         onTriggered: win.die()
+                    }
+
+                    // cascada: al limpiar mueren en cadena, del más viejo al más nuevo
+                    Connections {
+                        target: root
+                        enabled: !win.dying
+                        function onClearGenChanged() {
+                            const rank = root.dialogList.findIndex(d => d.serial === win.modelData.serial);
+                            cascadeTimer.interval = 60 + Math.max(0, rank) * 110;
+                            cascadeTimer.restart();
+                        }
+                    }
+                    Timer {
+                        id: cascadeTimer
+                        onTriggered: {
+                            if (!win.dying)
+                                win.die();
+                        }
                     }
 
                     // al dejar de ser el actual: burst que tapa el achique + tearing permanente
@@ -626,7 +714,8 @@ ShellRoot {
                                     Text {
                                         width: parent.width - (win.iconW + 14 + 28) * win.k
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: win.modelData.text
+                                        text: win.karaokeActive ? win.karaokeText : win.modelData.text
+                                        textFormat: win.karaokeActive ? Text.StyledText : Text.PlainText
                                         color: "#000000"
                                         font.pixelSize: Math.round(13 * win.k)
                                         wrapMode: Text.Wrap
@@ -846,6 +935,108 @@ ShellRoot {
                 // un solo parámetro anima posición y tamaño juntos → trayectoria recta
                 property real dockT: root.npDocked ? 1 : 0
                 Behavior on dockT { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+
+                // disco de vinilo que asoma girando por el costado de la funda
+                // (np_vinyl); declarado antes de npCard para quedar DETRÁS
+                Item {
+                    id: npDisc
+                    // asoma hacia el centro de la pantalla: esquinas derechas → izquierda
+                    readonly property real dir: root.npCorner.indexOf("right") >= 0 ? -1 : 1
+                    property real out: 0
+                    Behavior on out { NumberAnimation { duration: 800; easing.type: Easing.OutCubic } }
+
+                    visible: root.npVinyl && out > 0.01
+                    width: (npCard.width - npCard.pad * 2) * 0.96
+                    height: width
+                    x: npCard.x + (npCard.width - width) / 2 + dir * out * width * 0.42
+                    y: npCard.y + npCard.pad + (npCard.width - npCard.pad * 2 - height) / 2
+
+                    // al cambiar de tema el disco arranca guardado y sale a los ~900 ms
+                    Connections {
+                        target: root
+                        function onNpSerialChanged() {
+                            npDisc.out = 0;
+                            discDelay.restart();
+                        }
+                    }
+                    Timer {
+                        id: discDelay
+                        interval: 900
+                        onTriggered: npDisc.out = 1
+                    }
+
+                    Item {
+                        anchors.fill: parent
+                        RotationAnimation on rotation {
+                            from: 0
+                            to: 360
+                            duration: 1800 // ~33 rpm
+                            loops: Animation.Infinite
+                            running: npDisc.visible && root.npShown
+                        }
+
+                        // vinilo: disco negro con surcos y un brillo que gira con él
+                        Canvas {
+                            anchors.fill: parent
+                            onWidthChanged: requestPaint()
+                            onPaint: {
+                                const c = getContext("2d");
+                                c.reset();
+                                c.scale(width / 200, height / 200);
+                                c.beginPath();
+                                c.arc(100, 100, 99, 0, Math.PI * 2);
+                                c.fillStyle = "#101010";
+                                c.fill();
+                                c.strokeStyle = "rgba(255,255,255,0.05)";
+                                c.lineWidth = 1;
+                                for (let r = 44; r < 96; r += 4.5) {
+                                    c.beginPath();
+                                    c.arc(100, 100, r, 0, Math.PI * 2);
+                                    c.stroke();
+                                }
+                                // brillo asimétrico: hace visible la rotación
+                                c.strokeStyle = "rgba(255,255,255,0.09)";
+                                c.lineWidth = 26;
+                                c.beginPath();
+                                c.arc(100, 100, 68, -0.5, 0.55);
+                                c.stroke();
+                                c.beginPath();
+                                c.arc(100, 100, 68, Math.PI - 0.5, Math.PI + 0.55);
+                                c.stroke();
+                                c.strokeStyle = "rgba(255,255,255,0.14)";
+                                c.lineWidth = 1.5;
+                                c.beginPath();
+                                c.arc(100, 100, 98, 0, Math.PI * 2);
+                                c.stroke();
+                            }
+                        }
+
+                        // etiqueta central con la portada, recortada en círculo
+                        ClippingRectangle {
+                            anchors.centerIn: parent
+                            width: parent.width * 0.37
+                            height: width
+                            radius: width / 2
+                            color: "#2a2a2a"
+
+                            Image {
+                                anchors.fill: parent
+                                visible: root.npArt !== ""
+                                source: root.npArt
+                                fillMode: Image.PreserveAspectCrop
+                            }
+                        }
+
+                        // agujero del eje
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width * 0.045
+                            height: width
+                            radius: width / 2
+                            color: "#000000"
+                        }
+                    }
+                }
 
                 Rectangle {
                     id: npCard

@@ -2,7 +2,7 @@
 Type=Application
 Name=Fatal Lyrics
 GenericName=Cartelitos
-Comment=Letras de Spotify como diálogos de error de Windows
+Comment=Synced Spotify lyrics as Windows error dialogs
 Exec=fatal toggle
 Icon=dialog-warning
 Terminal=false

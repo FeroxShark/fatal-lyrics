@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""cartelitos / fatal-lyrics — letras de Spotify sincronizadas como diálogos
-de error de Windows.
+"""cartelitos / fatal-lyrics — synced Spotify lyrics as Windows error dialogs.
 
-Sigue la reproducción por MPRIS (playerctl), baja letras sincronizadas de
-lrclib.net y le manda cada línea al overlay Quickshell vía socket Unix.
-Config en ~/.config/cartelitos/config.toml (se crea sola con defaults).
+Follows playback via MPRIS (playerctl), fetches synced lyrics from
+lrclib.net, and sends each line to the Quickshell overlay over a Unix
+socket. Config at ~/.config/cartelitos/config.toml (auto-created with
+defaults).
 """
 import json
 import os
@@ -26,40 +26,40 @@ CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
 
 DEFAULT_CONFIG = """\
-# fatal-lyrics — configuración
-# Aplicar cambios con: fatal restart
+# fatal-lyrics — configuration
+# Apply changes with: fatal restart
 
 [display]
-screen = "auto"        # "auto" (primer monitor) | "all" (todas) | "DP-1" | ["DP-1", "DP-2"]
-max_dialogs = 0        # máximo de carteles vivos a la vez; 0 = sin límite
-scale = 1.0            # tamaño base de todos los carteles
-current_scale = 1.3    # factor extra del cartel de la línea actual
-spawn_area = "full"    # full | top | bottom | left | right | edges (bordes, no tapa el centro)
-karaoke = false        # la línea actual se pinta palabra por palabra (timing estimado)
+screen = "auto"        # "auto" (first monitor) | "all" (every one) | "DP-1" | ["DP-1", "DP-2"]
+max_dialogs = 0        # max live dialogs at once; 0 = unlimited
+scale = 1.0            # base size for all dialogs
+current_scale = 1.3    # extra size factor for the current-line dialog
+spawn_area = "full"    # full | top | bottom | left | right | edges (leaves the center clear)
+karaoke = false        # current line paints word by word (estimated timing)
 
 [effects]
 glitch = "normal"      # off | soft | normal | aggressive
-effects_on_current = false  # true = el cartel actual también vibra/glitchea
-tearing = true         # los carteles viejos quedan con la ventana partida
-death_age_min = 3      # un cartel muere entre N…
-death_age_max = 7      # …y M carteles después de aparecer
-max_lifetime = 60      # vida máxima en segundos por cartel; 0 = sin límite
-burn_in = true         # los carteles muertos dejan una sombra quemada que se desvanece
-cascade = true         # al cambiar de canción los carteles mueren en cadena (dominó CRT)
+effects_on_current = false  # true = the current dialog also vibrates/glitches
+tearing = true         # old dialogs get a split window
+death_age_min = 3      # a dialog dies between N…
+death_age_max = 7      # …and M dialogs after it appears
+max_lifetime = 60      # max lifetime per dialog in seconds; 0 = unlimited
+burn_in = true         # dead dialogs leave a fading burnt shadow
+cascade = true         # on track change, dialogs die in a chain (CRT domino)
 
 [behavior]
-now_playing = true     # funda de vinilo con la portada al cambiar de canción
-np_corner = "top-right"  # dónde se estaciona la funda: top-left | top-right | bottom-left | bottom-right | center
-np_margin = 14         # píxeles libres contra los bordes (por si hay una barra/panel)
-np_vinyl = true        # disco de vinilo que asoma girando de la funda
-troll_no = true        # el botón "No" duplica el cartel; false = solo cierra
-click_through = false  # true = los carteles no capturan el mouse (clicks pasan de largo)
-pause_clear = 15       # segundos en pausa antes de limpiar todo; 0 = nunca
-player = "spotify"     # nombre del player MPRIS (ver: playerctl -l)
-offset = 0.15          # adelanto de sincronización en segundos
-game_pause = true      # auto-pausa si hay una ventana en pantalla completa (heurística
-                        # genérica de "juego" vía Hyprland, no depende de un proceso puntual);
-                        # false = nunca pausar por juegos
+now_playing = true     # vinyl sleeve with album art on track change
+np_corner = "top-right"  # where the sleeve docks: top-left | top-right | bottom-left | bottom-right | center
+np_margin = 14         # free pixels against the edges (in case of a bar/panel)
+np_vinyl = true        # spinning vinyl record peeking out of the sleeve
+troll_no = true        # the "No" button duplicates the dialog; false = just closes it
+click_through = false  # true = dialogs don't capture the mouse (clicks pass through)
+pause_clear = 15       # seconds paused before clearing everything; 0 = never
+player = "spotify"     # MPRIS player name (see: playerctl -l)
+offset = 0.15          # sync lead time in seconds
+game_pause = true      # auto-pause when a window goes fullscreen (generic "game" heuristic
+                        # via Hyprland, doesn't depend on a specific process);
+                        # false = never pause for games
 """
 
 DEFAULTS = {
@@ -92,7 +92,7 @@ def load_config():
         os.makedirs(CONFIG_DIR, exist_ok=True)
         with open(CONFIG_PATH, "w") as f:
             f.write(DEFAULT_CONFIG)
-        log(f"config default creada en {CONFIG_PATH}")
+        log(f"default config created at {CONFIG_PATH}")
     cfg = {k: dict(v) for k, v in DEFAULTS.items()}
     try:
         with open(CONFIG_PATH, "rb") as f:
@@ -101,7 +101,7 @@ def load_config():
             if section in cfg and isinstance(values, dict):
                 cfg[section].update(values)
     except Exception as e:
-        log(f"config inválida ({e}), usando defaults")
+        log(f"invalid config ({e}), using defaults")
     return cfg
 
 
@@ -337,8 +337,8 @@ def _monitors():
 
 
 def _pick(title, options, current):
-    """Menú numerado; enter = dejar el valor actual. options: [(etiqueta, valor)]."""
-    print(f"\n{title}   (ahora: {current})")
+    """Numbered menu; enter = keep the current value. options: [(label, value)]."""
+    print(f"\n{title}   (now: {current})")
     for i, (label, _) in enumerate(options, 1):
         print(f"  {i}) {label}")
     while True:
@@ -347,11 +347,11 @@ def _pick(title, options, current):
             return None
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1][1]
-        print("  número de la lista, o enter para dejarlo")
+        print("  pick a number from the list, or enter to keep it")
 
 
 def _ask_num(title, current, lo, hi):
-    print(f"\n{title}   (ahora: {current}, enter = dejar)")
+    print(f"\n{title}   (now: {current}, enter = keep)")
     while True:
         raw = input("> ").strip().replace(",", ".")
         if not raw:
@@ -362,11 +362,11 @@ def _ask_num(title, current, lo, hi):
                 return v
         except ValueError:
             pass
-        print(f"  número entre {lo} y {hi}")
+        print(f"  a number between {lo} and {hi}")
 
 
 def _ask_int(title, current, lo, hi):
-    print(f"\n{title}   (ahora: {current}, enter = dejar)")
+    print(f"\n{title}   (now: {current}, enter = keep)")
     while True:
         raw = input("> ").strip()
         if not raw:
@@ -377,32 +377,32 @@ def _ask_int(title, current, lo, hi):
                 return v
         except ValueError:
             pass
-        print(f"  entero entre {lo} y {hi}")
+        print(f"  an integer between {lo} and {hi}")
 
 
 def _ask_text(title, current):
-    print(f"\n{title}   (ahora: \"{current}\", enter = dejar)")
+    print(f"\n{title}   (now: \"{current}\", enter = keep)")
     raw = input("> ").strip()
     return raw or None
 
 
 def setup():
-    """Asistente interactivo: pregunta lo importante y escribe el TOML."""
+    """Interactive wizard: asks what matters and writes the TOML."""
     cfg = load_config()
     d, e, b = cfg["display"], cfg["effects"], cfg["behavior"]
     ch = {}
-    print("fatal-lyrics — setup. Enter en cualquier pregunta = dejar como está.")
+    print("fatal-lyrics — setup. Enter on any question = leave it as is.")
 
     mons = _monitors()
-    opts = [("auto (primer monitor)", "auto"), ("todas las pantallas", "all")]
-    opts += [(f"solo {n}  ({info})", n) for n, info in mons]
+    opts = [("auto (first monitor)", "auto"), ("all screens", "all")]
+    opts += [(f"only {n}  ({info})", n) for n, info in mons]
     if len(mons) > 1:
-        opts.append(("varias (elegir cuáles)", "__multi__"))
-    v = _pick("¿En qué pantalla(s) aparecen los carteles?", opts, d["screen"])
+        opts.append(("several (pick which)", "__multi__"))
+    v = _pick("Which screen(s) should dialogs appear on?", opts, d["screen"])
     if v == "__multi__":
         for i, (n, info) in enumerate(mons, 1):
             print(f"  {i}) {n}  ({info})")
-        raw = input("números separados por coma (ej: 1,3) > ").strip()
+        raw = input("comma-separated numbers (e.g. 1,3) > ").strip()
         picked = [mons[int(t) - 1][0] for t in (t.strip() for t in raw.split(","))
                   if t.isdigit() and 1 <= int(t) <= len(mons)]
         if picked:
@@ -410,114 +410,114 @@ def setup():
     elif v is not None and v != d["screen"]:
         ch["screen"] = ("display", v)
 
-    v = _pick("Funda de vinilo (portada al cambiar de tema)",
-              [("sí", True), ("no", False)], b["now_playing"])
+    v = _pick("Vinyl sleeve (album art on track change)",
+              [("yes", True), ("no", False)], b["now_playing"])
     if v is not None and v != b["now_playing"]:
         ch["now_playing"] = ("behavior", v)
     if ch.get("now_playing", (None, b["now_playing"]))[1]:
-        v = _pick("¿Dónde se estaciona la funda?", [
-            ("arriba a la izquierda", "top-left"),
-            ("arriba a la derecha", "top-right"),
-            ("abajo a la izquierda", "bottom-left"),
-            ("abajo a la derecha", "bottom-right"),
-            ("siempre centrada (se achica en el lugar)", "center"),
+        v = _pick("Where should the sleeve dock?", [
+            ("top-left", "top-left"),
+            ("top-right", "top-right"),
+            ("bottom-left", "bottom-left"),
+            ("bottom-right", "bottom-right"),
+            ("always centered (shrinks in place)", "center"),
         ], b["np_corner"])
         if v is not None and v != b["np_corner"]:
             ch["np_corner"] = ("behavior", v)
-        v = _ask_int("Margen de la funda contra los bordes (px)", b["np_margin"], 0, 200)
+        v = _ask_int("Sleeve margin against the edges (px)", b["np_margin"], 0, 200)
         if v is not None and v != b["np_margin"]:
             ch["np_margin"] = ("behavior", v)
-        v = _pick("Disco de vinilo asomando de la funda",
-                  [("sí", True), ("no", False)], b["np_vinyl"])
+        v = _pick("Spinning vinyl record peeking out of the sleeve",
+                  [("yes", True), ("no", False)], b["np_vinyl"])
         if v is not None and v != b["np_vinyl"]:
             ch["np_vinyl"] = ("behavior", v)
 
-    v = _pick("Karaoke (la línea actual se pinta palabra por palabra)",
-              [("sí", True), ("no", False)], d["karaoke"])
+    v = _pick("Karaoke (current line paints word by word)",
+              [("yes", True), ("no", False)], d["karaoke"])
     if v is not None and v != d["karaoke"]:
         ch["karaoke"] = ("display", v)
 
-    v = _pick("Nivel de glitch", [
-        ("off (carteles sanos)", "off"), ("soft", "soft"),
-        ("normal", "normal"), ("aggressive (GPU muriéndose)", "aggressive"),
+    v = _pick("Glitch intensity", [
+        ("off (clean dialogs)", "off"), ("soft", "soft"),
+        ("normal", "normal"), ("aggressive (dying GPU)", "aggressive"),
     ], e["glitch"])
     if v is not None and v != e["glitch"]:
         ch["glitch"] = ("effects", v)
 
-    v = _pick("Zona donde aparecen", [
-        ("toda la pantalla", "full"), ("arriba", "top"), ("abajo", "bottom"),
-        ("izquierda", "left"), ("derecha", "right"),
-        ("bordes (no tapa el centro)", "edges"),
+    v = _pick("Spawn zone", [
+        ("full screen", "full"), ("top", "top"), ("bottom", "bottom"),
+        ("left", "left"), ("right", "right"),
+        ("edges (leaves the center clear)", "edges"),
     ], d["spawn_area"])
     if v is not None and v != d["spawn_area"]:
         ch["spawn_area"] = ("display", v)
 
-    v = _ask_num("Escala de los carteles", d["scale"], 0.5, 3.0)
+    v = _ask_num("Dialog scale", d["scale"], 0.5, 3.0)
     if v is not None and v != d["scale"]:
         ch["scale"] = ("display", v)
 
-    v = _ask_num("Escala extra del cartel actual", d["current_scale"], 0.5, 3.0)
+    v = _ask_num("Extra scale for the current-line dialog", d["current_scale"], 0.5, 3.0)
     if v is not None and v != d["current_scale"]:
         ch["current_scale"] = ("display", v)
 
-    v = _ask_int("Máximo de carteles vivos a la vez (0 = sin límite)", d["max_dialogs"], 0, 50)
+    v = _ask_int("Max live dialogs at once (0 = unlimited)", d["max_dialogs"], 0, 50)
     if v is not None and v != d["max_dialogs"]:
         ch["max_dialogs"] = ("display", v)
 
-    v = _ask_int("Un cartel muere entre... (carteles nuevos después de aparecer)",
+    v = _ask_int("A dialog dies between... (new dialogs after it appears)",
                  e["death_age_min"], 1, 50)
     if v is not None and v != e["death_age_min"]:
         ch["death_age_min"] = ("effects", v)
-    v = _ask_int("...y como máximo (carteles nuevos)", e["death_age_max"], 1, 50)
+    v = _ask_int("...and at most (new dialogs)", e["death_age_max"], 1, 50)
     if v is not None and v != e["death_age_max"]:
         ch["death_age_max"] = ("effects", v)
 
-    v = _ask_int("Vida máxima por cartel en segundos (0 = sin límite)", e["max_lifetime"], 0, 600)
+    v = _ask_int("Max lifetime per dialog in seconds (0 = unlimited)", e["max_lifetime"], 0, 600)
     if v is not None and v != e["max_lifetime"]:
         ch["max_lifetime"] = ("effects", v)
 
-    v = _ask_int("Segundos en pausa antes de limpiar todo (0 = nunca)", b["pause_clear"], 0, 300)
+    v = _ask_int("Seconds paused before clearing everything (0 = never)", b["pause_clear"], 0, 300)
     if v is not None and v != b["pause_clear"]:
         ch["pause_clear"] = ("behavior", v)
 
-    v = _ask_num("Adelanto de sincronización de letra en segundos (puede ser negativo)",
+    v = _ask_num("Lyric sync lead time in seconds (can be negative)",
                  b["offset"], -2.0, 2.0)
     if v is not None and v != b["offset"]:
         ch["offset"] = ("behavior", v)
 
     players = _players()
     if players:
-        v = _pick("Player MPRIS a seguir",
-                  [(p, p) for p in players] + [("otro (escribir a mano)", "__manual__")], b["player"])
+        v = _pick("MPRIS player to follow",
+                  [(p, p) for p in players] + [("other (type it in)", "__manual__")], b["player"])
         if v == "__manual__":
-            v = _ask_text("Nombre del player (ver: playerctl -l)", b["player"])
+            v = _ask_text("Player name (see: playerctl -l)", b["player"])
     else:
-        v = _ask_text("Player MPRIS a seguir (ver: playerctl -l)", b["player"])
+        v = _ask_text("MPRIS player to follow (see: playerctl -l)", b["player"])
     if v is not None and v != b["player"]:
         ch["player"] = ("behavior", v)
 
     for key, sec, label, cur in [
-        ("tearing", "effects", "Ventana partida en carteles viejos", e["tearing"]),
-        ("effects_on_current", "effects", "El cartel actual también vibra/glitchea", e["effects_on_current"]),
-        ("burn_in", "effects", "Sombra quemada al morir (burn-in)", e["burn_in"]),
-        ("cascade", "effects", "Muerte en cascada al cambiar de canción", e["cascade"]),
-        ("troll_no", "behavior", 'Botón "No" duplica el cartel', b["troll_no"]),
-        ("click_through", "behavior", "Carteles fantasma (los clicks pasan de largo)", b["click_through"]),
-        ("game_pause", "behavior", "Auto-pausa si hay un juego en pantalla completa", b["game_pause"]),
+        ("tearing", "effects", "Split window on old dialogs", e["tearing"]),
+        ("effects_on_current", "effects", "The current dialog also vibrates/glitches", e["effects_on_current"]),
+        ("burn_in", "effects", "Fading burnt shadow when a dialog dies (burn-in)", e["burn_in"]),
+        ("cascade", "effects", "Dialogs die in a chain on track change", e["cascade"]),
+        ("troll_no", "behavior", 'The "No" button duplicates the dialog', b["troll_no"]),
+        ("click_through", "behavior", "Ghost dialogs (clicks pass through)", b["click_through"]),
+        ("game_pause", "behavior", "Auto-pause when a game is in fullscreen", b["game_pause"]),
     ]:
-        v = _pick(label, [("sí", True), ("no", False)], cur)
+        v = _pick(label, [("yes", True), ("no", False)], cur)
         if v is not None and v != cur:
             ch[key] = (sec, v)
 
     if not ch:
-        print("\nSin cambios.")
+        print("\nNo changes.")
         return
     _save_config(ch)
-    print(f"\nGuardado en {CONFIG_PATH}:")
+    print(f"\nSaved to {CONFIG_PATH}:")
     for key, (sec, val) in ch.items():
         print(f"  {sec}.{key} = {_toml_val(val)}")
-    raw = input("¿Reiniciar Fatal Lyrics para aplicar? [S/n] > ").strip().lower()
-    if raw in ("", "s", "si", "sí", "y", "yes"):
+    raw = input("Restart Fatal Lyrics to apply? [Y/n] > ").strip().lower()
+    if raw in ("", "y", "yes", "s", "si", "sí"):
         launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "fatal")
         cmd = [launcher] if os.path.exists(launcher) else ["fatal"]
         subprocess.run(cmd + ["restart"])
@@ -543,7 +543,7 @@ def start_tray():
         gi.require_version("AyatanaAppIndicator3", "0.1")
         from gi.repository import Gtk, AyatanaAppIndicator3
     except Exception as e:
-        log(f"bandeja no disponible ({e}), sigo sin ícono")
+        log(f"tray not available ({e}), continuing without an icon")
         return
 
     def run():
@@ -554,11 +554,11 @@ def start_tray():
         indicator.set_title("Fatal Lyrics")
 
         menu = Gtk.Menu()
-        status_item = Gtk.MenuItem(label="Fatal Lyrics activo")
+        status_item = Gtk.MenuItem(label="Fatal Lyrics active")
         status_item.set_sensitive(False)
         menu.append(status_item)
         menu.append(Gtk.SeparatorMenuItem())
-        quit_item = Gtk.MenuItem(label="Cerrar")
+        quit_item = Gtk.MenuItem(label="Quit")
         cartelitos_bin = os.path.expanduser("~/.local/bin/fatal")
         quit_item.connect("activate", lambda *_: subprocess.Popen([cartelitos_bin, "off"]))
         menu.append(quit_item)
@@ -582,7 +582,7 @@ def main():
     last_pos_sent = 0.0
     pause_clear_s = CFG["behavior"]["pause_clear"]
     offset = CFG["behavior"]["offset"]
-    log("cartelitos daemon arrancó")
+    log("fatal-lyrics daemon started")
     start_tray()
     send(_config_event())
     while True:
@@ -597,10 +597,10 @@ def main():
                     lyrics = None
                     idx = -1
                     clear()
-                    log("juego detectado: cartelitos en pausa")
+                    log("game detected: pausing")
             elif paused_by_game:
                 paused_by_game = False
-                log("juego cerrado: cartelitos vuelve")
+                log("game closed: resuming")
         if paused_by_game:
             time.sleep(2)
             continue
@@ -624,7 +624,7 @@ def main():
                 pause_cleared = True
                 resend_np = True
                 idx = -1
-                log("pausa larga: carteles limpiados")
+                log("long pause: dialogs cleared")
         else:
             pause_started = None
             pause_cleared = False
@@ -645,9 +645,9 @@ def main():
                       "album": t["album"], "art": t["art"]})
             lyrics = fetch_lyrics(t) if t["title"] else None
             if lyrics:
-                log(f"letra sincronizada: {len(lyrics)} líneas")
+                log(f"synced lyrics: {len(lyrics)} lines")
             else:
-                log("sin letra sincronizada (sin carteles)")
+                log("no synced lyrics (no dialogs)")
 
         # progreso de la canción: barra de la funda + karaoke (1 evento por segundo)
         if ((CFG["behavior"]["now_playing"] or CFG["display"]["karaoke"])
@@ -672,7 +672,7 @@ if __name__ == "__main__":
         try:
             setup()
         except (KeyboardInterrupt, EOFError):
-            print("\nlisto, me voy")
+            print("\nok, bye")
         sys.exit(0)
     try:
         main()

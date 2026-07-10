@@ -1,6 +1,6 @@
 #!/bin/bash
-# fatal-lyrics — letras de Spotify como diálogos de error de Windows.
-# Relocatable: funciona desde el repo clonado o instalado en /usr/share/fatal-lyrics.
+# fatal-lyrics — synced Spotify lyrics as Windows error dialogs.
+# Relocatable: works from the cloned repo or installed at /usr/share/fatal-lyrics.
 SELF="$(readlink -f "$0")"
 BASE="${CARTELITOS_HOME:-$(dirname "$(dirname "$SELF")")}"
 QML="$BASE/shell/shell.qml"
@@ -15,14 +15,14 @@ running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
 start() {
     if [ ! -f "$QML" ] || [ ! -f "$DAEMON" ]; then
-        echo "no encuentro los archivos de fatal-lyrics en $BASE" >&2
+        echo "can't find the fatal-lyrics files in $BASE" >&2
         exit 1
     fi
     if ! running $QS_PID; then
         qs -p "$QML" >/tmp/cartelitos-qs.log 2>&1 &
         echo $! > $QS_PID
     fi
-    # esperar a que el overlay levante el socket antes de arrancar el daemon
+    # wait for the overlay to bring up the socket before starting the daemon
     for _ in $(seq 1 25); do
         [ -S "$SOCK" ] && break
         sleep 0.2
@@ -39,7 +39,7 @@ stop() {
         running "$f" && kill "$(cat "$f")" 2>/dev/null
         rm -f "$f"
     done
-    # sin esto, el próximo start ve el socket viejo y arranca el daemon antes de tiempo
+    # without this, the next start sees the stale socket and starts the daemon too early
     rm -f "$SOCK"
     echo "fatal OFF"
 }
@@ -51,6 +51,6 @@ case "${1:-toggle}" in
     status)    running $D_PID && echo ON || echo OFF ;;
     toggle)    running $D_PID && stop || start ;;
     config|setup) python3 "$DAEMON" --setup ;;
-    edit)      ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: fatal restart" ;;
-    *)         echo "uso: fatal [on|off|toggle|restart|status|config|edit]" ;;
+    edit)      ${EDITOR:-nano} "$CONFIG"; echo "apply changes with: fatal restart" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit]" ;;
 esac

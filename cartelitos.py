@@ -427,10 +427,10 @@ def setup():
     print(f"\nGuardado en {CONFIG_PATH}:")
     for key, (sec, val) in ch.items():
         print(f"  {sec}.{key} = {_toml_val(val)}")
-    raw = input("¿Reiniciar cartelitos para aplicar? [S/n] > ").strip().lower()
+    raw = input("¿Reiniciar Fatal Lyrics para aplicar? [S/n] > ").strip().lower()
     if raw in ("", "s", "si", "sí", "y", "yes"):
-        launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "cartelitos")
-        cmd = [launcher] if os.path.exists(launcher) else ["cartelitos"]
+        launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "fatal")
+        cmd = [launcher] if os.path.exists(launcher) else ["fatal"]
         subprocess.run(cmd + ["restart"])
 
 
@@ -470,7 +470,7 @@ def start_tray():
         menu.append(status_item)
         menu.append(Gtk.SeparatorMenuItem())
         quit_item = Gtk.MenuItem(label="Cerrar")
-        cartelitos_bin = os.path.expanduser("~/.local/bin/cartelitos")
+        cartelitos_bin = os.path.expanduser("~/.local/bin/fatal")
         quit_item.connect("activate", lambda *_: subprocess.Popen([cartelitos_bin, "off"]))
         menu.append(quit_item)
         menu.show_all()

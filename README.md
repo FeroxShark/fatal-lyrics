@@ -1,46 +1,46 @@
 # fatal-lyrics
 
-Letras de Spotify sincronizadas, mostradas como diálogos de error de Windows 95
-que van apareciendo en tu escritorio. Inspirado en el video de
-[*Me and Mr Wolf* — The Real Tuesday Weld](https://www.youtube.com/watch?v=e1_BBW1umyE).
+Synced Spotify lyrics shown as Windows 95 error dialogs popping up on your
+desktop.
 
-- Cada línea de la letra aparece como un cartel de error en una posición random.
-- El cartel de la línea que suena **ahora** es más grande y está quieto.
-- Los carteles viejos vibran como hologramas, se glitchean con artefactos tipo
-  GPU rota (bloques magenta/verde/morado), quedan con la **ventana partida**
-  (tearing real) y mueren con un colapso estilo CRT.
-- Al cambiar de canción aparece una **funda de vinilo**: caja cuadrada con la
-  portada del álbum y borde estilo Windows clásico. Sale grande en el centro y
-  a los segundos se estaciona chiquita en una esquina (configurable, o siempre
-  centrada), con una **barra de progreso Win95** que avanza con la canción.
-  Se puede arrastrar a donde quieras; click seco = esconderla hasta el próximo tema.
-- De la funda asoma un **disco de vinilo girando**, con la portada de etiqueta.
-- Al cambiar de canción los carteles viejos no se esfuman: mueren **en cadena**,
-  un dominó de colapsos CRT del más viejo al más nuevo.
-- Modo **karaoke** opcional: la línea actual se va pintando palabra por palabra
-  a medida que se canta (timing estimado — lrclib da tiempos por línea).
-- **Multi-monitor**: `screen = "all"` (o una lista) muestra los carteles en
-  varias pantallas a la vez, cada monitor con sus propias posiciones random.
-- Los carteles muertos dejan una **sombra quemada** (burn-in CRT) que se
-  desvanece en un par de segundos.
-- Íconos de Windows random: error, advertencia, pregunta, info.
-- Los carteles se pueden **arrastrar** desde la barra de título.
-- En el cartel actual: `Yes` / `Cancel` / `✕` cierran, `No` lo **duplica** (como
-  los popups de malware de los 2000). En los viejos (rotos): click = cerrar.
-- Si detecta un juego corriendo se pausa solo; si pausás la música mucho tiempo,
-  limpia todo; cada cartel tiene vida máxima (nada queda flotando para siempre).
+- Every lyric line appears as an error dialog at a random position.
+- The dialog for the line playing **right now** is bigger and stays still.
+- Older dialogs vibrate like holograms, glitch with broken-GPU artifacts
+  (magenta/green/purple blocks), get a **split window** (real tearing), and
+  die with a CRT-style collapse.
+- On track change a **vinyl sleeve** pops up: a square card with the album
+  art and a classic Windows border. It appears big in the center, then after
+  a few seconds shrinks and docks into a corner (configurable, or always
+  centered), with a **Win95 progress bar** that tracks the song. Draggable
+  anywhere; a quick click hides it until the next track.
+- A **spinning vinyl record** peeks out of the sleeve, labeled with the
+  album art.
+- On track change, old dialogs don't just vanish: they die **in a chain**,
+  a domino of CRT collapses from oldest to newest.
+- Optional **karaoke** mode: the current line paints word by word as it's
+  sung (estimated timing — lrclib provides per-line timestamps).
+- **Multi-monitor**: `screen = "all"` (or a list) shows dialogs across
+  several screens at once, each with its own random positions.
+- Dead dialogs leave a **burnt shadow** (CRT burn-in) that fades out over a
+  couple seconds.
+- Random Windows icons: error, warning, question, info.
+- Dialogs can be **dragged** by their title bar.
+- On the current dialog: `Yes` / `Cancel` / `✕` close it, `No` **duplicates**
+  it (like 2000s malware popups). On old (broken) ones: click to close.
+- Auto-pauses if it detects a running game; clears everything if music stays
+  paused too long; every dialog has a max lifetime (nothing floats forever).
 
-## Requisitos
+## Requirements
 
-- Wayland con un compositor wlroots-like (probado en **Hyprland**)
+- Wayland with a wlroots-like compositor (tested on **Hyprland**)
 - [Quickshell](https://quickshell.org/) (`qs`)
 - `playerctl`
-- `python3` ≥ 3.11 (solo stdlib)
-- Spotify (o cualquier player MPRIS — configurable)
+- `python3` ≥ 3.11 (stdlib only)
+- Spotify (or any MPRIS player — configurable)
 
-Las letras salen de [lrclib.net](https://lrclib.net) (gratis, sin API key).
+Lyrics come from [lrclib.net](https://lrclib.net) (free, no API key).
 
-## Instalación
+## Installation
 
 ### Arch Linux (AUR)
 
@@ -55,72 +55,72 @@ git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
 ~/fatal-lyrics/install.sh
 ```
 
-## Uso
+## Usage
 
 ```bash
-cartelitos            # toggle on/off
-cartelitos on|off     # explícito
-cartelitos restart    # reiniciar (aplica cambios de config)
-cartelitos status     # ON / OFF
-cartelitos setup      # menú interactivo de configuración (recomendado)
-cartelitos config     # abre la config en $EDITOR
+fatal            # toggle on/off
+fatal on|off     # explicit
+fatal restart    # restart (applies config changes)
+fatal status     # ON / OFF
+fatal setup      # interactive config menu (recommended)
+fatal config     # opens the config in $EDITOR
 ```
 
-## Configuración
+## Configuration
 
-La primera vez se crea `~/.config/cartelitos/config.toml` con defaults.
-Lo más fácil es `cartelitos setup` (menú interactivo que detecta tus monitores
-y reinicia solo). También podés editarla a mano (`cartelitos config`) y aplicar
-con `cartelitos restart`.
+On first run it creates `~/.config/cartelitos/config.toml` with defaults.
+The easiest way is `fatal setup` (interactive menu that detects your
+monitors and restarts on its own). You can also edit it by hand
+(`fatal config`) and apply changes with `fatal restart`.
 
-| Sección    | Opción               | Qué hace                                                       | Default     |
-|------------|----------------------|----------------------------------------------------------------|-------------|
-| `display`  | `screen`             | `"auto"` (primero), `"all"` (todos), nombre (`"DP-1"`) o lista (`["DP-1", "DP-2"]`) | `"auto"`   |
-| `display`  | `max_dialogs`        | Máximo de carteles vivos a la vez (`0` = sin límite)           | `0`         |
-| `display`  | `scale`              | Tamaño base de todos los carteles                              | `1.0`       |
-| `display`  | `current_scale`      | Factor extra del cartel de la línea actual                     | `1.3`       |
-| `display`  | `spawn_area`         | Zona de aparición: `full`/`top`/`bottom`/`left`/`right`/`edges` | `"full"`   |
-| `display`  | `karaoke`            | La línea actual se pinta palabra por palabra                   | `false`     |
-| `effects`  | `glitch`             | Intensidad: `off`/`soft`/`normal`/`aggressive`                 | `"normal"`  |
-| `effects`  | `effects_on_current` | El cartel actual también vibra/glitchea                        | `false`     |
-| `effects`  | `tearing`            | Los viejos quedan con la ventana partida                       | `true`      |
-| `effects`  | `death_age_min/max`  | Un cartel muere entre N y M carteles después                   | `3` / `7`   |
-| `effects`  | `max_lifetime`       | Vida máxima por cartel en segundos (`0` = sin límite)          | `60`        |
-| `effects`  | `burn_in`            | Los carteles muertos dejan una sombra quemada que se desvanece | `true`      |
-| `effects`  | `cascade`            | Al cambiar de canción los carteles mueren en cadena (dominó)   | `true`      |
-| `behavior` | `now_playing`        | Funda de vinilo con la portada al cambiar de canción           | `true`      |
-| `behavior` | `np_corner`          | Dónde se estaciona: `top-left`/`top-right`/`bottom-left`/`bottom-right`/`center` | `"top-right"` |
-| `behavior` | `np_margin`          | Píxeles libres contra los bordes (por si hay una barra/panel)  | `14`        |
-| `behavior` | `np_vinyl`           | Disco de vinilo que asoma girando de la funda                  | `true`      |
-| `behavior` | `troll_no`           | El botón `No` duplica el cartel                                | `true`      |
-| `behavior` | `click_through`      | Los carteles no capturan el mouse                              | `false`     |
-| `behavior` | `pause_clear`        | Segundos en pausa antes de limpiar todo (`0` = nunca)          | `15`        |
-| `behavior` | `player`             | Nombre del player MPRIS (`playerctl -l`)                       | `"spotify"` |
-| `behavior` | `offset`             | Adelanto de sincronización en segundos                         | `0.15`      |
-| `behavior` | `game_procs`         | Procesos que pausan los carteles automáticamente               | `["cs2"]`   |
+| Section    | Option               | What it does                                                    | Default     |
+|------------|----------------------|------------------------------------------------------------------|-------------|
+| `display`  | `screen`             | `"auto"` (first), `"all"` (every monitor), a name (`"DP-1"`) or a list (`["DP-1", "DP-2"]`) | `"auto"`   |
+| `display`  | `max_dialogs`        | Max live dialogs at once (`0` = unlimited)                      | `0`         |
+| `display`  | `scale`              | Base size for all dialogs                                       | `1.0`       |
+| `display`  | `current_scale`      | Extra size factor for the current-line dialog                   | `1.3`       |
+| `display`  | `spawn_area`         | Spawn zone: `full`/`top`/`bottom`/`left`/`right`/`edges`         | `"full"`   |
+| `display`  | `karaoke`            | Current line paints word by word                                 | `false`     |
+| `effects`  | `glitch`             | Intensity: `off`/`soft`/`normal`/`aggressive`                    | `"normal"`  |
+| `effects`  | `effects_on_current` | The current dialog also vibrates/glitches                        | `false`     |
+| `effects`  | `tearing`            | Old dialogs get a split window                                   | `true`      |
+| `effects`  | `death_age_min/max`  | A dialog dies between N and M dialogs later                      | `3` / `7`   |
+| `effects`  | `max_lifetime`       | Max lifetime per dialog in seconds (`0` = unlimited)              | `60`        |
+| `effects`  | `burn_in`            | Dead dialogs leave a fading burnt shadow                          | `true`      |
+| `effects`  | `cascade`            | On track change, dialogs die in a chain (domino)                 | `true`      |
+| `behavior` | `now_playing`        | Vinyl sleeve with album art on track change                       | `true`      |
+| `behavior` | `np_corner`          | Where it docks: `top-left`/`top-right`/`bottom-left`/`bottom-right`/`center` | `"top-right"` |
+| `behavior` | `np_margin`          | Free pixels against the edges (in case of a bar/panel)            | `14`        |
+| `behavior` | `np_vinyl`           | Spinning vinyl record peeking out of the sleeve                   | `true`      |
+| `behavior` | `troll_no`           | The `No` button duplicates the dialog                              | `true`      |
+| `behavior` | `click_through`      | Dialogs don't capture the mouse                                    | `false`     |
+| `behavior` | `pause_clear`        | Seconds paused before clearing everything (`0` = never)            | `15`        |
+| `behavior` | `player`             | MPRIS player name (`playerctl -l`)                                 | `"spotify"` |
+| `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
+| `behavior` | `game_procs`         | Processes that auto-pause the dialogs                              | `["cs2"]`   |
 
-## Cómo funciona
+## How it works
 
 ```
-Spotify ──playerctl (MPRIS)──▶ cartelitos.py ──socket Unix──▶ Quickshell overlay
+Spotify ──playerctl (MPRIS)──▶ cartelitos.py ──Unix socket──▶ Quickshell overlay
                                     │
-                                    └──HTTP──▶ lrclib.net (letra sincronizada LRC)
+                                    └──HTTP──▶ lrclib.net (synced LRC lyrics)
 ```
 
-El daemon sondea la posición de reproducción, resuelve qué línea corresponde y
-le manda eventos JSON al overlay por `$XDG_RUNTIME_DIR/cartelitos.sock`.
-La config viaja por el mismo socket al conectar.
+The daemon polls playback position, resolves which line applies, and sends
+JSON events to the overlay over `$XDG_RUNTIME_DIR/cartelitos.sock`. Config is
+sent over the same socket on connect.
 
-## Desinstalar
+## Uninstall
 
 ```bash
-cartelitos off
+fatal off
 # AUR: sudo pacman -R fatal-lyrics-git
 # manual:
-rm ~/.local/bin/cartelitos && rm -rf ~/fatal-lyrics
-rm -rf ~/.config/cartelitos   # opcional: borrar config
+rm ~/.local/bin/fatal && rm -rf ~/fatal-lyrics
+rm -rf ~/.config/cartelitos   # optional: delete config
 ```
 
-## Licencia
+## License
 
 MIT

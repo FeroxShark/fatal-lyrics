@@ -14,17 +14,19 @@ done
 [ "$missing" -eq 1 ] && exit 1
 
 mkdir -p "$HOME/.local/bin"
-ln -sf "$REPO_DIR/bin/cartelitos" "$HOME/.local/bin/cartelitos"
-chmod +x "$REPO_DIR/bin/cartelitos" "$REPO_DIR/cartelitos.py"
+ln -sf "$REPO_DIR/bin/fatal" "$HOME/.local/bin/fatal"
+chmod +x "$REPO_DIR/bin/fatal" "$REPO_DIR/cartelitos.py"
 
 mkdir -p "$HOME/.local/share/applications"
-sed "s|Exec=cartelitos|Exec=$HOME/.local/bin/cartelitos|" "$REPO_DIR/packaging/cartelitos.desktop" \
-    > "$HOME/.local/share/applications/cartelitos.desktop"
+sed "s|Exec=fatal|Exec=$HOME/.local/bin/fatal|" "$REPO_DIR/packaging/fatal.desktop" \
+    > "$HOME/.local/share/applications/fatal.desktop"
 command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/.local/share/applications"
 
-# limpiar symlink legacy de versiones viejas
+# limpiar symlinks legacy de versiones viejas
 [ -L "$HOME/.config/quickshell/cartelitos" ] && rm "$HOME/.config/quickshell/cartelitos"
+[ -L "$HOME/.local/bin/cartelitos" ] && rm "$HOME/.local/bin/cartelitos"
+[ -f "$HOME/.local/share/applications/cartelitos.desktop" ] && rm "$HOME/.local/share/applications/cartelitos.desktop"
 
-echo "instalado. Poné música en Spotify y corré: cartelitos"
-echo "config: se crea sola en ~/.config/cartelitos/config.toml (editar con: cartelitos config)"
+echo "instalado. Poné música en Spotify y corré: fatal"
+echo "config: se crea sola en ~/.config/cartelitos/config.toml (editar con: fatal config)"
 echo "bandeja del sistema (ícono + botón cerrar): opcional, instalá gtk3 + libayatana-appindicator"

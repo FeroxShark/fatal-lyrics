@@ -31,7 +31,7 @@ start() {
         python3 "$DAEMON" >/tmp/cartelitos.log 2>&1 &
         echo $! > $D_PID
     fi
-    echo "cartelitos ON"
+    echo "fatal ON"
 }
 
 stop() {
@@ -41,7 +41,7 @@ stop() {
     done
     # sin esto, el próximo start ve el socket viejo y arranca el daemon antes de tiempo
     rm -f "$SOCK"
-    echo "cartelitos OFF"
+    echo "fatal OFF"
 }
 
 case "${1:-toggle}" in
@@ -50,7 +50,7 @@ case "${1:-toggle}" in
     restart)   stop; sleep 0.5; start ;;
     status)    running $D_PID && echo ON || echo OFF ;;
     toggle)    running $D_PID && stop || start ;;
-    config)    ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: cartelitos restart" ;;
+    config)    ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: fatal restart" ;;
     setup)     python3 "$DAEMON" --setup ;;
-    *)         echo "uso: cartelitos [on|off|toggle|restart|status|config|setup]" ;;
+    *)         echo "uso: fatal [on|off|toggle|restart|status|config|setup]" ;;
 esac

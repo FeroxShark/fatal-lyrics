@@ -50,7 +50,7 @@ case "${1:-toggle}" in
     restart)   stop; sleep 0.5; start ;;
     status)    running $D_PID && echo ON || echo OFF ;;
     toggle)    running $D_PID && stop || start ;;
-    config)    ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: fatal restart" ;;
-    setup)     python3 "$DAEMON" --setup ;;
-    *)         echo "uso: fatal [on|off|toggle|restart|status|config|setup]" ;;
+    config|setup) python3 "$DAEMON" --setup ;;
+    edit)      ${EDITOR:-nano} "$CONFIG"; echo "aplicá los cambios con: fatal restart" ;;
+    *)         echo "uso: fatal [on|off|toggle|restart|status|config|edit]" ;;
 esac

@@ -62,16 +62,18 @@ fatal            # toggle on/off
 fatal on|off     # explicit
 fatal restart    # restart (applies config changes)
 fatal status     # ON / OFF
-fatal setup      # interactive config menu (recommended)
-fatal config     # opens the config in $EDITOR
+fatal config     # interactive menu, every setting, no need to touch the TOML by hand
+fatal setup      # same as `fatal config` (first-run alias)
+fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 ```
 
 ## Configuration
 
 On first run it creates `~/.config/cartelitos/config.toml` with defaults.
-The easiest way is `fatal setup` (interactive menu that detects your
-monitors and restarts on its own). You can also edit it by hand
-(`fatal config`) and apply changes with `fatal restart`.
+`fatal config` walks through every option as a numbered menu (enter = keep
+the current value) — detects your monitors and MPRIS players, and offers to
+restart for you at the end. Prefer a text editor? `fatal edit` opens the raw
+TOML instead; apply changes with `fatal restart`.
 
 | Section    | Option               | What it does                                                    | Default     |
 |------------|----------------------|------------------------------------------------------------------|-------------|
@@ -97,7 +99,7 @@ monitors and restarts on its own). You can also edit it by hand
 | `behavior` | `pause_clear`        | Seconds paused before clearing everything (`0` = never)            | `15`        |
 | `behavior` | `player`             | MPRIS player name (`playerctl -l`)                                 | `"spotify"` |
 | `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
-| `behavior` | `game_procs`         | Processes that auto-pause the dialogs                              | `["cs2"]`   |
+| `behavior` | `game_pause`         | Auto-pause when a window goes fullscreen (any game, no process list needed) | `true`      |
 
 ## How it works
 

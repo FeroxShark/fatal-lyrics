@@ -27,7 +27,7 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
 
 DEFAULT_CONFIG = """\
 # fatal-lyrics — configuración
-# Aplicar cambios con: cartelitos restart
+# Aplicar cambios con: fatal restart
 
 [display]
 screen = "auto"        # "auto" (primer monitor) | "all" (todas) | "DP-1" | ["DP-1", "DP-2"]
@@ -57,7 +57,9 @@ click_through = false  # true = los carteles no capturan el mouse (clicks pasan 
 pause_clear = 15       # segundos en pausa antes de limpiar todo; 0 = nunca
 player = "spotify"     # nombre del player MPRIS (ver: playerctl -l)
 offset = 0.15          # adelanto de sincronización en segundos
-game_procs = ["cs2"]   # si alguno de estos procesos corre, pausa automática
+game_pause = true      # auto-pausa si hay una ventana en pantalla completa (heurística
+                        # genérica de "juego" vía Hyprland, no depende de un proceso puntual);
+                        # false = nunca pausar por juegos
 """
 
 DEFAULTS = {
@@ -74,7 +76,7 @@ DEFAULTS = {
         "now_playing": True, "np_corner": "top-right", "np_margin": 14,
         "np_vinyl": True, "troll_no": True, "click_through": False,
         "pause_clear": 15, "player": "spotify", "offset": 0.15,
-        "game_procs": ["cs2"],
+        "game_pause": True,
     },
 }
 
@@ -141,11 +143,21 @@ def playerctl_state():
 
 
 def gaming():
-    """True si hay un juego corriendo (no molestar)."""
-    for proc in CFG["behavior"]["game_procs"]:
-        if subprocess.run(["pgrep", "-x", proc], capture_output=True).returncode == 0:
-            return True
-    return False
+    """True si hay una ventana en pantalla completa (no molestar). Heurística
+    genérica vía Hyprland: no depende de una lista de procesos puntuales, así
+    que funciona con cualquier juego que pida fullscreen (no detecta borderless
+    windowed, que para Hyprland es una ventana normal)."""
+    if not CFG["behavior"]["game_pause"]:
+        return False
+    try:
+        out = subprocess.run(["hyprctl", "activewindow", "-j"],
+                             capture_output=True, text=True, timeout=2)
+        if out.returncode != 0 or not out.stdout.strip():
+            return False
+        w = json.loads(out.stdout)
+        return bool(w) and (w.get("fullscreen", 0) != 0 or w.get("fullscreenClient", 0) != 0)
+    except Exception:
+        return False
 
 
 def parse_lrc(text):
@@ -297,6 +309,17 @@ def _save_config(changes):
         f.write("\n".join(lines))
 
 
+def _players():
+    """Players MPRIS detectados vía playerctl; lista vacía si no hay o falta el binario."""
+    try:
+        out = subprocess.run(["playerctl", "-l"], capture_output=True, text=True, timeout=2)
+        if out.returncode == 0:
+            return [p.strip() for p in out.stdout.splitlines() if p.strip()]
+    except Exception:
+        pass
+    return []
+
+
 def _monitors():
     """Monitores conectados vía hyprctl; lista vacía si no es Hyprland."""
     try:
@@ -342,6 +365,27 @@ def _ask_num(title, current, lo, hi):
         print(f"  número entre {lo} y {hi}")
 
 
+def _ask_int(title, current, lo, hi):
+    print(f"\n{title}   (ahora: {current}, enter = dejar)")
+    while True:
+        raw = input("> ").strip()
+        if not raw:
+            return None
+        try:
+            v = int(raw)
+            if lo <= v <= hi:
+                return v
+        except ValueError:
+            pass
+        print(f"  entero entre {lo} y {hi}")
+
+
+def _ask_text(title, current):
+    print(f"\n{title}   (ahora: \"{current}\", enter = dejar)")
+    raw = input("> ").strip()
+    return raw or None
+
+
 def setup():
     """Asistente interactivo: pregunta lo importante y escribe el TOML."""
     cfg = load_config()
@@ -380,6 +424,9 @@ def setup():
         ], b["np_corner"])
         if v is not None and v != b["np_corner"]:
             ch["np_corner"] = ("behavior", v)
+        v = _ask_int("Margen de la funda contra los bordes (px)", b["np_margin"], 0, 200)
+        if v is not None and v != b["np_margin"]:
+            ch["np_margin"] = ("behavior", v)
         v = _pick("Disco de vinilo asomando de la funda",
                   [("sí", True), ("no", False)], b["np_vinyl"])
         if v is not None and v != b["np_vinyl"]:
@@ -409,12 +456,54 @@ def setup():
     if v is not None and v != d["scale"]:
         ch["scale"] = ("display", v)
 
+    v = _ask_num("Escala extra del cartel actual", d["current_scale"], 0.5, 3.0)
+    if v is not None and v != d["current_scale"]:
+        ch["current_scale"] = ("display", v)
+
+    v = _ask_int("Máximo de carteles vivos a la vez (0 = sin límite)", d["max_dialogs"], 0, 50)
+    if v is not None and v != d["max_dialogs"]:
+        ch["max_dialogs"] = ("display", v)
+
+    v = _ask_int("Un cartel muere entre... (carteles nuevos después de aparecer)",
+                 e["death_age_min"], 1, 50)
+    if v is not None and v != e["death_age_min"]:
+        ch["death_age_min"] = ("effects", v)
+    v = _ask_int("...y como máximo (carteles nuevos)", e["death_age_max"], 1, 50)
+    if v is not None and v != e["death_age_max"]:
+        ch["death_age_max"] = ("effects", v)
+
+    v = _ask_int("Vida máxima por cartel en segundos (0 = sin límite)", e["max_lifetime"], 0, 600)
+    if v is not None and v != e["max_lifetime"]:
+        ch["max_lifetime"] = ("effects", v)
+
+    v = _ask_int("Segundos en pausa antes de limpiar todo (0 = nunca)", b["pause_clear"], 0, 300)
+    if v is not None and v != b["pause_clear"]:
+        ch["pause_clear"] = ("behavior", v)
+
+    v = _ask_num("Adelanto de sincronización de letra en segundos (puede ser negativo)",
+                 b["offset"], -2.0, 2.0)
+    if v is not None and v != b["offset"]:
+        ch["offset"] = ("behavior", v)
+
+    players = _players()
+    if players:
+        v = _pick("Player MPRIS a seguir",
+                  [(p, p) for p in players] + [("otro (escribir a mano)", "__manual__")], b["player"])
+        if v == "__manual__":
+            v = _ask_text("Nombre del player (ver: playerctl -l)", b["player"])
+    else:
+        v = _ask_text("Player MPRIS a seguir (ver: playerctl -l)", b["player"])
+    if v is not None and v != b["player"]:
+        ch["player"] = ("behavior", v)
+
     for key, sec, label, cur in [
         ("tearing", "effects", "Ventana partida en carteles viejos", e["tearing"]),
+        ("effects_on_current", "effects", "El cartel actual también vibra/glitchea", e["effects_on_current"]),
         ("burn_in", "effects", "Sombra quemada al morir (burn-in)", e["burn_in"]),
         ("cascade", "effects", "Muerte en cascada al cambiar de canción", e["cascade"]),
         ("troll_no", "behavior", 'Botón "No" duplica el cartel', b["troll_no"]),
         ("click_through", "behavior", "Carteles fantasma (los clicks pasan de largo)", b["click_through"]),
+        ("game_pause", "behavior", "Auto-pausa si hay un juego en pantalla completa", b["game_pause"]),
     ]:
         v = _pick(label, [("sí", True), ("no", False)], cur)
         if v is not None and v != cur:

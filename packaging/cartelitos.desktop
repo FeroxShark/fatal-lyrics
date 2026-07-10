@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Fatal Lyrics
+GenericName=Cartelitos
+Comment=Letras de Spotify como diálogos de error de Windows
+Exec=cartelitos toggle
+Icon=dialog-warning
+Terminal=false
+Categories=AudioVideo;Utility;
+Keywords=lyrics;letras;spotify;windows;cartelitos;fatal-lyrics;

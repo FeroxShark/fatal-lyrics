@@ -12,6 +12,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import tomllib
 import urllib.parse
@@ -443,6 +444,43 @@ def current_line_index(lyrics, pos):
     return idx
 
 
+def start_tray():
+    """Ícono en la bandeja del sistema mientras el daemon está vivo (StatusNotifierItem
+    vía AyatanaAppIndicator3). Opcional: si gtk3/libayatana-appindicator no están
+    instalados, el daemon sigue andando igual, sin bandeja."""
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        gi.require_version("AyatanaAppIndicator3", "0.1")
+        from gi.repository import Gtk, AyatanaAppIndicator3
+    except Exception as e:
+        log(f"bandeja no disponible ({e}), sigo sin ícono")
+        return
+
+    def run():
+        indicator = AyatanaAppIndicator3.Indicator.new(
+            "cartelitos", "dialog-warning",
+            AyatanaAppIndicator3.IndicatorCategory.APPLICATION_STATUS)
+        indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
+        indicator.set_title("Fatal Lyrics")
+
+        menu = Gtk.Menu()
+        status_item = Gtk.MenuItem(label="Fatal Lyrics activo")
+        status_item.set_sensitive(False)
+        menu.append(status_item)
+        menu.append(Gtk.SeparatorMenuItem())
+        quit_item = Gtk.MenuItem(label="Cerrar")
+        cartelitos_bin = os.path.expanduser("~/.local/bin/cartelitos")
+        quit_item.connect("activate", lambda *_: subprocess.Popen([cartelitos_bin, "off"]))
+        menu.append(quit_item)
+        menu.show_all()
+        indicator.set_menu(menu)
+
+        Gtk.main()
+
+    threading.Thread(target=run, daemon=True, name="tray").start()
+
+
 def main():
     track_id = None
     lyrics = None
@@ -456,6 +494,7 @@ def main():
     pause_clear_s = CFG["behavior"]["pause_clear"]
     offset = CFG["behavior"]["offset"]
     log("cartelitos daemon arrancó")
+    start_tray()
     send(_config_event())
     while True:
         # pausa automática si hay un juego corriendo

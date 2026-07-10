@@ -7,6 +7,7 @@ arch=('any')
 url="https://github.com/FeroxShark/fatal-lyrics"
 license=('MIT')
 depends=('quickshell' 'playerctl' 'python')
+optdepends=('gtk3: ícono de bandeja del sistema' 'libayatana-appindicator: ícono de bandeja del sistema')
 makedepends=('git')
 provides=('fatal-lyrics')
 conflicts=('fatal-lyrics')
@@ -28,4 +29,5 @@ package() {
   ln -s /usr/share/fatal-lyrics/bin/cartelitos "$pkgdir/usr/bin/cartelitos"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 packaging/cartelitos.desktop "$pkgdir/usr/share/applications/cartelitos.desktop"
 }

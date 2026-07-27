@@ -9,6 +9,7 @@ defaults).
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -27,7 +28,7 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
 
 DEFAULT_CONFIG = """\
 # fatal-lyrics — configuration
-# Apply changes with: fatal restart
+# Saving this file applies the changes right away. Menu: fatal config
 
 [display]
 screen = "auto"        # "auto" (first monitor) | "all" (every one) | "DP-1" | ["DP-1", "DP-2"]
@@ -87,25 +88,71 @@ def log(*args):
     print(time.strftime("%H:%M:%S"), *args, flush=True)
 
 
-def load_config():
+def read_config():
+    """Lee el TOML mezclado sobre los defaults. Propaga la excepción si está roto."""
     if not os.path.exists(CONFIG_PATH):
         os.makedirs(CONFIG_DIR, exist_ok=True)
         with open(CONFIG_PATH, "w") as f:
             f.write(DEFAULT_CONFIG)
         log(f"default config created at {CONFIG_PATH}")
     cfg = {k: dict(v) for k, v in DEFAULTS.items()}
-    try:
-        with open(CONFIG_PATH, "rb") as f:
-            user = tomllib.load(f)
-        for section, values in user.items():
-            if section in cfg and isinstance(values, dict):
-                cfg[section].update(values)
-    except Exception as e:
-        log(f"invalid config ({e}), using defaults")
+    with open(CONFIG_PATH, "rb") as f:
+        user = tomllib.load(f)
+    for section, values in user.items():
+        if section in cfg and isinstance(values, dict):
+            cfg[section].update(values)
     return cfg
 
 
+def load_config():
+    try:
+        return read_config()
+    except Exception as e:
+        log(f"invalid config ({e}), using defaults")
+        return {k: dict(v) for k, v in DEFAULTS.items()}
+
+
 CFG = load_config()
+
+
+def reload_config():
+    """Relee la config sobre el CFG vivo. Si el archivo está roto deja la anterior
+    intacta: un typo o un editor a medio guardar no puede resetear nada."""
+    try:
+        fresh = read_config()
+    except Exception as e:
+        log(f"config not applied ({e}), keeping the previous one")
+        return False
+    if fresh == CFG:
+        return False
+    for section, values in fresh.items():
+        CFG[section].update(values)   # in place: todo el proceso lee el mismo dict
+    return True
+
+
+def watch_config():
+    """Aplica la config sola cuando cambia el archivo — sin reiniciar nada."""
+    last = None
+    while True:
+        time.sleep(1.0)
+        try:
+            stamp = os.stat(CONFIG_PATH).st_mtime_ns
+        except OSError:
+            continue
+        if stamp == last:
+            continue
+        # el editor trunca y escribe: esperar a que el tamaño se quede quieto
+        time.sleep(0.4)
+        try:
+            stamp = os.stat(CONFIG_PATH).st_mtime_ns
+        except OSError:
+            continue
+        first, last = last is None, stamp
+        if first:
+            continue
+        if reload_config():
+            log("config reloaded")
+            send(_config_event())
 
 
 def playerctl_state():
@@ -208,6 +255,8 @@ def fetch_lyrics(track):
 
 _sock = None
 _last_np = None
+# el watcher de config escribe desde otro hilo: sin esto dos eventos se pisan
+_send_lock = threading.Lock()
 
 
 def _config_event():
@@ -234,25 +283,26 @@ def send(event):
     if event.get("cmd") == "np":
         _last_np = event
     data = (json.dumps(event, ensure_ascii=False) + "\n").encode()
-    for _ in range(2):
-        try:
-            if _sock is None:
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.settimeout(2)
-                s.connect(SOCK_PATH)
-                s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
-                if _last_np is not None and _last_np is not event:
-                    s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
-                _sock = s
-            _sock.sendall(data)
-            return
-        except Exception:
+    with _send_lock:
+        for _ in range(2):
             try:
-                if _sock:
-                    _sock.close()
+                if _sock is None:
+                    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    s.settimeout(2)
+                    s.connect(SOCK_PATH)
+                    s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
+                    if _last_np is not None and _last_np is not event:
+                        s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
+                    _sock = s
+                _sock.sendall(data)
+                return
             except Exception:
-                pass
-            _sock = None
+                try:
+                    if _sock:
+                        _sock.close()
+                except Exception:
+                    pass
+                _sock = None
 
 
 def show(text, title, t0=0.0, t1=0.0):
@@ -263,6 +313,28 @@ def show(text, title, t0=0.0, t1=0.0):
 
 def clear():
     send({"cmd": "clear"})
+
+
+DEMO_LINES = [
+    "this is what a dialog looks like",
+    "no music needed to try it out",
+    "tweak it until it feels right",
+    "0x0000DEAD — everything is fine",
+]
+
+
+def _demo_burst():
+    for i, line in enumerate(DEMO_LINES):
+        show(line, "fatal-lyrics — demo")
+        if i < len(DEMO_LINES) - 1:
+            time.sleep(0.7)
+
+
+def demo(*_):
+    """SIGUSR1: tira unos carteles de mentira. Sirve para ver cómo quedó la
+    config sin tener que poner música. Va en un hilo aparte: mandar desde el
+    handler trabaría el daemon si la señal cae con el lock de send() tomado."""
+    threading.Thread(target=_demo_burst, daemon=True, name="demo").start()
 
 
 # --------------------------------------------------------------- setup TUI
@@ -338,7 +410,7 @@ def _monitors():
 
 def _pick(title, options, current):
     """Numbered menu; enter = keep the current value. options: [(label, value)]."""
-    print(f"\n{title}   (now: {current})")
+    print(f"\n{title}   (now: {_fmt(current)})")
     for i, (label, _) in enumerate(options, 1):
         print(f"  {i}) {label}")
     while True:
@@ -386,141 +458,215 @@ def _ask_text(title, current):
     return raw or None
 
 
-def setup():
-    """Interactive wizard: asks what matters and writes the TOML."""
-    cfg = load_config()
-    d, e, b = cfg["display"], cfg["effects"], cfg["behavior"]
-    ch = {}
-    print("fatal-lyrics — setup. Enter on any question = leave it as is.")
-
+def _ask_screens(current):
+    """Pantallas: auto / todas / una / varias. Devuelve str o lista."""
     mons = _monitors()
     opts = [("auto (first monitor)", "auto"), ("all screens", "all")]
     opts += [(f"only {n}  ({info})", n) for n, info in mons]
     if len(mons) > 1:
         opts.append(("several (pick which)", "__multi__"))
-    v = _pick("Which screen(s) should dialogs appear on?", opts, d["screen"])
-    if v == "__multi__":
-        for i, (n, info) in enumerate(mons, 1):
-            print(f"  {i}) {n}  ({info})")
-        raw = input("comma-separated numbers (e.g. 1,3) > ").strip()
-        picked = [mons[int(t) - 1][0] for t in (t.strip() for t in raw.split(","))
-                  if t.isdigit() and 1 <= int(t) <= len(mons)]
-        if picked:
-            ch["screen"] = ("display", picked)
-    elif v is not None and v != d["screen"]:
-        ch["screen"] = ("display", v)
+    v = _pick("Which screen(s) should dialogs appear on?", opts, _fmt(current))
+    if v != "__multi__":
+        return v
+    for i, (n, info) in enumerate(mons, 1):
+        print(f"  {i}) {n}  ({info})")
+    raw = input("comma-separated numbers (e.g. 1,3) > ").strip()
+    picked = [mons[int(t) - 1][0] for t in (t.strip() for t in raw.split(","))
+              if t.isdigit() and 1 <= int(t) <= len(mons)]
+    return picked or None
 
-    v = _pick("Vinyl sleeve (album art on track change)",
-              [("yes", True), ("no", False)], b["now_playing"])
-    if v is not None and v != b["now_playing"]:
-        ch["now_playing"] = ("behavior", v)
-    if ch.get("now_playing", (None, b["now_playing"]))[1]:
-        v = _pick("Where should the sleeve dock?", [
-            ("top-left", "top-left"),
-            ("top-right", "top-right"),
-            ("bottom-left", "bottom-left"),
-            ("bottom-right", "bottom-right"),
-            ("always centered (shrinks in place)", "center"),
-        ], b["np_corner"])
-        if v is not None and v != b["np_corner"]:
-            ch["np_corner"] = ("behavior", v)
-        v = _ask_int("Sleeve margin against the edges (px)", b["np_margin"], 0, 200)
-        if v is not None and v != b["np_margin"]:
-            ch["np_margin"] = ("behavior", v)
-        v = _pick("Spinning vinyl record peeking out of the sleeve",
-                  [("yes", True), ("no", False)], b["np_vinyl"])
-        if v is not None and v != b["np_vinyl"]:
-            ch["np_vinyl"] = ("behavior", v)
 
-    v = _pick("Karaoke (current line paints word by word)",
-              [("yes", True), ("no", False)], d["karaoke"])
-    if v is not None and v != d["karaoke"]:
-        ch["karaoke"] = ("display", v)
+def _ask_player(current):
+    players = _players()
+    if not players:
+        return _ask_text("MPRIS player to follow (see: playerctl -l)", current)
+    v = _pick("MPRIS player to follow",
+              [(p, p) for p in players] + [("other (type it in)", "__manual__")], current)
+    if v == "__manual__":
+        return _ask_text("Player name (see: playerctl -l)", current)
+    return v
 
-    v = _pick("Glitch intensity", [
-        ("off (clean dialogs)", "off"), ("soft", "soft"),
-        ("normal", "normal"), ("aggressive (dying GPU)", "aggressive"),
-    ], e["glitch"])
-    if v is not None and v != e["glitch"]:
-        ch["glitch"] = ("effects", v)
 
-    v = _pick("Spawn zone", [
+YESNO = [("yes", True), ("no", False)]
+
+# (clave, sección, etiqueta, editor). El editor recibe el valor actual y
+# devuelve el nuevo, o None para dejarlo como está.
+SETTINGS = [
+    ("— screen —", None, None, None),
+    ("screen", "display", "Screens", _ask_screens),
+    ("spawn_area", "display", "Spawn zone", lambda c: _pick("Spawn zone", [
         ("full screen", "full"), ("top", "top"), ("bottom", "bottom"),
         ("left", "left"), ("right", "right"),
-        ("edges (leaves the center clear)", "edges"),
-    ], d["spawn_area"])
-    if v is not None and v != d["spawn_area"]:
-        ch["spawn_area"] = ("display", v)
+        ("edges (leaves the center clear)", "edges")], c)),
+    ("scale", "display", "Dialog scale", lambda c: _ask_num("Dialog scale", c, 0.5, 3.0)),
+    ("current_scale", "display", "Extra scale, current line",
+     lambda c: _ask_num("Extra scale for the current-line dialog", c, 0.5, 3.0)),
+    ("max_dialogs", "display", "Max live dialogs (0 = unlimited)",
+     lambda c: _ask_int("Max live dialogs at once (0 = unlimited)", c, 0, 50)),
+    ("karaoke", "display", "Karaoke (paints word by word)",
+     lambda c: _pick("Karaoke (current line paints word by word)", YESNO, c)),
 
-    v = _ask_num("Dialog scale", d["scale"], 0.5, 3.0)
-    if v is not None and v != d["scale"]:
-        ch["scale"] = ("display", v)
+    ("— effects —", None, None, None),
+    ("glitch", "effects", "Glitch intensity", lambda c: _pick("Glitch intensity", [
+        ("off (clean dialogs)", "off"), ("soft", "soft"),
+        ("normal", "normal"), ("aggressive (dying GPU)", "aggressive")], c)),
+    ("effects_on_current", "effects", "Current dialog also glitches",
+     lambda c: _pick("The current dialog also vibrates/glitches", YESNO, c)),
+    ("tearing", "effects", "Split window on old dialogs",
+     lambda c: _pick("Split window on old dialogs", YESNO, c)),
+    ("burn_in", "effects", "Burn-in shadow when one dies",
+     lambda c: _pick("Fading burnt shadow when a dialog dies (burn-in)", YESNO, c)),
+    ("cascade", "effects", "Chain death on track change",
+     lambda c: _pick("Dialogs die in a chain on track change", YESNO, c)),
+    ("death_age_min", "effects", "A dialog dies after at least",
+     lambda c: _ask_int("A dialog dies between... (new dialogs after it appears)", c, 1, 50)),
+    ("death_age_max", "effects", "...and at most",
+     lambda c: _ask_int("...and at most (new dialogs)", c, 1, 50)),
+    ("max_lifetime", "effects", "Max lifetime, seconds (0 = unlimited)",
+     lambda c: _ask_int("Max lifetime per dialog in seconds (0 = unlimited)", c, 0, 600)),
 
-    v = _ask_num("Extra scale for the current-line dialog", d["current_scale"], 0.5, 3.0)
-    if v is not None and v != d["current_scale"]:
-        ch["current_scale"] = ("display", v)
+    ("— vinyl sleeve —", None, None, None),
+    ("now_playing", "behavior", "Sleeve with album art",
+     lambda c: _pick("Vinyl sleeve (album art on track change)", YESNO, c)),
+    ("np_corner", "behavior", "Where it docks", lambda c: _pick("Where should the sleeve dock?", [
+        ("top-left", "top-left"), ("top-right", "top-right"),
+        ("bottom-left", "bottom-left"), ("bottom-right", "bottom-right"),
+        ("always centered (shrinks in place)", "center")], c)),
+    ("np_margin", "behavior", "Margin against the edges (px)",
+     lambda c: _ask_int("Sleeve margin against the edges (px)", c, 0, 200)),
+    ("np_vinyl", "behavior", "Spinning vinyl record",
+     lambda c: _pick("Spinning vinyl record peeking out of the sleeve", YESNO, c)),
 
-    v = _ask_int("Max live dialogs at once (0 = unlimited)", d["max_dialogs"], 0, 50)
-    if v is not None and v != d["max_dialogs"]:
-        ch["max_dialogs"] = ("display", v)
+    ("— behavior —", None, None, None),
+    ("player", "behavior", "Player to follow", _ask_player),
+    ("offset", "behavior", "Sync lead time (s)",
+     lambda c: _ask_num("Lyric sync lead time in seconds (can be negative)", c, -2.0, 2.0)),
+    ("troll_no", "behavior", '"No" button duplicates the dialog',
+     lambda c: _pick('The "No" button duplicates the dialog', YESNO, c)),
+    ("click_through", "behavior", "Ghost dialogs (clicks pass through)",
+     lambda c: _pick("Ghost dialogs (clicks pass through)", YESNO, c)),
+    ("pause_clear", "behavior", "Clear after N s paused (0 = never)",
+     lambda c: _ask_int("Seconds paused before clearing everything (0 = never)", c, 0, 300)),
+    ("game_pause", "behavior", "Auto-pause on fullscreen games",
+     lambda c: _pick("Auto-pause when a game is in fullscreen", YESNO, c)),
+]
 
-    v = _ask_int("A dialog dies between... (new dialogs after it appears)",
-                 e["death_age_min"], 1, 50)
-    if v is not None and v != e["death_age_min"]:
-        ch["death_age_min"] = ("effects", v)
-    v = _ask_int("...and at most (new dialogs)", e["death_age_max"], 1, 50)
-    if v is not None and v != e["death_age_max"]:
-        ch["death_age_max"] = ("effects", v)
+DIM, BOLD, YEL, OFF = "\033[2m", "\033[1m", "\033[33m", "\033[0m"
 
-    v = _ask_int("Max lifetime per dialog in seconds (0 = unlimited)", e["max_lifetime"], 0, 600)
-    if v is not None and v != e["max_lifetime"]:
-        ch["max_lifetime"] = ("effects", v)
 
-    v = _ask_int("Seconds paused before clearing everything (0 = never)", b["pause_clear"], 0, 300)
-    if v is not None and v != b["pause_clear"]:
-        ch["pause_clear"] = ("behavior", v)
+def _fmt(v):
+    if isinstance(v, bool):
+        return "yes" if v else "no"
+    if isinstance(v, list):
+        return ", ".join(str(x) for x in v)
+    return str(v)
 
-    v = _ask_num("Lyric sync lead time in seconds (can be negative)",
-                 b["offset"], -2.0, 2.0)
-    if v is not None and v != b["offset"]:
-        ch["offset"] = ("behavior", v)
 
-    players = _players()
-    if players:
-        v = _pick("MPRIS player to follow",
-                  [(p, p) for p in players] + [("other (type it in)", "__manual__")], b["player"])
-        if v == "__manual__":
-            v = _ask_text("Player name (see: playerctl -l)", b["player"])
-    else:
-        v = _ask_text("MPRIS player to follow (see: playerctl -l)", b["player"])
-    if v is not None and v != b["player"]:
-        ch["player"] = ("behavior", v)
+def _daemon_pid():
+    """PID del daemon, o None. Confirma el cmdline: un PID reciclado con
+    SIGUSR1 encima mata un proceso ajeno."""
+    try:
+        with open("/tmp/cartelitos-daemon.pid") as f:
+            pid = int(f.read().strip())
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            if b"cartelitos" not in f.read():
+                return None
+        return pid
+    except (OSError, ValueError):
+        return None
 
-    for key, sec, label, cur in [
-        ("tearing", "effects", "Split window on old dialogs", e["tearing"]),
-        ("effects_on_current", "effects", "The current dialog also vibrates/glitches", e["effects_on_current"]),
-        ("burn_in", "effects", "Fading burnt shadow when a dialog dies (burn-in)", e["burn_in"]),
-        ("cascade", "effects", "Dialogs die in a chain on track change", e["cascade"]),
-        ("troll_no", "behavior", 'The "No" button duplicates the dialog', b["troll_no"]),
-        ("click_through", "behavior", "Ghost dialogs (clicks pass through)", b["click_through"]),
-        ("game_pause", "behavior", "Auto-pause when a game is in fullscreen", b["game_pause"]),
-    ]:
-        v = _pick(label, [("yes", True), ("no", False)], cur)
-        if v is not None and v != cur:
-            ch[key] = (sec, v)
 
-    if not ch:
-        print("\nNo changes.")
+def _demo():
+    """Le pide al daemon un par de carteles de mentira, para ver los cambios
+    sin depender de que haya música sonando."""
+    pid = _daemon_pid()
+    if not pid or not os.path.exists(SOCK_PATH):
+        print("  fatal-lyrics isn't running — start it with: fatal on")
         return
-    _save_config(ch)
-    print(f"\nSaved to {CONFIG_PATH}:")
-    for key, (sec, val) in ch.items():
-        print(f"  {sec}.{key} = {_toml_val(val)}")
-    raw = input("Restart Fatal Lyrics to apply? [Y/n] > ").strip().lower()
-    if raw in ("", "y", "yes", "s", "si", "sí"):
-        launcher = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "fatal")
-        cmd = [launcher] if os.path.exists(launcher) else ["fatal"]
-        subprocess.run(cmd + ["restart"])
+    os.kill(pid, signal.SIGUSR1)
+    print("  demo dialogs sent")
+
+
+def _menu(cfg, opening):
+    print("\033[H\033[J", end="")
+    print(f"{BOLD}fatal-lyrics — config{OFF}   "
+          f"{DIM}every change applies live, no restart{OFF}\n")
+    rows = {}
+    n = 0
+    for key, section, label, editor in SETTINGS:
+        if section is None:
+            print(f"\n {DIM}{key}{OFF}")
+            continue
+        n += 1
+        rows[n] = (key, section, label, editor)
+        cur, was = cfg[section][key], opening[section][key]
+        dots = "." * max(1, 34 - len(label))
+        mark = f" {YEL}*{OFF} {DIM}(was {_fmt(was)}){OFF}" if cur != was else ""
+        print(f"  {n:>2}  {label} {DIM}{dots}{OFF} {_fmt(cur)}{mark}")
+    print(f"\n {DIM}number{OFF} edit   {DIM}d{OFF} demo dialogs   "
+          f"{DIM}u{OFF} undo everything   {DIM}q{OFF} done")
+    return rows
+
+
+def setup():
+    """Menú: todo a la vista, se edita sólo lo que se quiere, se aplica al toque."""
+    cfg = load_config()
+    opening = {s: dict(v) for s, v in cfg.items()}
+    msg = ""
+    while True:
+        rows = _menu(cfg, opening)
+        if msg:
+            print(f"\n{msg}")
+            msg = ""
+        raw = input("\n> ").strip().lower()
+
+        if raw in ("q", "quit", "exit", "x", ""):
+            changed = [(k, s) for s, vals in cfg.items() for k in vals
+                       if vals[k] != opening[s][k]]
+            print("\033[H\033[J", end="")
+            if changed:
+                print(f"Saved to {CONFIG_PATH}:")
+                for key, sec in changed:
+                    print(f"  {sec}.{key} = {_toml_val(cfg[sec][key])}")
+            else:
+                print("No changes.")
+            return
+
+        if raw in ("d", "demo"):
+            _demo()
+            input("  enter to go back ")
+            continue
+
+        if raw in ("u", "undo"):
+            back = {k: (s, opening[s][k]) for s, vals in cfg.items() for k in vals
+                    if vals[k] != opening[s][k]}
+            if not back:
+                msg = "  nothing to undo"
+                continue
+            _save_config(back)
+            for key, (sec, val) in back.items():
+                cfg[sec][key] = val
+            msg = f"  {len(back)} setting(s) back to how you found them"
+            continue
+
+        if not (raw.isdigit() and int(raw) in rows):
+            msg = "  pick a number from the list, or q to finish"
+            continue
+
+        key, section, _, editor = rows[int(raw)]
+        print("\033[H\033[J", end="")
+        try:
+            new = editor(cfg[section][key])
+        except (KeyboardInterrupt, EOFError):
+            continue
+        if new is None or new == cfg[section][key]:
+            continue
+        cfg[section][key] = new
+        _save_config({key: (section, new)})
+        msg = f"  {section}.{key} = {_toml_val(new)}"
+        if key in ("death_age_min", "death_age_max") and \
+                cfg["effects"]["death_age_min"] > cfg["effects"]["death_age_max"]:
+            msg += f"\n  {YEL}heads up:{OFF} the minimum is above the maximum"
 
 
 def current_line_index(lyrics, pos):
@@ -580,11 +726,11 @@ def main():
     pause_cleared = False
     resend_np = False
     last_pos_sent = 0.0
-    pause_clear_s = CFG["behavior"]["pause_clear"]
-    offset = CFG["behavior"]["offset"]
     log("fatal-lyrics daemon started")
     start_tray()
     send(_config_event())
+    threading.Thread(target=watch_config, daemon=True, name="config").start()
+    signal.signal(signal.SIGUSR1, demo)
     while True:
         # pausa automática si hay un juego corriendo
         now = time.monotonic()
@@ -619,7 +765,8 @@ def main():
         if t["status"] == "Paused":
             if pause_started is None:
                 pause_started = now
-            elif pause_clear_s > 0 and not pause_cleared and now - pause_started > pause_clear_s:
+            elif (CFG["behavior"]["pause_clear"] > 0 and not pause_cleared
+                    and now - pause_started > CFG["behavior"]["pause_clear"]):
                 clear()
                 pause_cleared = True
                 resend_np = True
@@ -657,7 +804,7 @@ def main():
             send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
 
         if lyrics and t["status"] == "Playing":
-            i = current_line_index(lyrics, t["pos"] + offset)
+            i = current_line_index(lyrics, t["pos"] + CFG["behavior"]["offset"])
             if i != idx:
                 idx = i
                 if i >= 0 and lyrics[i][1]:

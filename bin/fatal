@@ -44,6 +44,15 @@ stop() {
     echo "fatal OFF"
 }
 
+demo() {
+    if running $D_PID; then
+        kill -USR1 "$(cat $D_PID)"
+    else
+        echo "fatal-lyrics isn't running — start it with: fatal on" >&2
+        exit 1
+    fi
+}
+
 case "${1:-toggle}" in
     on|start)  start ;;
     off|stop)  stop ;;
@@ -51,6 +60,7 @@ case "${1:-toggle}" in
     status)    running $D_PID && echo ON || echo OFF ;;
     toggle)    running $D_PID && stop || start ;;
     config|setup) python3 "$DAEMON" --setup ;;
-    edit)      ${EDITOR:-nano} "$CONFIG"; echo "apply changes with: fatal restart" ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit]" ;;
+    edit)      ${EDITOR:-nano} "$CONFIG" ;;
+    demo)      demo ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo]" ;;
 esac

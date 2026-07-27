@@ -60,20 +60,31 @@ git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
 ```bash
 fatal            # toggle on/off
 fatal on|off     # explicit
-fatal restart    # restart (applies config changes)
+fatal restart    # restart it
 fatal status     # ON / OFF
-fatal config     # interactive menu, every setting, no need to touch the TOML by hand
+fatal config     # settings menu — every option on one screen, applies live
 fatal setup      # same as `fatal config` (first-run alias)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
+fatal demo       # throws a few fake dialogs, to try settings without music
 ```
 
 ## Configuration
 
 On first run it creates `~/.config/cartelitos/config.toml` with defaults.
-`fatal config` walks through every option as a numbered menu (enter = keep
-the current value) — detects your monitors and MPRIS players, and offers to
-restart for you at the end. Prefer a text editor? `fatal edit` opens the raw
-TOML instead; apply changes with `fatal restart`.
+
+**Nothing needs a restart.** Saving the config — from the menu or from your
+own editor — is picked up within about a second and applied to the dialogs
+already on screen. If the file has a typo, the running config is kept as is
+and the error goes to `/tmp/cartelitos.log`; nothing gets reset.
+
+`fatal config` opens a menu with every setting and its current value on one
+screen. Type a number to change that one thing, and you're back at the menu —
+no walking through questions you don't care about. Changed rows are marked
+and show what the value was when you opened it, `u` puts everything back, and
+`d` throws a few fake dialogs so you can see your changes even with nothing
+playing. It detects your monitors and MPRIS players on its own.
+
+Prefer a text editor? `fatal edit` opens the raw TOML — same live apply.
 
 | Section    | Option               | What it does                                                    | Default     |
 |------------|----------------------|------------------------------------------------------------------|-------------|

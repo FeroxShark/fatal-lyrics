@@ -23,6 +23,7 @@ import urllib.request
 UA = "fatal-lyrics/1.0 (https://github.com/FeroxShark/fatal-lyrics)"
 FIELD_SEP = "\x1f"
 POLL = 0.3
+POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
 SOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos.sock")
 CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "cartelitos")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
@@ -264,6 +265,27 @@ def fetch_lyrics(track):
     except Exception:
         pass
     return None
+
+
+# resultado de la búsqueda en curso; lo escribe el hilo, lo lee el loop
+_fetch = {"id": None, "lyrics": None, "done": False}
+
+
+def fetch_lyrics_async(track):
+    """Busca la letra en un hilo. Son dos requests con timeout de 10s cada uno:
+    hechos en el loop principal, un lrclib lento o caído congelaba todo —
+    detección de juego, eventos de progreso y limpieza incluidos."""
+    _fetch.update(id=track["id"], lyrics=None, done=False)
+
+    def work(tid=track["id"]):
+        found = fetch_lyrics(track)
+        if _fetch["id"] != tid:
+            return                      # ya cambió de tema: el resultado no sirve
+        _fetch.update(lyrics=found, done=True)
+        log(f"synced lyrics: {len(found)} lines" if found
+            else "no synced lyrics (no dialogs)")
+
+    threading.Thread(target=work, daemon=True, name="lyrics").start()
 
 
 _sock = None
@@ -903,11 +925,15 @@ def main():
             if CFG["behavior"]["now_playing"]:
                 send({"cmd": "np", "title": t["title"], "artist": t["artist"],
                       "album": t["album"], "art": t["art"]})
-            lyrics = fetch_lyrics(t) if t["title"] else None
-            if lyrics:
-                log(f"synced lyrics: {len(lyrics)} lines")
+            lyrics = None
+            if t["title"]:
+                fetch_lyrics_async(t)
             else:
-                log("no synced lyrics (no dialogs)")
+                _fetch.update(id=None, lyrics=None, done=False)
+
+        # la búsqueda corre en un hilo: se recoge cuando llega
+        if lyrics is None and _fetch["done"] and _fetch["id"] == track_id:
+            lyrics = _fetch["lyrics"]
 
         # progreso de la canción: barra de la funda + karaoke (1 evento por segundo)
         if ((CFG["behavior"]["now_playing"] or CFG["display"]["karaoke"])
@@ -924,7 +950,9 @@ def main():
                     t1 = lyrics[i + 1][0] if i + 1 < len(lyrics) else lyrics[i][0] + 5
                     show(lyrics[i][1], t["title"], lyrics[i][0], t1)
 
-        time.sleep(POLL)
+        # cada vuelta es un playerctl: en pausa no hay nada que sincronizar,
+        # no hace falta hacerlo 3 veces por segundo
+        time.sleep(POLL if t["status"] == "Playing" else POLL_IDLE)
 
 
 if __name__ == "__main__":

@@ -86,6 +86,18 @@ playing. It detects your monitors and MPRIS players on its own.
 
 Prefer a text editor? `fatal edit` opens the raw TOML — same live apply.
 
+### From the tray
+
+While it's running there's a tray icon, and its menu carries the settings
+you actually reach for mid-song: glitch level and spawn zone as submenus,
+size as bigger/smaller/reset, and one-click toggles for karaoke, album art
+and tearing — plus the demo dialogs and a way into the full menu. Each item
+shows its current value in its own label, so you can see how things are set
+without opening anything.
+
+The tray needs `gtk3` and `libayatana-appindicator`. Without them the daemon
+runs exactly the same, just without an icon.
+
 | Section    | Option               | What it does                                                    | Default     |
 |------------|----------------------|------------------------------------------------------------------|-------------|
 | `display`  | `screen`             | `"auto"` (first), `"all"` (every monitor), a name (`"DP-1"`) or a list (`["DP-1", "DP-2"]`) | `"auto"`   |

@@ -98,6 +98,29 @@ without opening anything.
 The tray needs `gtk3` and `libayatana-appindicator`. Without them the daemon
 runs exactly the same, just without an icon.
 
+## Lyrics
+
+Synced lyrics come from [lrclib.net](https://lrclib.net). Results are cached
+under `~/.cache/cartelitos/lyrics/`, keyed by artist, title, album and
+duration — so replaying a song is instant and costs lrclib nothing, and songs
+you've already heard still work with no connection.
+
+"This track has no synced lyrics" is cached too, but only for a week: lrclib
+gains lyrics over time. A failure to *reach* lrclib is never cached, and is
+retried a couple of times instead — otherwise every song played during a
+dropout would be remembered as having no lyrics.
+
+## Development
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Covers the LRC parser, the config writer (it has to leave your comments and
+alignment alone), live config reloading, the lyrics cache, and the race where
+a slow lookup for a track you already skipped could overwrite the current
+one. No dependencies beyond the standard library.
+
 | Section    | Option               | What it does                                                    | Default     |
 |------------|----------------------|------------------------------------------------------------------|-------------|
 | `display`  | `screen`             | `"auto"` (first), `"all"` (every monitor), a name (`"DP-1"`) or a list (`["DP-1", "DP-2"]`) | `"auto"`   |

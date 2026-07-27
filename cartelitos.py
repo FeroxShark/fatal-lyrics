@@ -6,6 +6,7 @@ lrclib.net, and sends each line to the Quickshell overlay over a Unix
 socket. Config at ~/.config/cartelitos/config.toml (auto-created with
 defaults).
 """
+import hashlib
 import json
 import os
 import re
@@ -17,16 +18,19 @@ import sys
 import threading
 import time
 import tomllib
+import urllib.error
 import urllib.parse
 import urllib.request
 
-UA = "fatal-lyrics/1.0 (https://github.com/FeroxShark/fatal-lyrics)"
+UA = "fatal-lyrics/2.4 (https://github.com/FeroxShark/fatal-lyrics)"
 FIELD_SEP = "\x1f"
 POLL = 0.3
 POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
 SOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos.sock")
 CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "cartelitos")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
+CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "cartelitos", "lyrics")
+NONE_TTL = 7 * 86400   # cuánto vale un "este tema no tiene letra" cacheado
 
 DEFAULT_CONFIG = """\
 # fatal-lyrics — configuration
@@ -241,49 +245,142 @@ def http_json(url):
 
 
 def fetch_lyrics(track):
-    """Letra sincronizada de lrclib: match exacto y si no, búsqueda."""
+    """Letra sincronizada de lrclib: match exacto y si no, búsqueda.
+
+    Devuelve (estado, líneas) con TRES resultados, no dos: "ok", "none" (lrclib
+    contestó y este tema no tiene letra sincronizada) y "error" (no se pudo
+    llegar a lrclib). Mezclarlos rompe el cache y el reintento, que necesitan
+    lo contrario uno del otro: el "no hay" se cachea y no se reintenta, la
+    caída de red se reintenta y no se cachea nunca."""
+    reached = False
+
+    def try_url(url):
+        nonlocal reached
+        try:
+            data = http_json(url)
+        except urllib.error.HTTPError:
+            reached = True      # contestó "no lo tengo": es una respuesta, no una caída
+            return None
+        except Exception:
+            return None
+        reached = True
+        return data
+
     params = urllib.parse.urlencode({
         "artist_name": track["artist"],
         "track_name": track["title"],
         "album_name": track["album"],
         "duration": str(int(round(track["length"]))),
     })
-    try:
-        data = http_json("https://lrclib.net/api/get?" + params)
+    data = try_url("https://lrclib.net/api/get?" + params)
+    if data and data.get("syncedLyrics"):
+        lines = parse_lrc(data["syncedLyrics"])
+        if lines:
+            return "ok", lines
+
+    params = urllib.parse.urlencode({
+        "track_name": track["title"],
+        "artist_name": track["artist"],
+    })
+    for data in try_url("https://lrclib.net/api/search?" + params) or []:
         if data.get("syncedLyrics"):
-            return parse_lrc(data["syncedLyrics"])
-    except Exception:
-        pass
+            lines = parse_lrc(data["syncedLyrics"])
+            if lines:
+                return "ok", lines
+
+    return ("none", None) if reached else ("error", None)
+
+
+def _cache_path(track):
+    key = FIELD_SEP.join([track["artist"], track["title"], track["album"],
+                          str(int(round(track["length"])))])
+    return os.path.join(CACHE_DIR, hashlib.sha1(key.encode()).hexdigest() + ".json")
+
+
+def cache_get(track):
+    """Resultado guardado, o None si no hay / caducó."""
     try:
-        params = urllib.parse.urlencode({
-            "track_name": track["title"],
-            "artist_name": track["artist"],
-        })
-        for data in http_json("https://lrclib.net/api/search?" + params):
-            if data.get("syncedLyrics"):
-                return parse_lrc(data["syncedLyrics"])
+        with open(_cache_path(track)) as f:
+            data = json.load(f)
     except Exception:
-        pass
-    return None
+        return None
+    if not data.get("lines"):
+        # el "no hay letra" caduca: lrclib suma letras con el tiempo y un tema
+        # instrumental hoy puede tenerla el mes que viene
+        if time.time() - data.get("at", 0) > NONE_TTL:
+            return None
+        return "none", None
+    return "ok", [(ts, text) for ts, text in data["lines"]]
 
 
-# resultado de la búsqueda en curso; lo escribe el hilo, lo lee el loop
-_fetch = {"id": None, "lyrics": None, "done": False}
+def cache_put(track, status, lines):
+    """Guarda "ok" y "none". Una caída de red NO se guarda: si no, cada tema que
+    sonó sin internet queda marcado como sin letra."""
+    if status == "error":
+        return
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = _cache_path(track)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump({"lines": lines, "at": int(time.time())}, f)
+        os.replace(tmp, path)   # atómico: nadie lee un archivo a medio escribir
+    except Exception as e:
+        log(f"couldn't cache the lyrics ({e})")
+
+
+# resultado de la búsqueda en curso. `gen` sube en cada cambio de tema: el hilo
+# sólo publica si sigue siendo el suyo, y lo chequea con el lock tomado — sin eso,
+# un hilo que pasó el chequeo justo antes del cambio pisa el tema nuevo.
+_fetch_lock = threading.Lock()
+_fetch = {"gen": 0, "id": None, "lyrics": None, "done": False}
+RETRY_DELAY = 10
+RETRIES = 2
 
 
 def fetch_lyrics_async(track):
     """Busca la letra en un hilo. Son dos requests con timeout de 10s cada uno:
     hechos en el loop principal, un lrclib lento o caído congelaba todo —
     detección de juego, eventos de progreso y limpieza incluidos."""
-    _fetch.update(id=track["id"], lyrics=None, done=False)
+    with _fetch_lock:
+        _fetch["gen"] += 1
+        gen = _fetch["gen"]
+        _fetch.update(id=track["id"], lyrics=None, done=False)
 
-    def work(tid=track["id"]):
-        found = fetch_lyrics(track)
-        if _fetch["id"] != tid:
-            return                      # ya cambió de tema: el resultado no sirve
-        _fetch.update(lyrics=found, done=True)
-        log(f"synced lyrics: {len(found)} lines" if found
-            else "no synced lyrics (no dialogs)")
+    def mine():
+        return _fetch["gen"] == gen
+
+    def publish(lines):
+        with _fetch_lock:
+            if not mine():
+                return False
+            _fetch.update(lyrics=lines, done=True)
+        return True
+
+    def work():
+        hit = cache_get(track)
+        if hit:
+            if publish(hit[1]):
+                log(f"cached lyrics: {len(hit[1])} lines" if hit[1]
+                    else "no synced lyrics (cached)")
+            return
+        for attempt in range(RETRIES + 1):
+            status, lines = fetch_lyrics(track)
+            if status != "error":
+                break
+            if attempt == RETRIES:
+                log("lrclib unreachable, giving up on this track")
+                return
+            # red caída: esperar y reintentar, salvo que ya haya cambiado de tema
+            log(f"lrclib unreachable, retrying in {RETRY_DELAY}s")
+            for _ in range(RETRY_DELAY * 2):
+                time.sleep(0.5)
+                if not mine():
+                    return
+        cache_put(track, status, lines)
+        if publish(lines):
+            log(f"synced lyrics: {len(lines)} lines" if lines
+                else "no synced lyrics (no dialogs)")
 
     threading.Thread(target=work, daemon=True, name="lyrics").start()
 
@@ -386,7 +483,9 @@ def _toml_val(v):
 
 def _save_config(changes):
     """Pisa claves puntuales del TOML preservando comentarios y el resto.
-    changes: {clave: (sección, valor)} — las claves son únicas en el archivo."""
+    changes: {clave: (sección, valor)}. Sólo pisa la clave dentro de SU sección:
+    un `scale` suelto en otra sección no se toca. Si no estaba, la agrega al
+    final de la suya (o crea la sección)."""
     with open(CONFIG_PATH) as f:
         lines = f.read().split("\n")
     section = None
@@ -950,9 +1049,12 @@ def main():
                     t1 = lyrics[i + 1][0] if i + 1 < len(lyrics) else lyrics[i][0] + 5
                     show(lyrics[i][1], t["title"], lyrics[i][0], t1)
 
-        # cada vuelta es un playerctl: en pausa no hay nada que sincronizar,
-        # no hace falta hacerlo 3 veces por segundo
-        time.sleep(POLL if t["status"] == "Playing" else POLL_IDLE)
+        # Cada vuelta spawnea un playerctl (~4 ms de CPU). El poll fino sólo hace
+        # falta para pegarle al momento de cada verso: en pausa, o en un tema sin
+        # letra sincronizada, con una vuelta por segundo alcanza — y ésa es la
+        # frecuencia de los eventos de progreso, así que no se pierde nada.
+        fast = t["status"] == "Playing" and lyrics
+        time.sleep(POLL if fast else POLL_IDLE)
 
 
 if __name__ == "__main__":

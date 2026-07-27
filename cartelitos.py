@@ -9,6 +9,7 @@ defaults).
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -113,6 +114,8 @@ def load_config():
 
 
 CFG = load_config()
+# lo setea start_tray(); None = corriendo sin bandeja
+_tray_refresh = None
 
 
 def reload_config():
@@ -127,6 +130,18 @@ def reload_config():
         return False
     for section, values in fresh.items():
         CFG[section].update(values)   # in place: todo el proceso lee el mismo dict
+    return True
+
+
+def apply_config():
+    """Relee el archivo y aplica: overlay + etiquetas de la bandeja. Único camino,
+    lo llaman tanto el watcher como la bandeja (que además no quiere esperar el poll)."""
+    if not reload_config():
+        return False
+    log("config reloaded")
+    send(_config_event())
+    if _tray_refresh is not None:
+        _tray_refresh()
     return True
 
 
@@ -150,9 +165,7 @@ def watch_config():
         first, last = last is None, stamp
         if first:
             continue
-        if reload_config():
-            log("config reloaded")
-            send(_config_event())
+        apply_config()
 
 
 def playerctl_state():
@@ -679,18 +692,76 @@ def current_line_index(lyrics, pos):
     return idx
 
 
+def set_option(key, section, value):
+    """Escribe una clave y la aplica ya. Mismo camino que el menú y que editar el
+    TOML a mano: se escribe el archivo y se relee."""
+    _save_config({key: (section, value)})
+    apply_config()
+
+
+def _terminal():
+    """Terminal para abrir el menú completo. $TERMINAL primero: en un repo público
+    no se puede asumir la de nadie."""
+    names = [os.environ.get("TERMINAL"), "kitty", "alacritty", "foot", "wezterm",
+             "ghostty", "konsole", "gnome-terminal", "xterm"]
+    for name in names:
+        if name:
+            found = shutil.which(name)
+            if found:
+                return found
+    return None
+
+
+# submenús de la bandeja: (clave, sección, título, [(etiqueta, valor)])
+TRAY_CHOICES = [
+    ("glitch", "effects", "Glitch", [
+        ("Off", "off"), ("Soft", "soft"), ("Normal", "normal"),
+        ("Aggressive", "aggressive")]),
+    ("spawn_area", "display", "Spawn zone", [
+        ("Full screen", "full"), ("Top", "top"), ("Bottom", "bottom"),
+        ("Left", "left"), ("Right", "right"), ("Edges", "edges")]),
+]
+# toggles que se cambian de un click, con el estado en el texto
+TRAY_TOGGLES = [
+    ("karaoke", "display", "Karaoke"),
+    ("now_playing", "behavior", "Album art"),
+    ("tearing", "effects", "Tearing"),
+]
+SCALE_STEP = 0.1
+
+
 def start_tray():
     """Ícono en la bandeja del sistema mientras el daemon está vivo (StatusNotifierItem
     vía AyatanaAppIndicator3). Opcional: si gtk3/libayatana-appindicator no están
-    instalados, el daemon sigue andando igual, sin bandeja."""
+    instalados, el daemon sigue andando igual, sin bandeja.
+
+    El estado va en el TEXTO de cada ítem ("Glitch: normal", "• Soft"), no en
+    checkboxes: DBusMenu los expone, pero varios shells (caelestia, entre otros)
+    dibujan sólo ícono + texto y el tilde no se ve. Los submenús sí se dibujan."""
+    global _tray_refresh
     try:
         import gi
         gi.require_version("Gtk", "3.0")
         gi.require_version("AyatanaAppIndicator3", "0.1")
-        from gi.repository import Gtk, AyatanaAppIndicator3
+        from gi.repository import Gtk, GLib, AyatanaAppIndicator3
     except Exception as e:
         log(f"tray not available ({e}), continuing without an icon")
         return
+
+    fatal_bin = shutil.which("fatal") or os.path.expanduser("~/.local/bin/fatal")
+    term = _terminal()
+    labels = []   # [(item, función que devuelve el texto)] para refrescar
+
+    def item(menu, label, on_click=None, dynamic=None):
+        it = Gtk.MenuItem(label=label)
+        if on_click:
+            it.connect("activate", lambda *_: on_click())
+        else:
+            it.set_sensitive(False)
+        if dynamic:
+            labels.append((it, dynamic))
+        menu.append(it)
+        return it
 
     def run():
         indicator = AyatanaAppIndicator3.Indicator.new(
@@ -700,17 +771,59 @@ def start_tray():
         indicator.set_title("Fatal Lyrics")
 
         menu = Gtk.Menu()
-        status_item = Gtk.MenuItem(label="Fatal Lyrics active")
-        status_item.set_sensitive(False)
-        menu.append(status_item)
+        item(menu, "Fatal Lyrics active")
         menu.append(Gtk.SeparatorMenuItem())
-        quit_item = Gtk.MenuItem(label="Quit")
-        cartelitos_bin = os.path.expanduser("~/.local/bin/fatal")
-        quit_item.connect("activate", lambda *_: subprocess.Popen([cartelitos_bin, "off"]))
-        menu.append(quit_item)
+
+        for key, section, title, options in TRAY_CHOICES:
+            sub = Gtk.Menu()
+            for label, value in options:
+                # el punto marca la opción activa: el tilde de DBusMenu no se dibuja
+                item(sub, label,
+                     on_click=lambda k=key, s=section, v=value: set_option(k, s, v),
+                     dynamic=lambda l=label, k=key, s=section, v=value:
+                         ("• " if CFG[s][k] == v else "   ") + l)
+            root_item = item(menu, title,
+                             dynamic=lambda t=title, k=key, s=section:
+                                 f"{t}: {CFG[s][k]}")
+            root_item.set_sensitive(True)
+            root_item.set_submenu(sub)
+
+        size = Gtk.Menu()
+        item(size, "Bigger", on_click=lambda: set_option(
+            "scale", "display", round(min(CFG["display"]["scale"] + SCALE_STEP, 3.0), 2)))
+        item(size, "Smaller", on_click=lambda: set_option(
+            "scale", "display", round(max(CFG["display"]["scale"] - SCALE_STEP, 0.5), 2)))
+        item(size, "Reset", on_click=lambda: set_option("scale", "display", 1.0))
+        size_root = item(menu, "Size",
+                         dynamic=lambda: f"Size: {CFG['display']['scale']}")
+        size_root.set_sensitive(True)
+        size_root.set_submenu(size)
+
+        for key, section, title in TRAY_TOGGLES:
+            item(menu, title,
+                 on_click=lambda k=key, s=section: set_option(k, s, not CFG[s][k]),
+                 dynamic=lambda t=title, k=key, s=section:
+                     f"{t}: {'on' if CFG[s][k] else 'off'}")
+
+        menu.append(Gtk.SeparatorMenuItem())
+        item(menu, "Demo dialogs", on_click=lambda: demo())
+        if term:
+            item(menu, "All settings…",
+                 on_click=lambda: subprocess.Popen([term, "-e", fatal_bin, "config"]))
+        menu.append(Gtk.SeparatorMenuItem())
+        item(menu, "Quit", on_click=lambda: subprocess.Popen([fatal_bin, "off"]))
+
+        def refresh():
+            for it, text in labels:
+                it.set_label(text())
+            return False   # idle_add: una sola pasada
+
+        refresh()
         menu.show_all()
         indicator.set_menu(menu)
-
+        # el watcher corre en otro hilo; GTK sólo se toca desde el suyo
+        global _tray_refresh
+        _tray_refresh = lambda: GLib.idle_add(refresh)
         Gtk.main()
 
     threading.Thread(target=run, daemon=True, name="tray").start()

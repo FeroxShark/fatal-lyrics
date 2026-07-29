@@ -4,6 +4,7 @@ three-way lyrics result that the cache and the retry both depend on.
 
 Run with:  python3 -m unittest discover -s tests
 """
+import builtins
 import json
 import os
 import sys
@@ -430,3 +431,536 @@ class TestFetchAsync(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCrtSwitch(unittest.TestCase):
+    """El interruptor del modo CRT es un archivo, no el socket: el overlay lo
+    vigila él mismo, así que apagarlo tiene que funcionar con el daemon muerto."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self._old = c.CRT_PATH
+        c.CRT_PATH = os.path.join(self.dir.name, "cartelitos-crt")
+        self.addCleanup(lambda: setattr(c, "CRT_PATH", self._old))
+
+    def test_off_when_the_file_is_not_there(self):
+        self.assertFalse(c.crt_on())
+
+    def test_on_and_off_round_trip(self):
+        self.assertTrue(c.set_crt(True))
+        self.assertTrue(c.crt_on())
+        self.assertTrue(c.set_crt(False))
+        self.assertFalse(c.crt_on())
+
+    def test_the_file_holds_a_single_flag(self):
+        c.set_crt(True)
+        with open(c.CRT_PATH) as f:
+            self.assertEqual(f.read(), "1")
+
+    def test_garbage_reads_as_off(self):
+        with open(c.CRT_PATH, "w") as f:
+            f.write("whatever")
+        self.assertFalse(c.crt_on())
+
+    def test_no_leftover_temp_file(self):
+        # se escribe con rename atómico: el overlay nunca lee un archivo a medias
+        c.set_crt(True)
+        self.assertEqual(sorted(os.listdir(self.dir.name)), ["cartelitos-crt"])
+
+    def test_a_directory_that_does_not_exist_does_not_raise(self):
+        c.CRT_PATH = os.path.join(self.dir.name, "nope", "cartelitos-crt")
+        self.assertFalse(c.set_crt(True))
+        self.assertFalse(c.crt_on())
+
+
+class TestConfigEvent(unittest.TestCase):
+    """El evento de config se arma a mano: una clave nueva en DEFAULTS que no se
+    agregue acá nunca llega al overlay, y no falla nada — simplemente no anda."""
+
+    def test_every_crt_key_reaches_the_overlay(self):
+        ev = c._config_event()
+        # `enabled` viaja por el archivo interruptor y `audio` es cosa del daemon
+        # (levanta la captura): al overlay no le sirven, el resto sí tiene que llegar
+        daemon_only = {"enabled", "audio"}
+        for key in c.DEFAULTS["crt"]:
+            if key in daemon_only:
+                continue
+            self.assertIn(f"crt_{key}", ev, f"crt.{key} no llega al overlay")
+
+    def test_the_event_is_json(self):
+        json.dumps(c._config_event())
+
+
+class TestCrtOrder(unittest.TestCase):
+    """El orden de las pantallas decide dónde cae cada pedazo de una línea
+    partida, así que una entrada mal escrita no puede pasar como buena."""
+
+    MONS = [("DP-4", "vertical, at x=0"), ("HDMI-A-2", "at x=1080"),
+            ("DP-5", "at x=3000")]
+
+    def setUp(self):
+        self._mons = c._monitors_lr
+        c._monitors_lr = lambda: list(self.MONS)
+        self.addCleanup(lambda: setattr(c, "_monitors_lr", self._mons))
+        self._input = builtins.input
+        self.addCleanup(lambda: setattr(builtins, "input", self._input))
+
+    def answer(self, *lines):
+        """Responde el menú sin teclado. El "enter to go back" de los errores
+        cuenta como una respuesta más."""
+        it = iter(lines)
+        builtins.input = lambda *a, **k: next(it, "")
+
+    def test_numbers_become_names_in_that_order(self):
+        self.answer("3,2,1")
+        self.assertEqual(c._ask_crt_order("auto"), ["DP-5", "HDMI-A-2", "DP-4"])
+
+    def test_spaces_work_too(self):
+        self.answer("2 1 3")
+        self.assertEqual(c._ask_crt_order("auto"), ["HDMI-A-2", "DP-4", "DP-5"])
+
+    def test_a_means_automatic(self):
+        self.answer("a")
+        self.assertEqual(c._ask_crt_order(["DP-5"]), "auto")
+
+    def test_enter_keeps_what_was_there(self):
+        self.answer("")
+        self.assertIsNone(c._ask_crt_order("auto"))
+
+    def test_a_number_out_of_range_changes_nothing(self):
+        self.answer("9", "")
+        self.assertIsNone(c._ask_crt_order("auto"))
+
+    def test_garbage_changes_nothing(self):
+        self.answer("left,right", "")
+        self.assertIsNone(c._ask_crt_order("auto"))
+
+    def test_the_same_screen_twice_changes_nothing(self):
+        self.answer("1,1,2", "")
+        self.assertIsNone(c._ask_crt_order("auto"))
+
+    def test_a_partial_order_is_allowed(self):
+        # las que no nombró van al final solas: nadie se queda sin tubo
+        self.answer("3")
+        self.assertEqual(c._ask_crt_order("auto"), ["DP-5"])
+
+    def test_one_screen_has_no_order_to_pick(self):
+        c._monitors_lr = lambda: [("DP-4", "at x=0")]
+        self.answer("")
+        self.assertIsNone(c._ask_crt_order("auto"))
+
+
+def tone(freq, seconds=0.032, rate=16000, amp=0.5):
+    """PCM s16 mono de un tono puro, para probar el análisis sin tarjeta de sonido."""
+    import math
+    n = int(rate * seconds)
+    out = bytearray()
+    for i in range(n):
+        v = int(amp * 32767 * math.sin(2 * math.pi * freq * i / rate))
+        out += int(v).to_bytes(2, "little", signed=True)
+    return bytes(out)
+
+
+class TestBandEnergy(unittest.TestCase):
+    """Sin numpy: se mide banda por banda, así que la banda tiene que encenderse
+    con su propia frecuencia y quedarse quieta con las demás — y sobre todo un
+    agudo NO puede aparecer en los graves (por eso se fue Goertzel)."""
+
+    def samples(self, freq, seconds=0.032, amp=0.5):
+        pcm = tone(freq, seconds, amp=amp)
+        return [int.from_bytes(pcm[i:i + 2], "little", signed=True) / 32768.0
+                for i in range(0, len(pcm), 2)]
+
+    def test_the_band_lights_up_on_its_own_frequency(self):
+        s = self.samples(1000)
+        here = c.band_energy(s, 16000, 1000)
+        far = c.band_energy(s, 16000, 150)
+        self.assertGreater(here, far * 50)
+
+    def test_silence_has_no_energy(self):
+        self.assertAlmostEqual(c.band_energy([0.0] * 512, 16000, 1000), 0.0, places=9)
+
+    def test_louder_means_more_energy(self):
+        quiet = c.band_energy(self.samples(1000, amp=0.1), 16000, 1000)
+        loud = c.band_energy(self.samples(1000, amp=0.8), 16000, 1000)
+        self.assertGreater(loud, quiet * 10)
+
+    def test_an_empty_buffer_does_not_divide_by_zero(self):
+        self.assertEqual(c.band_energy([], 16000, 1000), 0.0)
+
+    def test_a_high_tone_does_not_leak_into_the_bass(self):
+        s = self.samples(4000)
+        self.assertGreater(c.band_energy(s, 16000, 5000),
+                           c.band_energy(s, 16000, 60) * 20)
+
+
+class TestAudioAnalyzer(unittest.TestCase):
+    def setUp(self):
+        self.an = c.AudioAnalyzer()
+
+    def test_nothing_to_analyse_returns_none(self):
+        self.assertIsNone(self.an.feed(b"", 0.0))
+
+    def test_a_low_tone_reads_low_and_a_high_one_reads_high(self):
+        low = c.AudioAnalyzer().feed(tone(80), 0.0)
+        high = c.AudioAnalyzer().feed(tone(4000), 0.0)
+        self.assertLess(low["c"], 0.35)
+        self.assertGreater(high["c"], 0.65)
+        self.assertGreater(low["lo"], low["hi"])
+        self.assertGreater(high["hi"], high["lo"])
+
+    def test_the_level_adapts_to_the_system_volume(self):
+        # el mismo tema bajito tiene que terminar latiendo igual que fuerte:
+        # si no, el tubo late según el master del sistema y no según la música
+        quiet = c.AudioAnalyzer()
+        for i in range(40):
+            ev = quiet.feed(tone(440, amp=0.02), i * 0.032)
+        self.assertGreater(ev["l"], 0.8)
+
+    def test_a_hit_after_silence_is_a_beat(self):
+        for i in range(20):
+            self.an.feed(tone(440, amp=0.001), i * 0.032)
+        ev = self.an.feed(tone(60, amp=0.9), 20 * 0.032)
+        self.assertEqual(ev["b"], 1)
+
+    def test_the_same_hit_does_not_fire_twice(self):
+        for i in range(20):
+            self.an.feed(tone(440, amp=0.001), i * 0.032)
+        first = self.an.feed(tone(60, amp=0.9), 1.0)
+        again = self.an.feed(tone(60, amp=0.9), 1.02)   # 20 ms después
+        self.assertEqual(first["b"], 1)
+        self.assertEqual(again["b"], 0)
+
+    def test_silence_is_not_a_beat(self):
+        ev = self.an.feed(b"\x00\x00" * 512, 0.0)
+        self.assertEqual(ev["b"], 0)
+        self.assertLessEqual(ev["l"], 0.05)
+
+    def test_the_event_is_json_and_bounded(self):
+        ev = self.an.feed(tone(1000), 0.0)
+        json.dumps(ev)
+        for key in ("l", "lo", "mid", "hi", "c"):
+            self.assertGreaterEqual(ev[key], 0.0)
+            self.assertLessEqual(ev[key], 1.0)
+
+
+class TestSinkNodeId(unittest.TestCase):
+    """pw-record necesita el ID del nodo: con el nombre del monitor conecta igual
+    pero graba SILENCIO (medido: 0.0012 de rms contra 0.0757 con el id)."""
+
+    LISTING = ("32\taudiorelay-virtual-mic-sink\tPipeWire\tfloat32le 2ch 48000Hz\tSUSPENDED\n"
+               "93\talsa_output.usb-Kingston.analog-stereo\tPipeWire\ts16le 2ch 48000Hz\tRUNNING\n"
+               "114\talsa_output.pci-0000_01_00.1.hdmi-stereo\tPipeWire\ts32le 2ch\tIDLE\n")
+
+    def test_finds_the_id_of_its_sink(self):
+        self.assertEqual(c.sink_node_id(self.LISTING,
+                                        "alsa_output.usb-Kingston.analog-stereo"), "93")
+
+    def test_a_sink_that_is_not_there(self):
+        self.assertIsNone(c.sink_node_id(self.LISTING, "nope"))
+
+    def test_a_name_that_only_looks_alike_does_not_match(self):
+        self.assertIsNone(c.sink_node_id(self.LISTING, "alsa_output.usb-Kingston"))
+
+    def test_garbage_does_not_raise(self):
+        self.assertIsNone(c.sink_node_id("", "whatever"))
+        self.assertIsNone(c.sink_node_id("basura sin tabs\n", "whatever"))
+
+
+class TestAlbumColours(unittest.TestCase):
+    """Los colores del tubo salen de la tapa. Lo que importa es el ORDEN: la
+    portada típica es mayormente oscura, y si se ordena por cantidad pelada el
+    tubo termina pintado del color de una sombra."""
+
+    HIST = ("  40000: (10,10,10)  #0A0A0A srgb(4%,4%,4%)\n"
+            "   2000: (240,30,30) #F01E1E srgb(94%,12%,12%)\n"
+            "   1800: (30,120,240) #1E78F0 srgb(12%,47%,94%)\n"
+            "   9000: (250,250,250) #FAFAFA srgb(98%,98%,98%)\n")
+
+    def test_a_saturated_colour_beats_a_bigger_grey(self):
+        got = c.parse_histogram(self.HIST)
+        self.assertEqual(got[0], "#f01e1e")
+        self.assertIn("#1e78f0", got)
+
+    def test_it_keeps_at_most_what_it_is_asked_for(self):
+        self.assertEqual(len(c.parse_histogram(self.HIST, keep=2)), 2)
+
+    def test_garbage_lines_are_skipped(self):
+        text = "no soy un histograma\n123: sin numeral\n" + self.HIST
+        self.assertEqual(c.parse_histogram(text)[0], "#f01e1e")
+
+    def test_nothing_usable_gives_nothing(self):
+        self.assertEqual(c.parse_histogram(""), [])
+
+    def test_no_cover_no_colours(self):
+        self.assertIsNone(c.album_colors(""))
+
+
+class TestAlbumGreys(unittest.TestCase):
+    """Un gris no sirve de color de pantalla: no tiene tono propio, y una tapa en
+    blanco y negro terminaba pintando el tubo de un color inventado."""
+
+    def test_tinted_colours_come_before_greys(self):
+        hist = ("  50000: (200,200,200) #C8C8C8 srgb(78%,78%,78%)\n"
+                "   3000: (20,180,90)  #14B45A srgb(8%,71%,35%)\n")
+        got = c.parse_histogram(hist)
+        self.assertEqual(got[0], "#14b45a")
+
+    def test_an_all_grey_cover_still_returns_something(self):
+        hist = ("  50000: (200,200,200) #C8C8C8 srgb(78%,78%,78%)\n"
+                "  10000: (40,40,42)    #28282A srgb(15%,15%,16%)\n")
+        self.assertEqual(len(c.parse_histogram(hist)), 2)
+
+
+class TestSections(unittest.TestCase):
+    """Fuerte y flojo son relativos AL TEMA: un lofi entero no puede quedar
+    marcado como "bajo" ni un tema de metal como un drop de punta a punta."""
+
+    def test_without_enough_song_it_does_not_guess(self):
+        kind, pct = c.classify_level(0.9, [0.1, 0.2])
+        self.assertEqual(kind, "verse")
+        self.assertEqual(pct, 0.5)
+
+    def test_the_loudest_moment_of_a_quiet_song_is_still_a_drop(self):
+        quiet_song = [0.01 + i * 0.0005 for i in range(60)]
+        kind, _ = c.classify_level(0.05, quiet_song)
+        self.assertEqual(kind, "drop")
+
+    def test_an_average_moment_of_a_loud_song_is_not_a_drop(self):
+        loud_song = [0.5 + (i % 10) * 0.01 for i in range(60)]
+        kind, _ = c.classify_level(0.54, loud_song)
+        self.assertIn(kind, ("verse", "build"))
+
+    def test_silence_reads_as_quiet(self):
+        song = [0.2 + (i % 7) * 0.02 for i in range(60)]
+        kind, pct = c.classify_level(0.0, song)
+        self.assertEqual(kind, "quiet")
+        self.assertEqual(pct, 0.0)
+
+
+class TestTrackProfile(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self._old = c.PROFILE_DIR
+        c.PROFILE_DIR = self.dir.name
+        self.addCleanup(lambda: setattr(c, "PROFILE_DIR", self._old))
+
+    def filled(self, key="tema"):
+        p = c.TrackProfile(key, 120.0)
+        for i in range(80):
+            pos = i * c.PROFILE_STEP
+            p.record(pos, 0.1 if i < 40 else 0.6, 0.4)
+        return p
+
+    def test_it_remembers_a_track_between_plays(self):
+        self.assertTrue(self.filled().save())
+        again = c.TrackProfile("tema", 120.0)
+        self.assertTrue(again.load())
+        self.assertTrue(again.known)
+        self.assertEqual(len(again.rms), 80)
+
+    def test_half_a_song_is_not_a_map(self):
+        p = c.TrackProfile("corto", 10.0)
+        p.record(0.0, 0.3, 0.5)
+        self.assertFalse(p.save())
+
+    def test_an_unknown_track_cannot_see_ahead(self):
+        p = self.filled()          # grabado en vivo, no cargado del cache
+        self.assertIsNone(p.coming(5.0))
+
+    def test_a_known_track_sees_the_loud_part_coming(self):
+        self.filled().save()
+        p = c.TrackProfile("tema", 120.0)
+        p.load()
+        # a los 19 s todavía está en la parte floja y a los 21 arranca la fuerte:
+        # lo que importa es que AVISE el cambio antes de que pase
+        self.assertIn(p.coming(19.0, ahead=2.0), ("build", "drop"))
+        self.assertIsNone(p.coming(5.0, ahead=2.0))   # dentro de la misma parte
+
+    def test_a_change_needs_to_hold_before_it_counts(self):
+        p = self.filled()
+        p.section = "quiet"
+        p.since = 100.0
+        _, _, changed = p.update(0.0, 0.6, 100.5)      # medio segundo nomás
+        self.assertFalse(changed)
+        seen = False
+        for i in range(1, 40):                          # sostenido en el tiempo
+            _, _, changed = p.update(0.0, 0.6, 100.5 + i * c.SECTION_HOLD / 2)
+            seen = seen or changed
+        self.assertTrue(seen)
+
+
+class TestUnheardParts(unittest.TestCase):
+    """Un tema que se empezó a escuchar por la mitad tiene el principio en cero.
+    Ese cero es "no lo escuché", no "acá el tema está callado": si cuenta como
+    parte de la canción, todo lo que suene después parece un estribillo."""
+
+    def test_unheard_zeros_do_not_count_as_quiet(self):
+        song = [0.0] * 40 + [0.3 + (i % 5) * 0.01 for i in range(40)]
+        kind, _ = c.classify_level(0.31, song)
+        self.assertIn(kind, ("verse", "build"))
+
+    def test_it_will_not_predict_a_part_it_never_heard(self):
+        p = c.TrackProfile("x", 100.0)
+        p.rms = [0.0] * 60
+        p.known = True
+        self.assertIsNone(p.coming(5.0))
+
+
+class TestSectionSmoothing(unittest.TestCase):
+    """Una sección dura una estrofa, no un compás: un golpe suelto no puede
+    hacer que el tema entero cambie de parte."""
+
+    def profile(self):
+        p = c.TrackProfile("x", 100.0)
+        for i in range(60):
+            p.record(i * c.PROFILE_STEP, 0.2, 0.5)
+        return p
+
+    def test_one_loud_hit_does_not_change_the_section(self):
+        p = self.profile()
+        p.section = "verse"
+        p.since = 0.0
+        changed = False
+        for i in range(1, 20):
+            p.update(0.0, 0.2, i * 0.5)          # tema tranquilo
+        _, _, changed = p.update(0.0, 3.0, 12.0)  # un solo bombo enorme
+        self.assertFalse(changed)
+
+    def test_a_sustained_change_does_get_through(self):
+        p = self.profile()
+        p.since = 0.0
+        seen = set()
+        for i in range(1, 80):
+            kind, _, _ = p.update(0.0, 3.0, i * 0.5)
+            seen.add(kind)
+        self.assertIn("drop", seen)
+
+
+class TestFlatSong(unittest.TestCase):
+    def test_a_song_with_no_dynamics_is_not_one_long_drop(self):
+        flat = [0.25] * 40
+        kind, pct = c.classify_level(0.25, flat)
+        self.assertEqual(kind, "verse")
+        self.assertAlmostEqual(pct, 0.5, places=2)
+
+
+class TestGameDetection(unittest.TestCase):
+    """"Pantalla completa" solo no alcanza: un video a pantalla completa apagaba
+    la letra justo cuando uno la quiere mirando algo."""
+
+    def test_a_fullscreen_game_counts(self):
+        self.assertTrue(c.is_game_window({"class": "cs2", "fullscreen": 2}))
+
+    def test_a_window_that_is_not_fullscreen_never_counts(self):
+        self.assertFalse(c.is_game_window({"class": "cs2", "fullscreen": 0,
+                                           "fullscreenClient": 0}))
+
+    def test_a_fullscreen_browser_is_not_a_game(self):
+        self.assertFalse(c.is_game_window({"class": "google-chrome", "fullscreen": 1,
+                                           "fullscreenClient": 1}))
+
+    def test_a_fullscreen_video_player_is_not_a_game(self):
+        self.assertFalse(c.is_game_window({"class": "mpv", "fullscreen": 2}))
+
+    def test_it_also_looks_at_the_initial_class(self):
+        self.assertFalse(c.is_game_window({"class": "", "initialClass": "firefox",
+                                           "fullscreen": 1}))
+
+    def test_nothing_focused_is_not_a_game(self):
+        self.assertFalse(c.is_game_window({}))
+        self.assertFalse(c.is_game_window(None))
+
+
+class TestSplitRepeats(unittest.TestCase):
+    """Una línea de letra no siempre es una frase: muchas veces son golpes
+    repetidos, y cada golpe va a una pantalla distinta. Esto tiene que aguantar
+    todas las formas en que una letra escribe una repetición."""
+
+    def test_hyphens_are_repetitions(self):
+        # el caso que lo destapó: venía pegado con guiones y era UNA palabra
+        self.assertEqual(c.split_repeats("Take-take-take me to the beach"),
+                         ["Take", "take", "take", "me to the beach"])
+
+    def test_commas_are_repetitions(self):
+        self.assertEqual(c.split_repeats("take, take, take me"),
+                         ["take,", "take,", "take", "me"])
+
+    def test_plain_spaces_are_repetitions(self):
+        self.assertEqual(c.split_repeats("down down down"), ["down", "down", "down"])
+
+    def test_a_repeated_pair_counts_as_one_hit(self):
+        self.assertEqual(c.split_repeats("Take me, take me, take me to the beach"),
+                         ["Take me,", "take me,", "take me", "to the beach"])
+
+    def test_a_repeated_trio_counts_too(self):
+        self.assertEqual(c.split_repeats("to the beach, to the beach"),
+                         ["to the beach,", "to the beach"])
+
+    def test_the_smallest_group_wins(self):
+        # cuatro golpes, no dos pares
+        self.assertEqual(c.split_repeats("down, down, down, down"),
+                         ["down,", "down,", "down,", "down"])
+
+    def test_a_spelled_out_word_becomes_one_hit_per_letter(self):
+        # se canta letra por letra, así que son cuatro golpes y no una palabra
+        self.assertEqual(c.split_repeats("T-A-K-E, take me")[:4],
+                         ["T", "A", "K", "E,"])
+        self.assertEqual(c.split_repeats("R.E.S.P.E.C.T"),
+                         list("RESPECT"))
+        # y también deletreado con espacios
+        self.assertEqual(c.split_repeats("T A K E me")[:4], ["T", "A", "K", "E"])
+
+    def test_a_hyphen_with_one_letter_is_not_always_spelling(self):
+        for word in ("e-mail", "T-shirt", "x-ray", "K-pop", "U-turn"):
+            self.assertEqual(c.split_repeats("say " + word), ["say " + word], word)
+
+    def test_a_stutter_opens_up(self):
+        self.assertEqual(c.split_repeats("B-B-B-Baby you"),
+                         ["B", "B", "B", "Baby you"])
+
+    def test_a_compound_word_is_not_a_repetition(self):
+        self.assertEqual(c.split_repeats("people-pleasing planet"),
+                         ["people-pleasing planet"])
+
+    def test_a_line_without_repeats_stays_whole(self):
+        line = "just a normal line with no repeats"
+        self.assertEqual(c.split_repeats(line), [line])
+
+    def test_case_and_punctuation_do_not_hide_a_repetition(self):
+        self.assertEqual(len(c.split_repeats("Ha! ha... HA?")), 3)
+
+    def test_slashes_cut_too(self):
+        self.assertEqual(c.split_repeats("I own / I own"), ["I own", "I own"])
+
+    def test_it_does_not_only_work_in_latin(self):
+        # con un filtro a–z, dos palabras japonesas distintas quedaban vacías y
+        # parecían la misma repetición
+        self.assertEqual(c.split_repeats("もっと もっと 欲しい"),
+                         ["もっと", "もっと", "欲しい"])
+        self.assertEqual(c.split_repeats("最後 まで"), ["最後 まで"])
+
+    def test_too_many_hits_get_merged(self):
+        # nadie lee doce pedazos en cuatro segundos: la cola se junta
+        long_words = c.split_repeats("baby " * 12)
+        self.assertLessEqual(len(long_words), c.SEG_MAX)
+        # deletrear entra con más lugar, porque cada golpe es una letra sola
+        letters = c.split_repeats("A-B-C-D-E-F-G-H-I-J-K-L")
+        self.assertLessEqual(len(letters), c.SEG_MAX_SHORT)
+        self.assertGreater(len(letters), c.SEG_MAX)
+
+    def test_empty_and_whitespace_do_not_crash(self):
+        self.assertEqual(c.split_repeats(""), [])
+        self.assertEqual(c.split_repeats("   "), [])
+
+    def test_the_event_carries_the_cuts(self):
+        sent = []
+        old = c.send
+        c.send = lambda ev: sent.append(ev)
+        self.addCleanup(lambda: setattr(c, "send", old))
+        c.show("take, take, take me", "t", 1.0, 5.0)
+        c.show("a plain line", "t", 5.0, 9.0)
+        self.assertEqual(len(sent[0]["segs"]), 4)
+        self.assertNotIn("segs", sent[1])

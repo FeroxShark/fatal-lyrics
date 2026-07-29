@@ -2,7 +2,7 @@
 pkgname=fatal-lyrics-git
 pkgver=r1.0000000
 pkgrel=1
-pkgdesc="Synced Spotify lyrics as glitchy Win95 error dialogs (Wayland overlay)"
+pkgdesc="Synced Spotify lyrics as glitchy Win95 error dialogs, or a full-screen CRT takeover (Wayland overlay)"
 arch=('any')
 url="https://github.com/FeroxShark/fatal-lyrics"
 license=('MIT')
@@ -23,6 +23,11 @@ package() {
   cd fatal-lyrics
   install -d "$pkgdir/usr/share/fatal-lyrics/shell"
   install -Dm644 shell/shell.qml "$pkgdir/usr/share/fatal-lyrics/shell/shell.qml"
+  install -Dm644 shell/Crt.qml "$pkgdir/usr/share/fatal-lyrics/shell/Crt.qml"
+  install -Dm644 shell/Motif.qml "$pkgdir/usr/share/fatal-lyrics/shell/Motif.qml"
+  # el shader del modo CRT va precompilado (.qsb); el .frag viaja como fuente
+  install -Dm644 shell/crt.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag.qsb"
+  install -Dm644 shell/crt.frag "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag"
   install -Dm755 cartelitos.py "$pkgdir/usr/share/fatal-lyrics/cartelitos.py"
   install -Dm755 bin/fatal "$pkgdir/usr/share/fatal-lyrics/bin/fatal"
   install -d "$pkgdir/usr/bin"

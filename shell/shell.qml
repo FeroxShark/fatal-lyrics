@@ -35,6 +35,59 @@ ShellRoot {
     property int npMargin: 14
     property bool npVinyl: true
 
+    // ---- modo CRT: el tubo full-bleed que tapa cada monitor (opt-in)
+    property bool crtOn: false
+    property string crtScreens: "all"    // igual que `screen`, pero para el tubo ("same" = el mismo)
+    property var crtOrder: "auto"        // "auto" (por posición) o lista de izquierda a derecha
+    property string crtExitOn: "mouse"   // mouse (cursor oculto + click) | keyboard (cualquier tecla)
+    property string crtPalette: "album"  // album | auto | dragons | ado | poison | bloodline | vapor | bone
+    property string crtSplit: "mixed"    // mixed | whole | fragment
+    property string crtFont: ""
+    property real crtCurvature: 1.0
+    property real crtScanlines: 0.75
+    property real crtChroma: 1.0
+    property real crtBloom: 1.0
+    property real crtNoise: 0.5
+    property real crtRoll: 1.0
+    property real crtVignette: 0.9
+    property real crtIntensity: 1.0
+    property bool crtChrome: true
+    property bool crtDirector: true
+    property string crtFocusMode: "roam"     // roam | all
+    property bool crtColorFromPitch: true
+    property int crtColorHold: 10
+    property bool crtMotifs: true
+    property real crtCamera: 1.0
+    property real crtQuality: 1.0
+
+    // ---- lo que está sonando de verdad (eventos "aud" del daemon)
+    property real audLevel: 0
+    property real audLo: 0
+    property real audMid: 0
+    property real audHi: 0
+    property real audCentroid: 0.5
+    property int audBeat: 0
+    property double audAt: 0
+    // en qué parte de la canción estamos (lo decide el daemon comparando este
+    // momento contra el tema entero, no contra un volumen fijo)
+    property string audSection: "verse"
+    property real audPct: 0.5
+    property string audComing: ""      // lo que se viene, si el tema ya se escuchó
+    property double audComingAt: 0
+    property int sectionGen: 0
+    // si la captura se cae o está apagada, todo vuelve a moverse con la letra
+    readonly property bool audLive: crtOn && (Date.now() - audAt) < 1500
+
+    // Cuánto empuja la parte en la que está el tema. Es el número que hace que
+    // las animaciones estén "sintonizadas": en el silencio todo se aquieta, en
+    // el estribillo todo aprieta, sin que nadie toque una perilla.
+    readonly property real sectionEnergy: audSection === "quiet" ? 0.45
+        : audSection === "build" ? 1.25
+        : audSection === "drop" ? 1.6 : 1.0
+    // true mientras se sabe que en un par de segundos cambia la parte: el tubo
+    // empieza a apretar ANTES, que es lo que hace que el golpe caiga en tiempo
+    readonly property bool building: audComing !== "" && (Date.now() - audComingAt) < 2200
+
     // estado del Now Playing (ventana propia, no es un diálogo);
     // compartido entre pantallas para que la animación vaya sincronizada
     property bool npShown: false
@@ -69,9 +122,558 @@ ShellRoot {
     // posición de la canción (eventos "pos" a 1 Hz) para el karaoke;
     // se extrapola con el reloj local, con tope por si el player se pausó
     property real posAbs: 0
+    property real posLen: 0
     property double posAt: 0
     function songPos() {
         return posAbs + Math.min((Date.now() - posAt) / 1000, 1.5);
+    }
+
+    function htmlEscape(s) {
+        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // ------------------------------------------------- estado del modo CRT
+    // La línea que suena, sin diálogos de por medio: el tubo la dibuja entera.
+    property var crtLine: ({ text: "", t0: 0, t1: 0, serial: 0, segs: [] })
+    property int crtSerial: 0
+    property int crtTrackSeed: 0
+
+    // Ruido determinístico: todas las pantallas tienen que elegir el MISMO
+    // layout para la misma línea, y sin hablar entre ellas.
+    function crtHash(n) {
+        let x = Math.imul(n ^ 0x9e3779b9, 2654435761);
+        x ^= x >>> 15;
+        x = Math.imul(x, 2246822507);
+        x ^= x >>> 13;
+        return (x >>> 0) / 4294967296;
+    }
+
+    // Cómo se muestra esta línea. "mixed" (default): casi siempre la frase
+    // entera en cada monitor y de vez en cuando partida entre las pantallas.
+    function crtPlanFor(line) {
+        const words = (line.text || "").split(/\s+/).filter(w => w.length > 0);
+        if (words.length === 0)
+            return { layout: "plain", alarm: false };
+        const n = line.serial || 0;
+        const r = crtHash(n * 7 + words.length);
+        const alarm = crtHash(n * 13 + 5) > 0.87;
+        // el corte se reparte entre las pantallas DEL TUBO, que no son las
+        // mismas donde salen los carteles
+        const canSplit = activeCrtScreens.length > 1 && words.length <= 3;
+        if (crtSplit === "fragment" && canSplit)
+            return { layout: "split", alarm: alarm };
+        if (crtSplit === "mixed" && canSplit && r < 0.45)
+            return { layout: "split", alarm: alarm };
+        if (words.length <= 4 && r < 0.60)
+            return { layout: "stack", alarm: alarm };
+        if (words.length <= 3 && r < 0.72)
+            return { layout: "tile", alarm: alarm };
+        if (r > 0.86)
+            return { layout: "type", alarm: alarm };
+        return { layout: "plain", alarm: alarm };
+    }
+    readonly property var crtPlan: crtPlanFor(crtLine)
+
+    // Pedazo de la línea que le toca a la pantalla i de n: se corta por
+    // posición, no por palabra — que "TAKE" quede como "TA" + "KE" es el efecto.
+    function crtSlice(text, i, n) {
+        const s = (text || "").trim();
+        if (n <= 1 || s.length === 0)
+            return s;
+        const a = Math.round(s.length * i / n);
+        const b = Math.round(s.length * (i + 1) / n);
+        return s.substring(a, b).trim();
+    }
+
+    // Avance de la línea actual (0..1) para el pintado palabra por palabra;
+    // mismo cálculo que el karaoke de los carteles.
+    function karaokeFraction(t0, t1) {
+        const dur = t1 - t0;
+        if (dur <= 0)
+            return 1;
+        // termina de pintar ~1 s antes de la próxima línea
+        const lead = Math.min(1.0, dur * 0.35);
+        return Math.max(0, Math.min((songPos() - t0) / Math.max(dur - lead, 0.5), 1));
+    }
+    function crtProgress() {
+        const e = crtLine;
+        if (!e || (e.t1 || 0) <= (e.t0 || 0))
+            return 1;
+        return karaokeFraction(e.t0, e.t1);
+    }
+
+    function fmtTime(s) {
+        const v = Math.max(0, Math.floor(s));
+        const m = Math.floor(v / 60);
+        const ss = v % 60;
+        return (m < 10 ? "0" : "") + m + ":" + (ss < 10 ? "0" : "") + ss;
+    }
+    // depende de posAbs (1 evento por segundo del daemon) → el binding se refresca solo
+    function crtClock() {
+        return fmtTime(posAbs) + " / " + fmtTime(posLen);
+    }
+
+
+
+    // --------------------------------------------------------------- paletas
+    // Una paleta = DOS caras que combinan entre sí: una pantalla prendida (fondo
+    // quemado, letra oscura) y una de tubo apagado (fondo hondo, letra encendida).
+    // Las pantallas alternan entre esas dos y nunca hay tres colores peleándose.
+    readonly property var schemes: [
+        { key: "dragons",
+          a: { bg: "#f7d21f", ink: "#a51405", hot: "#5e0700", dim: "#c05010" },
+          b: { bg: "#170604", ink: "#ff8a2b", hot: "#ffe0b0", dim: "#8a4110" } },
+        { key: "ado",
+          a: { bg: "#68d6f2", ink: "#062247", hot: "#010d24", dim: "#1f5c8a" },
+          b: { bg: "#04162e", ink: "#7fe4ff", hot: "#ffffff", dim: "#2d6f96" } },
+        { key: "poison",
+          a: { bg: "#c8f224", ink: "#123a06", hot: "#061c02", dim: "#3f7a1a" },
+          b: { bg: "#04120a", ink: "#9dff3d", hot: "#e8ffc4", dim: "#3f7a1a" } },
+        { key: "bloodline",
+          a: { bg: "#ff2f14", ink: "#2b0600", hot: "#5e0f00", dim: "#8a2c14" },
+          b: { bg: "#12030a", ink: "#ff5c7a", hot: "#ffd6de", dim: "#8a2540" } },
+        { key: "vapor",
+          a: { bg: "#f74fc3", ink: "#2b0126", hot: "#12000f", dim: "#8a1670" },
+          b: { bg: "#0d0a2b", ink: "#6ff2ff", hot: "#e6ffff", dim: "#2f5a8a" } },
+        { key: "bone",
+          a: { bg: "#f2e2bc", ink: "#7a2a05", hot: "#3d1302", dim: "#a8642a" },
+          b: { bg: "#150c05", ink: "#ffb457", hot: "#ffe6c2", dim: "#8a5a20" } },
+    ]
+    readonly property var criticalFace: ({ bg: "#ff2a0a", ink: "#26030a", hot: "#5e0500", dim: "#7d1a08" })
+
+    // colores de la tapa del disco (evento "art" del daemon)
+    property var artColors: []
+
+    function faceFromColor(hex, lit) {
+        const c = Qt.color(hex);
+        const h = c.hslHue;
+        const sat = Math.min(Math.max(c.hslSaturation, 0.6), 1);
+        if (lit)
+            return {
+                bg: Qt.hsla(h, sat, 0.58, 1),
+                ink: Qt.hsla(h, Math.min(sat + 0.15, 1), 0.15, 1),
+                hot: Qt.hsla(h, 1, 0.07, 1),
+                dim: Qt.hsla(h, sat, 0.34, 1),
+            };
+        return {
+            bg: Qt.hsla(h, sat * 0.9, 0.07, 1),
+            ink: Qt.hsla(h, sat, 0.66, 1),
+            hot: Qt.hsla(h, 0.4, 0.92, 1),
+            dim: Qt.hsla(h, sat, 0.40, 1),
+        };
+    }
+
+    // La paleta del tema sale de su tapa: el color más presente manda la pantalla
+    // prendida y el segundo la oscura. Si los dos son casi el mismo tono, al
+    // segundo se lo manda al otro lado de la rueda — dos caras del mismo color no
+    // son una paleta, son una pantalla lavada.
+    readonly property var albumScheme: {
+        if (!artColors || artColors.length === 0)
+            return null;
+        // Los grises NO sirven como color de pantalla: no tienen tono propio y
+        // Qt les devuelve uno cualquiera — una tapa en blanco y negro terminaba
+        // pintando el tubo de verde, que no pintaba nada con el resto.
+        let usable = [];
+        for (let i = 0; i < artColors.length; i++)
+            if (Qt.color(artColors[i]).hslSaturation > 0.18)
+                usable.push(artColors[i]);
+        if (usable.length === 0)
+            return null;     // tapa sin color: mejor una paleta de fábrica
+        const first = usable[0];
+        const h1 = Qt.color(first).hslHue;
+        let second = usable.length > 1 ? usable[1] : null;
+        if (second !== null) {
+            const h2 = Qt.color(second).hslHue;
+            const gap = Math.abs(h1 - h2);
+            if (gap < 0.06 || gap > 0.94)
+                second = null;    // casi el mismo tono: no son dos colores
+        }
+        if (second === null)
+            second = Qt.hsla((h1 + 0.45) % 1, 0.75, 0.5, 1).toString();
+        return { key: "album", a: faceFromColor(first, true), b: faceFromColor(second, false) };
+    }
+
+    function currentScheme() {
+        if (crtPalette === "album" && albumScheme)
+            return albumScheme;
+        for (let i = 0; i < schemes.length; i++)
+            if (schemes[i].key === crtPalette)
+                return schemes[i];
+        if (crtPalette === "album" || crtPalette === "auto") {
+            // sin tapa: la elige el registro de lo que suena, o el tema
+            const base = crtColorFromPitch && pitchPal >= 0 ? pitchPal : crtTrackSeed;
+            return schemes[base % schemes.length];
+        }
+        return schemes[0];
+    }
+
+    // Cómo se reparten las dos caras entre las pantallas. Alternar (0,1,0) deja
+    // SIEMPRE la del medio distinta y se nota enseguida; acá el reparto cambia
+    // por tema y cada varias líneas, y sólo se garantiza que estén las dos caras.
+    function crtFacePattern() {
+        const n = Math.max(activeCrtScreens.length, 1);
+        if (n === 1)
+            return [0];
+        const seed = crtTrackSeed * 31 + sectionGen * 13 + Math.floor(crtSerial / 6) * 7;
+        // 1..2^n-2 deja afuera "todas iguales" en las dos puntas
+        const combos = Math.pow(2, n) - 2;
+        const bits = 1 + Math.floor(crtHash(seed) * combos);
+        let out = [];
+        for (let i = 0; i < n; i++)
+            out.push((bits >> i) & 1);
+        return out;
+    }
+
+    // Qué cara tiene cada pantalla AHORA. Empieza en el reparto de arriba, pero
+    // se contagia: cuando la frase está por saltar a la pantalla de al lado, esa
+    // pantalla toma el color de la que la trae, un instante ANTES de que llegue
+    // el texto. La letra no cambia de pantalla, infecta la siguiente.
+    property var faceIdx: []
+    readonly property real infectLead: 0.35     // segundos de anticipación
+
+    function resetFaces() {
+        faceIdx = crtFacePattern();
+    }
+    onSectionGenChanged: resetFaces()
+    onCrtTrackSeedChanged: resetFaces()
+    onActiveCrtScreensChanged: resetFaces()
+
+    function updateInfection() {
+        const sh = crtShot;
+        if (!crtOn || sh.mode === "all" || sh.chunks.length < 2)
+            return;
+        if (faceIdx.length !== activeCrtScreens.length) {
+            resetFaces();
+            return;
+        }
+        const p = songPos();
+        let next = faceIdx.slice();
+        let touched = false;
+        for (let k = 1; k < sh.chunks.length; k++) {
+            const c = sh.chunks[k];
+            if (p < c.from - infectLead)
+                break;                       // todavía no le toca a esta pantalla
+            const donor = sh.chunks[k - 1].screen;
+            if (c.screen === donor || next[c.screen] === next[donor])
+                continue;
+            // El color se MUDA, no se copia: la que recibe toma el color de la
+            // que traía la frase, y la que lo entregó se queda con el otro. Si
+            // sólo se copiara, en tres pasos las tres pantallas terminan del
+            // mismo color y se pierde la pared de dos tonos.
+            const moving = next[donor];
+            next[donor] = next[c.screen];
+            next[c.screen] = moving;
+            touched = true;
+        }
+        if (touched)
+            faceIdx = next;                  // array nuevo: dispara los bindings
+    }
+
+    Timer {
+        interval: 60
+        repeat: true
+        running: root.crtOn
+        onTriggered: root.updateInfection()
+    }
+
+    function crtFace(i, alarm) {
+        if (alarm)
+            return criticalFace;
+        const sc = currentScheme();
+        const idx = (faceIdx.length > i ? faceIdx[i] : crtFacePattern()[i]) || 0;
+        return idx === 0 ? sc.a : sc.b;
+    }
+    function crtSchemeKey() {
+        return currentScheme().key;
+    }
+
+    // ------------------------------------------------- dirección de cámara
+    // El videoclip no muestra la misma frase en todas las pantallas: enfoca una,
+    // la frase sigue en la de al lado, y el resto queda apagado. Eso es esto.
+    //
+    // El QUÉ se ve y DÓNDE lo manda siempre el reloj de la letra, nunca el audio:
+    // si los saltos siguieran los golpes, una palabra terminaría cayendo en una
+    // pantalla que ya se apagó. El audio mueve la intensidad (brillo, glitch,
+    // animaciones, encuadre), no el contenido.
+    property real pitchAvg: 0.5
+    // referencia lenta (~20 s) del mismo centroide: el color no sale del valor
+    // absoluto sino de cuánto se separó de su propio promedio. La música real
+    // vive apretada en la zona grave del espectro, así que un mapeo absoluto
+    // pintaría todo del mismo color; contra su propia referencia, en cambio, el
+    // estribillo se despega del verso y ahí sí se ve el cambio.
+    property real pitchRef: 0.5
+    readonly property real pitchRel: Math.max(0, Math.min(0.5 + (pitchAvg - pitchRef) * 3.5, 1))
+    property int pitchPal: -1
+    property real pitchAtPal: 0.5
+    property double pitchChangedAt: 0
+
+    // fósforo según el registro: grave → amarillo/rojo (dragons), agudo →
+    // celeste (ado). El rojo "critical" queda reservado para los golpes de línea.
+    function palForPitch(p) {
+        if (p < 0.22) return 0;        // dragons
+        if (p < 0.42) return 3;        // bloodline
+        if (p < 0.60) return 5;        // bone
+        if (p < 0.78) return 2;        // poison
+        return 1;                      // ado
+    }
+
+    // Se evalúa sólo al empezar una línea, con salto mínimo de tono y un mínimo
+    // de segundos entre cambios: si no, el tubo es una calesita de colores.
+    function updatePitchPalette() {
+        if (!crtColorFromPitch || !audLive)
+            return;
+        const now = Date.now();
+        const cand = palForPitch(pitchRel);
+        if (pitchPal < 0) {
+            pitchPal = cand;
+            pitchAtPal = pitchRel;
+            pitchChangedAt = now;
+            return;
+        }
+        if (cand === pitchPal)
+            return;
+        if (now - pitchChangedAt < crtColorHold * 1000)
+            return;
+        if (Math.abs(pitchRel - pitchAtPal) < 0.06)
+            return;
+        pitchPal = cand;
+        pitchAtPal = pitchRel;
+        pitchChangedAt = now;
+    }
+
+    // Reparte una línea en pedazos con su pantalla y su ventana de tiempo.
+    // mode: "all" (todas muestran todo, comportamiento viejo) | "relay" (la frase
+    // viaja) | "jump" (la frase corta salta) | "single" (una sola pantalla).
+    // Pedazos "naturales" de una línea: las barras la cortan, y una palabra
+    // repetida arranca uno nuevo. "Take, take, take" no es una frase de tres
+    // palabras: son tres golpes, y cada uno se merece su propia pantalla.
+    function crtShotFor(line) {
+        const text = (line.text || "").trim();
+        const words = text.split(/\s+/).filter(w => w.length > 0);
+        const n = activeCrtScreens.length;
+        const serial = line.serial || 0;
+        const focus = n > 0 ? (serial + Math.floor(crtHash(serial * 17 + 3) * n)) % n : 0;
+        if (!crtDirector || crtFocusMode === "all" || n <= 1 || words.length === 0)
+            return { mode: "all", focus: focus, chunks: [] };
+
+        const t0 = line.t0 || 0;
+        // Termina antes que la línea (el último pedazo tiene que llegar a leerse)
+        // Y ADEMÁS se acota al tiempo de lectura: lrclib da como final de la línea
+        // el comienzo de la siguiente, así que entre estrofas eso puede ser medio
+        // minuto — sin el tope, un pedazo se quedaba solo en pantalla eternidades.
+        const words_n = words.length;
+        const span = Math.max((line.t1 || 0) - t0, 0.8) * 0.92;
+        const dur = Math.min(span, 1.2 + words_n * 0.55);
+        const h = crtHash(serial * 31 + words.length);
+        const dir = crtHash(serial * 11 + 7) < 0.5 ? 1 : -1;
+
+        // Golpes repetidos: cada uno a una pantalla distinta. El corte viene
+        // hecho del daemon (`segs`), que es donde se puede probar de verdad
+        // contra todas las formas en que una letra escribe una repetición.
+        const segs = line.segs || [];
+        if (segs.length > 1) {
+            let total = 0;
+            const weights = segs.map(sg => { const w = sg.length + 2; total += w; return w; });
+            let chunks = [], acc = 0;
+            for (let i = 0; i < segs.length; i++) {
+                const from = t0 + dur * acc / total;
+                acc += weights[i];
+                chunks.push({
+                    text: segs[i],
+                    screen: ((focus + dir * i) % n + n) % n,
+                    from: from,
+                    to: t0 + dur * acc / total,
+                });
+            }
+            return { mode: "relay", focus: focus, chunks: chunks };
+        }
+
+        // frase corta y sorteo a favor: salta de pantalla en pantalla, entera
+        if (words.length <= 3 && h < 0.45) {
+            const hops = Math.min(n, 3);
+            let chunks = [];
+            for (let i = 0; i < hops; i++)
+                chunks.push({
+                    text: text,
+                    screen: ((focus + dir * i) % n + n) % n,
+                    from: t0 + dur * i / hops,
+                    to: t0 + dur * (i + 1) / hops,
+                });
+            return { mode: "jump", focus: focus, chunks: chunks };
+        }
+
+        // frase larga: se reparte en pedazos que se encienden uno atrás del otro
+        if (words.length >= 4) {
+            const parts = Math.min(n, Math.max(2, Math.ceil(words.length / 3)));
+            const per = Math.ceil(words.length / parts);
+            let groups = [];
+            for (let i = 0; i < words.length; i += per)
+                groups.push(words.slice(i, i + per));
+            let total = 0;
+            const weights = groups.map(g => { const w = g.join(" ").length + 1; total += w; return w; });
+            let chunks = [], acc = 0;
+            for (let i = 0; i < groups.length; i++) {
+                const from = t0 + dur * acc / total;
+                acc += weights[i];
+                chunks.push({
+                    text: groups[i].join(" "),
+                    screen: ((focus + dir * i) % n + n) % n,
+                    from: from,
+                    to: t0 + dur * acc / total,
+                });
+            }
+            return { mode: "relay", focus: focus, chunks: chunks };
+        }
+
+        return { mode: "single", focus: focus,
+                 chunks: [{ text: text, screen: focus, from: t0, to: t0 + dur }] };
+    }
+    readonly property var crtShot: crtShotFor(crtLine)
+
+    // Qué le toca a la pantalla i AHORA: su pedazo encendido, el que ya pasó
+    // (queda quemado, apagándose) o nada.
+    function crtChunkState(i) {
+        const sh = crtShot;
+        if (sh.mode === "all")
+            return { text: crtLine.text || "", active: true, past: false, reveal: crtProgress() };
+        const p = songPos();
+        let out = { text: "", active: false, past: false, reveal: 0 };
+        // el quemado dura un rato después del último pedazo y se apaga: en el
+        // instrumental las pantallas tienen que quedar libres, no con restos
+        const ends = sh.chunks.length > 0 ? sh.chunks[sh.chunks.length - 1].to : 0;
+        if (p > ends + 2.5)
+            return out;
+        for (let k = 0; k < sh.chunks.length; k++) {
+            const c = sh.chunks[k];
+            if (c.screen !== i || p < c.from)
+                continue;
+            const span = Math.max(c.to - c.from, 0.35);
+            out = {
+                text: c.text,
+                active: p <= c.to,
+                past: p > c.to,
+                reveal: Math.max(0, Math.min((p - c.from) / span, 1)),
+            };
+        }
+        return out;
+    }
+
+    // Cómo entra la palabra en esta línea. Que sea siempre igual cansa: a veces
+    // aparece seca, a veces entra de golpe grande, a veces baja rodando como un
+    // tubo que recién agarra la sincronía.
+    function crtEntryStyle() {
+        const r = crtHash((crtLine.serial || 0) * 23 + 11);
+        if (r < 0.18)
+            return "slam";
+        if (r < 0.34)
+            return "roll";
+        return "snap";
+    }
+
+    // Animación de la pantalla sin letra. Alguna palabra la elige a propósito
+    // (el ojo cuando la letra habla de mirar o de silencio), el resto es sorteo.
+    readonly property var motifWords: [
+        { re: /\b(eye|eyes|see|seen|look|watch|silence|silent|quiet|blind)\b/i, kind: "eye" },
+        { re: /\b(ojo|ojos|mir[ao]|mirar|ver|silencio|callar|ciego)\b/i, kind: "eye" },
+        { re: /\b(fire|burn|heart|beat|blood|fuego|arde|coraz[oó]n|late)\b/i, kind: "rings" },
+        { re: /\b(run|road|drive|fall|deep|corr[eo]|camino|caigo|fondo)\b/i, kind: "tunnel" },
+    ]
+    // Cada cuánto se cambia de animación. Antes se sorteaba por LÍNEA: las
+    // pantallas laterales cambiaban de dibujo cada dos segundos y parecían un
+    // salvapantallas nervioso. Ahora dura una sección entera (o ~25 s).
+    property int motifGen: 0
+    Timer {
+        interval: 25000
+        repeat: true
+        running: root.crtOn
+        onTriggered: root.motifGen++
+    }
+
+    readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard", "rain"]
+
+    function crtMotifFor(i) {
+        if (!crtMotifs)
+            return "none";
+        const n = Math.max(activeCrtScreens.length, 1);
+        // la palabra clave se lleva UNA sola pantalla, no todas: si el ojo
+        // aparece en las tres a la vez deja de ser un guiño y es un cartel
+        const chosen = (crtLine.serial || 0) % n;
+        if (i === chosen) {
+            const text = crtLine.text || "";
+            for (let k = 0; k < motifWords.length; k++)
+                if (motifWords[k].re.test(text))
+                    return motifWords[k].kind;
+        }
+        // dos pantallas apagadas nunca muestran el mismo dibujo
+        // en el silencio el ojo o la carta de ajuste; en el pico, lo que se mueve
+        const calm = audSection === "quiet";
+        const pool = calm ? ["eye", "testcard", "scope"] : motifKinds;
+        const pick = Math.floor(crtHash(motifGen * 17 + crtTrackSeed * 3) * pool.length);
+        const offset = Math.floor(crtHash(motifGen * 29 + i * 11) * (pool.length - 1)) + 1;
+        return pool[(pick + (i === chosen ? 0 : offset)) % pool.length];
+    }
+
+    // Interferencia espontánea: la programa el root y le toca a UNA pantalla por
+    // vez. Con un temporizador propio por pantalla, aunque cada una se rompiera
+    // cada 20 s, en la pared se veía una rotura cada 6 — y eso es lo que se
+    // siente como "vibra en momentos random".
+    property int interfGen: 0
+    property int interfScreen: 0
+    Timer {
+        interval: 9000
+        repeat: true
+        running: root.crtOn && root.crtIntensity > 0
+        onTriggered: {
+            const calm = 1 / Math.max(sectionEnergy, 0.35);
+            interval = (7000 + Math.random() * 11000 * calm)
+                / Math.max(crtIntensity + 0.55, 0.3);
+            interfScreen = Math.floor(Math.random() * Math.max(activeCrtScreens.length, 1));
+            interfGen++;
+        }
+    }
+
+    // Interruptor del modo: un archivo en XDG_RUNTIME_DIR, no el socket. Así
+    // `fatal crt off` apaga el tubo aunque el daemon esté colgado o muerto —
+    // con la pantalla tapada esa es la única salida que no depende de nada.
+    FileView {
+        id: crtSwitch
+        path: `${Quickshell.env("XDG_RUNTIME_DIR")}/cartelitos-crt`
+        watchChanges: true
+        preload: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.crtOn = text().trim() === "1"
+        onLoadFailed: root.crtOn = false
+    }
+
+    // Al prender el tubo se barren los carteles: si no, los que ya estaban vivos
+    // quedan esperando abajo y reaparecen enteros al salir (se veía como si el
+    // modo viejo hubiera estado corriendo todo el tiempo).
+    onCrtOnChanged: {
+        if (crtOn) {
+            dialogList = [];
+            currentLyricSerial = -1;
+        }
+    }
+
+    // Salida del tubo: cualquier tecla o click vuelve al escritorio. Se escribe
+    // el mismo interruptor que usa `fatal crt`, así que el daemon y la bandeja
+    // quedan enterados — no hay dos verdades sobre si el tubo está prendido.
+    function crtExit() {
+        if (!crtOn)
+            return;
+        crtOn = false;
+        crtSwitch.setText("0");
+    }
+
+    // el watcher no alcanza si el archivo todavía no existe cuando arranca el
+    // overlay (pasa siempre: el daemon lo escribe un segundo después), así que
+    // además se relee solo. Es un byte: sale más barato que perdérselo.
+    Timer {
+        interval: 500
+        repeat: true
+        running: true
+        onTriggered: crtSwitch.reload()
     }
 
     // pantallas donde corre el overlay según la config
@@ -89,6 +691,32 @@ ShellRoot {
         return [ss[0]];
     }
     readonly property var activeScreens: matchScreens(targetScreen)
+
+    // Orden de las pantallas del tubo: de izquierda a derecha. Importa cuando la
+    // línea se parte entre monitores — "TA" tiene que caer en el de la izquierda.
+    // "auto" usa la posición real que les dio el compositor; también se puede
+    // dar la lista a mano (sirve para cualquier cantidad de monitores).
+    function orderScreens(list) {
+        if (Array.isArray(crtOrder) && crtOrder.length > 0) {
+            let out = [];
+            for (let i = 0; i < crtOrder.length; i++) {
+                const s = list.find(x => x.name === crtOrder[i]);
+                if (s && out.indexOf(s) < 0)
+                    out.push(s);
+            }
+            // las que no estén en la lista van al final, sin perderse
+            for (let i = 0; i < list.length; i++)
+                if (out.indexOf(list[i]) < 0)
+                    out.push(list[i]);
+            return out;
+        }
+        return [...list].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+    }
+
+    // el tubo se toma todas las pantallas por default, aunque los carteles
+    // estén limitados a una sola: el modo CRT es una toma de la máquina entera
+    readonly property var activeCrtScreens: orderScreens(
+        crtScreens === "same" ? activeScreens : matchScreens(crtScreens))
 
     function randomIcon() {
         const r = Math.random();
@@ -138,7 +766,16 @@ ShellRoot {
         root.dialogList = arr;
     }
 
-    function show(text, title, icon, t0, t1) {
+    function show(text, title, icon, t0, t1, segs) {
+        // el tubo dibuja la línea entera; los carteles son el otro modo
+        // el serial viaja adentro del objeto: una sola señal de cambio lleva
+        // texto y sorteo juntos, y el layout no parpadea al aparecer la línea
+        crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: crtSerial + 1,
+                    segs: segs || [] };
+        crtSerial++;
+        updatePitchPalette();
+        if (crtOn)
+            return;
         pushDialog({
             text: text, title: title || "Spotify", icon: icon || randomIcon(),
             t0: t0 ?? 0, t1: t1 ?? 0,
@@ -185,6 +822,28 @@ ShellRoot {
         npCorner = ev.np_corner ?? npCorner;
         npMargin = ev.np_margin ?? npMargin;
         npVinyl = ev.np_vinyl ?? npVinyl;
+        crtScreens = ev.crt_screens ?? crtScreens;
+        crtOrder = ev.crt_order ?? crtOrder;
+        crtExitOn = ev.crt_exit_on ?? crtExitOn;
+        crtPalette = ev.crt_palette ?? crtPalette;
+        crtSplit = ev.crt_split ?? crtSplit;
+        crtFont = ev.crt_font ?? crtFont;
+        crtCurvature = ev.crt_curvature ?? crtCurvature;
+        crtScanlines = ev.crt_scanlines ?? crtScanlines;
+        crtChroma = ev.crt_chroma ?? crtChroma;
+        crtBloom = ev.crt_bloom ?? crtBloom;
+        crtNoise = ev.crt_noise ?? crtNoise;
+        crtRoll = ev.crt_roll ?? crtRoll;
+        crtVignette = ev.crt_vignette ?? crtVignette;
+        crtIntensity = ev.crt_intensity ?? crtIntensity;
+        crtChrome = ev.crt_chrome ?? crtChrome;
+        crtDirector = ev.crt_director ?? crtDirector;
+        crtFocusMode = ev.crt_focus ?? crtFocusMode;
+        crtColorFromPitch = ev.crt_color_from_pitch ?? crtColorFromPitch;
+        crtColorHold = ev.crt_color_hold ?? crtColorHold;
+        crtMotifs = ev.crt_motifs ?? crtMotifs;
+        crtCamera = ev.crt_camera ?? crtCamera;
+        crtQuality = ev.crt_quality ?? crtQuality;
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear
@@ -197,15 +856,44 @@ ShellRoot {
                     try {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
-                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1);
+                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs);
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
                         else if (ev.cmd === "pos") {
                             root.npProgress = ev.l > 0 ? Math.min(ev.p / ev.l, 1) : 0;
                             root.posAbs = ev.p;
+                            root.posLen = ev.l;
                             root.posAt = Date.now();
+                        } else if (ev.cmd === "sec") {
+                            root.audSection = ev.kind;
+                            root.audPct = ev.p;
+                            // cambiar de parte cambia el dibujo y el reparto de
+                            // colores: es el momento en el que el tema respira
+                            root.sectionGen++;
+                            root.motifGen++;
+                        } else if (ev.cmd === "cue") {
+                            root.audComing = ev.kind;
+                            root.audComingAt = Date.now();
+                        } else if (ev.cmd === "art") {
+                            root.artColors = ev.colors || [];
+                        } else if (ev.cmd === "aud") {
+                            root.audLevel = ev.l;
+                            root.audLo = ev.lo;
+                            root.audMid = ev.mid;
+                            root.audHi = ev.hi;
+                            root.audCentroid = ev.c;
+                            root.audAt = Date.now();
+                            // el centroide se promedia largo: el color tiene que
+                            // seguir el registro del tema, no cada sílaba
+                            root.pitchAvg = root.pitchAvg * 0.96 + ev.c * 0.04;
+                            root.pitchRef = root.pitchRef * 0.998 + ev.c * 0.002;
+                            if (ev.b)
+                                root.audBeat++;
                         } else if (ev.cmd === "clear") {
                             root.npShown = false;
+                            // el tubo se queda sin señal y rota el fósforo
+                            root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [] };
+                            root.crtTrackSeed++;
                             // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
                             if (root.cascadeDeath && root.dialogList.length > 0)
                                 root.clearGen++;
@@ -221,6 +909,24 @@ ShellRoot {
         }
     }
 
+    // modo CRT: un tubo full-bleed por pantalla, con su propio fósforo.
+    // Va aparte de los carteles porque suele tomar más monitores que ellos.
+    Variants {
+        model: root.activeCrtScreens
+
+        Scope {
+            id: crtScope
+            required property var modelData
+
+            Crt {
+                ctl: root
+                scr: crtScope.modelData
+                idx: Math.max(0, root.activeCrtScreens.indexOf(crtScope.modelData))
+                total: root.activeCrtScreens.length
+            }
+        }
+    }
+
     // una instancia del overlay por pantalla activa ("all"/lista = varias);
     // cada monitor spawnea los carteles en posiciones propias
     Variants {
@@ -232,7 +938,7 @@ ShellRoot {
             readonly property var scr: modelData
 
             Variants {
-                model: root.dialogList
+                model: root.crtOn ? [] : root.dialogList
 
                 PanelWindow {
                     id: win
@@ -257,18 +963,16 @@ ShellRoot {
                         && (modelData.t1 || 0) > (modelData.t0 || 0)
                     property string karaokeText: ""
                     function htmlEsc(s) {
-                        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        return root.htmlEscape(s);
                     }
                     function updateKaraoke() {
                         const words = modelData.text.split(" ").filter(w => w.length > 0);
                         if (words.length === 0)
                             return;
-                        // termina de pintar ~1 s antes del próximo cartel: si no, la
-                        // última palabra nunca llega a verse pintada (t1 = ya la reemplazó)
-                        const dur = modelData.t1 - modelData.t0;
-                        const lead = Math.min(1.0, dur * 0.35);
-                        const f = Math.max(0, Math.min(
-                            (root.songPos() - modelData.t0) / Math.max(dur - lead, 0.5), 1));
+                        // mismo avance que usa el tubo del modo CRT: una sola cuenta
+                        // (termina de pintar ~1 s antes del próximo cartel; si no, la
+                        // última palabra nunca llega a verse pintada)
+                        const f = root.karaokeFraction(modelData.t0, modelData.t1);
                         let total = 0;
                         const weights = words.map(w => { const n = w.length + 1; total += n; return n; });
                         let acc = 0, cut = 0;
@@ -926,7 +1630,7 @@ ShellRoot {
             // de progreso Win95. Ventana propia full-screen con máscara solo en la funda.
             PanelWindow {
                 id: npWin
-                visible: root.npShown
+                visible: root.npShown && !root.crtOn
                 screen: perScreen.scr
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.namespace: "cartelitos-np"

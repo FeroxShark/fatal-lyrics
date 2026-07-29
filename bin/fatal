@@ -10,6 +10,9 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/cartelitos/config.toml"
 QS_PID=/tmp/cartelitos-qs.pid
 D_PID=/tmp/cartelitos-daemon.pid
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos.sock"
+# interruptor del modo CRT: un archivo, no el socket — apagarlo tiene que
+# funcionar aunque el daemon esté colgado (el tubo tapa todas las pantallas)
+CRT="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt"
 
 running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
@@ -41,7 +44,26 @@ stop() {
     done
     # without this, the next start sees the stale socket and starts the daemon too early
     rm -f "$SOCK"
+    printf '0' > "$CRT" 2>/dev/null   # que no quede el tubo prendido en el archivo
+
     echo "fatal OFF"
+}
+
+crt_state() { [ "$(cat "$CRT" 2>/dev/null)" = "1" ] && echo on || echo off; }
+
+crt_set() {
+    printf '%s' "$1" > "$CRT.tmp" && mv "$CRT.tmp" "$CRT"
+    echo "CRT $(crt_state)"
+}
+
+crt() {
+    case "${1:-toggle}" in
+        on)     crt_set 1 ;;
+        off)    crt_set 0 ;;
+        status) crt_state ;;
+        toggle) [ "$(crt_state)" = "on" ] && crt_set 0 || crt_set 1 ;;
+        *)      echo "usage: fatal crt [on|off|toggle|status]" >&2; exit 1 ;;
+    esac
 }
 
 demo() {
@@ -62,5 +84,6 @@ case "${1:-toggle}" in
     config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo]" ;;
+    crt)       crt "$2" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|crt on|off|toggle]" ;;
 esac

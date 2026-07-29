@@ -27,8 +27,175 @@ desktop.
 - Dialogs can be **dragged** by their title bar.
 - On the current dialog: `Yes` / `Cancel` / `✕` close it, `No` **duplicates**
   it (like 2000s malware popups). On old (broken) ones: click to close.
-- Auto-pauses if it detects a running game; clears everything if music stays
+- A whole second mode: **CRT takeover** — every monitor becomes one giant
+  dying cathode ray tube with the lyric inside it (see below).
+- Auto-pauses for a fullscreen **game** — but not for a fullscreen browser or
+  video player, which is exactly when you still want it; clears everything if music stays
   paused too long; every dialog has a max lifetime (nothing floats forever).
+
+## CRT mode
+
+A second, completely different mode: **every screen becomes one giant dying
+cathode ray tube** and the lyric fills it. No dialogs, no desktop — the tube
+takes the whole machine, on every monitor at once.
+
+```bash
+fatal crt on | off | toggle | status
+```
+
+What the tube does:
+
+- **Real glass**: the picture is bent by barrel curvature, darkened towards
+  the corners, and lit by a faint sheen off the top-left of the tube face.
+- **The screen is lit, not black.** Like the tubes in the video: a burnt yellow
+  screen with dark red letters, or a deep blue one with cyan letters, and the
+  light bleeding around the glyphs. Two families that alternate across your
+  monitors so the wall never looks uniform.
+- **Phosphor**: the light bleeds around the glyphs (and *into* them on a lit
+  screen, which is what thins the letters on a real tube), the raster is combed
+  by scanlines that crawl, and an aperture-grille triad breaks every pixel into
+  R/G/B — text never looks clean, exactly like a real tube.
+- **Words arrive as they're sung**: each one lands in white with a kick of
+  static, its colour channels split apart and snap back, and it settles into the
+  phosphor in under a fifth of a second. No pre-printed line lighting up word by
+  word — the tube tunes each word in as it's sung. Three entries take turns
+  (a dry snap, a hard slam, a roll down into sync) so a long song never looks
+  looped. Every entry is interpolated per frame, so it runs at whatever each
+  monitor actually does (200, 144 or 60 Hz here).
+- **Broken signal**: RGB channels drift apart (red left, blue right), the
+  raster snakes, horizontal bands jump sideways, blocks of the image corrupt,
+  static crawls, and a bright bar rolls slowly down the screen. **The flicker is
+  on the beat**: instead of blinking on its own clock, the tube lifts with every
+  hit the music actually lands, and in the loud parts it drops out for a couple
+  of frames like a set short of current. A change of
+  verse kicks the signal, and between verses it breaks by itself every so often
+  — but only that: beats, single words and colour changes deliberately do *not*
+  glitch, and everything that asks for one goes through a single gate that
+  refuses anything too soon after the last. Five sources firing at once is what
+  turns a tube into a screen that never stops vibrating. The kick of a new verse
+  lands only on the screen the phrase arrives at, and the spontaneous breakdown
+  is scheduled once for the whole wall — three screens each breaking "only every
+  twenty seconds" still means something breaks every six.
+- **Critical states**: some lines flip the whole tube to a red alarm wash that
+  pulses, with `CRITICAL` on the readout instead of `REC`.
+- **A phosphor per screen**: amber, cyan, green, violet or red — a different
+  one on each monitor, rotating with every track (or pin one).
+- **A director, not three clones**: one screen is in focus and the phrase
+  *continues* on the next one — `I DON'T WANT YOU` on the middle screen, then
+  `TO LEAVE` picks up on the one beside it, with the piece you already read
+  still burning dim behind. Short phrases hop from screen to screen instead.
+  The screens without lyric aren't dead: they run an animation (see below).
+- **A layout per line**, picked from the line itself so every screen agrees
+  without talking to each other: the phrase wrapped big, one word per line,
+  typed out with a block cursor, tiled across the tube — or **cut in pieces
+  across your monitors**, `TA` on one screen and `KE` on the next.
+- **Your monitors in order**: the pieces follow your screens left to right.
+  By default it reads the layout the compositor already knows; `fatal config`
+  also lets you name the order yourself, for any number of screens.
+- **It knows where it is inside the song.** Loud and quiet are measured against
+  *that* track, not against a fixed number — the loudest moment of a lofi tune
+  still counts as its drop, and an average bar of a metal song doesn't. The tube
+  reads which part is playing (quiet / verse / build / drop) off a smoothed
+  curve, so a section lasts a verse and not a bar, and everything follows:
+  animations slow right down in the quiet parts and speed up into the chorus,
+  the signal breaks more often when it's loud, and both the animation and the
+  colour split across your screens change when the song changes part.
+- **And it remembers the song.** The energy curve of each track is kept in
+  `~/.cache/cartelitos/audio/`, so the second time you play it the tube already
+  knows where the drops are and starts pushing a couple of seconds *before* they
+  land, instead of reacting after the fact.
+- **The colour travels with the lyric.** When the phrase is about to jump to the
+  next monitor, that monitor takes the colour of the one handing it over — a
+  third of a second *before* the words land, so the screen is already infected
+  when they arrive. And it is a move, not a copy: the screen that let go takes
+  the other colour, otherwise after three jumps the whole wall ends up the same
+  shade and the two-tone look is gone.
+- **Repeats get their own screen**: `take, take, take me to the beach` is not one
+  phrase — it's three hits, and each lands on a different monitor. It catches
+  every shape a lyric writes a repeat in: spaces, commas, **hyphens**
+  (`Take-take-take-take-take me to the beach` is one word to anything that
+  splits on spaces), repeated pairs (`take me, take me, take me`) and trios,
+  slashes, any script. **Spelled-out words split per letter** — `T-A-K-E` is sung
+  one letter at a time, so each letter takes a screen on its own and fills it —
+  and so do stutters (`B-B-B-Baby`), while compound words and one-letter
+  hyphenations (`people-pleasing`, `e-mail`, `T-shirt`, `K-pop`, `U-turn`) are
+  left alone. The cutting is done in the daemon, where it is covered by tests,
+  and travels to the overlay already cut.
+- **It reacts to what's actually playing.** The daemon captures the sound
+  card's own monitor (`pw-record`, or `parec` — whatever your PipeWire/Pulse
+  setup already provides, no extra packages, no cava) and reads level, bass,
+  treble, a pitch estimate and beats out of it in plain Python. The phosphor
+  glow breathes with the level, beats kick the signal and flash the focused
+  screen, the animations move with the spectrum, and the framing opens and
+  closes. Capture only runs while the tube is up; without it everything falls
+  back to the lyric clock and still works.
+- **The colours come from the cover.** Each palette is *two* faces that go
+  together — one lit screen (burnt background, dark letters) and one dark tube
+  (deep background, glowing letters) — and your monitors alternate between them,
+  so there are never three colours fighting each other. By default both come out
+  of the album art of whatever is playing (needs ImageMagick), skipping any
+  greys in it, because a grey has no hue of its own and picking one paints the
+  wall a colour that belongs to nothing. No cover, no ImageMagick, or a black
+  and white sleeve: it falls back to six presets, and with `palette = "auto"`
+  the register of the song picks between them.
+- **Animations where the lyric isn't** — six of them, meant to look like
+  something a machine of that era would put on a tube rather than a music
+  visualiser bolted on top: a wireframe **eye** that opens and blinks with its
+  iris breathing, a **scope** tracing a Lissajous figure that twists with the
+  bass and treble, a **radar** sweep with echoes that light on the beat, a
+  **rain** of characters, a **hyperspace** of streaks, and a **test card** with
+  its hand going round. They change with the *part* of the song, not with every
+  line — otherwise the side screens flick between drawings every two seconds and
+  read as a nervous screensaver. Two screens never run the same one, the quiet
+  parts pick the calm ones, and words like *eye*, *look*, *silence* (English or
+  Spanish) pull the eye up on purpose, on **one** screen, not all of them.
+- **Karaoke built in**: words light up as they're sung and stay dim before.
+- **Console readouts**: REC dot, channel and phosphor, timecode, track, a
+  block progress bar and framing brackets. Turn them off with `chrome = false`.
+- **No signal**: with nothing playing the tube falls back to colour bars,
+  heavy static and a blinking `NO SIGNAL`.
+
+### Getting out
+
+The tube takes the input too, so leaving it is one motion — `exit_on` picks
+which:
+
+- `"mouse"` (default): the **cursor is hidden** while the tube is up, and
+  **moving the mouse** — or a click, or the wheel — puts the desktop back.
+  Movement arms half a second after the tube appears and needs a few pixels of
+  travel, so the click that opened it doesn't close it right away.
+- `"keyboard"`: **any key** puts the desktop back, but the cursor stays
+  visible and clicks fall through to whatever is underneath.
+
+You can't have both: a layer surface that holds the keyboard stops receiving
+the pointer (tested with exclusive *and* on-demand focus), so hiding the
+cursor and catching bare keypresses are mutually exclusive. A line in tiny
+letters on the tube says how to get out — it shows up for a few seconds when
+the tube starts and then fades down to almost nothing.
+
+Either way there are two exits that never depend on the overlay: a compositor
+keybind, and the command itself.
+
+```
+bind = SUPER SHIFT, C, exec, fatal crt toggle   # Hyprland
+```
+
+It is **opt-in** and never turns itself on. The switch is a file in
+`$XDG_RUNTIME_DIR`, not the socket, so `fatal crt off` puts the desktop back
+even if the daemon is wedged or dead. It also switches itself off while a game
+is fullscreen and comes back when you're out.
+
+Everything else lives under `[crt]` in the config (screens, order, palette,
+split mode, font, and the strength of curvature, scanlines, chroma, bloom,
+noise, roll and vignette), all with live reload like the rest.
+
+Want the old behaviour — the same line on every screen at once, no travelling
+focus? `focus = "all"`.
+
+It is not free: three full screens running a shader cost around a fifth of a
+CPU core and a few points of GPU while the tube is up. Off, it costs nothing —
+no capture, no textures, no timers. `quality` trades resolution for load, and
+`focus`/`motifs`/`audio` each turn off a piece of the work.
 
 ## Requirements
 
@@ -66,6 +233,7 @@ fatal config     # settings menu — every option on one screen, applies live
 fatal setup      # same as `fatal config` (first-run alias)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 fatal demo       # throws a few fake dialogs, to try settings without music
+fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
 ```
 
 ## Configuration
@@ -144,6 +312,30 @@ one. No dependencies beyond the standard library.
 | `behavior` | `click_through`      | Dialogs don't capture the mouse                                    | `false`     |
 | `behavior` | `pause_clear`        | Seconds paused before clearing everything (`0` = never)            | `15`        |
 | `behavior` | `player`             | MPRIS player name (`playerctl -l`)                                 | `"spotify"` |
+| `crt`      | `enabled`            | Start with the tube on (live switch: `fatal crt on/off`)           | `false`     |
+| `crt`      | `screens`            | Screens the tube takes: `"all"`, a name, a list, or `"same"` as the dialogs | `"all"` |
+| `crt`      | `order`              | Screens left to right (decides where each piece of a split line lands): `"auto"` or a list | `"auto"` |
+| `crt`      | `exit_on`            | How you get out: `mouse` (cursor hidden, moving it returns) / `keyboard` (any key returns) | `"mouse"` |
+| `crt`      | `director`           | The lyric travels across the screens instead of cloning        | `true`      |
+| `crt`      | `focus`              | `roam` (one screen at a time) / `all` (every screen shows the whole line) | `"roam"` |
+| `crt`      | `audio`              | React to what's playing (captures the sound card's monitor)     | `true`      |
+| `crt`      | `color_from_pitch`   | Phosphor leans on the register of what's playing                | `true`      |
+| `crt`      | `color_hold`         | Seconds a colour must stay before it may change                 | `10`        |
+| `crt`      | `motifs`             | Animations on the screens without lyric                         | `true`      |
+| `crt`      | `camera`             | How much the framing moves (letterbox, zoom); `0` = still       | `1.0`       |
+| `crt`      | `quality`            | Resolution the tube is drawn at before the CRT pass (`1.0` = native) | `1.0`   |
+| `crt`      | `palette`            | Where the two colours come from: `album` (the cover) / `auto` (by register) / `dragons` / `ado` / `poison` / `bloodline` / `vapor` / `bone` | `"album"` |
+| `crt`      | `split`              | Line across screens: `mixed` / `whole` / `fragment`                 | `"mixed"`   |
+| `crt`      | `font`               | Font family for the lyric (`""` = system default)                   | `""`        |
+| `crt`      | `chrome`             | Console readouts: REC, track, timecode, progress bar                | `true`      |
+| `crt`      | `intensity`          | How often the signal breaks by itself (`0` = never)                 | `1.0`       |
+| `crt`      | `curvature`          | Tube glass curvature (`0` = flat panel)                             | `1.0`       |
+| `crt`      | `scanlines`          | Depth of the horizontal comb                                        | `0.75`      |
+| `crt`      | `chroma`             | Steady RGB misalignment                                             | `1.0`       |
+| `crt`      | `bloom`              | Phosphor glow around the letters                                    | `1.0`       |
+| `crt`      | `noise`              | Static                                                              | `0.5`       |
+| `crt`      | `roll`               | Brightness bar rolling down the tube                                | `1.0`       |
+| `crt`      | `vignette`           | Darkening towards the corners                                       | `0.9`       |
 | `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
 | `behavior` | `game_pause`         | Auto-pause when a window goes fullscreen (any game, no process list needed) | `true`      |
 

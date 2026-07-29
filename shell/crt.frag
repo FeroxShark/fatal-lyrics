@@ -144,9 +144,9 @@ void main() {
     // que se ve es el otro: `pulse` llega con cada golpe de la canción, así que
     // la pantalla late CON la música en vez de parpadear por su cuenta.
     col *= 1.0 - 0.025 * sin(t * 377.0) - 0.02 * hash11(floor(t * 24.0));
-    col *= 1.0 + pulse * (0.30 + 0.25 * hash11(floor(t * 11.0)));
+    col *= 1.0 + pulse * (0.15 + 0.13 * hash11(floor(t * 11.0)));
     // y en los picos, el apagón corto de una tele a la que le falta corriente
-    col *= 1.0 - blink * 0.82;
+    col *= 1.0 - blink * 0.55;
 
     // critical state: the whole tube washes red and pulses
     if (alarm > 0.001) {

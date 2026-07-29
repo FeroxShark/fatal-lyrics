@@ -155,8 +155,16 @@ PanelWindow {
             // El golpe NO rompe la señal (eso era la mitad de la vibración): lo
             // que hace es prender el tubo. El titileo va con la canción.
             beatAnim.restart();
-            if (crt.ctl.sectionEnergy > 1.1 && Math.random() < 0.35)
-                blinkAnim.restart();      // en los picos, además, un apagón corto
+            // El apagón es para el pico del tema, no para cada golpe: pedía poco
+            // (energía > 1.1 y una de cada tres) y terminaba pareciendo una luz
+            // rota. Ahora sólo en la parte más fuerte, una de cada ocho, y con
+            // tres segundos de descanso mínimo entre uno y otro.
+            const now = Date.now();
+            if (crt.ctl.sectionEnergy > 1.35 && Math.random() < 0.12
+                    && now - crt.lastBlinkAt > 3000) {
+                crt.lastBlinkAt = now;
+                blinkAnim.restart();
+            }
             if (crt.focused)
                 flash.pulse();
         }
@@ -166,6 +174,7 @@ PanelWindow {
     // es lo que se lee como "está sincronizado" en vez de "parpadea".
     property real beatPulse: 0
     property real beatBlink: 0
+    property double lastBlinkAt: 0
     NumberAnimation {
         id: beatAnim
         target: crt
@@ -177,7 +186,7 @@ PanelWindow {
     }
     SequentialAnimation {
         id: blinkAnim
-        NumberAnimation { target: crt; property: "beatBlink"; from: 0.9; to: 0; duration: 90; easing.type: Easing.OutQuad }
+        NumberAnimation { target: crt; property: "beatBlink"; from: 0.55; to: 0; duration: 90; easing.type: Easing.OutQuad }
     }
 
     // ------------------------------------------------------- glitch bursts
@@ -314,8 +323,10 @@ PanelWindow {
             property real alarm: crt.alarmLine ? 1 : 0
             property real vignette: crt.ctl.crtVignette
             // el titileo llega desde el audio, no del reloj del shader
+            // el latido también lo gradúa la perilla única: en intensity baja
+            // late apenas, en alta pega como antes
             property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
-                * (crt.focused ? 1 : 0.6)
+                * (crt.focused ? 1 : 0.6) * (0.45 + 0.55 * crt.ctl.crtIntensity)
             property real blink: crt.beatBlink
             property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
             property variant tint: crt.pal.tint

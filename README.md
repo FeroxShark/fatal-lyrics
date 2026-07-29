@@ -66,8 +66,10 @@ What the tube does:
   raster snakes, horizontal bands jump sideways, blocks of the image corrupt,
   static crawls, and a bright bar rolls slowly down the screen. **The flicker is
   on the beat**: instead of blinking on its own clock, the tube lifts with every
-  hit the music actually lands, and in the loud parts it drops out for a couple
-  of frames like a set short of current. A change of
+  hit the music actually lands, and — if you turn `flicker` up — the loudest part
+  of a song also drops out for a couple of frames like a set short of current.
+  `flicker` is its own knob precisely because it's the first thing you want to
+  turn down. A change of
   verse kicks the signal, and between verses it breaks by itself every so often
   — but only that: beats, single words and colour changes deliberately do *not*
   glitch, and everything that asks for one goes through a single gate that

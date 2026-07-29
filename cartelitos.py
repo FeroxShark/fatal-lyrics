@@ -122,6 +122,9 @@ chrome = false         # console readouts (REC, track, timecode, progress bar). 
                        # default: full screen, nothing else on it
 intensity = 0.45       # how restless the tube is: signal breaks, how hard beats
                        # shake it, static. 0 = dead still, 1 = the old behaviour
+flicker = 0.35         # how hard the picture beats with the music: 0 = the light
+                       # never moves, 1 = it thumps. Above ~0.6 the loudest part of
+                       # a song also gets the odd blackout of a frame or two
 curvature = 1.0        # how fat the tube glass is (0 = flat panel)
 scanlines = 0.5        # depth of the horizontal comb
 chroma = 0.6           # steady RGB misalignment
@@ -153,7 +156,7 @@ DEFAULTS = {
         "color_from_pitch": True, "color_hold": 10, "motifs": True, "camera": 1.0,
         "quality": 1.0,
         "exit_on": "mouse", "font": "",
-        "chrome": False, "intensity": 0.45, "curvature": 1.0, "scanlines": 0.5,
+        "chrome": False, "intensity": 0.45, "flicker": 0.35, "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
     },
 }
@@ -544,6 +547,7 @@ def _config_event():
         "crt_color_from_pitch": c["color_from_pitch"],
         "crt_color_hold": c["color_hold"], "crt_motifs": c["motifs"],
         "crt_camera": c["camera"], "crt_quality": c["quality"],
+        "crt_flicker": c["flicker"],
         "crt_font": c["font"], "crt_chrome": c["chrome"],
         "crt_intensity": c["intensity"], "crt_curvature": c["curvature"],
         "crt_scanlines": c["scanlines"], "crt_chroma": c["chroma"],
@@ -1562,6 +1566,9 @@ SETTINGS = [
             ("keyboard: any key returns, cursor stays visible", "keyboard")], c)),
     ("chrome", "crt", "Console readouts (REC, timecode)",
      lambda c: _pick("Console readouts on the tube", YESNO, c)),
+    ("flicker", "crt", "Beating with the music (0 = none)",
+     lambda c: _ask_num("How hard the picture beats with the music "
+                        "(0 = the light never moves, 1 = it thumps)", c, 0.0, 1.0)),
     ("intensity", "crt", "How restless it is (0 = still)",
      lambda c: _ask_num("How restless the tube is: breaks, static, channel split, "
                         "beat shakes (0 = dead still, 1 = wild)", c, 0.0, 2.0)),
@@ -1750,6 +1757,8 @@ TRAY_CHOICES = [
         ("Mixed", "mixed"), ("Never cut", "whole"), ("Always cut", "fragment")]),
     ("exit_on", "crt", "CRT exit", [
         ("Mouse (cursor hidden)", "mouse"), ("Keyboard (any key)", "keyboard")]),
+    ("flicker", "crt", "CRT beating", [
+        ("Off", 0.0), ("Gentle", 0.2), ("Normal", 0.35), ("Hard", 0.7)]),
 ]
 # toggles que se cambian de un click, con el estado en el texto
 TRAY_TOGGLES = [

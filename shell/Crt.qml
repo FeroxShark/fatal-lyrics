@@ -160,8 +160,9 @@ PanelWindow {
             // rota. Ahora sólo en la parte más fuerte, una de cada ocho, y con
             // tres segundos de descanso mínimo entre uno y otro.
             const now = Date.now();
-            if (crt.ctl.sectionEnergy > 1.35 && Math.random() < 0.12
-                    && now - crt.lastBlinkAt > 3000) {
+            if (crt.ctl.crtFlicker > 0.01 && crt.ctl.sectionEnergy > 1.45
+                    && Math.random() < 0.10 * crt.ctl.crtFlicker
+                    && now - crt.lastBlinkAt > 4000) {
                 crt.lastBlinkAt = now;
                 blinkAnim.restart();
             }
@@ -186,7 +187,7 @@ PanelWindow {
     }
     SequentialAnimation {
         id: blinkAnim
-        NumberAnimation { target: crt; property: "beatBlink"; from: 0.55; to: 0; duration: 90; easing.type: Easing.OutQuad }
+        NumberAnimation { target: crt; property: "beatBlink"; from: 0.5 * crt.ctl.crtFlicker; to: 0; duration: 90; easing.type: Easing.OutQuad }
     }
 
     // ------------------------------------------------------- glitch bursts
@@ -323,10 +324,10 @@ PanelWindow {
             property real alarm: crt.alarmLine ? 1 : 0
             property real vignette: crt.ctl.crtVignette
             // el titileo llega desde el audio, no del reloj del shader
-            // el latido también lo gradúa la perilla única: en intensity baja
-            // late apenas, en alta pega como antes
+            // el latido tiene su propia perilla (`flicker`), aparte de la
+            // intensidad general: es lo primero que uno quiere bajar
             property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
-                * (crt.focused ? 1 : 0.6) * (0.45 + 0.55 * crt.ctl.crtIntensity)
+                * (crt.focused ? 1 : 0.6) * crt.ctl.crtFlicker
             property real blink: crt.beatBlink
             property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
             property variant tint: crt.pal.tint

@@ -59,6 +59,7 @@ ShellRoot {
     property bool crtMotifs: true
     property real crtCamera: 1.0
     property real crtQuality: 1.0
+    property real crtFlicker: 0.35
 
     // ---- lo que está sonando de verdad (eventos "aud" del daemon)
     property real audLevel: 0
@@ -844,6 +845,7 @@ ShellRoot {
         crtMotifs = ev.crt_motifs ?? crtMotifs;
         crtCamera = ev.crt_camera ?? crtCamera;
         crtQuality = ev.crt_quality ?? crtQuality;
+        crtFlicker = ev.crt_flicker ?? crtFlicker;
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear

@@ -30,8 +30,27 @@ Item {
     // cuánto empuja la parte del tema (silencio ≈ 0.45, estribillo ≈ 1.6): las
     // animaciones se aquietan o se aceleran con la canción, no con el reloj
     property real energy: 1.0
+    // El golpe del tubo: cuando la pantalla parpadea, la animación ACOMPAÑA —
+    // se acelera y crece un instante. Sin esto el parpadeo es una luz que se
+    // mueve sola; con esto es el golpe de la canción atravesando todo.
+    // `kick` es un contador: cada vez que sube, se dispara el empujón.
+    property int kick: 0
+    property real surge: 0
+    onKickChanged: {
+        surgeDecay.stop();
+        surge = 1;
+        surgeDecay.start();
+    }
+    NumberAnimation {
+        id: surgeDecay
+        target: motif
+        property: "surge"
+        to: 0
+        duration: 460
+        easing.type: Easing.OutQuad
+    }
 
-    opacity: 0.62
+    opacity: Math.min(0.62 + 0.30 * surge, 1)
 
     // pulso del golpe: sube de un saque y baja solo
     property real punch: 0
@@ -49,6 +68,16 @@ Item {
     }
 
     readonly property real span: Math.min(width, height)
+    // velocidad efectiva: la parte del tema, más el empujón del golpe
+    readonly property real drive: energy * (1 + 1.6 * surge)
+
+    // y un tirón de tamaño, corto, para que el golpe se vea y no sólo se acelere
+    transform: Scale {
+        origin.x: motif.width / 2
+        origin.y: motif.height / 2
+        xScale: 1 + 0.05 * motif.surge
+        yScale: 1 + 0.05 * motif.surge
+    }
 
     // ------------------------------------------------------------------- ojo
     // Ojo de alambre como el de la pantalla del videoclip: lente en punta, malla
@@ -165,7 +194,7 @@ Item {
 
         // pupila: lo único que se mueve aparte, clavada al centro exacto
         Rectangle {
-            width: eye.height * (0.10 + 0.05 * motif.level + 0.05 * motif.punch)
+            width: eye.height * (0.10 + 0.05 * motif.level + 0.05 * motif.punch + 0.06 * motif.surge)
             height: width
             radius: width / 2
             x: (eye.width - width) / 2
@@ -208,7 +237,7 @@ Item {
             const d = phase * 0.6;
             const amp = 0.75 + 0.25 * motif.level;
             c.strokeStyle = motif.colour;
-            c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch));
+            c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
             c.beginPath();
             for (let i = 0; i <= 220; i++) {
                 const t = i / 220 * Math.PI * 2;
@@ -278,7 +307,7 @@ Item {
             anchors.centerIn: parent
             width: radar.width
             height: radar.height
-            rotation: motif.clock * (38 + 22 * motif.level) * motif.energy
+            rotation: motif.clock * (38 + 22 * motif.level) * motif.drive
 
             Rectangle {
                 x: parent.width / 2
@@ -329,7 +358,7 @@ Item {
             Text {
                 id: drop
                 required property int index
-                readonly property real speed: (0.35 + (index % 5) * 0.12 + motif.level * 0.5) * motif.energy
+                readonly property real speed: (0.35 + (index % 5) * 0.12 + motif.level * 0.5) * motif.drive
                 x: index * rain.width / rain.columns
                 width: rain.width / rain.columns
                 text: {
@@ -364,7 +393,7 @@ Item {
             Rectangle {
                 required property int index
                 readonly property real ang: index * 2.399963      // ángulo áureo: reparte parejo
-                readonly property real phase: (motif.clock * (0.22 + 0.5 * motif.level) * motif.energy
+                readonly property real phase: (motif.clock * (0.22 + 0.5 * motif.level) * motif.drive
                     + index / 46) % 1
                 readonly property real dist: phase * motif.span * 0.75
                 x: stars.width / 2 + Math.cos(ang) * dist - width / 2
@@ -454,7 +483,7 @@ Item {
             anchors.centerIn: parent
             width: card.height * 0.86
             height: width
-            rotation: motif.clock * 24 * motif.energy
+            rotation: motif.clock * 24 * motif.drive
 
             Rectangle {
                 x: parent.width / 2

@@ -122,9 +122,11 @@ chrome = false         # console readouts (REC, track, timecode, progress bar). 
                        # default: full screen, nothing else on it
 intensity = 0.45       # how restless the tube is: signal breaks, how hard beats
                        # shake it, static. 0 = dead still, 1 = the old behaviour
-flicker = 0.35         # how hard the picture beats with the music: 0 = the light
-                       # never moves, 1 = it thumps. Above ~0.6 the loudest part of
-                       # a song also gets the odd blackout of a frame or two
+flicker = 0.25         # how hard AND how often the picture beats with the music:
+                       # 0 = the light never moves, 1 = it thumps every couple of
+                       # seconds. Above ~0.6 the loudest part of a song also gets the
+                       # odd blackout of a frame or two. Whenever it beats, the
+                       # animations on the other screens surge along with it
 curvature = 1.0        # how fat the tube glass is (0 = flat panel)
 scanlines = 0.5        # depth of the horizontal comb
 chroma = 0.6           # steady RGB misalignment
@@ -156,7 +158,7 @@ DEFAULTS = {
         "color_from_pitch": True, "color_hold": 10, "motifs": True, "camera": 1.0,
         "quality": 1.0,
         "exit_on": "mouse", "font": "",
-        "chrome": False, "intensity": 0.45, "flicker": 0.35, "curvature": 1.0, "scanlines": 0.5,
+        "chrome": False, "intensity": 0.45, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
     },
 }
@@ -1758,7 +1760,7 @@ TRAY_CHOICES = [
     ("exit_on", "crt", "CRT exit", [
         ("Mouse (cursor hidden)", "mouse"), ("Keyboard (any key)", "keyboard")]),
     ("flicker", "crt", "CRT beating", [
-        ("Off", 0.0), ("Gentle", 0.2), ("Normal", 0.35), ("Hard", 0.7)]),
+        ("Off", 0.0), ("Gentle", 0.15), ("Normal", 0.25), ("Hard", 0.7)]),
 ]
 # toggles que se cambian de un click, con el estado en el texto
 TRAY_TOGGLES = [

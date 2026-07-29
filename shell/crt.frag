@@ -143,7 +143,9 @@ void main() {
     // El titileo. La parte fija es el tubo (60 Hz y su inestabilidad), pero lo
     // que se ve es el otro: `pulse` llega con cada golpe de la canción, así que
     // la pantalla late CON la música en vez de parpadear por su cuenta.
-    col *= 1.0 - 0.025 * sin(t * 377.0) - 0.02 * hash11(floor(t * 24.0));
+    // el escalón al azar 24 veces por segundo es lo que hace que un tubo parezca
+    // vivo, pero de más se lee como una lámpara que falla: va bajito
+    col *= 1.0 - 0.022 * sin(t * 377.0) - 0.010 * hash11(floor(t * 24.0));
     col *= 1.0 + pulse * (0.10 + 0.10 * hash11(floor(t * 11.0)));
     // y en los picos, el apagón corto de una tele a la que le falta corriente
     col *= 1.0 - blink * 0.55;

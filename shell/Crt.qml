@@ -165,9 +165,20 @@ PanelWindow {
                     && now - crt.lastBlinkAt > 4000) {
                 crt.lastBlinkAt = now;
                 blinkAnim.restart();
+                crt.surgeGen++;
             }
-            if (crt.focused)
+            // El fogonazo de pantalla completa era el verdadero parpadeo: saltaba
+            // en CADA golpe (una o dos veces por segundo) y no pasaba por ninguna
+            // perilla, así que sobrevivió a todas las bajadas anteriores. Ahora lo
+            // gradúa `flicker` y además se espacia.
+            // la perilla gobierna las dos cosas: cuán fuerte pega y cada cuánto
+            // (en 0.25 sale uno cada ~6 s, en 1.0 uno cada segundo y medio)
+            if (crt.focused && crt.ctl.crtFlicker > 0.01
+                    && now - crt.lastFlashAt > 1400 / Math.max(crt.ctl.crtFlicker, 0.05)) {
+                crt.lastFlashAt = now;
                 flash.pulse();
+                crt.surgeGen++;
+            }
         }
     }
 
@@ -176,6 +187,9 @@ PanelWindow {
     property real beatPulse: 0
     property real beatBlink: 0
     property double lastBlinkAt: 0
+    property double lastFlashAt: 0
+    // sube cada vez que el tubo pega un parpadeo: las animaciones lo toman de acá
+    property int surgeGen: 0
     NumberAnimation {
         id: beatAnim
         target: crt
@@ -555,6 +569,11 @@ PanelWindow {
                 low: crt.live ? crt.ctl.audLo : 0.4
                 high: crt.live ? crt.ctl.audHi : 0.3
                 beat: crt.ctl.audBeat
+                // cuando el tubo parpadea, la animación acompaña: se acelera y
+                // crece un instante, así el golpe se ve en todas las pantallas.
+                // Va por contador y no por magnitud: aunque el parpadeo esté
+                // bajito, cuando pasa se tiene que ver acompañado.
+                kick: crt.surgeGen
                 clock: crt.tubeTime
                 spinning: crt.visible && crt.idle
             }
@@ -620,7 +639,7 @@ PanelWindow {
                 id: flashAnim
                 target: flash
                 property: "opacity"
-                from: 0.055
+                from: 0.05 * crt.ctl.crtFlicker
                 to: 0
                 duration: 220
                 easing.type: Easing.OutQuad

@@ -502,20 +502,23 @@ PanelWindow {
                                     entry.restart();
                             }
 
-                            // La entrada: blanco de un frame largo (≈40 ms, se ve
-                            // igual en el monitor de 60 que en el de 200) y se va
-                            // al color con easing, con un tirón lateral y los
-                            // canales separados que se juntan. Todo interpolado
-                            // por frame — nada de timers manejando el movimiento.
-                            // La entrada tiene que leerse como que la palabra YA
-                            // ESTABA y el televisor recién la sintonizó: golpe de
-                            // estática, blanco, y en menos de un cuarto de segundo
-                            // ya está quieta. Nada de rebotes largos.
+                            // La entrada: la palabra llega como si el televisor
+                            // recién la sintonizara. El destello de color tiene su
+                            // propia perilla (`word_flash`) porque pasa en CADA
+                            // palabra — con el destello a full se lee como que la
+                            // letra titila todo el tiempo, y no es lo mismo que el
+                            // latido del tubo.
+                            readonly property color entryTint: crt.ctl.crtWordFlash <= 0.01
+                                ? crt.pal.ink
+                                // proporción directa: el piso de 0.25 que tenía
+                                // hacía que hasta en el mínimo la palabra entrara
+                                // clarita, y el mínimo tiene que ser "nada"
+                                : Qt.tint(crt.pal.ink, Qt.rgba(1, 1, 1, crt.ctl.crtWordFlash))
                             SequentialAnimation {
                                 id: entry
-                                PropertyAction { target: label; property: "color"; value: "#ffffff" }
+                                PropertyAction { target: label; property: "color"; value: slot.entryTint }
                                 PropertyAction { target: slot; property: "ghostOff"; value: measure.fontInfo.pixelSize * (crt.entryStyle === "roll" ? 0.34 : 0.22) }
-                                PropertyAction { target: slot; property: "ghostFade"; value: 1 }
+                                PropertyAction { target: slot; property: "ghostFade"; value: 0.3 + 0.7 * crt.ctl.crtWordFlash }
                                 PropertyAction { target: sc; property: "xScale"; value: crt.entryStyle === "slam" ? 1.35 : 1.06 }
                                 PropertyAction { target: sc; property: "yScale"; value: crt.entryStyle === "slam" ? 1.35 : 0.82 }
                                 PropertyAction { target: tr; property: "y"; value: crt.entryStyle === "roll" ? -measure.fontInfo.pixelSize * 0.55 : 0 }

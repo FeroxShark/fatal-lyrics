@@ -122,6 +122,10 @@ chrome = false         # console readouts (REC, track, timecode, progress bar). 
                        # default: full screen, nothing else on it
 intensity = 0.45       # how restless the tube is: signal breaks, how hard beats
                        # shake it, static. 0 = dead still, 1 = the old behaviour
+word_flash = 0.3       # how much each word flashes as it lands: 0 = it arrives
+                       # straight in its own colour, 1 = it lands white. This one is
+                       # not the tube beating — it happens on EVERY word, which is
+                       # what reads as "the letters keep flickering"
 flicker = 0.25         # how hard AND how often the picture beats with the music
                        # (the curve is gentle at the bottom, which is where you
                        # actually want to live: 0.25 is a light beat, not a quarter
@@ -161,7 +165,7 @@ DEFAULTS = {
         "color_from_pitch": True, "color_hold": 10, "motifs": True, "camera": 1.0,
         "quality": 1.0,
         "exit_on": "mouse", "font": "",
-        "chrome": False, "intensity": 0.45, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,
+        "chrome": False, "intensity": 0.45, "flicker": 0.25, "word_flash": 0.3, "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
     },
 }
@@ -607,7 +611,7 @@ def _config_event():
         "crt_color_from_pitch": c["color_from_pitch"],
         "crt_color_hold": c["color_hold"], "crt_motifs": c["motifs"],
         "crt_camera": c["camera"], "crt_quality": c["quality"],
-        "crt_flicker": c["flicker"],
+        "crt_flicker": c["flicker"], "crt_word_flash": c["word_flash"],
         "crt_font": c["font"], "crt_chrome": c["chrome"],
         "crt_intensity": c["intensity"], "crt_curvature": c["curvature"],
         "crt_scanlines": c["scanlines"], "crt_chroma": c["chroma"],
@@ -1626,6 +1630,9 @@ SETTINGS = [
             ("keyboard: any key returns, cursor stays visible", "keyboard")], c)),
     ("chrome", "crt", "Console readouts (REC, timecode)",
      lambda c: _pick("Console readouts on the tube", YESNO, c)),
+    ("word_flash", "crt", "Flash as each word lands (0 = none)",
+     lambda c: _ask_num("How much each word flashes as it lands "
+                        "(0 = straight in its colour, 1 = lands white)", c, 0.0, 1.0)),
     ("flicker", "crt", "Beating with the music (0 = none)",
      lambda c: _ask_num("How hard the picture beats with the music "
                         "(0 = the light never moves, 1 = it thumps)", c, 0.0, 1.0)),
@@ -1819,6 +1826,8 @@ TRAY_CHOICES = [
         ("Mouse (cursor hidden)", "mouse"), ("Keyboard (any key)", "keyboard")]),
     ("flicker", "crt", "CRT beating", [
         ("Off", 0.0), ("Gentle", 0.15), ("Normal", 0.25), ("Hard", 0.7)]),
+    ("word_flash", "crt", "CRT word flash", [
+        ("Off", 0.0), ("Gentle", 0.15), ("Normal", 0.3), ("Hard", 0.8)]),
 ]
 # toggles que se cambian de un click, con el estado en el texto
 TRAY_TOGGLES = [

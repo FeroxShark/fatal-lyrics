@@ -17,11 +17,13 @@ ShellRoot {
 
     // valores de arranque; los pisa la config real al leerla
     property var vals: ({
-        flicker: 0.25, intensity: 0.45, camera: 1.0,
+        word_flash: 0.3, flicker: 0.25, intensity: 0.45, camera: 1.0,
         bloom: 1.0, scanlines: 0.5, noise: 0.22,
     })
 
     readonly property var rows: [
+        { key: "word_flash", label: "Word flash",    max: 1.0,
+          hint: "how much each word flashes as it lands" },
         { key: "flicker",   label: "Beat / flicker", max: 1.0,
           hint: "how hard and how often it beats" },
         { key: "intensity", label: "Restlessness",   max: 1.5,

@@ -55,8 +55,9 @@ What the tube does:
   screen, which is what thins the letters on a real tube), the raster is combed
   by scanlines that crawl, and an aperture-grille triad breaks every pixel into
   R/G/B — text never looks clean, exactly like a real tube.
-- **Words arrive as they're sung**: each one lands in white with a kick of
-  static, its colour channels split apart and snap back, and it settles into the
+- **Words arrive as they're sung**: each one lands with a kick of static and a
+  flash of its own colour (how much of a flash is `word_flash`; at `0` the word
+  simply arrives in its final colour), its colour channels split apart and snap back, and it settles into the
   phosphor in under a fifth of a second. No pre-printed line lighting up word by
   word — the tube tunes each word in as it's sung. Three entries take turns
   (a dry snap, a hard slam, a roll down into sync) so a long song never looks

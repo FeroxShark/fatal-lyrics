@@ -64,6 +64,10 @@ ShellRoot {
     // saltos de 5% de brillo ya en 0.25, y la zona donde uno quiere estar es
     // justo la de abajo. Así 0.25 son 6 puntos de latido y no 25.
     readonly property real flickerAmt: crtFlicker * crtFlicker
+    // cuánto destella cada palabra al aparecer (0 = entra directo en su color).
+    // Va aparte del latido del tubo: pasa en CADA palabra, así que es lo que se
+    // percibe como "la letra titila todo el tiempo".
+    property real crtWordFlash: 0.3
 
     // ---- lo que está sonando de verdad (eventos "aud" del daemon)
     property real audLevel: 0
@@ -869,6 +873,7 @@ ShellRoot {
         crtCamera = ev.crt_camera ?? crtCamera;
         crtQuality = ev.crt_quality ?? crtQuality;
         crtFlicker = ev.crt_flicker ?? crtFlicker;
+        crtWordFlash = ev.crt_word_flash ?? crtWordFlash;
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear

@@ -964,3 +964,25 @@ class TestSplitRepeats(unittest.TestCase):
         c.show("a plain line", "t", 5.0, 9.0)
         self.assertEqual(len(sent[0]["segs"]), 4)
         self.assertNotIn("segs", sent[1])
+
+
+class TestTuneChannel(unittest.TestCase):
+    """El panel de sliders es OTRO proceso escribiendo un archivo: no se le cree
+    nada de lo que manda."""
+
+    def test_a_normal_line_goes_through(self):
+        self.assertEqual(c.parse_tune("flicker=0.250\n"), {"flicker": 0.25})
+
+    def test_several_lines_at_once(self):
+        got = c.parse_tune("flicker=0.1\nnoise=0.5\n")
+        self.assertEqual(got, {"flicker": 0.1, "noise": 0.5})
+
+    def test_a_key_that_is_not_a_setting_is_ignored(self):
+        self.assertEqual(c.parse_tune("rm=1\nplayer=vlc\nflicker=0.3"), {"flicker": 0.3})
+
+    def test_garbage_values_are_ignored(self):
+        self.assertEqual(c.parse_tune("flicker=mucho\nnoise=\n"), {})
+
+    def test_junk_does_not_crash(self):
+        self.assertEqual(c.parse_tune(""), {})
+        self.assertEqual(c.parse_tune("sin igual\n\n"), {})

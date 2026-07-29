@@ -4,6 +4,7 @@
 SELF="$(readlink -f "$0")"
 BASE="${CARTELITOS_HOME:-$(dirname "$(dirname "$SELF")")}"
 QML="$BASE/shell/shell.qml"
+TUNE_QML="$BASE/shell/tune.qml"
 DAEMON="$BASE/cartelitos.py"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/cartelitos/config.toml"
 
@@ -49,6 +50,14 @@ stop() {
     echo "fatal OFF"
 }
 
+tune() {
+    if [ ! -f "$TUNE_QML" ]; then
+        echo "can't find the sliders in $BASE" >&2
+        exit 1
+    fi
+    exec qs -p "$TUNE_QML"
+}
+
 crt_state() { [ "$(cat "$CRT" 2>/dev/null)" = "1" ] && echo on || echo off; }
 
 crt_set() {
@@ -85,5 +94,6 @@ case "${1:-toggle}" in
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
     crt)       crt "$2" ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|crt on|off|toggle]" ;;
+    tune|sliders) tune ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle]" ;;
 esac

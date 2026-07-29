@@ -236,6 +236,7 @@ fatal setup      # same as `fatal config` (first-run alias)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 fatal demo       # throws a few fake dialogs, to try settings without music
 fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
+fatal tune       # sliders for the CRT settings you want to move while it plays
 ```
 
 ## Configuration
@@ -255,6 +256,12 @@ and show what the value was when you opened it, `u` puts everything back, and
 playing. It detects your monitors and MPRIS players on its own.
 
 Prefer a text editor? `fatal edit` opens the raw TOML — same live apply.
+
+And for the handful of CRT settings you only understand by moving them while the
+music plays — how hard it beats, how restless the tube is, the glow, the
+scanlines — `fatal tune` (or **Sliders…** in the tray) opens a small panel of
+sliders. Each one writes straight into the config, so the tube follows along and
+the value is still there next time.
 
 ### From the tray
 

@@ -122,7 +122,10 @@ chrome = false         # console readouts (REC, track, timecode, progress bar). 
                        # default: full screen, nothing else on it
 intensity = 0.45       # how restless the tube is: signal breaks, how hard beats
                        # shake it, static. 0 = dead still, 1 = the old behaviour
-flicker = 0.25         # how hard AND how often the picture beats with the music:
+flicker = 0.25         # how hard AND how often the picture beats with the music
+                       # (the curve is gentle at the bottom, which is where you
+                       # actually want to live: 0.25 is a light beat, not a quarter
+                       # of the way to a strobe):
                        # 0 = the light never moves, 1 = it thumps every couple of
                        # seconds. Above ~0.6 the loudest part of a song also gets the
                        # odd blackout of a frame or two. Whenever it beats, the
@@ -256,6 +259,61 @@ def apply_config():
     if _tray_refresh is not None:
         _tray_refresh()
     return True
+
+
+TUNE_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-tune")
+
+
+def parse_tune(text):
+    """Líneas `clave=valor` que manda el panel de sliders. Devuelve sólo las
+    claves que existen en [crt] y con el número bien formado: es un archivo que
+    escribe otro proceso, no se le cree nada."""
+    out = {}
+    for line in text.splitlines():
+        if "=" not in line:
+            continue
+        key, _, raw = line.partition("=")
+        key = key.strip()
+        if key not in DEFAULTS["crt"]:
+            continue
+        try:
+            value = float(raw.strip())
+        except ValueError:
+            continue
+        out[key] = value
+    return out
+
+
+def watch_tune():
+    """Aplica lo que mueve el panel de sliders (`fatal tune`).
+
+    Va por archivo y no por el socket porque el socket lo sirve el overlay: el
+    panel es otro proceso y sólo tiene que dejar el valor escrito. El daemon lo
+    pasa a la config, así el cambio queda para la próxima vez."""
+    # Se anota lo que YA estaba al arrancar: así lo que quedó de una sesión
+    # anterior no se aplica, pero el primer movimiento del slider sí (antes se
+    # perdía el primer arrastre, que es justo el que uno prueba).
+    try:
+        last = os.stat(TUNE_PATH).st_mtime_ns
+    except OSError:
+        last = None
+    while True:
+        time.sleep(0.35)
+        try:
+            stamp = os.stat(TUNE_PATH).st_mtime_ns
+        except OSError:
+            continue
+        if stamp == last:
+            continue
+        last = stamp
+        try:
+            with open(TUNE_PATH) as f:
+                changes = parse_tune(f.read())
+        except OSError:
+            continue
+        for key, value in changes.items():
+            log(f"tune: crt.{key} = {value}")
+            set_option(key, "crt", value)
 
 
 def watch_config():
@@ -1856,6 +1914,7 @@ def start_tray():
              dynamic=lambda: f"CRT mode: {'on' if crt_on() else 'off'}")
 
         menu.append(Gtk.SeparatorMenuItem())
+        item(menu, "Sliders…", on_click=lambda: subprocess.Popen([fatal_bin, "tune"]))
         item(menu, "Demo dialogs", on_click=lambda: demo())
         if term:
             item(menu, "All settings…",
@@ -1898,6 +1957,7 @@ def main():
     send(_config_event())
     threading.Thread(target=watch_config, daemon=True, name="config").start()
     threading.Thread(target=audio_loop, daemon=True, name="audio").start()
+    threading.Thread(target=watch_tune, daemon=True, name="tune").start()
     signal.signal(signal.SIGUSR1, demo)
     while True:
         # pausa automática si hay un juego corriendo

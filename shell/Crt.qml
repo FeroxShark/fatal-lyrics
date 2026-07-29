@@ -147,48 +147,12 @@ PanelWindow {
         }
     }
 
-    // golpe: chispazo de señal y fogonazo, más fuerte en la pantalla enfocada
-    Connections {
-        target: crt.ctl
-        enabled: crt.visible && crt.live
-        function onAudBeatChanged() {
-            // El golpe NO rompe la señal (eso era la mitad de la vibración): lo
-            // que hace es prender el tubo. El titileo va con la canción.
-            beatAnim.restart();
-            // El apagón es para el pico del tema, no para cada golpe: pedía poco
-            // (energía > 1.1 y una de cada tres) y terminaba pareciendo una luz
-            // rota. Ahora sólo en la parte más fuerte, una de cada ocho, y con
-            // tres segundos de descanso mínimo entre uno y otro.
-            const now = Date.now();
-            if (crt.ctl.crtFlicker > 0.01 && crt.ctl.sectionEnergy > 1.45
-                    && Math.random() < 0.10 * crt.ctl.crtFlicker
-                    && now - crt.lastBlinkAt > 4000) {
-                crt.lastBlinkAt = now;
-                blinkAnim.restart();
-                crt.surgeGen++;
-            }
-            // El fogonazo de pantalla completa era el verdadero parpadeo: saltaba
-            // en CADA golpe (una o dos veces por segundo) y no pasaba por ninguna
-            // perilla, así que sobrevivió a todas las bajadas anteriores. Ahora lo
-            // gradúa `flicker` y además se espacia.
-            // la perilla gobierna las dos cosas: cuán fuerte pega y cada cuánto
-            // (en 0.25 sale uno cada ~6 s, en 1.0 uno cada segundo y medio)
-            if (crt.focused && crt.ctl.crtFlicker > 0.01
-                    && now - crt.lastFlashAt > 1400 / Math.max(crt.ctl.crtFlicker, 0.05)) {
-                crt.lastFlashAt = now;
-                flash.pulse();
-                crt.surgeGen++;
-            }
-        }
-    }
-
-    // El latido del tubo con cada golpe: sube de un saque y baja con curva, que
-    // es lo que se lee como "está sincronizado" en vez de "parpadea".
+    // El latido llega del root, una sola vez para toda la pared: la pantalla con
+    // la letra pega el fogonazo y las otras multiplican su animación. Antes esto
+    // lo disparaba cada pantalla por su cuenta y el empujón no salía de la que
+    // parpadeaba, así que se veía una luz sola moviéndose.
     property real beatPulse: 0
     property real beatBlink: 0
-    property double lastBlinkAt: 0
-    property double lastFlashAt: 0
-    // sube cada vez que el tubo pega un parpadeo: las animaciones lo toman de acá
     property int surgeGen: 0
     NumberAnimation {
         id: beatAnim
@@ -199,9 +163,26 @@ PanelWindow {
         duration: 190
         easing.type: Easing.OutQuad
     }
-    SequentialAnimation {
+    NumberAnimation {
         id: blinkAnim
-        NumberAnimation { target: crt; property: "beatBlink"; from: 0.5 * crt.ctl.crtFlicker; to: 0; duration: 90; easing.type: Easing.OutQuad }
+        target: crt
+        property: "beatBlink"
+        from: 0.5 * crt.ctl.flickerAmt
+        to: 0
+        duration: 90
+        easing.type: Easing.OutQuad
+    }
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible
+        function onFlickerGenChanged() {
+            beatAnim.restart();
+            if (crt.ctl.flickerHard)
+                blinkAnim.restart();
+            if (crt.focused)
+                flash.pulse();
+            crt.surgeGen++;      // acá y en las otras: la pared entera acompaña
+        }
     }
 
     // ------------------------------------------------------- glitch bursts
@@ -330,7 +311,7 @@ PanelWindow {
             // el fósforo late con la música; en la pantalla apagada se va a cero
             // y el shader se saltea las ocho muestras del bloom
             property real bloom: crt.showsText
-                ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump) : 0
+                ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt) : 0
             property real noiseAmt: crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
                 * (crt.standby ? 3.5 : (crt.idle ? 1.6 : 1))
             property real glitch: Math.min(crt.glitchAmt, 1)
@@ -341,7 +322,7 @@ PanelWindow {
             // el latido tiene su propia perilla (`flicker`), aparte de la
             // intensidad general: es lo primero que uno quiere bajar
             property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
-                * (crt.focused ? 1 : 0.6) * crt.ctl.crtFlicker
+                * (crt.focused ? 1 : 0.6) * crt.ctl.flickerAmt
             property real blink: crt.beatBlink
             property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
             property variant tint: crt.pal.tint
@@ -359,11 +340,13 @@ PanelWindow {
         Item {
             id: camera
             anchors.fill: parent
+            // el tirón del latido va acá, así la pantalla CON la letra también
+            // acompaña el parpadeo y no sólo las de al lado
             transform: Scale {
                 origin.x: camera.width / 2
                 origin.y: camera.height / 2
-                xScale: crt.camZoom
-                yScale: crt.camZoom
+                xScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
+                yScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
             }
 
             // la pantalla prendida respira: el fondo sube y baja con la música,
@@ -371,7 +354,11 @@ PanelWindow {
             Rectangle {
                 anchors.fill: parent
                 color: crt.pal.bg
-                opacity: crt.showsText ? 0.10 + 0.16 * crt.pump : 0.05
+                // el "respira" seguía el nivel del audio a 14 Hz: cada sílaba
+                // movía el brillo de la pantalla entera. Ahora lo gradúa la
+                // misma perilla del parpadeo.
+                opacity: crt.showsText
+                    ? 0.10 + 0.16 * crt.pump * crt.ctl.flickerAmt : 0.05
             }
 
             // ---- verso anterior, quemado en el fósforo mientras se apaga
@@ -639,7 +626,7 @@ PanelWindow {
                 id: flashAnim
                 target: flash
                 property: "opacity"
-                from: 0.05 * crt.ctl.crtFlicker
+                from: 0.05 * crt.ctl.flickerAmt
                 to: 0
                 duration: 220
                 easing.type: Easing.OutQuad

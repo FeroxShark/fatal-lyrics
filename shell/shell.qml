@@ -59,7 +59,11 @@ ShellRoot {
     property bool crtMotifs: true
     property real crtCamera: 1.0
     property real crtQuality: 1.0
-    property real crtFlicker: 0.35
+    property real crtFlicker: 0.25
+    // La perilla mueve el brillo al CUADRADO: medido, la respuesta lineal daba
+    // saltos de 5% de brillo ya en 0.25, y la zona donde uno quiere estar es
+    // justo la de abajo. Así 0.25 son 6 puntos de latido y no 25.
+    readonly property real flickerAmt: crtFlicker * crtFlicker
 
     // ---- lo que está sonando de verdad (eventos "aud" del daemon)
     property real audLevel: 0
@@ -613,6 +617,25 @@ ShellRoot {
         const offset = Math.floor(crtHash(motifGen * 29 + i * 11) * (pool.length - 1)) + 1;
         return pool[(pick + (i === chosen ? 0 : offset)) % pool.length];
     }
+
+    // El latido del tubo: lo decide el root UNA vez para toda la pared, no cada
+    // pantalla por su cuenta. Antes el fogonazo lo disparaba la pantalla enfocada
+    // en su propia instancia, así que las demás nunca se enteraban y las
+    // animaciones no acompañaban nada.
+    property int flickerGen: 0
+    property double lastFlickerAt: 0
+    property bool flickerHard: false     // true = además apagón corto
+    function tubeBeat() {
+        if (!crtOn || crtFlicker <= 0.01)
+            return;
+        const now = Date.now();
+        if (now - lastFlickerAt < 1400 / Math.max(crtFlicker, 0.05))
+            return;
+        lastFlickerAt = now;
+        flickerHard = sectionEnergy > 1.45 && Math.random() < 0.35 && crtFlicker > 0.5;
+        flickerGen++;
+    }
+    onAudBeatChanged: tubeBeat()
 
     // Interferencia espontánea: la programa el root y le toca a UNA pantalla por
     // vez. Con un temporizador propio por pantalla, aunque cada una se rompiera

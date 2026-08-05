@@ -93,7 +93,10 @@ def _ask_crt_order(current):
     haya — con uno solo no cambia nada."""
     mons = system._monitors_lr()
     if len(mons) < 2:
-        print("\n  only one screen detected, the order changes nothing")
+        # cero = no hay lista de monitores (fuera de Hyprland no se puede pedir)
+        print("\n  no screen list available (Hyprland only), nothing to order"
+              if not mons else
+              "\n  only one screen detected, the order changes nothing")
         input("  enter to go back ")
         return None
     print(f"\nScreen order, left to right   (now: {_fmt(current)})")

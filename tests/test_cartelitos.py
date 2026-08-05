@@ -965,6 +965,82 @@ class TestGameDetection(unittest.TestCase):
         self.assertFalse(c.is_game_window(None))
 
 
+class TestCompositorDetection(unittest.TestCase):
+    """gaming() y la lista de monitores son Hyprland-only. En otro compositor
+    tienen que apagarse solas y avisar UNA vez, no reventar por tick."""
+
+    def setUp(self):
+        self.env = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(self.env)))
+        self.empty = tempfile.TemporaryDirectory()      # XDG_RUNTIME_DIR sin hypr/
+        self.addCleanup(self.empty.cleanup)
+        gp = config.CFG["behavior"]["game_pause"]
+        self.addCleanup(lambda: config.CFG["behavior"].__setitem__("game_pause", gp))
+        system._hypr_warned = False
+        self.addCleanup(lambda: setattr(system, "_hypr_warned", False))
+        # cualquier hyprctl que se escape del guard tiene que hacer ruido
+        self.ran = []
+        real_run = system.subprocess.run
+        def spy(cmd, *a, **kw):
+            self.ran.append(cmd)
+            return real_run(cmd, *a, **kw)
+        system.subprocess.run = spy
+        self.addCleanup(lambda: setattr(system.subprocess, "run", real_run))
+        self.which = system.shutil.which
+        self.addCleanup(lambda: setattr(system.shutil, "which", self.which))
+        self.logged = []
+        real_log = system.log
+        system.log = lambda *a: self.logged.append(" ".join(str(x) for x in a))
+        self.addCleanup(lambda: setattr(system, "log", real_log))
+
+    def blank_env(self):
+        for k in ("HYPRLAND_INSTANCE_SIGNATURE", "XDG_CURRENT_DESKTOP"):
+            os.environ.pop(k, None)
+        os.environ["XDG_RUNTIME_DIR"] = self.empty.name
+
+    def test_hyprland_is_detected_by_its_signature(self):
+        self.blank_env()
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "whatever"
+        system.shutil.which = lambda n: "/usr/bin/hyprctl"
+        self.assertTrue(system._hyprland())
+        self.assertEqual(self.logged, [])
+
+    def test_a_scrubbed_env_still_finds_it_by_the_desktop_name(self):
+        # arrancado como unit de systemd la firma puede no estar
+        self.blank_env()
+        os.environ["XDG_CURRENT_DESKTOP"] = "Hyprland"
+        system.shutil.which = lambda n: "/usr/bin/hyprctl"
+        self.assertTrue(system._hyprland())
+
+    def test_or_by_the_runtime_socket_directory(self):
+        self.blank_env()
+        os.mkdir(os.path.join(self.empty.name, "hypr"))
+        system.shutil.which = lambda n: "/usr/bin/hyprctl"
+        self.assertTrue(system._hyprland())
+
+    def test_without_any_signal_nothing_shells_out(self):
+        self.blank_env()
+        config.CFG["behavior"]["game_pause"] = True   # el guard, no el early-return
+        self.assertFalse(system._hyprland())
+        self.assertEqual(system._monitors(), [])
+        self.assertEqual(system._monitors_lr(), [])
+        self.assertFalse(system.gaming())
+        self.assertEqual(self.ran, [])
+
+    def test_the_signature_without_the_binary_is_not_enough(self):
+        self.blank_env()
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "whatever"
+        system.shutil.which = lambda n: None
+        self.assertFalse(system._hyprland())
+
+    def test_it_complains_once_and_then_shuts_up(self):
+        self.blank_env()
+        for _ in range(5):
+            system._hyprland()
+        self.assertEqual(len(self.logged), 1)
+        self.assertIn("hyprctl", self.logged[0])
+
+
 class TestSplitRepeats(unittest.TestCase):
     """Una línea de letra no siempre es una frase: muchas veces son golpes
     repetidos, y cada golpe va a una pantalla distinta. Esto tiene que aguantar

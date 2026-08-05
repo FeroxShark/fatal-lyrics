@@ -6,7 +6,46 @@ import subprocess
 
 from . import config
 from . import util
-from .util import FIELD_SEP
+from .util import FIELD_SEP, log
+
+_hypr_warned = False
+
+
+def _hyprland():
+    """¿Estamos abajo de Hyprland, con hyprctl a mano?
+
+    `hyprctl` es exclusivo de Hyprland: no existe en Sway, river ni el resto de
+    los wlroots. Las dos features que dependen de él —la pausa por juego de
+    gaming() y la enumeración de monitores de _monitors()/_monitors_lr()— chequean
+    esto antes de shellear, así en otro compositor degradan limpio y avisan UNA
+    sola vez, en vez de comerse un FileNotFoundError por tick escondido adentro de
+    un except ancho.
+
+    TODO: un fallback genérico es viable a futuro — `wlr-randr` o
+    `swaymsg -t get_outputs` para los monitores, y el protocolo
+    wlr-foreign-toplevel (o `swaymsg -t get_tree`) para la ventana activa.
+    Fuera de scope por ahora: acá solo se avisa qué queda apagado.
+    """
+    # La firma sola no alcanza: arrancado como unit de systemd / app2unit / uwsm
+    # el entorno viene lavado y HYPRLAND_INSTANCE_SIGNATURE puede no estar aunque
+    # Hyprland esté andando. Por eso hay tres señales, todas baratas (nada de
+    # subprocess): si alguna da, hyprctl encuentra el socket solo.
+    global _hypr_warned
+    signals = (
+        bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")),
+        "hyprland" in os.environ.get("XDG_CURRENT_DESKTOP", "").lower(),
+        os.path.isdir(os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/nonexistent"), "hypr")),
+    )
+    if any(signals) and shutil.which("hyprctl"):
+        return True
+    if not _hypr_warned:
+        _hypr_warned = True
+        log("no parece Hyprland (ni HYPRLAND_INSTANCE_SIGNATURE, ni "
+            "XDG_CURRENT_DESKTOP, ni socket en XDG_RUNTIME_DIR/hypr) o falta hyprctl: "
+            "quedan apagadas la pausa por juego y la lista de monitores. "
+            "El resto de cartelitos anda igual.")
+    return False
+
 
 def playerctl_state():
     """Devuelve dict con track+posición del player, o None si no hay."""
@@ -54,7 +93,11 @@ def is_game_window(win):
 
     La heurística de "fullscreen = juego" sola es demasiado ancha: un YouTube a
     pantalla completa apagaba la letra entera, que es exactamente cuando uno la
-    quiere. Se mira la clase de la ventana antes de cortar."""
+    quiere. Se mira la clase de la ventana antes de cortar.
+
+    `win` es el JSON de `hyprctl activewindow -j` (claves fullscreen,
+    fullscreenClient, class, initialClass): la forma es de Hyprland, aunque la
+    función en sí es pura y no shellea nada."""
     if not win:
         return False
     if win.get("fullscreen", 0) == 0 and win.get("fullscreenClient", 0) == 0:
@@ -64,11 +107,18 @@ def is_game_window(win):
 
 
 def gaming():
-    """True si hay un JUEGO en pantalla completa (no molestar). Vía Hyprland, sin
-    depender de una lista de juegos: cualquiera que pida fullscreen cuenta, menos
+    """True si hay un JUEGO en pantalla completa (no molestar).
+
+    REQUIERE HYPRLAND: se apoya en `hyprctl activewindow`, que no tiene equivalente
+    en otros compositores. Fuera de Hyprland siempre devuelve False (o sea: la
+    pausa por juego queda apagada) y _hyprland() avisa una vez por qué.
+
+    No depende de una lista de juegos: cualquiera que pida fullscreen cuenta, menos
     los navegadores y reproductores (ver is_game_window). No detecta borderless
     windowed, que para Hyprland es una ventana normal."""
     if not config.CFG["behavior"]["game_pause"]:
+        return False
+    if not _hyprland():
         return False
     try:
         out = subprocess.run(["hyprctl", "activewindow", "-j"],
@@ -91,7 +141,12 @@ def _players():
 
 
 def _monitors():
-    """Monitores conectados vía hyprctl; lista vacía si no es Hyprland."""
+    """Monitores conectados.
+
+    REQUIERE HYPRLAND: sale de `hyprctl monitors -j`. Fuera de Hyprland devuelve
+    lista vacía (el setup pide el monitor a mano) y _hyprland() avisa una vez."""
+    if not _hyprland():
+        return []
     try:
         out = subprocess.run(["hyprctl", "monitors", "-j"],
                              capture_output=True, text=True, timeout=3)
@@ -108,7 +163,12 @@ def _monitors():
 
 
 def _monitors_lr():
-    """Monitores ordenados como están puestos: de izquierda a derecha."""
+    """Monitores ordenados como están puestos: de izquierda a derecha.
+
+    REQUIERE HYPRLAND, igual que _monitors(): las coordenadas x/y salen de
+    `hyprctl monitors -j`. Fuera de Hyprland, lista vacía."""
+    if not _hyprland():
+        return []
     try:
         out = subprocess.run(["hyprctl", "monitors", "-j"],
                              capture_output=True, text=True, timeout=3)

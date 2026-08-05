@@ -1481,6 +1481,378 @@ class TestKnobsAreReachable(unittest.TestCase):
                     self.assertIn(key, cfg[section], f"{section}.{key} no sobrevivió al merge")
 
 
+class _FakeInput:
+    """Cola de respuestas de teclado para el menú de `fatal config`. Cada
+    llamada a input() saca la próxima; si se acaban, sigue devolviendo ''
+    (como si el usuario apretara enter) — así un test no cuelga esperando
+    una respuesta que se olvidó de poner en la cola."""
+
+    def __init__(self, case, *answers):
+        self._it = iter(answers)
+        self._old = builtins.input
+        case.addCleanup(lambda: setattr(builtins, "input", self._old))
+        builtins.input = lambda *a, **k: next(self._it, "")
+
+
+class TestPick(unittest.TestCase):
+    """`_pick` es la base de casi todo el menú: si acepta un número fuera de
+    rango o basura sin volver a preguntar, cualquier perilla queda mal."""
+
+    OPTIONS = [("uno", "u"), ("dos", "d"), ("tres", "t")]
+
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_valid_selection_returns_its_value(self):
+        self.answer("2")
+        self.assertEqual(c._pick("t", self.OPTIONS, "u"), "d")
+
+    def test_empty_keeps_the_current_value(self):
+        self.answer("")
+        self.assertIsNone(c._pick("t", self.OPTIONS, "u"))
+
+    def test_invalid_selection_retries_until_a_good_one(self):
+        self.answer("nope", "0", "99", "1")
+        self.assertEqual(c._pick("t", self.OPTIONS, "u"), "u")
+
+    def test_out_of_range_number_is_rejected_not_accepted(self):
+        # "0" y "99" no son índices válidos (1..len(options)): tienen que
+        # volver a preguntar, no devolver cualquier cosa
+        self.answer("0", "")
+        self.assertIsNone(c._pick("t", self.OPTIONS, "u"))
+
+
+class TestAskNum(unittest.TestCase):
+    """`_ask_num` es el que más perillas de [crt] usa (scale, curvature,
+    bloom...); un límite mal chequeado ahí se nota en pantalla."""
+
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_valid_number_in_range(self):
+        self.answer("1.5")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.5)
+
+    def test_comma_decimal_is_accepted(self):
+        self.answer("1,5")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.5)
+
+    def test_empty_keeps_the_current_value(self):
+        self.answer("")
+        self.assertIsNone(c._ask_num("t", 1.0, 0.5, 3.0))
+
+    def test_below_range_retries_then_accepts_a_good_value(self):
+        self.answer("0.1", "1.0")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.0)
+
+    def test_above_range_retries_then_accepts_a_good_value(self):
+        self.answer("99", "2.0")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 2.0)
+
+    def test_non_numeric_retries_instead_of_crashing(self):
+        self.answer("abc", "1.0")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.0)
+
+    def test_boundaries_are_inclusive(self):
+        self.answer("0.5")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 0.5)
+        self.answer("3.0")
+        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 3.0)
+
+    def test_just_outside_the_boundary_is_rejected(self):
+        self.answer("3.0000001", "")
+        self.assertIsNone(c._ask_num("t", 1.0, 0.5, 3.0))
+
+
+class TestAskInt(unittest.TestCase):
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_valid_int_in_range(self):
+        self.answer("5")
+        self.assertEqual(c._ask_int("t", 0, 0, 50), 5)
+
+    def test_empty_keeps_the_current_value(self):
+        self.answer("")
+        self.assertIsNone(c._ask_int("t", 0, 0, 50))
+
+    def test_a_float_string_is_not_a_valid_int_and_retries(self):
+        self.answer("1.5", "1")
+        self.assertEqual(c._ask_int("t", 0, 0, 50), 1)
+
+    def test_out_of_range_retries_then_accepts(self):
+        self.answer("-1", "51", "25")
+        self.assertEqual(c._ask_int("t", 0, 0, 50), 25)
+
+    def test_boundaries_are_inclusive(self):
+        self.answer("0")
+        self.assertEqual(c._ask_int("t", 5, 0, 50), 0)
+        self.answer("50")
+        self.assertEqual(c._ask_int("t", 5, 0, 50), 50)
+
+
+class TestAskText(unittest.TestCase):
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_text_is_returned_stripped(self):
+        self.answer("  hola  ")
+        self.assertEqual(c._ask_text("t", "viejo"), "hola")
+
+    def test_empty_keeps_the_current_value(self):
+        self.answer("")
+        self.assertIsNone(c._ask_text("t", "viejo"))
+
+
+class TestAskScreens(unittest.TestCase):
+    """`_ask_screens` arma sus propias opciones a partir de los monitores
+    reales: si el mock no está bien encadenado, cualquier respuesta numérica
+    apunta a la pantalla equivocada."""
+
+    MONS = [("DP-4", "1920x1080 horizontal"), ("DP-5", "2560x1440 horizontal")]
+
+    def setUp(self):
+        self._old_monitors = system._monitors
+        system._monitors = lambda: list(self.MONS)
+        self.addCleanup(lambda: setattr(system, "_monitors", self._old_monitors))
+
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_auto_is_the_first_option(self):
+        self.answer("1")
+        self.assertEqual(c._ask_screens("all"), "auto")
+
+    def test_all_is_the_second_option(self):
+        self.answer("2")
+        self.assertEqual(c._ask_screens("auto"), "all")
+
+    def test_a_single_named_screen(self):
+        self.answer("3")
+        self.assertEqual(c._ask_screens("auto"), "DP-4")
+
+    def test_several_lets_you_pick_more_than_one(self):
+        # con 2+ monitores aparece la opción "several" al final de la lista
+        self.answer(str(len(self.MONS) + 3), "1,2")
+        self.assertEqual(c._ask_screens("auto"), ["DP-4", "DP-5"])
+
+    def test_several_with_garbage_numbers_returns_none(self):
+        # los tokens que no son índices válidos se descartan en silencio;
+        # si TODOS son basura no queda nada para elegir
+        self.answer(str(len(self.MONS) + 3), "x,y")
+        self.assertIsNone(c._ask_screens("auto"))
+
+    def test_several_with_a_mix_of_good_and_bad_tokens_drops_the_bad_ones_silently(self):
+        # a diferencia de `_ask_crt_order` (que valida TODOS los tokens con
+        # `all(...)` y reintenta si alguno es basura), acá el filtro es por
+        # token: "1,x" no es un error, es "me quedo con el 1 y listo". No es
+        # un bug de validación (no cuela ningún valor fuera de rango), pero
+        # el usuario que tipeó dos pantallas se queda con una sin aviso —
+        # comportamiento real, pineado a propósito, no corregido.
+        self.answer(str(len(self.MONS) + 3), "1,x")
+        self.assertEqual(c._ask_screens("auto"), ["DP-4"])
+
+    def test_with_a_single_monitor_there_is_no_several_option(self):
+        system._monitors = lambda: [self.MONS[0]]
+        # opciones: 1) auto, 2) all, 3) DP-4 -- "4" no existe, tiene que reintentar
+        self.answer("4", "2")
+        self.assertEqual(c._ask_screens("auto"), "all")
+
+
+class TestAskPlayer(unittest.TestCase):
+    def setUp(self):
+        self._old_players = system._players
+        self.addCleanup(lambda: setattr(system, "_players", self._old_players))
+
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_no_players_falls_back_to_free_text(self):
+        system._players = lambda: []
+        self.answer("spotify")
+        self.assertEqual(c._ask_player("old"), "spotify")
+
+    def test_picks_a_detected_player_by_number(self):
+        system._players = lambda: ["spotify", "firefox"]
+        self.answer("2")
+        self.assertEqual(c._ask_player("spotify"), "firefox")
+
+    def test_other_falls_back_to_manual_text(self):
+        system._players = lambda: ["spotify"]
+        self.answer("2", "vlc")   # 2) other (type it in)
+        self.assertEqual(c._ask_player("spotify"), "vlc")
+
+
+def _row_for(settings, target_key):
+    """Reproduce la numeración de `_menu`: sólo cuenta filas con sección
+    (los separadores como "— screen —" no tienen número)."""
+    n = 0
+    for key, section, _, _ in settings:
+        if section is None:
+            continue
+        n += 1
+        if key == target_key:
+            return n
+    raise AssertionError(f"{target_key} no está en SETTINGS")
+
+
+class TestSetupMenu(unittest.TestCase):
+    """El loop de `setup()`: elegir una fila, editarla, cancelar sin tocar
+    nada, deshacer. Usa un CONFIG_PATH temporal para no rozar el config real
+    ni depender del resto de las perillas (pantallas, player MPRIS...)."""
+
+    TEST_SETTINGS = [
+        ("karaoke", "display", "Karaoke", lambda cur: c._pick("Karaoke", c.YESNO, cur)),
+        ("scale", "display", "Dialog scale",
+         lambda cur: c._ask_num("Dialog scale", cur, 0.5, 3.0)),
+    ]
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = os.path.join(tmp.name, "config.toml")
+        with open(self.path, "w") as f:
+            f.write(c.DEFAULT_CONFIG)
+        self._old_path = config.CONFIG_PATH
+        config.CONFIG_PATH = self.path
+        self.addCleanup(lambda: setattr(config, "CONFIG_PATH", self._old_path))
+
+        self._old_settings = c.setup.SETTINGS
+        c.setup.SETTINGS = self.TEST_SETTINGS
+        self.addCleanup(lambda: setattr(c.setup, "SETTINGS", self._old_settings))
+
+        # el menú imprime pantallas enteras a cada paso; silenciarlo evita
+        # ensuciar la salida de `unittest discover` sin cambiar el chequeo.
+        # Se guarda la referencia porque algunos tests necesitan confirmar
+        # POR QUÉ se llegó a un resultado (ej: que el valor fue rechazado y
+        # no que la fila nunca se seleccionó), no sólo el estado final.
+        self.out = io.StringIO()
+        patcher = mock.patch("sys.stdout", self.out)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def _read_saved(self):
+        import tomllib
+        with open(self.path, "rb") as f:
+            return tomllib.load(f)
+
+    def test_quit_immediately_changes_nothing(self):
+        self.answer("q")
+        c.setup.setup()
+        saved = self._read_saved()
+        self.assertEqual(saved["display"]["karaoke"], False)   # default
+        self.assertEqual(saved["display"]["scale"], 1.0)       # default
+
+    def test_invalid_row_number_retries_instead_of_crashing(self):
+        # "99" no es una fila válida (sólo hay 2 en TEST_SETTINGS): tiene que
+        # volver al menú, no reventar ni aplicar nada
+        self.answer("99", "q")
+        c.setup.setup()
+        saved = self._read_saved()
+        self.assertEqual(saved["display"]["karaoke"], False)
+
+    def test_a_valid_edit_is_saved_to_disk(self):
+        # fila 1 = karaoke, opción 1 de YESNO = "yes" -> True (el default es
+        # False, así que este edit sí mueve la aguja)
+        self.answer("1", "1", "q")   # fila 1 (karaoke), opción 1 = "yes"
+        c.setup.setup()
+        saved = self._read_saved()
+        self.assertEqual(saved["display"]["karaoke"], True)
+
+    def test_out_of_range_number_during_an_edit_does_not_get_saved(self):
+        # fila 2 = scale, 10 está fuera de [0.5, 3.0]: _ask_num tiene que
+        # reintentar en vez de guardar un valor inválido; enter cancela.
+        # Sin el assert de stdout esto pasaría igual aunque la fila nunca
+        # se hubiera seleccionado (el "" final también cancela desde el
+        # menú principal) — así que se confirma que SE LLEGÓ a _ask_num y
+        # que rechazó el 10, no sólo que scale terminó en el default.
+        self.answer("2", "10", "", "q")
+        c.setup.setup()
+        self.assertIn("a number between 0.5 and 3.0", self.out.getvalue())
+        saved = self._read_saved()
+        self.assertEqual(saved["display"]["scale"], 1.0)   # sigue en el default
+
+    def test_undo_reverts_a_saved_change(self):
+        self.answer("1", "1", "u", "q")   # editar karaoke a yes, después deshacer
+        c.setup.setup()
+        # sin este assert, si el edit nunca se hubiera guardado, "u" habría
+        # impreso "nothing to undo" y el resultado final sería idéntico
+        self.assertIn("1 setting(s) back to how you found them", self.out.getvalue())
+        saved = self._read_saved()
+        self.assertEqual(saved["display"]["karaoke"], False)
+
+    def test_undo_with_nothing_changed_does_not_crash(self):
+        self.answer("u", "q")
+        c.setup.setup()   # no debe explotar ni escribir nada raro
+        self.assertIn("nothing to undo", self.out.getvalue())
+        saved = self._read_saved()
+        self.assertEqual(saved["display"]["karaoke"], False)
+
+    def test_ctrl_c_mid_edit_returns_to_the_menu_without_saving(self):
+        # setup() envuelve la llamada al editor en
+        # `except (KeyboardInterrupt, EOFError): continue` — es la otra
+        # forma de "cancelación" además del enter vacío, y con su propio
+        # modo de falla posible (guardar un valor a medio construir, o
+        # que el Ctrl-C se lleve puesto todo el menú en vez de sólo el edit)
+        settings = self.TEST_SETTINGS + [
+            ("player", "behavior", "Player",
+             lambda cur: (_ for _ in ()).throw(KeyboardInterrupt())),
+        ]
+        c.setup.SETTINGS = settings
+        row = _row_for(settings, "player")
+        self.answer(str(row), "q")
+        c.setup.setup()   # no tiene que propagar el KeyboardInterrupt
+        saved = self._read_saved()
+        self.assertEqual(saved["behavior"]["player"], config.DEFAULTS["behavior"]["player"])
+
+    def test_eof_mid_edit_also_returns_to_the_menu_without_saving(self):
+        settings = self.TEST_SETTINGS + [
+            ("player", "behavior", "Player",
+             lambda cur: (_ for _ in ()).throw(EOFError())),
+        ]
+        c.setup.SETTINGS = settings
+        row = _row_for(settings, "player")
+        self.answer(str(row), "q")
+        c.setup.setup()
+        saved = self._read_saved()
+        self.assertEqual(saved["behavior"]["player"], config.DEFAULTS["behavior"]["player"])
+
+
+class TestSetupDeathAgeWarning(unittest.TestCase):
+    """death_age_min > death_age_max es un estado válido para cada perilla
+    por separado (1..50) pero sin sentido juntas: setup() tiene que avisar,
+    no guardarlo en silencio."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = os.path.join(tmp.name, "config.toml")
+        with open(self.path, "w") as f:
+            f.write(c.DEFAULT_CONFIG)
+        self._old_path = config.CONFIG_PATH
+        config.CONFIG_PATH = self.path
+        self.addCleanup(lambda: setattr(config, "CONFIG_PATH", self._old_path))
+
+    def answer(self, *lines):
+        _FakeInput(self, *lines)
+
+    def test_pushing_min_above_max_warns_in_the_next_screen(self):
+        row = _row_for(c.setup.SETTINGS, "death_age_min")
+        # default: death_age_min=3, death_age_max=7 -> 8 lo deja arriba del máximo
+        self.answer(str(row), "8", "q")
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            c.setup.setup()
+        self.assertIn("heads up", out.getvalue())
+        import tomllib
+        with open(self.path, "rb") as f:
+            saved = tomllib.load(f)
+        self.assertEqual(saved["effects"]["death_age_min"], 8)
+
+
 class TestLogRotation(unittest.TestCase):
     """El daemon corre semanas: sin tope el log llena el tmpfs (que es RAM)."""
 

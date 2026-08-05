@@ -7,6 +7,7 @@ Run with:  python3 -m unittest discover -s tests
 import builtins
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -22,6 +23,9 @@ os.environ["XDG_CACHE_HOME"] = os.path.join(_TMP.name, "cache")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import cartelitos as c  # noqa: E402
+# Los globals se parchean en SU módulo: `config.CFG` es una copia de la
+# referencia y pisarla no cambia lo que lee el resto del paquete.
+from cartelitos import audio, config, ipc, lyrics, system  # noqa: E402
 
 
 class TestParseLrc(unittest.TestCase):
@@ -93,9 +97,9 @@ class TestSaveConfig(unittest.TestCase):
         self.path = os.path.join(self.dir.name, "config.toml")
         with open(self.path, "w") as f:
             f.write(SAMPLE)
-        self._old = c.CONFIG_PATH
-        c.CONFIG_PATH = self.path
-        self.addCleanup(lambda: setattr(c, "CONFIG_PATH", self._old))
+        self._old = config.CONFIG_PATH
+        config.CONFIG_PATH = self.path
+        self.addCleanup(lambda: setattr(config, "CONFIG_PATH", self._old))
 
     def read(self):
         with open(self.path) as f:
@@ -162,12 +166,12 @@ class TestReloadConfig(unittest.TestCase):
         self.path = os.path.join(self.dir.name, "config.toml")
         with open(self.path, "w") as f:
             f.write(SAMPLE)
-        self._old_path, self._old_cfg = c.CONFIG_PATH, c.CFG
-        c.CONFIG_PATH = self.path
-        c.CFG = c.load_config()
+        self._old_path, self._old_cfg = config.CONFIG_PATH, config.CFG
+        config.CONFIG_PATH = self.path
+        config.CFG = c.load_config()
 
         def restore():
-            c.CONFIG_PATH, c.CFG = self._old_path, self._old_cfg
+            config.CONFIG_PATH, config.CFG = self._old_path, self._old_cfg
         self.addCleanup(restore)
 
     def write(self, body):
@@ -177,35 +181,35 @@ class TestReloadConfig(unittest.TestCase):
     def test_picks_up_a_change(self):
         self.write(SAMPLE.replace('glitch = "normal"', 'glitch = "off"'))
         self.assertTrue(c.reload_config())
-        self.assertEqual(c.CFG["effects"]["glitch"], "off")
+        self.assertEqual(config.CFG["effects"]["glitch"], "off")
 
     def test_no_change_reports_false(self):
         self.assertFalse(c.reload_config())
 
     def test_a_broken_file_keeps_the_running_config(self):
-        c.CFG["effects"]["glitch"] = "aggressive"
+        config.CFG["effects"]["glitch"] = "aggressive"
         self.write("[effects]\nglitch = \n")
         self.assertFalse(c.reload_config())
         # ni se resetea a los defaults ni se aplica basura
-        self.assertEqual(c.CFG["effects"]["glitch"], "aggressive")
+        self.assertEqual(config.CFG["effects"]["glitch"], "aggressive")
 
     def test_a_removed_key_goes_back_to_its_default(self):
         self.write(SAMPLE.replace('glitch = "normal"      # off | soft | normal | aggressive\n', ""))
         c.reload_config()
-        self.assertEqual(c.CFG["effects"]["glitch"], c.DEFAULTS["effects"]["glitch"])
+        self.assertEqual(config.CFG["effects"]["glitch"], c.DEFAULTS["effects"]["glitch"])
 
     def test_unknown_sections_are_ignored(self):
         self.write(SAMPLE + "\n[nonsense]\nfoo = 1\n")
         c.reload_config()
-        self.assertNotIn("nonsense", c.CFG)
+        self.assertNotIn("nonsense", config.CFG)
 
     def test_the_live_dict_is_mutated_in_place(self):
         # todo el proceso guarda referencias a CFG: si se reemplazara el dict,
         # los lectores viejos se quedarían con la config vieja para siempre
-        before = c.CFG
+        before = config.CFG
         self.write(SAMPLE.replace("scale = 1.0", "scale = 2.0"))
         c.reload_config()
-        self.assertIs(c.CFG, before)
+        self.assertIs(config.CFG, before)
         self.assertEqual(before["display"]["scale"], 2.0)
 
 
@@ -219,9 +223,9 @@ class TestFetchLyrics(unittest.TestCase):
     el cache guarda el primero y el reintento sólo aplica al segundo."""
 
     def patch_http(self, fn):
-        old = c.http_json
-        c.http_json = fn
-        self.addCleanup(lambda: setattr(c, "http_json", old))
+        old = lyrics.http_json
+        lyrics.http_json = fn
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
 
     def test_found(self):
         self.patch_http(lambda url: {"syncedLyrics": LRC})
@@ -266,9 +270,9 @@ class TestLyricsCache(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self._old = c.CACHE_DIR
-        c.CACHE_DIR = self.dir.name
-        self.addCleanup(lambda: setattr(c, "CACHE_DIR", self._old))
+        self._old = lyrics.CACHE_DIR
+        lyrics.CACHE_DIR = self.dir.name
+        self.addCleanup(lambda: setattr(lyrics, "CACHE_DIR", self._old))
 
     def test_miss_on_an_empty_cache(self):
         self.assertIsNone(c.cache_get(TRACK))
@@ -320,7 +324,7 @@ class TestLyricsCache(unittest.TestCase):
         self.assertIsNone(c.cache_get(dict(TRACK, length=300.0)))
 
     def test_a_corrupt_file_is_a_miss_not_a_crash(self):
-        os.makedirs(c.CACHE_DIR, exist_ok=True)
+        os.makedirs(lyrics.CACHE_DIR, exist_ok=True)
         with open(c._cache_path(TRACK), "w") as f:
             f.write("{ not json")
         self.assertIsNone(c.cache_get(TRACK))
@@ -330,16 +334,16 @@ class TestFetchAsync(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self._old = c.CACHE_DIR
-        c.CACHE_DIR = self.dir.name
-        self.addCleanup(lambda: setattr(c, "CACHE_DIR", self._old))
+        self._old = lyrics.CACHE_DIR
+        lyrics.CACHE_DIR = self.dir.name
+        self.addCleanup(lambda: setattr(lyrics, "CACHE_DIR", self._old))
         with c._fetch_lock:
             c._fetch.update(gen=0, id=None, lyrics=None, done=False)
 
     def patch_fetch(self, fn):
-        old = c.fetch_lyrics
-        c.fetch_lyrics = fn
-        self.addCleanup(lambda: setattr(c, "fetch_lyrics", old))
+        old = lyrics.fetch_lyrics
+        lyrics.fetch_lyrics = fn
+        self.addCleanup(lambda: setattr(lyrics, "fetch_lyrics", old))
 
     def wait_done(self, timeout=3.0):
         end = time.time() + timeout
@@ -393,9 +397,9 @@ class TestFetchAsync(unittest.TestCase):
 
     def test_retries_a_network_failure_then_succeeds(self):
         calls = []
-        old_delay = c.RETRY_DELAY
-        c.RETRY_DELAY = 0
-        self.addCleanup(lambda: setattr(c, "RETRY_DELAY", old_delay))
+        old_delay = lyrics.RETRY_DELAY
+        lyrics.RETRY_DELAY = 0
+        self.addCleanup(lambda: setattr(lyrics, "RETRY_DELAY", old_delay))
 
         def flaky(track):
             calls.append(1)
@@ -407,9 +411,9 @@ class TestFetchAsync(unittest.TestCase):
         self.assertEqual(c._fetch["lyrics"], [(1.0, "one")])
 
     def test_gives_up_after_the_retries_without_caching(self):
-        old_delay = c.RETRY_DELAY
-        c.RETRY_DELAY = 0
-        self.addCleanup(lambda: setattr(c, "RETRY_DELAY", old_delay))
+        old_delay = lyrics.RETRY_DELAY
+        lyrics.RETRY_DELAY = 0
+        self.addCleanup(lambda: setattr(lyrics, "RETRY_DELAY", old_delay))
         calls = []
 
         def down(track):
@@ -440,9 +444,9 @@ class TestCrtSwitch(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self._old = c.CRT_PATH
-        c.CRT_PATH = os.path.join(self.dir.name, "cartelitos-crt")
-        self.addCleanup(lambda: setattr(c, "CRT_PATH", self._old))
+        self._old = config.CRT_PATH
+        config.CRT_PATH = os.path.join(self.dir.name, "cartelitos-crt")
+        self.addCleanup(lambda: setattr(config, "CRT_PATH", self._old))
 
     def test_off_when_the_file_is_not_there(self):
         self.assertFalse(c.crt_on())
@@ -455,11 +459,11 @@ class TestCrtSwitch(unittest.TestCase):
 
     def test_the_file_holds_a_single_flag(self):
         c.set_crt(True)
-        with open(c.CRT_PATH) as f:
+        with open(config.CRT_PATH) as f:
             self.assertEqual(f.read(), "1")
 
     def test_garbage_reads_as_off(self):
-        with open(c.CRT_PATH, "w") as f:
+        with open(config.CRT_PATH, "w") as f:
             f.write("whatever")
         self.assertFalse(c.crt_on())
 
@@ -469,7 +473,7 @@ class TestCrtSwitch(unittest.TestCase):
         self.assertEqual(sorted(os.listdir(self.dir.name)), ["cartelitos-crt"])
 
     def test_a_directory_that_does_not_exist_does_not_raise(self):
-        c.CRT_PATH = os.path.join(self.dir.name, "nope", "cartelitos-crt")
+        config.CRT_PATH = os.path.join(self.dir.name, "nope", "cartelitos-crt")
         self.assertFalse(c.set_crt(True))
         self.assertFalse(c.crt_on())
 
@@ -500,9 +504,9 @@ class TestCrtOrder(unittest.TestCase):
             ("DP-5", "at x=3000")]
 
     def setUp(self):
-        self._mons = c._monitors_lr
-        c._monitors_lr = lambda: list(self.MONS)
-        self.addCleanup(lambda: setattr(c, "_monitors_lr", self._mons))
+        self._mons = system._monitors_lr
+        system._monitors_lr = lambda: list(self.MONS)
+        self.addCleanup(lambda: setattr(system, "_monitors_lr", self._mons))
         self._input = builtins.input
         self.addCleanup(lambda: setattr(builtins, "input", self._input))
 
@@ -546,7 +550,7 @@ class TestCrtOrder(unittest.TestCase):
         self.assertEqual(c._ask_crt_order("auto"), ["DP-5"])
 
     def test_one_screen_has_no_order_to_pick(self):
-        c._monitors_lr = lambda: [("DP-4", "at x=0")]
+        system._monitors_lr = lambda: [("DP-4", "at x=0")]
         self.answer("")
         self.assertIsNone(c._ask_crt_order("auto"))
 
@@ -643,6 +647,74 @@ class TestAudioAnalyzer(unittest.TestCase):
         for key in ("l", "lo", "mid", "hi", "c"):
             self.assertGreaterEqual(ev[key], 0.0)
             self.assertLessEqual(ev[key], 1.0)
+
+    def test_a_normal_beat_is_not_a_hard_one(self):
+        # `h` es el golpe que sobresale MUCHO, no cualquiera que pase el umbral:
+        # es lo único con lo que se puede elegir un pico sin mapa del tema
+        for i in range(20):
+            self.an.feed(tone(440, amp=0.30), i * 0.032)
+        ev = self.an.feed(tone(60, amp=0.45), 1.0)
+        self.assertEqual(ev["b"], 1)
+        self.assertEqual(ev["h"], 0)
+        self.assertEqual(self.an.feed(tone(60, amp=0.95), 2.0)["h"], 1)
+
+
+class TestPeakGate(unittest.TestCase):
+    """El portero de los picos. Lo que se rompió una vez: la pantalla latía en
+    cada golpe, así que latía todo el tiempo."""
+
+    def setUp(self):
+        self.gate = c.PeakGate(pct=0.92, gap=15.0, cap=5)
+        self.gate.track("tema")
+
+    def test_a_beat_at_the_top_of_the_song_is_a_peak(self):
+        self.assertTrue(self.gate.hit(100.0, True, False, 0.95))
+
+    def test_a_loud_beat_that_is_not_the_top_is_not_a_peak(self):
+        self.assertFalse(self.gate.hit(100.0, True, True, 0.80))
+
+    def test_something_that_is_not_a_beat_is_never_a_peak(self):
+        self.assertFalse(self.gate.hit(100.0, False, True, 1.0))
+
+    def test_two_peaks_do_not_land_on_top_of_each_other(self):
+        self.assertTrue(self.gate.hit(100.0, True, False, 0.99))
+        self.assertFalse(self.gate.hit(103.0, True, False, 0.99))
+        self.assertTrue(self.gate.hit(120.0, True, False, 0.99))
+
+    def test_a_whole_loud_song_still_gets_only_a_handful(self):
+        # tres minutos de estribillo continuo, un golpe cada segundo
+        got = sum(1 for i in range(180)
+                  if self.gate.hit(100.0 + i, True, True, 0.99))
+        self.assertEqual(got, 5)
+
+    def test_without_a_map_only_a_hit_that_stands_out_counts(self):
+        self.assertFalse(self.gate.hit(100.0, True, False, None))
+        self.assertTrue(self.gate.hit(101.0, True, True, None))
+
+    def test_a_new_track_gets_its_own_peaks(self):
+        for i in range(5):
+            self.gate.hit(100.0 + i * 20, True, True, 0.99)
+        self.assertFalse(self.gate.hit(300.0, True, True, 0.99))
+        self.gate.track("otro tema", 300.0)
+        self.assertTrue(self.gate.hit(316.0, True, True, 0.99))
+
+    def test_the_tube_does_not_flash_the_moment_it_comes_up(self):
+        # el reloj del sistema son horas: con el último pico en cero, el primer
+        # frame de captura ya cumplía la distancia mínima — y el análisis recién
+        # arrancado toma cualquier cosa por un golpazo. Fogonazo al prender.
+        fresh = c.PeakGate(now=98000.0)
+        self.assertFalse(fresh.hit(98000.03, True, True, None))
+        self.assertFalse(fresh.hit(98010.0, True, True, 0.99))
+        self.assertTrue(fresh.hit(98020.0, True, True, 0.99))
+
+    def test_changing_track_does_not_flash_on_the_first_note(self):
+        self.gate.track("otro tema", 500.0)
+        self.assertFalse(self.gate.hit(500.2, True, True, 0.99))
+
+    def test_the_same_track_does_not_reset_the_quota(self):
+        self.assertTrue(self.gate.hit(100.0, True, True, 0.99))
+        self.gate.track("tema")
+        self.assertFalse(self.gate.hit(103.0, True, True, 0.99))
 
 
 class TestSinkNodeId(unittest.TestCase):
@@ -743,9 +815,9 @@ class TestTrackProfile(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
-        self._old = c.PROFILE_DIR
-        c.PROFILE_DIR = self.dir.name
-        self.addCleanup(lambda: setattr(c, "PROFILE_DIR", self._old))
+        self._old = audio.PROFILE_DIR
+        audio.PROFILE_DIR = self.dir.name
+        self.addCleanup(lambda: setattr(audio, "PROFILE_DIR", self._old))
 
     def filled(self, key="tema"):
         p = c.TrackProfile(key, 120.0)
@@ -957,9 +1029,9 @@ class TestSplitRepeats(unittest.TestCase):
 
     def test_the_event_carries_the_cuts(self):
         sent = []
-        old = c.send
-        c.send = lambda ev: sent.append(ev)
-        self.addCleanup(lambda: setattr(c, "send", old))
+        old = ipc.send
+        ipc.send = lambda ev: sent.append(ev)
+        self.addCleanup(lambda: setattr(ipc, "send", old))
         c.show("take, take, take me", "t", 1.0, 5.0)
         c.show("a plain line", "t", 5.0, 9.0)
         self.assertEqual(len(sent[0]["segs"]), 4)
@@ -986,3 +1058,42 @@ class TestTuneChannel(unittest.TestCase):
     def test_junk_does_not_crash(self):
         self.assertEqual(c.parse_tune(""), {})
         self.assertEqual(c.parse_tune("sin igual\n\n"), {})
+
+
+class TestKnobsAreReachable(unittest.TestCase):
+    """Una perilla nueva se agrega en cuatro lugares (DEFAULTS, el TOML de
+    ejemplo, el evento al overlay y, si tiene slider, tune.qml). Olvidarse de
+    uno no rompe nada: simplemente la perilla no hace nada, que es peor."""
+
+    SHELL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shell")
+
+    def test_the_sample_toml_declares_every_crt_key(self):
+        # `fatal edit` abre este archivo: lo que no está escrito no existe
+        for key in c.DEFAULTS["crt"]:
+            self.assertRegex(c.DEFAULT_CONFIG, rf"(?m)^{key} = ",
+                             f"crt.{key} no está en el TOML de ejemplo")
+
+    def test_every_slider_is_a_numeric_crt_key(self):
+        # el panel escribe `clave=valor` y parse_tune descarta lo que no es un
+        # número de [crt]: un slider con otra clave mueve la barra y nada más
+        qml = open(os.path.join(self.SHELL, "tune.qml"), encoding="utf-8").read()
+        keys = re.findall(r'\{\s*key:\s*"([a-z_]+)"', qml)
+        self.assertTrue(keys, "no se encontró ningún slider en tune.qml")
+        for key in keys:
+            self.assertIn(key, c.DEFAULTS["crt"], f"el slider {key} no es una opción de [crt]")
+            self.assertIsInstance(c.DEFAULTS["crt"][key], (int, float))
+            self.assertEqual(c.parse_tune(f"{key}=0.5"), {key: 0.5})
+
+    def test_the_water_knobs_are_saved_in_their_own_section(self):
+        # el agua tiene interruptor (bool) y cantidad (número): los dos van a [crt]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.toml")
+            with open(path, "w") as f:
+                f.write("[display]\nscale = 1.0\n\n[crt]\nwater = true\nwater_amp = 0.55\n")
+            old = config.CONFIG_PATH
+            config.CONFIG_PATH = path
+            self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
+            c._save_config({"water": ("crt", False), "water_amp": ("crt", 0.9)})
+            body = open(path).read()
+            self.assertIn("water = false", body)
+            self.assertIn("water_amp = 0.9", body)

@@ -56,8 +56,9 @@ What the tube does:
   by scanlines that crawl, and an aperture-grille triad breaks every pixel into
   R/G/B — text never looks clean, exactly like a real tube.
 - **Words arrive as they're sung**: each one lands with a kick of static and a
-  flash of its own colour (how much of a flash is `word_flash`; at `0` the word
-  simply arrives in its final colour), its colour channels split apart and snap back, and it settles into the
+  flash of its own colour (the whole jolt — flash, colour ghosts and size kick —
+  is `word_flash`; at `0` the word simply arrives, still, in its final colour),
+  its colour channels split apart and snap back, and it settles into the
   phosphor in under a fifth of a second. No pre-printed line lighting up word by
   word — the tube tunes each word in as it's sung. Three entries take turns
   (a dry snap, a hard slam, a roll down into sync) so a long song never looks
@@ -66,11 +67,14 @@ What the tube does:
 - **Broken signal**: RGB channels drift apart (red left, blue right), the
   raster snakes, horizontal bands jump sideways, blocks of the image corrupt,
   static crawls, and a bright bar rolls slowly down the screen. **The flicker is
-  on the beat**: instead of blinking on its own clock, the tube lifts with every
-  hit the music actually lands, and — if you turn `flicker` up — the loudest part
-  of a song also drops out for a couple of frames like a set short of current.
-  `flicker` is its own knob precisely because it's the first thing you want to
-  turn down. A change of
+  on the peaks, not on the beat**: a beat is every kick drum that stands out —
+  hundreds a song, and a tube that lifts on all of them lifts all the time. A
+  peak is being at the top of *this* track (percentile against the whole song,
+  at least 15 s from the last one, a handful per song), and that's the only
+  thing that makes the picture beat — and, if you turn `flicker` up, drop out
+  for a couple of frames like a set short of current. `flicker` sets how hard,
+  never how often, and at `0` nothing at all moves with the volume: not the
+  light, not the camera, not the animations on the other screens. A change of
   verse kicks the signal, and between verses it breaks by itself every so often
   — but only that: beats, single words and colour changes deliberately do *not*
   glitch, and everything that asks for one goes through a single gate that
@@ -79,8 +83,10 @@ What the tube does:
   lands only on the screen the phrase arrives at, and the spontaneous breakdown
   is scheduled once for the whole wall — three screens each breaking "only every
   twenty seconds" still means something breaks every six.
-- **Critical states**: some lines flip the whole tube to a red alarm wash that
-  pulses, with `CRITICAL` on the readout instead of `REC`.
+- **Critical states**: a line can flip the whole tube to a red alarm wash that
+  pulses, with `CRITICAL` on the readout instead of `REC` — but only a line that
+  lands on a peak. Drawn by lot alone it came up every forty seconds or so, and
+  a red that shows up for no reason is just another colour.
 - **A phosphor per screen**: amber, cyan, green, violet or red — a different
   one on each monitor, rotating with every track (or pin one).
 - **A director, not three clones**: one screen is in focus and the phrase
@@ -127,10 +133,12 @@ What the tube does:
 - **It reacts to what's actually playing.** The daemon captures the sound
   card's own monitor (`pw-record`, or `parec` — whatever your PipeWire/Pulse
   setup already provides, no extra packages, no cava) and reads level, bass,
-  treble, a pitch estimate and beats out of it in plain Python. The phosphor
-  glow breathes with the level, beats kick the signal and flash the focused
-  screen, the animations move with the spectrum, and the framing opens and
-  closes. Capture only runs while the tube is up; without it everything falls
+  treble, a pitch estimate and beats out of it in plain Python. It also keeps a
+  map of each track (an energy curve, cached between plays), so "loud" means
+  loud *for this song* and the peaks can be picked against the whole thing
+  instead of against the last two seconds. The phosphor glow breathes with the
+  level, the peaks kick the signal and flash the focused screen, the animations
+  move with the spectrum, and the framing opens and closes. Capture only runs while the tube is up; without it everything falls
   back to the lyric clock and still works.
 - **The colours come from the cover.** Each palette is *two* faces that go
   together — one lit screen (burnt background, dark letters) and one dark tube
@@ -140,8 +148,32 @@ What the tube does:
   greys in it, because a grey has no hue of its own and picking one paints the
   wall a colour that belongs to nothing. No cover, no ImageMagick, or a black
   and white sleeve: it falls back to six presets, and with `palette = "auto"`
-  the register of the song picks between them.
-- **Animations where the lyric isn't** — six of them, meant to look like
+  the register of the song picks between them — on the peaks, not whenever the
+  register moves. A voice climbs in every chorus, and repainting the whole wall
+  each time it does is a carousel of colours, not a tube.
+- **Two of water** — both made of loose points, both with every point its own
+  particle: no mesh, no deformed sheet.
+  - **The sea**: a field of points seen from just above the surface, running
+    off into the distance. A long swell rides under the fine chop, the bass
+    moves the rollers and the treble the ripple, and every beat drops a stone:
+    a ring that crosses the water and lifts each dot as the front reaches
+    *it*, then rings down.
+  - **The pond**: the whole screen is water, seen from above, and it **shivers
+    at the frequency of what is playing**. It is the physics-class demo — water
+    on a speaker stops being flat and stands still in a pattern. The register of
+    the song sets the pattern (higher voice, tighter rings and more lobes) and
+    the rate of the shiver; the volume sets how violent it is; a beat drops a
+    stone that ripples out and comes back off the edge.
+
+  The delay is the whole point in both: a beat that lifts the entire surface at
+  once is a screen flashing, not water. Crests catch the light and troughs fade
+  out instead of being painted dark, so they work on a lit palette as well as on
+  a dark tube. They take their turn like every other animation (`water = false`
+  leaves them out) and `water_amp` says how much the water moves. Each is one
+  shader (`shell/ocean.frag`, `shell/pond.frag`): a few hundred QML rectangles
+  with per-frame bindings on a 200 Hz screen is hundreds of thousands of
+  evaluations a second, and this costs about 1% of a core.
+- **Animations where the lyric isn't** — six more, meant to look like
   something a machine of that era would put on a tube rather than a music
   visualiser bolted on top: a wireframe **eye** that opens and blinks with its
   iris breathing, a **scope** tracing a Lissajous figure that twists with the
@@ -332,6 +364,8 @@ one. No dependencies beyond the standard library.
 | `crt`      | `color_from_pitch`   | Phosphor leans on the register of what's playing                | `true`      |
 | `crt`      | `color_hold`         | Seconds a colour must stay before it may change                 | `10`        |
 | `crt`      | `motifs`             | Animations on the screens without lyric                         | `true`      |
+| `crt`      | `water`              | The two water animations (the sea, and the pond that shivers with the song) take their turn | `true` |
+| `crt`      | `water_amp`          | How much the water moves (`0` = a flat field of points)         | `0.55`      |
 | `crt`      | `camera`             | How much the framing moves (letterbox, zoom); `0` = still       | `1.0`       |
 | `crt`      | `quality`            | Resolution the tube is drawn at before the CRT pass (`1.0` = native) | `1.0`   |
 | `crt`      | `palette`            | Where the two colours come from: `album` (the cover) / `auto` (by register) / `dragons` / `ado` / `poison` / `bloodline` / `vapor` / `bone` | `"album"` |
@@ -360,6 +394,27 @@ Spotify ──playerctl (MPRIS)──▶ cartelitos.py ──Unix socket──�
 The daemon polls playback position, resolves which line applies, and sends
 JSON events to the overlay over `$XDG_RUNTIME_DIR/cartelitos.sock`. Config is
 sent over the same socket on connect.
+
+`cartelitos.py` is only the launcher; the code lives in the `cartelitos/`
+package:
+
+| Module      | What's in it                                                        |
+|-------------|---------------------------------------------------------------------|
+| `util`      | `log()`, `UA`, `FIELD_SEP`                                           |
+| `config`    | defaults, TOML read/write, live reload, CRT switch, sliders watcher   |
+| `lyrics`    | lrclib client, on-disk cache, line splitting into beats               |
+| `art`       | album-cover colours (ImageMagick, optional)                           |
+| `system`    | playerctl / hyprctl / terminal lookups                                |
+| `ipc`       | the Unix socket and every event sent to the overlay                   |
+| `audio`     | capture, DSP (RMS/DFT/beats/peaks) and the per-track energy profile    |
+| `tray`      | system-tray icon (GTK + AyatanaAppIndicator3, optional)               |
+| `setup`     | the interactive `fatal config` menu                                   |
+| `daemon`    | the main loop                                                         |
+
+Mutable globals (`CFG`, `CACHE_DIR`, `CRT_PATH`, …) are re-exported from
+`cartelitos/__init__.py` for convenience, but they must be **patched in their
+own module** — rebinding `cartelitos.CFG` does not change what the rest of the
+package reads.
 
 ## Uninstall
 

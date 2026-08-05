@@ -17,19 +17,32 @@ import QtQuick
 Item {
     id: motif
 
-    // eye | scope | radar | rain | stars | testcard | none
+    // eye | scope | radar | rain | stars | testcard | ocean | pond | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     property real level: 0.35      // 0..1 volumen
+    // El volumen llega a 14 Hz: atado directo al brillo o al tamaño, eso no se
+    // ve como "respira", se ve como que titila. Acá se suaviza a la velocidad a
+    // la que uno percibe que un tema sube, no a la que se mueve la onda.
+    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
     property real low: 0.4         // energía de graves
     property real high: 0.3        // energía de agudos
     property int beat: 0           // contador de golpes
+    // cuánto se nota cada golpe (lo gradúa `flicker`): 0 = la animación sigue
+    // viva, pero no pega un salto en cada bombo
+    property real beatAmt: 1
     property real clock: 0         // reloj del tubo, en segundos
     property bool spinning: true   // false = quieto (pantalla apagada)
     // cuánto empuja la parte del tema (silencio ≈ 0.45, estribillo ≈ 1.6): las
     // animaciones se aquietan o se aceleran con la canción, no con el reloj
     property real energy: 1.0
+    // cuánta agua se mueve (perilla `water_amp`): la ola del mar y el temblor
+    // del laguito. El resto de los motivos no la usa.
+    property real waterAmp: 0.55
+    // registro de lo que suena (0 grave .. 1 agudo): la frecuencia a la que
+    // vibra el laguito
+    property real pitch: 0.5
     // El golpe del tubo: cuando la pantalla parpadea, la animación ACOMPAÑA —
     // se acelera y crece un instante. Sin esto el parpadeo es una luz que se
     // mueve sola; con esto es el golpe de la canción atravesando todo.
@@ -62,8 +75,10 @@ Item {
         easing.type: Easing.OutQuad
     }
     onBeatChanged: {
+        if (motif.beatAmt <= 0.01)
+            return;
         punchDecay.stop();
-        punch = 1;
+        punch = motif.beatAmt;
         punchDecay.start();
     }
 
@@ -493,6 +508,53 @@ Item {
                 color: motif.hot
                 opacity: 0.85
             }
+        }
+    }
+
+    // ------------------------------------------------------------------- agua
+    // Los dos motivos de agua son los únicos que no están hechos de items: son
+    // miles de puntos con física propia y eso sólo cierra en la GPU (ver
+    // `ocean.frag` y `pond.frag`). Por Loader, para que el shader ni exista
+    // mientras la pantalla muestra otra cosa.
+    //
+    //   ocean = un mar en perspectiva, olas que vienen de lejos
+    //   pond  = un plato de agua que TIEMBLA a la frecuencia de lo que suena
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "ocean"
+        visible: active
+
+        sourceComponent: Ocean {
+            colour: motif.colour
+            crest: motif.hot
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            beat: motif.beat
+            beatAmt: motif.beatAmt
+            energy: motif.energy * (1 + 0.5 * motif.surge)
+            amp: motif.waterAmp
+            running: motif.spinning
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "pond"
+        visible: active
+
+        sourceComponent: Pond {
+            colour: motif.colour
+            crest: motif.hot
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            beat: motif.beat
+            beatAmt: motif.beatAmt
+            energy: motif.energy * (1 + 0.5 * motif.surge)
+            amp: motif.waterAmp
+            running: motif.spinning
         }
     }
 }

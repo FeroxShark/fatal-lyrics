@@ -18,7 +18,7 @@ ShellRoot {
     // valores de arranque; los pisa la config real al leerla
     property var vals: ({
         word_flash: 0.3, flicker: 0.25, intensity: 0.45, camera: 1.0,
-        bloom: 1.0, scanlines: 0.5, noise: 0.22,
+        bloom: 1.0, scanlines: 0.5, noise: 0.22, water_amp: 0.55,
     })
 
     readonly property var rows: [
@@ -36,6 +36,8 @@ ShellRoot {
           hint: "depth of the comb" },
         { key: "noise",     label: "Static",         max: 1.0,
           hint: "grain on the tube" },
+        { key: "water_amp", label: "Water",          max: 1.0,
+          hint: "sea swell and pond shiver" },
     ]
 
     // el canal hacia el daemon: una línea por cambio

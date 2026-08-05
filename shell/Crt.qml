@@ -285,7 +285,11 @@ PanelWindow {
     // sale la sensación de fluidez: transformación sobre algo quieto, no
     // redibujo. La pantalla enfocada se acerca; la apagada queda un poco atrás.
     readonly property real cam: ctl.crtCamera
-    property real camZoom: 1 + cam * (focused ? 0.030 + 0.022 * pump : 0.004)
+    // el acercamiento fijo es de la cámara; el que sigue al volumen es latido, y
+    // el latido lo gradúa `flicker`: con la perilla en cero la cámara no respira
+    // con la música, se queda quieta donde la puso el encuadre
+    property real camZoom: 1 + cam * (focused
+        ? 0.030 + 0.022 * pump * ctl.crtFlicker : 0.004)
     Behavior on camZoom { NumberAnimation { duration: 520; easing.type: Easing.OutCubic } }
 
     Item {
@@ -332,8 +336,11 @@ PanelWindow {
         Rectangle {
             anchors.fill: parent
             color: crt.pal.bg
-            // el contagio se ve: el color entra rápido, pero entra, no aparece
-            Behavior on color { ColorAnimation { duration: 190; easing.type: Easing.OutQuad } }
+            // El contagio se ve, pero no se dispara. Las dos caras de la paleta
+            // son una clara y una oscura: cambiar de cara es dar vuelta la
+            // pantalla entera, y en 190 ms eso no se lee como que el color se
+            // mudó — se lee como un flash. Casi un segundo y es un lavado.
+            Behavior on color { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
         }
 
         // ---- todo lo que la cámara mueve va acá adentro
@@ -354,12 +361,14 @@ PanelWindow {
             Rectangle {
                 anchors.fill: parent
                 color: crt.pal.bg
+                Behavior on color { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
                 // el "respira" seguía el nivel del audio a 14 Hz: cada sílaba
                 // movía el brillo de la pantalla entera. Ahora lo gradúa la
                 // misma perilla del parpadeo.
                 opacity: crt.showsText
                     ? 0.10 + 0.16 * crt.pump * crt.ctl.flickerAmt : 0.05
             }
+
 
             // ---- verso anterior, quemado en el fósforo mientras se apaga
             Text {
@@ -473,6 +482,12 @@ PanelWindow {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: slot.modelData.toUpperCase()
                                 color: crt.pal.ink
+                                // la letra acompaña al fondo: si el fondo se
+                                // lava en un segundo y la tinta salta de golpe,
+                                // el salto de la tinta es el flash. (Las
+                                // animaciones de entrada no pasan por acá: un
+                                // Behavior no intercepta lo que anima otro.)
+                                Behavior on color { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
                                 font.family: crt.fontFamily
                                 font.bold: true
                                 font.letterSpacing: 3
@@ -517,11 +532,17 @@ PanelWindow {
                             SequentialAnimation {
                                 id: entry
                                 PropertyAction { target: label; property: "color"; value: slot.entryTint }
-                                PropertyAction { target: slot; property: "ghostOff"; value: measure.fontInfo.pixelSize * (crt.entryStyle === "roll" ? 0.34 : 0.22) }
-                                PropertyAction { target: slot; property: "ghostFade"; value: 0.3 + 0.7 * crt.ctl.crtWordFlash }
-                                PropertyAction { target: sc; property: "xScale"; value: crt.entryStyle === "slam" ? 1.35 : 1.06 }
-                                PropertyAction { target: sc; property: "yScale"; value: crt.entryStyle === "slam" ? 1.35 : 0.82 }
-                                PropertyAction { target: tr; property: "y"; value: crt.entryStyle === "roll" ? -measure.fontInfo.pixelSize * 0.55 : 0 }
+                                // TODO el sacudón de entrada va por la misma
+                                // perilla, no sólo el color: los fantasmas de
+                                // canal y el tirón de tamaño pasan igual en cada
+                                // palabra, así que con el destello apagado
+                                // seguían leyéndose como que la letra vibra.
+                                // `word_flash = 0` es la palabra entrando quieta.
+                                PropertyAction { target: slot; property: "ghostOff"; value: measure.fontInfo.pixelSize * (crt.entryStyle === "roll" ? 0.34 : 0.22) * crt.ctl.crtWordFlash }
+                                PropertyAction { target: slot; property: "ghostFade"; value: 0.85 * crt.ctl.crtWordFlash }
+                                PropertyAction { target: sc; property: "xScale"; value: 1 + (crt.entryStyle === "slam" ? 0.35 : 0.06) * crt.ctl.crtWordFlash }
+                                PropertyAction { target: sc; property: "yScale"; value: 1 + (crt.entryStyle === "slam" ? 0.35 : -0.18) * crt.ctl.crtWordFlash }
+                                PropertyAction { target: tr; property: "y"; value: crt.entryStyle === "roll" ? -measure.fontInfo.pixelSize * 0.55 * crt.ctl.crtWordFlash : 0 }
                                 PauseAnimation { duration: 28 }
                                 ParallelAnimation {
                                     ColorAnimation { target: label; property: "color"; to: crt.pal.ink; duration: 70; easing.type: Easing.OutQuad }
@@ -531,7 +552,7 @@ PanelWindow {
                                     NumberAnimation { target: slot; property: "ghostOff"; to: 0; duration: 110; easing.type: Easing.OutCubic }
                                     NumberAnimation { target: slot; property: "ghostFade"; to: 0; duration: 120; easing.type: Easing.InQuad }
                                     SequentialAnimation {
-                                        NumberAnimation { target: tr; property: "x"; from: -measure.fontInfo.pixelSize * 0.07; to: measure.fontInfo.pixelSize * 0.03; duration: 34 }
+                                        NumberAnimation { target: tr; property: "x"; from: -measure.fontInfo.pixelSize * 0.07 * crt.ctl.crtWordFlash; to: measure.fontInfo.pixelSize * 0.03 * crt.ctl.crtWordFlash; duration: 34 }
                                         NumberAnimation { target: tr; property: "x"; to: 0; duration: 60; easing.type: Easing.OutQuad }
                                     }
                                 }
@@ -553,12 +574,17 @@ PanelWindow {
                 visible: crt.idle
                 kind: crt.ctl.crtMotifFor(crt.idx)
                 energy: crt.ctl.sectionEnergy
+                waterAmp: crt.ctl.crtWaterAmp
+                // el registro de lo que suena: con el tubo apagado no hay
+                // captura, y el laguito tiembla en un tono medio
+                pitch: crt.live ? crt.ctl.audCentroid : 0.5
                 colour: crt.pal.ink
                 hot: crt.pal.hot
                 level: crt.pump
                 low: crt.live ? crt.ctl.audLo : 0.4
                 high: crt.live ? crt.ctl.audHi : 0.3
                 beat: crt.ctl.audBeat
+                beatAmt: crt.ctl.crtFlicker
                 // cuando el tubo parpadea, la animación acompaña: se acelera y
                 // crece un instante, así el golpe se ve en todas las pantallas.
                 // Va por contador y no por magnitud: aunque el parpadeo esté

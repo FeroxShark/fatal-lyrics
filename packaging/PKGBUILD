@@ -25,10 +25,21 @@ package() {
   install -Dm644 shell/shell.qml "$pkgdir/usr/share/fatal-lyrics/shell/shell.qml"
   install -Dm644 shell/Crt.qml "$pkgdir/usr/share/fatal-lyrics/shell/Crt.qml"
   install -Dm644 shell/Motif.qml "$pkgdir/usr/share/fatal-lyrics/shell/Motif.qml"
-  # el shader del modo CRT va precompilado (.qsb); el .frag viaja como fuente
+  install -Dm644 shell/Ocean.qml "$pkgdir/usr/share/fatal-lyrics/shell/Ocean.qml"
+  install -Dm644 shell/Pond.qml "$pkgdir/usr/share/fatal-lyrics/shell/Pond.qml"
+  install -Dm644 shell/tune.qml "$pkgdir/usr/share/fatal-lyrics/shell/tune.qml"
+  # los shaders van precompilados (.qsb); los .frag viajan como fuente
   install -Dm644 shell/crt.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag.qsb"
   install -Dm644 shell/crt.frag "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag"
+  install -Dm644 shell/ocean.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/ocean.frag.qsb"
+  install -Dm644 shell/ocean.frag "$pkgdir/usr/share/fatal-lyrics/shell/ocean.frag"
+  install -Dm644 shell/pond.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/pond.frag.qsb"
+  install -Dm644 shell/pond.frag "$pkgdir/usr/share/fatal-lyrics/shell/pond.frag"
   install -Dm755 cartelitos.py "$pkgdir/usr/share/fatal-lyrics/cartelitos.py"
+  # el código está en el paquete; cartelitos.py sólo delega
+  for m in cartelitos/*.py; do
+    install -Dm644 "$m" "$pkgdir/usr/share/fatal-lyrics/$m"
+  done
   install -Dm755 bin/fatal "$pkgdir/usr/share/fatal-lyrics/bin/fatal"
   install -d "$pkgdir/usr/bin"
   ln -s /usr/share/fatal-lyrics/bin/fatal "$pkgdir/usr/bin/fatal"

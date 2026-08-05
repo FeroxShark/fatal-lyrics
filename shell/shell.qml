@@ -68,6 +68,11 @@ ShellRoot {
     // Va aparte del latido del tubo: pasa en CADA palabra, así que es lo que se
     // percibe como "la letra titila todo el tiempo".
     property real crtWordFlash: 0.3
+    // Los dos motivos de agua (el mar y el laguito que vibra con la música):
+    // entran al sorteo como cualquier otro, y `water_amp` dice cuánta agua se
+    // mueve
+    property bool crtWater: true
+    property real crtWaterAmp: 0.55
 
     // ---- lo que está sonando de verdad (eventos "aud" del daemon)
     property real audLevel: 0
@@ -76,6 +81,9 @@ ShellRoot {
     property real audHi: 0
     property real audCentroid: 0.5
     property int audBeat: 0
+    // los picos: no cada golpe, sino los pocos momentos más altos del tema
+    property int audPeak: 0
+    property double lastPeakAt: 0
     property double audAt: 0
     // en qué parte de la canción estamos (lo decide el daemon comparando este
     // momento contra el tema entero, no contra un volumen fijo)
@@ -165,7 +173,11 @@ ShellRoot {
             return { layout: "plain", alarm: false };
         const n = line.serial || 0;
         const r = crtHash(n * 7 + words.length);
-        const alarm = crtHash(n * 13 + 5) > 0.87;
+        // La línea "critical" pinta la pantalla entera de rojo. Salía por sorteo
+        // — una de cada ocho, o sea un par por minuto — y el rojo dejaba de
+        // querer decir nada: era un color más que aparecía solo. Ahora sólo
+        // puede caer sobre un pico, así que el rojo ES el pico.
+        const alarm = crtHash(n * 13 + 5) > 0.87 && Date.now() - lastPeakAt < 9000;
         // el corte se reparte entre las pantallas DEL TUBO, que no son las
         // mismas donde salen los carteles
         const canSplit = activeCrtScreens.length > 1 && words.length <= 3;
@@ -343,7 +355,13 @@ ShellRoot {
     function resetFaces() {
         faceIdx = crtFacePattern();
     }
-    onSectionGenChanged: resetFaces()
+    // Repartir de nuevo las caras da vuelta pantallas ENTERAS: la que estaba
+    // clara se va a negra y al revés. Eso no es un cambio de color, es un
+    // fogonazo del tamaño del monitor. Iba en cada cambio de parte — o sea,
+    // cada vez que el tema subía — y era lo que se veía como "flashea todo el
+    // tiempo cuando sube la música". Ahora la pared se repinta en los picos y
+    // al cambiar de tema: un par de veces por canción, que es cuando significa
+    // algo.
     onCrtTrackSeedChanged: resetFaces()
     onActiveCrtScreensChanged: resetFaces()
 
@@ -428,12 +446,19 @@ ShellRoot {
 
     // Se evalúa sólo al empezar una línea, con salto mínimo de tono y un mínimo
     // de segundos entre cambios: si no, el tubo es una calesita de colores.
+    //
+    // Y aun con esos dos frenos era una calesita: el registro de una voz sube en
+    // cada estribillo, así que el permiso de cambiar cada `color_hold` segundos
+    // se usaba casi siempre, y la pantalla entera —fondo y letra— se pintaba de
+    // otro color cada diez segundos. Un tema tiene DOS o TRES momentos, no
+    // dieciocho: el color ahora sólo puede moverse encima de un pico.
     function updatePitchPalette() {
         if (!crtColorFromPitch || !audLive)
             return;
         const now = Date.now();
         const cand = palForPitch(pitchRel);
         if (pitchPal < 0) {
+            // la primera vez no es un cambio de color, es el color de arranque
             pitchPal = cand;
             pitchAtPal = pitchRel;
             pitchChangedAt = now;
@@ -445,6 +470,8 @@ ShellRoot {
             return;
         if (Math.abs(pitchRel - pitchAtPal) < 0.06)
             return;
+        if (now - lastPeakAt > 9000)
+            return;      // el registro cambió, pero no es un momento del tema
         pitchPal = cand;
         pitchAtPal = pitchRel;
         pitchChangedAt = now;
@@ -584,8 +611,17 @@ ShellRoot {
     readonly property var motifWords: [
         { re: /\b(eye|eyes|see|seen|look|watch|silence|silent|quiet|blind)\b/i, kind: "eye" },
         { re: /\b(ojo|ojos|mir[ao]|mirar|ver|silencio|callar|ciego)\b/i, kind: "eye" },
-        { re: /\b(fire|burn|heart|beat|blood|fuego|arde|coraz[oó]n|late)\b/i, kind: "rings" },
-        { re: /\b(run|road|drive|fall|deep|corr[eo]|camino|caigo|fondo)\b/i, kind: "tunnel" },
+        // el mar: agua grande, hundirse, la marea
+        { re: /\b(sea|ocean|wave|waves|drown|drowning|deep|tide|swim|sink|sinking|beach|shore)\b/i, kind: "ocean" },
+        { re: /\b(mar|ola|olas|ahog[oa]|marea|nad[ao]|hundi?[ro]|fondo|orilla|playa)\b/i, kind: "ocean" },
+        // el laguito: agua quieta que tiembla — temblar, vibrar, la lluvia
+        { re: /\b(water|shake|shaking|shiver|tremble|vibrate|ripple|still|rain)\b/i, kind: "pond" },
+        { re: /\b(agua|tiembl[oa]|temblar|vibra|vibrar|quiet[oa]|lluvia|llover|calma)\b/i, kind: "pond" },
+        // OJO: "rings" y "tunnel" existían hasta la 4ª pasada; hoy Motif.qml no
+        // los conoce y estas palabras dejaban la pantalla en blanco. Van a los
+        // motivos que quedaron con el mismo sentido.
+        { re: /\b(fire|burn|heart|beat|blood|fuego|arde|coraz[oó]n|late)\b/i, kind: "radar" },
+        { re: /\b(run|road|drive|fall|corr[eo]|camino|caigo)\b/i, kind: "stars" },
     ]
     // Cada cuánto se cambia de animación. Antes se sorteaba por LÍNEA: las
     // pantallas laterales cambiaban de dibujo cada dos segundos y parecían un
@@ -598,7 +634,20 @@ ShellRoot {
         onTriggered: root.motifGen++
     }
 
-    readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard", "rain"]
+    readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
+                                       "rain", "ocean", "pond"]
+
+    // los dos de agua se pueden apagar juntos (`water = false`) sin tocar el
+    // resto de las animaciones
+    function motifPool(list) {
+        if (crtWater)
+            return list;
+        const out = [];
+        for (let k = 0; k < list.length; k++)
+            if (list[k] !== "ocean" && list[k] !== "pond")
+                out.push(list[k]);
+        return out.length > 0 ? out : ["eye"];
+    }
 
     function crtMotifFor(i) {
         if (!crtMotifs)
@@ -610,13 +659,17 @@ ShellRoot {
         if (i === chosen) {
             const text = crtLine.text || "";
             for (let k = 0; k < motifWords.length; k++)
-                if (motifWords[k].re.test(text))
-                    return motifWords[k].kind;
+                if (motifWords[k].re.test(text)) {
+                    const kind = motifWords[k].kind;
+                    if (crtWater || (kind !== "ocean" && kind !== "pond"))
+                        return kind;
+                }
         }
         // dos pantallas apagadas nunca muestran el mismo dibujo
-        // en el silencio el ojo o la carta de ajuste; en el pico, lo que se mueve
+        // en el silencio el ojo, la carta de ajuste o el mar quieto; en el pico,
+        // lo que se mueve
         const calm = audSection === "quiet";
-        const pool = calm ? ["eye", "testcard", "scope"] : motifKinds;
+        const pool = motifPool(calm ? ["eye", "testcard", "scope", "pond"] : motifKinds);
         const pick = Math.floor(crtHash(motifGen * 17 + crtTrackSeed * 3) * pool.length);
         const offset = Math.floor(crtHash(motifGen * 29 + i * 11) * (pool.length - 1)) + 1;
         return pool[(pick + (i === chosen ? 0 : offset)) % pool.length];
@@ -629,17 +682,30 @@ ShellRoot {
     property int flickerGen: 0
     property double lastFlickerAt: 0
     property bool flickerHard: false     // true = además apagón corto
+    // El tubo late en los PICOS, no en los golpes. El golpe es cada bombo que
+    // sobresale: hay cientos por tema, y latir en todos es latir siempre — se
+    // lee como una pantalla rota, no como que el tema pegó. El pico lo elige el
+    // daemon contra la canción entera (percentil, separación mínima y tope por
+    // tema), así que acá sólo queda un seguro por si llegan dos juntos.
     function tubeBeat() {
         if (!crtOn || crtFlicker <= 0.01)
             return;
         const now = Date.now();
-        if (now - lastFlickerAt < 1400 / Math.max(crtFlicker, 0.05))
+        if (now - lastFlickerAt < 4000)
             return;
         lastFlickerAt = now;
         flickerHard = sectionEnergy > 1.45 && Math.random() < 0.35 && crtFlicker > 0.5;
         flickerGen++;
     }
-    onAudBeatChanged: tubeBeat()
+    // Todo lo grande cuelga del mismo clavo: el latido del tubo y el reparto de
+    // colores de la pared pasan en el pico, juntos. Dos cosas fuertes en el
+    // mismo instante se leen como UN golpe; repartidas, se leen como una
+    // pantalla que hace cosas raras cada tanto.
+    onAudPeakChanged: {
+        tubeBeat();
+        if (crtOn)
+            resetFaces();
+    }
 
     // Interferencia espontánea: la programa el root y le toca a UNA pantalla por
     // vez. Con un temporizador propio por pantalla, aunque cada una se rompiera
@@ -874,6 +940,8 @@ ShellRoot {
         crtQuality = ev.crt_quality ?? crtQuality;
         crtFlicker = ev.crt_flicker ?? crtFlicker;
         crtWordFlash = ev.crt_word_flash ?? crtWordFlash;
+        crtWater = ev.crt_water ?? crtWater;
+        crtWaterAmp = ev.crt_water_amp ?? crtWaterAmp;
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear
@@ -919,6 +987,12 @@ ShellRoot {
                             root.pitchRef = root.pitchRef * 0.998 + ev.c * 0.002;
                             if (ev.b)
                                 root.audBeat++;
+                            // el pico lo elige el daemon (es el que sabe dónde
+                            // cae este momento dentro de la canción entera)
+                            if (ev.pk) {
+                                root.lastPeakAt = Date.now();
+                                root.audPeak++;
+                            }
                         } else if (ev.cmd === "clear") {
                             root.npShown = false;
                             // el tubo se queda sin señal y rota el fósforo

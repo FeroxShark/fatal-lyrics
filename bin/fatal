@@ -17,14 +17,42 @@ CRT="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt"
 
 running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
+# Lanza en una sesión propia: un `cmd &` pelado se muere junto con la shell que
+# lo largó (terminal que cerrás, script que termina, autostart efímero), y el
+# overlay se caía calladito sin dejar ni una línea de log. `setsid` lo saca de
+# ese árbol; el PID lo escribe el propio hijo antes del exec porque setsid puede
+# forkear y ahí `$!` apunta al padre equivocado.
+spawn() {
+    local pidfile="$1" logfile="$2"
+    shift 2
+    PIDFILE="$pidfile" LOGFILE="$logfile" setsid sh -c \
+        'echo $$ > "$PIDFILE"; exec "$@" >"$LOGFILE" 2>&1' sh "$@" &
+}
+
+# El daemon y el overlay son dos procesos y se mueren por separado: si una
+# actualización reemplaza los binarios en caliente, el overlay se cae solo y el
+# daemon sigue mandando letras a una pantalla que ya no existe. Mirar un PID
+# solo hacía que `status` dijera ON con medio programa muerto y que `toggle`
+# apagara lo poco que quedaba en vez de levantarlo.
+status_line() {
+    if running $D_PID && running $QS_PID; then
+        echo ON
+    elif running $D_PID; then
+        echo "HALF (the overlay died — run: fatal restart)"
+    elif running $QS_PID; then
+        echo "HALF (the daemon died — run: fatal restart)"
+    else
+        echo OFF
+    fi
+}
+
 start() {
     if [ ! -f "$QML" ] || [ ! -f "$DAEMON" ]; then
         echo "can't find the fatal-lyrics files in $BASE" >&2
         exit 1
     fi
     if ! running $QS_PID; then
-        qs -p "$QML" >/tmp/cartelitos-qs.log 2>&1 &
-        echo $! > $QS_PID
+        spawn "$QS_PID" /tmp/cartelitos-qs.log qs -p "$QML"
     fi
     # wait for the overlay to bring up the socket before starting the daemon
     for _ in $(seq 1 25); do
@@ -32,8 +60,7 @@ start() {
         sleep 0.2
     done
     if ! running $D_PID; then
-        python3 "$DAEMON" >/tmp/cartelitos.log 2>&1 &
-        echo $! > $D_PID
+        spawn "$D_PID" /tmp/cartelitos.log python3 "$DAEMON"
     fi
     echo "fatal ON"
 }
@@ -88,8 +115,10 @@ case "${1:-toggle}" in
     on|start)  start ;;
     off|stop)  stop ;;
     restart)   stop; sleep 0.5; start ;;
-    status)    running $D_PID && echo ON || echo OFF ;;
-    toggle)    running $D_PID && stop || start ;;
+    status)    status_line ;;
+    # medio muerto cuenta como apagado: así el toggle lo levanta entero en vez
+    # de rematar la mitad que seguía viva
+    toggle)    running $D_PID && running $QS_PID && stop || start ;;
     config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;

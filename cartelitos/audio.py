@@ -27,6 +27,20 @@ SECTION_HOLD = 4.0          # segundos antes de aceptar que cambió de parte
 SECTION_SMOOTH = 0.12       # cuánto pesa cada muestra en la curva suavizada
 SECTIONS = ("quiet", "verse", "build", "drop")
 
+# Al re-escuchar un tema la muestra se promedia con la que ya había: si el tema
+# se escuchó otras veces, el mapa se afina en vez de pisarse. Lo viejo pesa más
+# que lo nuevo, así una pasada rara (un volumen distinto) no borra el mapa.
+PROFILE_BLEND_OLD = 0.6
+PROFILE_BLEND_NEW = 0.4
+
+PROFILE_MIN_SAMPLES = 20    # menos que esto es medio tema: no sirve de mapa
+
+# Cuánto adelante mira el mapa. Sin esto la reacción siempre llega tarde: el
+# golpe se ve DESPUÉS de que sonó; con el mapa cargado el tubo empieza a apretar
+# antes. Es también el aviso que se le manda a la pantalla ("esto entra en N").
+CUE_AHEAD = 2.0
+CUE_MIN_GAP = 2.0           # no más de un aviso cada tanto: si no, es un chorro
+
 
 def classify_level(rms, samples):
     """En qué parte de SU PROPIA canción está este momento.
@@ -83,7 +97,12 @@ class TrackProfile:
         try:
             with open(self.path()) as f:
                 data = json.load(f)
-        except Exception:
+        except OSError:
+            return False       # todavía no se escuchó nunca: no hay cache
+        except ValueError as e:
+            # JSON roto o cortado a la mitad (el daemon murió escribiendo): se
+            # descarta y se vuelve a medir, pero queda dicho cuál era el archivo
+            log(f"broken track profile, remeasuring ({type(e).__name__}: {e})")
             return False
         if not data.get("rms"):
             return False
@@ -93,7 +112,7 @@ class TrackProfile:
         return True
 
     def save(self):
-        if len(self.rms) < 20:
+        if len(self.rms) < PROFILE_MIN_SAMPLES:
             return False       # medio tema no sirve de mapa
         try:
             os.makedirs(PROFILE_DIR, exist_ok=True)
@@ -121,8 +140,10 @@ class TrackProfile:
             self.cen.append(0.5)
         # promedio con lo que ya había: si el tema se escuchó otras veces, el
         # mapa se afina en vez de pisarse
-        self.rms[i] = rms if self.rms[i] == 0.0 else (self.rms[i] * 0.6 + rms * 0.4)
-        self.cen[i] = cen if self.cen[i] == 0.5 else (self.cen[i] * 0.6 + cen * 0.4)
+        self.rms[i] = rms if self.rms[i] == 0.0 else (
+            self.rms[i] * PROFILE_BLEND_OLD + rms * PROFILE_BLEND_NEW)
+        self.cen[i] = cen if self.cen[i] == 0.5 else (
+            self.cen[i] * PROFILE_BLEND_OLD + cen * PROFILE_BLEND_NEW)
 
     def update(self, pos, rms, now):
         """Parte actual, con histéresis. Devuelve (parte, percentil, cambió)."""
@@ -138,7 +159,7 @@ class TrackProfile:
         self.since = now
         return kind, pct, True
 
-    def coming(self, pos, ahead=2.0):
+    def coming(self, pos, ahead=CUE_AHEAD):
         """Qué se viene en los próximos segundos, si el tema ya se conoce.
 
         Sin esto la reacción siempre llega tarde: el golpe se ve DESPUÉS de que
@@ -189,6 +210,14 @@ AUDIO_HOP = 512                                   # 32 ms por análisis
 AUDIO_BANDS = (60.0, 150.0, 400.0, 1000.0, 2500.0, 5000.0)
 AUDIO_MIN_SEND = 0.04                             # ~25 eventos por segundo
 
+# Captura muda un rato largo: casi siempre es que la salida por default no es la
+# que suena. Se avisa una vez y se sigue (no se corta: puede ser una pausa).
+QUIET_LEVEL = 0.02          # debajo de esto la captura está muda
+QUIET_WARN = 20.0           # segundos de mudez antes de avisar
+# El mapa se guarda cada tanto, no sólo al cambiar de tema: si el daemon se cae
+# en la mitad, lo escuchado hasta ahí no se pierde.
+PROFILE_SAVE_EVERY = 30.0
+
 # ---- el pico: el golpe que SÍ merece que la pantalla se rompa
 # Un golpe es cada bombo que sobresale — hay cientos por tema, y si la pantalla
 # late en todos, late todo el tiempo y cansa. El pico es otra cosa: el momento
@@ -201,6 +230,23 @@ PEAK_PCT = 0.95          # arriba del 95% de la canción
 PEAK_GAP = 15.0          # segundos mínimos entre dos picos
 PEAK_MAX = 4             # cuántos picos como mucho por tema
 PEAK_HARD = 2.0          # sin mapa del tema: el golpe tiene que doblar la media
+PEAK_HARD_FLOOR = 0.02   # ...y además sonar: doblar un silencio no es un golpe
+
+# ---- normalización del nivel
+# El nivel va contra un pico que decae solo: la música no viene con un volumen
+# fijo y sin esto el tubo late fuerte o no late según el master del sistema.
+LEVEL_PEAK_DECAY = 0.995   # cuánto sobrevive el pico en cada bloque (~32 ms)
+LEVEL_PEAK_FLOOR = 1e-4    # piso del pico: sin él, silencio => división por ~0
+
+# ---- el golpe (no el pico: eso lo filtra PeakGate)
+# Un golpe es algo que SOBRESALE del momento, no cada bombo: con el umbral bajo,
+# en un tema con batería marcada se dispara tres veces por segundo y la pantalla
+# queda vibrando todo el tiempo.
+BEAT_RATIO = 1.6           # cuánto tiene que superar al promedio corto
+BEAT_FLOOR = 0.012         # piso absoluto: en silencio, cualquier ruido "sobresale"
+BEAT_REFRACTORY = 0.25     # segundos mudos después de un golpe (mismo bombo, 3 veces)
+BEAT_SLOW_KEEP = 0.9       # el promedio corto contra el que se compara: memoria...
+BEAT_SLOW_MIX = 0.1        # ...y cuánto entra de cada bloque nuevo
 
 
 _BAND_TABLES = {}
@@ -256,7 +302,7 @@ class AudioAnalyzer:
 
     def __init__(self, rate=AUDIO_RATE):
         self.rate = rate
-        self.peak = 1e-4
+        self.peak = LEVEL_PEAK_FLOOR
         self.slow = 0.0
         self.last_beat = 0.0
 
@@ -270,7 +316,7 @@ class AudioAnalyzer:
         rms = math.sqrt(sum(x * x for x in samples) / n)
 
         # pico con decaimiento: se adapta al volumen del sistema sin saltos
-        self.peak = max(rms, self.peak * 0.995, 1e-4)
+        self.peak = max(rms, self.peak * LEVEL_PEAK_DECAY, LEVEL_PEAK_FLOOR)
         level = min(rms / self.peak, 1.0)
 
         energies = [band_energy(samples, self.rate, f) for f in AUDIO_BANDS]
@@ -297,15 +343,15 @@ class AudioAnalyzer:
         # queda vibrando todo el tiempo.
         beat = False
         hard = False
-        if (rms > max(self.slow * 1.6, 0.012)
-                and now - self.last_beat > 0.25):
+        if (rms > max(self.slow * BEAT_RATIO, BEAT_FLOOR)
+                and now - self.last_beat > BEAT_REFRACTORY):
             beat = True
             # golpe que sobresale MUCHO: es lo único que se puede usar como pico
             # cuando el tema todavía no tiene mapa (recién empieza, o no hay
             # posición del reproductor y no se sabe dónde estamos)
-            hard = rms > max(self.slow * PEAK_HARD, 0.02)
+            hard = rms > max(self.slow * PEAK_HARD, PEAK_HARD_FLOOR)
             self.last_beat = now
-        self.slow = self.slow * 0.9 + rms * 0.1
+        self.slow = self.slow * BEAT_SLOW_KEEP + rms * BEAT_SLOW_MIX
 
         return {
             "cmd": "aud",
@@ -372,8 +418,10 @@ def _default_sink():
         name = out.stdout.strip()
         if out.returncode == 0 and name:
             return name
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as e:
+        # pactl que no está (OSError) o que se colgó (TimeoutExpired). Cualquier
+        # otra cosa —args mal armados, por ejemplo— es un bug y tiene que explotar
+        log(f"couldn't ask for the default sink ({type(e).__name__}: {e})")
     return None
 
 
@@ -392,8 +440,9 @@ def _sink_node_id(name):
                              capture_output=True, text=True, timeout=3)
         if out.returncode == 0:
             return sink_node_id(out.stdout, name)
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as e:
+        # idem: sin id se cae a parec por nombre, pero que se sepa por qué
+        log(f"couldn't list the sinks ({type(e).__name__}: {e})")
     return None
 
 
@@ -434,8 +483,10 @@ def audio_loop():
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL)
-        except Exception as e:
-            log(f"couldn't capture audio ({e})")
+        except OSError as e:
+            # el grabador no está o no se pudo lanzar. Un TypeError/ValueError acá
+            # sería un error de programación en la lista de args: que se vea.
+            log(f"couldn't capture audio ({type(e).__name__}: {e})")
             time.sleep(5)
             continue
         log("audio: reacting to what's playing")
@@ -461,9 +512,9 @@ def audio_loop():
                     continue
                 # captura muda un rato largo: casi siempre es que la salida por
                 # default no es la que suena. Se avisa una vez y se sigue.
-                if ev["l"] > 0.02:
+                if ev["l"] > QUIET_LEVEL:
                     quiet_since = now
-                elif not warned and now - quiet_since > 20:
+                elif not warned and now - quiet_since > QUIET_WARN:
                     warned = True
                     log("audio: only silence on the default output, "
                         "the tube won't react to the music")
@@ -491,7 +542,7 @@ def audio_loop():
                     gate.track(prof.key, now)
                 # se guarda cada tanto, no sólo al cambiar de tema: si el daemon
                 # se cae en la mitad, el mapa de lo escuchado no se pierde
-                if now - last_save > 30:
+                if now - last_save > PROFILE_SAVE_EVERY:
                     last_save = now
                     prof.save()
                 pos = ipc._song_pos()
@@ -511,16 +562,16 @@ def audio_loop():
                     log(f"section: {kind} ({pct:.0%})")
                     ipc.send_soft({"cmd": "sec", "kind": kind, "p": round(pct, 2)})
                 # y lo que se viene, si el tema ya se escuchó antes
-                if now - last_cue > 2.0:
+                if now - last_cue > CUE_MIN_GAP:
                     nxt = prof.coming(pos)
                     if nxt and nxt != kind:
                         last_cue = now
                         log(f"coming: {nxt}")
-                        ipc.send_soft({"cmd": "cue", "kind": nxt, "in": 2.0})
+                        ipc.send_soft({"cmd": "cue", "kind": nxt, "in": CUE_AHEAD})
         finally:
             proc.terminate()
             try:
                 proc.wait(timeout=1)
-            except Exception:
-                proc.kill()
+            except subprocess.TimeoutExpired:
+                proc.kill()     # no se murió solo con terminate: a la fuerza
         log("audio: capture stopped")

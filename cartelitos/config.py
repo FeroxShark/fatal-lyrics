@@ -97,6 +97,11 @@ _CONFIG_COMMENTS = {
                       "is a floor, not a licence: a colour change also has to land\n"
                       "on a peak of the song, so it happens two or three times a\n"
                       "track and not every ten seconds",
+        "infect_lead": "seconds of lead the colour takes on the next screen before\n"
+                       "the line actually gets there — the tube reads as pre-empting\n"
+                       "the word instead of just following it",
+        "alarm_threshold": "how rare the \"critical\" (full red) screen is: a line\n"
+                            "rolls against this on a peak, higher = rarer. 1.0 = never",
         "motifs": "animations on the quiet screens (an eye, a scope, a radar,\n"
                   "falling data, hyperspace, a test card, the sea)",
         "water": "the two water animations: a sea of loose points seen in\n"
@@ -198,7 +203,8 @@ DEFAULTS = {
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "audio": True,
-        "color_from_pitch": True, "color_hold": 10, "motifs": True,
+        "color_from_pitch": True, "color_hold": 10,
+        "infect_lead": 0.35, "alarm_threshold": 0.87, "motifs": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,

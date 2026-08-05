@@ -56,6 +56,12 @@ ShellRoot {
     property string crtFocusMode: "roam"     // roam | all
     property bool crtColorFromPitch: true
     property int crtColorHold: 10
+    // segundos de anticipación con que el color infecta la pantalla siguiente
+    // (ver updateInfection más abajo)
+    property real crtInfectLead: 0.35
+    // qué tan seguido una línea sale "critical" (pantalla roja): umbral del
+    // sorteo determinístico en crtPlanFor, más alto = más raro
+    property real crtAlarmThreshold: 0.87
     property bool crtMotifs: true
     property real crtCamera: 1.0
     property real crtQuality: 1.0
@@ -177,7 +183,7 @@ ShellRoot {
         // — una de cada ocho, o sea un par por minuto — y el rojo dejaba de
         // querer decir nada: era un color más que aparecía solo. Ahora sólo
         // puede caer sobre un pico, así que el rojo ES el pico.
-        const alarm = crtHash(n * 13 + 5) > 0.87 && Date.now() - lastPeakAt < 9000;
+        const alarm = crtHash(n * 13 + 5) > crtAlarmThreshold && Date.now() - lastPeakAt < 9000;
         // el corte se reparte entre las pantallas DEL TUBO, que no son las
         // mismas donde salen los carteles
         const canSplit = activeCrtScreens.length > 1 && words.length <= 3;
@@ -350,7 +356,6 @@ ShellRoot {
     // pantalla toma el color de la que la trae, un instante ANTES de que llegue
     // el texto. La letra no cambia de pantalla, infecta la siguiente.
     property var faceIdx: []
-    readonly property real infectLead: 0.35     // segundos de anticipación
 
     function resetFaces() {
         faceIdx = crtFacePattern();
@@ -378,7 +383,7 @@ ShellRoot {
         let touched = false;
         for (let k = 1; k < sh.chunks.length; k++) {
             const c = sh.chunks[k];
-            if (p < c.from - infectLead)
+            if (p < c.from - crtInfectLead)
                 break;                       // todavía no le toca a esta pantalla
             const donor = sh.chunks[k - 1].screen;
             if (c.screen === donor || next[c.screen] === next[donor])
@@ -916,6 +921,7 @@ ShellRoot {
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
+        crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",

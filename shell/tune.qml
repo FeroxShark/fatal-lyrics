@@ -19,6 +19,7 @@ ShellRoot {
     property var vals: ({
         word_flash: 0.3, flicker: 0.25, intensity: 0.45, camera: 1.0,
         bloom: 1.0, scanlines: 0.5, noise: 0.22, water_amp: 0.55,
+        infect_lead: 0.35, alarm_threshold: 0.87,
     })
 
     readonly property var rows: [
@@ -38,6 +39,10 @@ ShellRoot {
           hint: "grain on the tube" },
         { key: "water_amp", label: "Water",          max: 1.0,
           hint: "sea swell and pond shiver" },
+        { key: "infect_lead", label: "Infect lead",  max: 0.5,
+          hint: "how far ahead the colour jumps to the next screen" },
+        { key: "alarm_threshold", label: "Alarm rarity", max: 1.0,
+          hint: "how rare the red \"critical\" screen is" },
     ]
 
     // el canal hacia el daemon: una línea por cambio

@@ -232,6 +232,31 @@ CPU core and a few points of GPU while the tube is up. Off, it costs nothing —
 no capture, no textures, no timers. `quality` trades resolution for load, and
 `focus`/`motifs`/`audio` each turn off a piece of the work.
 
+## Known Limitations
+
+- **Game-pause and monitor listing are Hyprland-only.** They shell out to
+  `hyprctl`, which has no equivalent on Sway, river or the rest of wlroots.
+  Off Hyprland, `game_pause` silently stays off and the monitor list comes
+  back empty (you pick monitors by name yourself in `fatal config`); a
+  warning is logged once. A generic wlroots fallback (`wlr-randr` /
+  `swaymsg -t get_outputs` for monitors, `wlr-foreign-toplevel` for the
+  active window) is a possible future direction, not implemented today.
+- **Game detection is fullscreen-only.** Anything that goes true fullscreen
+  and isn't in `[system].not_a_game` counts as "a game" — there's no process
+  list to keep up to date. It does **not** detect borderless-windowed, which
+  Hyprland treats as an ordinary window.
+- **CRT mode isn't free.** Three (or more) full screens running a shader
+  cost roughly a fifth of a CPU core plus a few points of GPU while the tube
+  is up. Off, it costs nothing — no capture, no textures, no timers.
+  `quality` trades resolution for load; `focus`/`motifs`/`audio` each turn
+  off a piece of the work.
+- **CRT exit is mouse *or* keyboard, never both at once.** A layer surface
+  that holds the keyboard stops receiving the pointer, so `exit_on` picks
+  one: hidden cursor + mouse-to-exit, or visible cursor + any-key-to-exit.
+  The compositor keybind and `fatal crt off` always work regardless.
+- **Wayland only, no Windows/X11 support.** Requires a wlroots-like
+  compositor and Quickshell; tested specifically on Hyprland.
+
 ## Requirements
 
 - Wayland with a wlroots-like compositor (tested on **Hyprland**)
@@ -329,10 +354,13 @@ dropout would be remembered as having no lyrics.
 python3 -m unittest discover -s tests
 ```
 
-Covers the LRC parser, the config writer (it has to leave your comments and
-alignment alone), live config reloading, the lyrics cache, and the race where
-a slow lookup for a track you already skipped could overwrite the current
-one. No dependencies beyond the standard library.
+270 tests. Covers the LRC parser, the config writer (it has to leave your
+comments and alignment alone, and round-trips the generated sample TOML),
+live config reloading, the lyrics cache, the race where a slow lookup for a
+track you already skipped could overwrite the current one, the daemon's main
+loop (via a dependency-injected `DaemonLoop`), the tray's fallback when `gi`
+isn't available, and the `fatal config` TUI's validation/retry paths. No
+dependencies beyond the standard library.
 
 | Section    | Option               | What it does                                                    | Default     |
 |------------|----------------------|------------------------------------------------------------------|-------------|
@@ -357,6 +385,10 @@ one. No dependencies beyond the standard library.
 | `behavior` | `click_through`      | Dialogs don't capture the mouse                                    | `false`     |
 | `behavior` | `pause_clear`        | Seconds paused before clearing everything (`0` = never)            | `15`        |
 | `behavior` | `player`             | MPRIS player name (`playerctl -l`)                                 | `"spotify"` |
+| `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
+| `behavior` | `game_pause`         | Auto-pause when a window goes fullscreen (any game, no process list needed; **Hyprland-only**, see [Known Limitations](#known-limitations)) | `true` |
+| `system`   | `not_a_game`         | Fullscreen window classes that never count as "a game" for `game_pause` (browsers, video/music players), matched as a substring | `["chrome", "chromium", "firefox", "zen", "brave", "vivaldi", "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid", "haruna", "totem", "spotify", "netflix", "youtube"]` |
+| `system`   | `terminals`          | Terminal emulators to try, in order, when opening the full menu (checked after `$TERMINAL`) | `["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole", "gnome-terminal", "xterm"]` |
 | `crt`      | `enabled`            | Start with the tube on (live switch: `fatal crt on/off`)           | `false`     |
 | `crt`      | `screens`            | Screens the tube takes: `"all"`, a name, a list, or `"same"` as the dialogs | `"all"` |
 | `crt`      | `order`              | Screens left to right (decides where each piece of a split line lands): `"auto"` or a list | `"auto"` |
@@ -366,6 +398,8 @@ one. No dependencies beyond the standard library.
 | `crt`      | `audio`              | React to what's playing (captures the sound card's monitor)     | `true`      |
 | `crt`      | `color_from_pitch`   | Phosphor leans on the register of what's playing                | `true`      |
 | `crt`      | `color_hold`         | Seconds a colour must stay before it may change                 | `10`        |
+| `crt`      | `infect_lead`        | Seconds of lead the colour takes on the next screen before the line actually arrives there | `0.35` |
+| `crt`      | `alarm_threshold`    | How rare the full-red "critical" screen is (rolled against a peak); higher = rarer, `1.0` = never | `0.87` |
 | `crt`      | `motifs`             | Animations on the screens without lyric                         | `true`      |
 | `crt`      | `water`              | The two water animations (the sea, and the pond that shivers with the song) take their turn | `true` |
 | `crt`      | `water_amp`          | How much the water moves (`0` = a flat field of points)         | `0.55`      |
@@ -374,17 +408,22 @@ one. No dependencies beyond the standard library.
 | `crt`      | `palette`            | Where the two colours come from: `album` (the cover) / `auto` (by register) / `dragons` / `ado` / `poison` / `bloodline` / `vapor` / `bone` | `"album"` |
 | `crt`      | `split`              | Line across screens: `mixed` / `whole` / `fragment`                 | `"mixed"`   |
 | `crt`      | `font`               | Font family for the lyric (`""` = system default)                   | `""`        |
-| `crt`      | `chrome`             | Console readouts: REC, track, timecode, progress bar                | `true`      |
-| `crt`      | `intensity`          | How often the signal breaks by itself (`0` = never)                 | `1.0`       |
+| `crt`      | `chrome`             | Console readouts: REC, track, timecode, progress bar                | `false`     |
+| `crt`      | `intensity`          | How restless the tube is: signal breaks, how hard beats shake it, static (`0` = dead still) | `0.45` |
+| `crt`      | `word_flash`         | How much each word jolts as it lands — flash, colour ghosts and size kick (`0` = word just appears, `1` = lands white and shaking) | `0.3` |
+| `crt`      | `flicker`            | How hard the picture beats with the music on peaks (`0` = nothing moves with the volume) | `0.25` |
 | `crt`      | `curvature`          | Tube glass curvature (`0` = flat panel)                             | `1.0`       |
-| `crt`      | `scanlines`          | Depth of the horizontal comb                                        | `0.75`      |
-| `crt`      | `chroma`             | Steady RGB misalignment                                             | `1.0`       |
+| `crt`      | `scanlines`          | Depth of the horizontal comb                                        | `0.5`       |
+| `crt`      | `chroma`             | Steady RGB misalignment                                             | `0.6`       |
 | `crt`      | `bloom`              | Phosphor glow around the letters                                    | `1.0`       |
-| `crt`      | `noise`              | Static                                                              | `0.5`       |
-| `crt`      | `roll`               | Brightness bar rolling down the tube                                | `1.0`       |
+| `crt`      | `noise`              | Static                                                              | `0.22`      |
+| `crt`      | `roll`               | Brightness bar rolling down the tube                                | `0.5`       |
 | `crt`      | `vignette`           | Darkening towards the corners                                       | `0.9`       |
-| `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
-| `behavior` | `game_pause`         | Auto-pause when a window goes fullscreen (any game, no process list needed) | `true`      |
+
+This table is kept in sync with `cartelitos/config.py`'s `DEFAULTS`, which is
+also what generates the sample `config.toml` (`_render_default_config`) —
+that generated file is the definitive, always-current reference; this table
+exists for a quick read without opening it.
 
 ## How it works
 

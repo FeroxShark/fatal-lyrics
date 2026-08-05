@@ -1314,7 +1314,8 @@ class TestKnobsAreReachable(unittest.TestCase):
     def test_every_slider_is_a_numeric_crt_key(self):
         # el panel escribe `clave=valor` y parse_tune descarta lo que no es un
         # número de [crt]: un slider con otra clave mueve la barra y nada más
-        qml = open(os.path.join(self.SHELL, "tune.qml"), encoding="utf-8").read()
+        with open(os.path.join(self.SHELL, "tune.qml"), encoding="utf-8") as f:
+            qml = f.read()
         keys = re.findall(r'\{\s*key:\s*"([a-z_]+)"', qml)
         self.assertTrue(keys, "no se encontró ningún slider en tune.qml")
         for key in keys:
@@ -1332,7 +1333,8 @@ class TestKnobsAreReachable(unittest.TestCase):
             config.CONFIG_PATH = path
             self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
             c._save_config({"water": ("crt", False), "water_amp": ("crt", 0.9)})
-            body = open(path).read()
+            with open(path) as f:
+                body = f.read()
             self.assertIn("water = false", body)
             self.assertIn("water_amp = 0.9", body)
 
@@ -1349,7 +1351,8 @@ class TestLogRotation(unittest.TestCase):
         with open(self.path, "w") as f:
             f.write("chico\n")
         self.assertFalse(util.rotate_log(self.path, limit=1024))
-        self.assertEqual(open(self.path).read(), "chico\n")
+        with open(self.path) as f:
+            self.assertEqual(f.read(), "chico\n")
         self.assertFalse(os.path.exists(self.path + ".1"))
 
     def test_over_the_limit_it_rotates_into_one_backup(self):
@@ -1366,7 +1369,8 @@ class TestLogRotation(unittest.TestCase):
             util.rotate_log(self.path, limit=1024)
         self.assertEqual(sorted(os.listdir(self.dir.name)),
                          ["daemon.log", "daemon.log.1"])
-        self.assertTrue(open(self.path + ".1").read().startswith("nuevo"))
+        with open(self.path + ".1") as f:
+            self.assertTrue(f.read().startswith("nuevo"))
 
     def test_the_inode_survives_the_rotation(self):
         # se trunca el mismo archivo, no se renombra: el redirect de bin/fatal ya
@@ -1385,7 +1389,8 @@ class TestLogRotation(unittest.TestCase):
             util.rotate_log(self.path, limit=1024)
             writer.write("después\n")
             writer.flush()
-        self.assertEqual(open(self.path).read(), "después\n")
+        with open(self.path) as f:
+            self.assertEqual(f.read(), "después\n")
 
     def test_a_log_that_is_not_there_is_not_an_error(self):
         self.assertFalse(util.rotate_log(os.path.join(self.dir.name, "nope.log")))
@@ -1549,7 +1554,8 @@ class TestFatalRunningGuard(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        body = open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8").read()
+        with open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8") as f:
+            body = f.read()
         start = body.index("running() {")
         cls.fn = body[start:body.index("\n}\n", start) + 3]
 
@@ -1624,7 +1630,8 @@ class TestFatalRuntimeLayout(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.body = open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8").read()
+        with open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8") as f:
+            cls.body = f.read()
 
     def test_no_pidfile_or_log_lives_in_tmp(self):
         for line in self.body.splitlines():

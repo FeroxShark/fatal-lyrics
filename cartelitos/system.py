@@ -83,9 +83,10 @@ def playerctl_state():
 
 # Ventanas que se ponen en pantalla completa TODO el tiempo y no son un juego:
 # un video a pantalla completa es justo cuando uno quiere que esto siga andando.
-NOT_A_GAME = ("chrome", "chromium", "firefox", "zen", "brave", "vivaldi",
-              "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid",
-              "haruna", "totem", "spotify", "netflix", "youtube")
+# El default vive en config.DEFAULTS["system"]["not_a_game"]; esto es sólo el
+# valor de fábrica expuesto con el nombre de siempre — is_game_window() lee
+# la lista viva (config.CFG), que el usuario puede pisar en config.toml.
+NOT_A_GAME = tuple(config.DEFAULTS["system"]["not_a_game"])
 
 
 def is_game_window(win):
@@ -103,7 +104,7 @@ def is_game_window(win):
     if win.get("fullscreen", 0) == 0 and win.get("fullscreenClient", 0) == 0:
         return False
     name = (str(win.get("class", "")) + " " + str(win.get("initialClass", ""))).lower()
-    return not any(tag in name for tag in NOT_A_GAME)
+    return not any(tag in name for tag in config.CFG["system"]["not_a_game"])
 
 
 def gaming():
@@ -244,9 +245,10 @@ def health_lines():
 
 def _terminal():
     """Terminal para abrir el menú completo. $TERMINAL primero: en un repo público
-    no se puede asumir la de nadie."""
-    names = [os.environ.get("TERMINAL"), "kitty", "alacritty", "foot", "wezterm",
-             "ghostty", "konsole", "gnome-terminal", "xterm"]
+    no se puede asumir la de nadie. El resto de la lista (el orden de
+    preferencia) sale de config.CFG["system"]["terminals"], configurable en
+    config.toml."""
+    names = [os.environ.get("TERMINAL"), *config.CFG["system"]["terminals"]]
     for name in names:
         if name:
             found = shutil.which(name)

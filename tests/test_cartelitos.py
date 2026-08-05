@@ -1133,6 +1133,53 @@ class TestGameDetection(unittest.TestCase):
         self.assertFalse(c.is_game_window(None))
 
 
+class TestNotAGameConfigurable(unittest.TestCase):
+    """not_a_game era una tupla fija en system.py; ahora es
+    config.CFG["system"]["not_a_game"], configurable en config.toml. Un
+    usuario que no toca la clave nueva tiene que ver exactamente el
+    comportamiento de siempre."""
+
+    def setUp(self):
+        self.old = list(config.CFG["system"]["not_a_game"])
+        self.addCleanup(lambda: config.CFG["system"].__setitem__("not_a_game", self.old))
+
+    def test_default_matches_the_old_hardcoded_tuple(self):
+        # el valor de fábrica de system.py (NOT_A_GAME) tiene que seguir
+        # siendo exactamente el default de config, para que nadie que no
+        # toque config.toml note ninguna diferencia
+        self.assertEqual(tuple(config.DEFAULTS["system"]["not_a_game"]), system.NOT_A_GAME)
+        for name in ("chrome", "chromium", "firefox", "zen", "brave", "vivaldi",
+                     "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid",
+                     "haruna", "totem", "spotify", "netflix", "youtube"):
+            self.assertIn(name, config.CFG["system"]["not_a_game"])
+
+    def test_untouched_config_behaves_exactly_like_before(self):
+        self.assertFalse(c.is_game_window({"class": "google-chrome", "fullscreen": 1}))
+        self.assertTrue(c.is_game_window({"class": "cs2", "fullscreen": 2}))
+
+    def test_a_user_can_add_to_the_list_via_config(self):
+        config.CFG["system"]["not_a_game"] = list(self.old) + ["obs"]
+        self.assertFalse(c.is_game_window({"class": "obs-studio", "fullscreen": 1}))
+
+    def test_a_user_can_shrink_the_list_via_config(self):
+        # si lo saca de la lista, ahora SÍ cuenta como juego
+        config.CFG["system"]["not_a_game"] = [n for n in self.old if n != "mpv"]
+        self.assertTrue(c.is_game_window({"class": "mpv", "fullscreen": 2}))
+
+    def test_the_list_round_trips_through_config_toml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.toml")
+            with open(path, "w") as f:
+                f.write('[system]\nnot_a_game = ["obs", "discord"]\n')
+            old_path = config.CONFIG_PATH
+            config.CONFIG_PATH = path
+            self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old_path))
+            cfg = c.read_config()
+            self.assertEqual(cfg["system"]["not_a_game"], ["obs", "discord"])
+            # el resto de las claves de [system] siguen ahí (merge sobre DEFAULTS)
+            self.assertEqual(cfg["system"]["terminals"], config.DEFAULTS["system"]["terminals"])
+
+
 class TestCompositorDetection(unittest.TestCase):
     """gaming() y la lista de monitores son Hyprland-only. En otro compositor
     tienen que apagarse solas y avisar UNA vez, no reventar por tick."""
@@ -1356,6 +1403,11 @@ class TestKnobsAreReachable(unittest.TestCase):
         for key in c.DEFAULTS["crt"]:
             self.assertIn(key, config._CONFIG_COMMENTS["crt"],
                           f"crt.{key} no tiene comentario en _CONFIG_COMMENTS")
+
+    def test_every_system_key_has_a_comment(self):
+        for key in c.DEFAULTS["system"]:
+            self.assertIn(key, config._CONFIG_COMMENTS["system"],
+                          f"system.{key} no tiene comentario en _CONFIG_COMMENTS")
 
     def test_every_slider_is_a_numeric_crt_key(self):
         # el panel escribe `clave=valor` y parse_tune descarta lo que no es un
@@ -1624,6 +1676,48 @@ class TestOptionalTools(unittest.TestCase):
         printed = [l for l in out.stdout.splitlines() if l.strip()]
         for line in printed:
             self.assertIn("not found →", line)
+
+
+class TestTerminalPreference(unittest.TestCase):
+    """La lista de terminals que prueba _terminal() (después de $TERMINAL) era
+    fija en system.py; ahora sale de config.CFG["system"]["terminals"]. Sin
+    tocar la config nueva, el orden de preferencia tiene que ser el de
+    siempre."""
+
+    OLD_ORDER = ["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole",
+                 "gnome-terminal", "xterm"]
+
+    def setUp(self):
+        self.env = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(self.env)))
+        os.environ.pop("TERMINAL", None)
+        self.old_terminals = list(config.CFG["system"]["terminals"])
+        self.addCleanup(lambda: config.CFG["system"].__setitem__("terminals", self.old_terminals))
+        self.old_which = system.shutil.which
+        self.addCleanup(lambda: setattr(system.shutil, "which", self.old_which))
+
+    def test_default_order_matches_the_old_hardcoded_list(self):
+        self.assertEqual(config.DEFAULTS["system"]["terminals"], self.OLD_ORDER)
+
+    def test_untouched_config_picks_the_same_terminal_as_before(self):
+        # sólo "foot" existe: con la lista de siempre, gana igual que antes
+        system.shutil.which = lambda n: "/usr/bin/foot" if n == "foot" else None
+        self.assertEqual(system._terminal(), "/usr/bin/foot")
+
+    def test_terminal_env_var_still_wins_over_the_config_list(self):
+        os.environ["TERMINAL"] = "myterm"
+        system.shutil.which = lambda n: "/usr/bin/" + n
+        self.assertEqual(system._terminal(), "/usr/bin/myterm")
+
+    def test_a_user_can_reorder_the_preference_via_config(self):
+        config.CFG["system"]["terminals"] = ["xterm", "kitty"]
+        system.shutil.which = lambda n: "/usr/bin/" + n if n in ("xterm", "kitty") else None
+        self.assertEqual(system._terminal(), "/usr/bin/xterm")
+
+    def test_nothing_found_returns_none(self):
+        config.CFG["system"]["terminals"] = ["madeup-term"]
+        system.shutil.which = lambda n: None
+        self.assertIsNone(system._terminal())
 
 
 class _patched_tray:

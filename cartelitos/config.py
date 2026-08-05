@@ -61,6 +61,13 @@ _CONFIG_COMMENTS = {
                        "via Hyprland, doesn't depend on a specific process);\n"
                        "false = never pause for games",
     },
+    "system": {
+        "not_a_game": "fullscreen windows that never count as \"a game\" for game_pause\n"
+                       "(a fullscreen video or browser tab is exactly when the lyrics\n"
+                       "should keep going); matched as a substring of the window class",
+        "terminals": "terminal emulators to try, in order, when opening the full menu —\n"
+                     "checked after $TERMINAL, which always wins if it's set",
+    },
     "crt": {
         "enabled": "true = start with the tube on",
         "screens": 'which screens the tube takes: "all" | "DP-1" | ["DP-1","DP-2"]\n'
@@ -199,6 +206,13 @@ DEFAULTS = {
         "np_vinyl": True, "troll_no": True, "click_through": False,
         "pause_clear": 15, "player": "spotify", "offset": 0.15,
         "game_pause": True,
+    },
+    "system": {
+        "not_a_game": ["chrome", "chromium", "firefox", "zen", "brave", "vivaldi",
+                       "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid",
+                       "haruna", "totem", "spotify", "netflix", "youtube"],
+        "terminals": ["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole",
+                      "gnome-terminal", "xterm"],
     },
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",

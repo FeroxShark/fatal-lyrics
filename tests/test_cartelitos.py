@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
-from cartelitos import audio, config, ipc, lyrics, system, util  # noqa: E402
+from cartelitos import audio, config, ipc, lyrics, system, tray, util  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -1675,6 +1675,86 @@ class TestOptionalTools(unittest.TestCase):
         printed = [l for l in out.stdout.splitlines() if l.strip()]
         for line in printed:
             self.assertIn("not found →", line)
+
+
+class TestTrayFallback(unittest.TestCase):
+    """start_tray() es opcional: sin gi/AyatanaAppIndicator3 el daemon tiene
+    que seguir vivo igual, dejando claro en el log qué falta. La detección de
+    "¿está gi?" es la misma que usa `fatal status` (system._tray_available),
+    no una copia: si una cambia y la otra no, este test lo agarra."""
+
+    def setUp(self):
+        # sacamos cualquier `gi` real que haya quedado cacheado en sys.modules
+        # (o el gi.repository de un test anterior) para que cada test arranque
+        # desde un import limpio.
+        self._removed = {}
+        for name in ("gi", "gi.repository"):
+            if name in sys.modules:
+                self._removed[name] = sys.modules.pop(name)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        for name in ("gi", "gi.repository"):
+            sys.modules.pop(name, None)
+        sys.modules.update(self._removed)
+
+    def test_gi_missing_logs_clearly_and_does_not_crash(self):
+        sys.modules["gi"] = None  # cualquier `import gi` levanta ImportError
+        out = io.StringIO()
+        threads_before = {t.ident for t in threading.enumerate()}
+        with mock.patch("sys.stdout", out):
+            result = tray.start_tray()  # no debe tirar excepción
+        self.assertIsNone(result)
+        self.assertIn("tray not available", out.getvalue())
+        self.assertIn("continuing without an icon", out.getvalue())
+        # sin gi no hay bandeja que levantar: no se lanzó el hilo "tray"
+        new_threads = [t for t in threading.enumerate()
+                       if t.ident not in threads_before]
+        self.assertFalse(any(t.name == "tray" for t in new_threads))
+
+    def test_uses_the_same_detection_as_fatal_status(self):
+        # misma pregunta ("¿puedo importar gi + Ayatana?") que hace
+        # system._tray_available() para `fatal status`; no se duplica la
+        # lógica, se comparte el resultado.
+        sys.modules["gi"] = None
+        self.assertFalse(system._tray_available())
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            tray.start_tray()
+        self.assertIn("tray not available", out.getvalue())
+
+    def test_start_tray_does_not_crash_when_gi_is_available(self):
+        # gi real puede estar instalado o no en la máquina que corre los
+        # tests; lo que importa acá no es que dibuje nada de GTK de verdad
+        # (eso levantaría un ícono real en la bandeja de quien corra la
+        # suite) sino que el código de armado del menú no reviente. Se
+        # simula gi con mocks que satisfacen la API que tray.py usa.
+        fake_gi = mock.MagicMock()
+        fake_repo = mock.MagicMock()
+        sys.modules["gi"] = fake_gi
+        sys.modules["gi.repository"] = fake_repo
+
+        # con Gtk.main() mockeado el hilo termina casi al instante, así que
+        # enumerarlo desde afuera es una carrera: interceptamos el propio
+        # threading.Thread que arma start_tray() para quedarnos con el
+        # objeto y poder esperarlo (join) de forma determinística.
+        created = []
+        real_thread = threading.Thread
+
+        def spy_thread(*args, **kwargs):
+            t = real_thread(*args, **kwargs)
+            created.append(t)
+            return t
+
+        with mock.patch("cartelitos.tray.threading.Thread", side_effect=spy_thread):
+            result = tray.start_tray()
+        self.assertIsNone(result)  # start_tray() no bloquea: lanza un hilo
+
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].name, "tray")
+        created[0].join(timeout=5)
+        self.assertFalse(created[0].is_alive(),
+                          "el hilo de la bandeja se quedó colgado")
 
 
 class TestTerminalPreference(unittest.TestCase):

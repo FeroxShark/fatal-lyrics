@@ -4,6 +4,7 @@ three-way lyrics result that the cache and the retry both depend on.
 
 Run with:  python3 -m unittest discover -s tests
 """
+import atexit
 import builtins
 import json
 import os
@@ -17,6 +18,7 @@ import urllib.error
 # El módulo lee la config al importarse, y la CREA si no existe: sin esto un
 # test tocaría la config real de quien corra la suite.
 _TMP = tempfile.TemporaryDirectory()
+atexit.register(_TMP.cleanup)  # si no, el finalizer avisa que quedó sin limpiar
 os.environ["XDG_CONFIG_HOME"] = os.path.join(_TMP.name, "config")
 os.environ["XDG_CACHE_HOME"] = os.path.join(_TMP.name, "cache")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -231,7 +233,10 @@ class TestFetchLyrics(unittest.TestCase):
 
     def test_server_says_no_match_is_none_not_error(self):
         def not_found(url):
-            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+            # con fp=None, HTTPError se abre un TemporaryFile propio: hay que cerrarlo
+            err = urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+            self.addCleanup(err.close)
+            raise err
         self.patch_http(not_found)
         self.assertEqual(c.fetch_lyrics(TRACK), ("none", None))
 

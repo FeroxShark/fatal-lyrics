@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import time
+import traceback
 
 from . import config
 from . import ipc
@@ -418,7 +419,7 @@ def _default_sink():
         name = out.stdout.strip()
         if out.returncode == 0 and name:
             return name
-    except (OSError, subprocess.SubprocessError) as e:
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
         # pactl que no está (OSError) o que se colgó (TimeoutExpired). Cualquier
         # otra cosa —args mal armados, por ejemplo— es un bug y tiene que explotar
         log(f"couldn't ask for the default sink ({type(e).__name__}: {e})")
@@ -440,7 +441,7 @@ def _sink_node_id(name):
                              capture_output=True, text=True, timeout=3)
         if out.returncode == 0:
             return sink_node_id(out.stdout, name)
-    except (OSError, subprocess.SubprocessError) as e:
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
         # idem: sin id se cae a parec por nombre, pero que se sepa por qué
         log(f"couldn't list the sinks ({type(e).__name__}: {e})")
     return None
@@ -469,6 +470,22 @@ def _audio_command():
 
 
 def audio_loop():
+    """Supervisor del hilo de audio.
+
+    daemon.py lanza esto en un Thread pelado: si una excepción se escapa, el hilo
+    muere y el tubo se queda sin reaccionar a la música PARA SIEMPRE, sin ruido
+    ni error visible, hasta reiniciar el daemon. Los except de acá abajo son
+    angostos a propósito (un typo en los args de un subprocess tiene que verse),
+    así que el reintento vive acá: se loguea entero y se vuelve a levantar."""
+    while True:
+        try:
+            _capture_loop()
+        except Exception:
+            log("audio thread blew up, restarting it:\n" + traceback.format_exc())
+            time.sleep(5)
+
+
+def _capture_loop():
     """Graba y manda eventos mientras el tubo esté prendido. Fuera del modo CRT
     no se abre ni el proceso: cero consumo cuando no se ve."""
     while True:

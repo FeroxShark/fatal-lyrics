@@ -11,124 +11,190 @@ CRT_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-c
 CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "cartelitos")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
 
-DEFAULT_CONFIG = """\
-# fatal-lyrics — configuration
-# Saving this file applies the changes right away. Menu: fatal config
+def _toml_val(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        return f'"{v}"'
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_val(x) for x in v) + "]"
+    return str(v)
 
-[display]
-screen = "auto"        # "auto" (first monitor) | "all" (every one) | "DP-1" | ["DP-1", "DP-2"]
-max_dialogs = 0        # max live dialogs at once; 0 = unlimited
-scale = 1.0            # base size for all dialogs
-current_scale = 1.3    # extra size factor for the current-line dialog
-spawn_area = "full"    # full | top | bottom | left | right | edges (leaves the center clear)
-karaoke = false        # current line paints word by word (estimated timing)
 
-[effects]
-glitch = "normal"      # off | soft | normal | aggressive
-effects_on_current = false  # true = the current dialog also vibrates/glitches
-tearing = true         # old dialogs get a split window
-death_age_min = 3      # a dialog dies between N…
-death_age_max = 7      # …and M dialogs after it appears
-max_lifetime = 60      # max lifetime per dialog in seconds; 0 = unlimited
-burn_in = true         # dead dialogs leave a fading burnt shadow
-cascade = true         # on track change, dialogs die in a chain (CRT domino)
+# Comentario de cada perilla del TOML de ejemplo. No vive en DEFAULTS porque
+# DEFAULTS es sólo valores (lo que se aplica); esto es sólo prosa (lo que se
+# lee en `fatal config`). Un string con "\n" es un comentario de varias
+# líneas, alineado bajo la primera. Perder esta prosa por generar el TOML
+# a mano sería peor que el problema que estamos resolviendo, así que separar
+# valores (DEFAULTS) de texto (esto) es lo que permite generar el archivo
+# sin perderla.
+_CONFIG_COMMENTS = {
+    "display": {
+        "screen": '"auto" (first monitor) | "all" (every one) | "DP-1" | ["DP-1", "DP-2"]',
+        "max_dialogs": "max live dialogs at once; 0 = unlimited",
+        "scale": "base size for all dialogs",
+        "current_scale": "extra size factor for the current-line dialog",
+        "spawn_area": "full | top | bottom | left | right | edges (leaves the center clear)",
+        "karaoke": "current line paints word by word (estimated timing)",
+    },
+    "effects": {
+        "glitch": "off | soft | normal | aggressive",
+        "effects_on_current": "true = the current dialog also vibrates/glitches",
+        "tearing": "old dialogs get a split window",
+        "death_age_min": "a dialog dies between N…",
+        "death_age_max": "…and M dialogs after it appears",
+        "max_lifetime": "max lifetime per dialog in seconds; 0 = unlimited",
+        "burn_in": "dead dialogs leave a fading burnt shadow",
+        "cascade": "on track change, dialogs die in a chain (CRT domino)",
+    },
+    "behavior": {
+        "now_playing": "vinyl sleeve with album art on track change",
+        "np_corner": "where the sleeve docks: top-left | top-right | bottom-left | bottom-right | center",
+        "np_margin": "free pixels against the edges (in case of a bar/panel)",
+        "np_vinyl": "spinning vinyl record peeking out of the sleeve",
+        "troll_no": 'the "No" button duplicates the dialog; false = just closes it',
+        "click_through": "true = dialogs don't capture the mouse (clicks pass through)",
+        "pause_clear": "seconds paused before clearing everything; 0 = never",
+        "player": "MPRIS player name (see: playerctl -l)",
+        "offset": "sync lead time in seconds",
+        "game_pause": 'auto-pause when a window goes fullscreen (generic "game" heuristic\n'
+                       "via Hyprland, doesn't depend on a specific process);\n"
+                       "false = never pause for games",
+    },
+    "crt": {
+        "enabled": "true = start with the tube on",
+        "screens": 'which screens the tube takes: "all" | "DP-1" | ["DP-1","DP-2"]\n'
+                   '| "same" (the same ones the dialogs use)',
+        "order": "screen order, left to right — this is what decides where each\n"
+                 'piece of a split line lands. "auto" = the layout the compositor\n'
+                 'already knows; or name them: ["DP-1", "HDMI-A-1", "DP-2"]',
+        "palette": "where the two colours come from:\n"
+                   '  "album" = from the cover of what\'s playing (needs\n'
+                   "            ImageMagick; falls back to the presets)\n"
+                   '  "auto"  = a preset picked by the register of the song\n'
+                   "  or a preset by name: dragons | ado | poison | bloodline\n"
+                   "            | vapor | bone\n"
+                   "Each palette is TWO faces that go together — one lit screen\n"
+                   "(burnt background, dark letters) and one dark tube (deep\n"
+                   "background, glowing letters). Your screens alternate between\n"
+                   "them, so there are never three colours fighting each other.",
+        "split": "how the line is spread over several screens:\n"
+                 "mixed = whole phrase, and short lines cut in pieces\n"
+                 "whole = never cut | fragment = always cut short lines",
+        "director": "the lyric travels across the screens instead of showing the\n"
+                    "same thing on all of them at once: one screen is in focus,\n"
+                    "the phrase continues on the next one, the rest go quiet",
+        "focus": '"roam" = the focus moves around | "all" = every screen shows\n'
+                 "the whole line at the same time (the old behaviour)",
+        "audio": "react to what's actually playing (captures the sound card's\n"
+                 "monitor with pw-record/parec — no extra packages). Only while\n"
+                 "the tube is up. false = everything follows the lyric clock",
+        "color_from_pitch": "the phosphor leans on the register of what's playing:\n"
+                             "high voices go cyan/blue, low ones amber/red. Only used when\n"
+                             "the cover gives no colours — with art, the palette is the\n"
+                             "album's and doesn't move for the whole track",
+        "color_hold": "seconds a colour has to stay before it may change again. It\n"
+                      "is a floor, not a licence: a colour change also has to land\n"
+                      "on a peak of the song, so it happens two or three times a\n"
+                      "track and not every ten seconds",
+        "motifs": "animations on the quiet screens (an eye, a scope, a radar,\n"
+                  "falling data, hyperspace, a test card, the sea)",
+        "water": "the two water animations: a sea of loose points seen in\n"
+                 "perspective, and a dish of water that stands still and\n"
+                 "SHIVERS at the frequency of what is playing. They take their\n"
+                 "turn like every other animation; false = leave them out",
+        "water_amp": "how much the water moves (0 = a flat field of points)",
+        "camera": "how much the framing moves (letterbox, zoom); 0 = still",
+        "quality": "resolution the tube is drawn at, before the CRT pass (1.0 =\n"
+                   "native). Lower it on a weaker GPU: the glass, the bloom and\n"
+                   "the phosphor grid hide most of the difference",
+        "exit_on": "how you get out of the tube:\n"
+                   '  "mouse"    = cursor hidden, moving it (or a click, or the\n'
+                   "               wheel) returns\n"
+                   '  "keyboard" = any key returns, but the cursor stays visible\n'
+                   "(a layer surface can't hold the keyboard and the pointer at\n"
+                   "once; `fatal crt off` and a compositor keybind always work)",
+        "font": 'font family for the lyric; "" = system default',
+        "chrome": "console readouts (REC, track, timecode, progress bar). Off by\n"
+                  "default: full screen, nothing else on it",
+        "intensity": "how restless the tube is: signal breaks, how hard beats\n"
+                     "shake it, static. 0 = dead still, 1 = the old behaviour",
+        "word_flash": "how much each word jolts as it lands — the white flash, the\n"
+                      "misaligned colour ghosts and the size kick, all on this one\n"
+                      "knob: 0 = the word simply appears, 1 = it lands white and\n"
+                      "shaking. This is not the tube beating — it happens on EVERY\n"
+                      'word, which is what reads as "the letters keep flickering"',
+        "flicker": "how hard the picture beats with the music. How OFTEN is not\n"
+                   "a knob: the tube only beats on the peaks of the song — the\n"
+                   "highest few moments measured against the whole track, at\n"
+                   "least 15 s apart and a handful per song. A beat is not every\n"
+                   "kick drum; if it were, it would beat all the time.\n"
+                   "0 = nothing moves with the volume (not the light, not the\n"
+                   "camera, not the animations on the other screens). Above ~0.6\n"
+                   "a peak can also drop a frame or two to black",
+        "curvature": "how fat the tube glass is (0 = flat panel)",
+        "scanlines": "depth of the horizontal comb",
+        "chroma": "steady RGB misalignment",
+        "bloom": "phosphor glow around the letters",
+        "noise": "static",
+        "roll": "brightness bar rolling down the tube",
+        "vignette": "darkening towards the corners",
+    },
+}
 
-[behavior]
-now_playing = true     # vinyl sleeve with album art on track change
-np_corner = "top-right"  # where the sleeve docks: top-left | top-right | bottom-left | bottom-right | center
-np_margin = 14         # free pixels against the edges (in case of a bar/panel)
-np_vinyl = true        # spinning vinyl record peeking out of the sleeve
-troll_no = true        # the "No" button duplicates the dialog; false = just closes it
-click_through = false  # true = dialogs don't capture the mouse (clicks pass through)
-pause_clear = 15       # seconds paused before clearing everything; 0 = never
-player = "spotify"     # MPRIS player name (see: playerctl -l)
-offset = 0.15          # sync lead time in seconds
-game_pause = true      # auto-pause when a window goes fullscreen (generic "game" heuristic
-                        # via Hyprland, doesn't depend on a specific process);
-                        # false = never pause for games
+# Encabezado de archivo y, para alguna sección, un bloque de comentario antes
+# de la primera clave (hoy sólo [crt], que necesita explicar el modo entero).
+_CONFIG_HEADER = ("# fatal-lyrics — configuration\n"
+                   "# Saving this file applies the changes right away. Menu: fatal config")
+_SECTION_INTRO = {
+    "crt": "# CRT mode: every screen becomes one big cathode ray tube showing the lyric.\n"
+           "# It covers the whole desktop, so it is opt-in and toggled by hand:\n"
+           "#   fatal crt on | off | toggle     (works even if the daemon is dead)",
+}
+# Orden de despliegue en el TOML de ejemplo (DEFAULTS trae un orden distinto
+# adentro de [crt], agrupado por afinidad para _config_event/tune, no por
+# lectura). Las claves que falten acá se listan al final en el orden de
+# DEFAULTS, así que no hace falta tocar esto para que una perilla nueva
+# aparezca — sólo para elegir DÓNDE cae entre las demás.
+_CRT_READING_ORDER = (
+    "enabled", "screens", "order", "palette", "split", "director", "focus",
+    "audio", "color_from_pitch", "color_hold", "motifs", "water", "water_amp",
+    "camera", "quality", "exit_on", "font", "chrome", "intensity",
+    "word_flash", "flicker", "curvature", "scanlines", "chroma", "bloom",
+    "noise", "roll", "vignette",
+)
+_SECTION_KEY_ORDER = {"crt": _CRT_READING_ORDER}
 
-[crt]
-# CRT mode: every screen becomes one big cathode ray tube showing the lyric.
-# It covers the whole desktop, so it is opt-in and toggled by hand:
-#   fatal crt on | off | toggle     (works even if the daemon is dead)
-enabled = false        # true = start with the tube on
-screens = "all"        # which screens the tube takes: "all" | "DP-1" | ["DP-1","DP-2"]
-                       # | "same" (the same ones the dialogs use)
-order = "auto"         # screen order, left to right — this is what decides where each
-                       # piece of a split line lands. "auto" = the layout the compositor
-                       # already knows; or name them: ["DP-1", "HDMI-A-1", "DP-2"]
-palette = "album"      # where the two colours come from:
-                       #   "album" = from the cover of what's playing (needs
-                       #             ImageMagick; falls back to the presets)
-                       #   "auto"  = a preset picked by the register of the song
-                       #   or a preset by name: dragons | ado | poison | bloodline
-                       #             | vapor | bone
-                       # Each palette is TWO faces that go together — one lit screen
-                       # (burnt background, dark letters) and one dark tube (deep
-                       # background, glowing letters). Your screens alternate between
-                       # them, so there are never three colours fighting each other.
-split = "mixed"        # how the line is spread over several screens:
-                       # mixed = whole phrase, and short lines cut in pieces
-                       # whole = never cut | fragment = always cut short lines
-director = true        # the lyric travels across the screens instead of showing the
-                       # same thing on all of them at once: one screen is in focus,
-                       # the phrase continues on the next one, the rest go quiet
-focus = "roam"         # "roam" = the focus moves around | "all" = every screen shows
-                       # the whole line at the same time (the old behaviour)
-audio = true           # react to what's actually playing (captures the sound card's
-                       # monitor with pw-record/parec — no extra packages). Only while
-                       # the tube is up. false = everything follows the lyric clock
-color_from_pitch = true  # the phosphor leans on the register of what's playing:
-                       # high voices go cyan/blue, low ones amber/red. Only used when
-                       # the cover gives no colours — with art, the palette is the
-                       # album's and doesn't move for the whole track
-color_hold = 10        # seconds a colour has to stay before it may change again. It
-                       # is a floor, not a licence: a colour change also has to land
-                       # on a peak of the song, so it happens two or three times a
-                       # track and not every ten seconds
-motifs = true          # animations on the quiet screens (an eye, a scope, a radar,
-                       # falling data, hyperspace, a test card, the sea)
-water = true           # the two water animations: a sea of loose points seen in
-                       # perspective, and a dish of water that stands still and
-                       # SHIVERS at the frequency of what is playing. They take their
-                       # turn like every other animation; false = leave them out
-water_amp = 0.55       # how much the water moves (0 = a flat field of points)
-camera = 1.0           # how much the framing moves (letterbox, zoom); 0 = still
-quality = 1.0          # resolution the tube is drawn at, before the CRT pass (1.0 =
-                       # native). Lower it on a weaker GPU: the glass, the bloom and
-                       # the phosphor grid hide most of the difference
-exit_on = "mouse"      # how you get out of the tube:
-                       #   "mouse"    = cursor hidden, moving it (or a click, or the
-                       #                wheel) returns
-                       #   "keyboard" = any key returns, but the cursor stays visible
-                       # (a layer surface can't hold the keyboard and the pointer at
-                       # once; `fatal crt off` and a compositor keybind always work)
-font = ""              # font family for the lyric; "" = system default
-chrome = false         # console readouts (REC, track, timecode, progress bar). Off by
-                       # default: full screen, nothing else on it
-intensity = 0.45       # how restless the tube is: signal breaks, how hard beats
-                       # shake it, static. 0 = dead still, 1 = the old behaviour
-word_flash = 0.3       # how much each word jolts as it lands — the white flash, the
-                       # misaligned colour ghosts and the size kick, all on this one
-                       # knob: 0 = the word simply appears, 1 = it lands white and
-                       # shaking. This is not the tube beating — it happens on EVERY
-                       # word, which is what reads as "the letters keep flickering"
-flicker = 0.25         # how hard the picture beats with the music. How OFTEN is not
-                       # a knob: the tube only beats on the peaks of the song — the
-                       # highest few moments measured against the whole track, at
-                       # least 15 s apart and a handful per song. A beat is not every
-                       # kick drum; if it were, it would beat all the time.
-                       # 0 = nothing moves with the volume (not the light, not the
-                       # camera, not the animations on the other screens). Above ~0.6
-                       # a peak can also drop a frame or two to black
-curvature = 1.0        # how fat the tube glass is (0 = flat panel)
-scanlines = 0.5        # depth of the horizontal comb
-chroma = 0.6           # steady RGB misalignment
-bloom = 1.0            # phosphor glow around the letters
-noise = 0.22           # static
-roll = 0.5             # brightness bar rolling down the tube
-vignette = 0.9         # darkening towards the corners
-"""
+
+def _render_default_config(defaults):
+    """Arma el TOML de ejemplo a partir de DEFAULTS (valores) y
+    _CONFIG_COMMENTS (prosa): una única fuente para los valores, en vez de
+    mantenerlos escritos dos veces (acá y en DEFAULTS)."""
+    lines = [_CONFIG_HEADER, ""]
+    for section, values in defaults.items():
+        lines.append(f"[{section}]")
+        intro = _SECTION_INTRO.get(section)
+        if intro:
+            lines.append(intro)
+        comments = _CONFIG_COMMENTS.get(section, {})
+        order = _SECTION_KEY_ORDER.get(section, ())
+        keys = list(order) + [k for k in values if k not in order]
+        assigns = {k: f"{k} = {_toml_val(values[k])}" for k in keys}
+        width = max(len(a) for a in assigns.values())
+        for key in keys:
+            assign = assigns[key]
+            comment = comments.get(key)
+            if not comment:
+                lines.append(assign)
+                continue
+            clines = comment.split("\n")
+            pad = " " * (width - len(assign) + 1)
+            lines.append(f"{assign}{pad}# {clines[0]}")
+            for extra in clines[1:]:
+                lines.append(" " * (width + 1) + "# " + extra)
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
 
 DEFAULTS = {
     "display": {
@@ -156,6 +222,9 @@ DEFAULTS = {
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
     },
 }
+
+DEFAULT_CONFIG = _render_default_config(DEFAULTS)
+
 
 def read_config():
     """Lee el TOML mezclado sobre los defaults. Propaga la excepción si está roto."""
@@ -326,15 +395,8 @@ def watch_config():
         apply_config()
 
 # ------------------------------------------------- escritura del TOML
-
-def _toml_val(v):
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, str):
-        return f'"{v}"'
-    if isinstance(v, list):
-        return "[" + ", ".join(_toml_val(x) for x in v) + "]"
-    return str(v)
+# (_toml_val vive arriba, junto al resto del renderer del TOML de ejemplo:
+# ambos formatean el mismo tipo de valor)
 
 
 def _save_config(changes):

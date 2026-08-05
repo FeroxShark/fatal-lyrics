@@ -25,36 +25,42 @@ def _song_pos():
 _send_lock = threading.Lock()
 
 
+# (clave del evento, sección de CFG, clave dentro de la sección). Cada perilla
+# que el overlay necesita conocer se agrega ACÁ, en vez de a mano en el dict
+# de _config_event: una lista de datos en vez de 45 líneas repetidas.
+CONFIG_EVENT_MAP = (
+    ("screen", "display", "screen"), ("max_dialogs", "display", "max_dialogs"),
+    ("scale", "display", "scale"), ("current_scale", "display", "current_scale"),
+    ("spawn_area", "display", "spawn_area"), ("karaoke", "display", "karaoke"),
+    ("glitch", "effects", "glitch"), ("effects_on_current", "effects", "effects_on_current"),
+    ("tearing", "effects", "tearing"), ("death_age_min", "effects", "death_age_min"),
+    ("death_age_max", "effects", "death_age_max"), ("max_lifetime", "effects", "max_lifetime"),
+    ("burn_in", "effects", "burn_in"), ("cascade", "effects", "cascade"),
+    ("click_through", "behavior", "click_through"), ("troll_no", "behavior", "troll_no"),
+    ("np_corner", "behavior", "np_corner"), ("np_margin", "behavior", "np_margin"),
+    ("np_vinyl", "behavior", "np_vinyl"),
+    ("crt_screens", "crt", "screens"), ("crt_order", "crt", "order"),
+    ("crt_palette", "crt", "palette"), ("crt_split", "crt", "split"),
+    ("crt_exit_on", "crt", "exit_on"), ("crt_director", "crt", "director"),
+    ("crt_focus", "crt", "focus"), ("crt_color_from_pitch", "crt", "color_from_pitch"),
+    ("crt_color_hold", "crt", "color_hold"), ("crt_motifs", "crt", "motifs"),
+    ("crt_water", "crt", "water"), ("crt_water_amp", "crt", "water_amp"),
+    ("crt_camera", "crt", "camera"), ("crt_quality", "crt", "quality"),
+    ("crt_flicker", "crt", "flicker"), ("crt_word_flash", "crt", "word_flash"),
+    ("crt_font", "crt", "font"), ("crt_chrome", "crt", "chrome"),
+    ("crt_intensity", "crt", "intensity"), ("crt_curvature", "crt", "curvature"),
+    ("crt_scanlines", "crt", "scanlines"), ("crt_chroma", "crt", "chroma"),
+    ("crt_bloom", "crt", "bloom"), ("crt_noise", "crt", "noise"),
+    ("crt_roll", "crt", "roll"), ("crt_vignette", "crt", "vignette"),
+)
+
+
 def _config_event():
     cfg = config.CFG
-    d, e, b, c = cfg["display"], cfg["effects"], cfg["behavior"], cfg["crt"]
-    return {
-        "cmd": "config",
-        "screen": d["screen"], "max_dialogs": d["max_dialogs"],
-        "scale": d["scale"], "current_scale": d["current_scale"],
-        "spawn_area": d["spawn_area"], "karaoke": d["karaoke"],
-        "glitch": e["glitch"], "effects_on_current": e["effects_on_current"],
-        "tearing": e["tearing"], "death_age_min": e["death_age_min"],
-        "death_age_max": e["death_age_max"], "max_lifetime": e["max_lifetime"],
-        "burn_in": e["burn_in"], "cascade": e["cascade"],
-        "click_through": b["click_through"], "troll_no": b["troll_no"],
-        "np_corner": b["np_corner"], "np_margin": b["np_margin"],
-        "np_vinyl": b["np_vinyl"],
-        "crt_screens": c["screens"], "crt_order": c["order"],
-        "crt_palette": c["palette"],
-        "crt_split": c["split"], "crt_exit_on": c["exit_on"],
-        "crt_director": c["director"], "crt_focus": c["focus"],
-        "crt_color_from_pitch": c["color_from_pitch"],
-        "crt_color_hold": c["color_hold"], "crt_motifs": c["motifs"],
-        "crt_water": c["water"], "crt_water_amp": c["water_amp"],
-        "crt_camera": c["camera"], "crt_quality": c["quality"],
-        "crt_flicker": c["flicker"], "crt_word_flash": c["word_flash"],
-        "crt_font": c["font"], "crt_chrome": c["chrome"],
-        "crt_intensity": c["intensity"], "crt_curvature": c["curvature"],
-        "crt_scanlines": c["scanlines"], "crt_chroma": c["chroma"],
-        "crt_bloom": c["bloom"], "crt_noise": c["noise"],
-        "crt_roll": c["roll"], "crt_vignette": c["vignette"],
-    }
+    ev = {"cmd": "config"}
+    for event_key, section, cfg_key in CONFIG_EVENT_MAP:
+        ev[event_key] = cfg[section][cfg_key]
+    return ev
 
 
 def send(event):

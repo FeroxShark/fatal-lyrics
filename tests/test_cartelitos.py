@@ -641,8 +641,9 @@ class TestCrtSwitch(unittest.TestCase):
 
 
 class TestConfigEvent(unittest.TestCase):
-    """El evento de config se arma a mano: una clave nueva en DEFAULTS que no se
-    agregue acá nunca llega al overlay, y no falla nada — simplemente no anda."""
+    """El evento de config se arma con CONFIG_EVENT_MAP: una clave nueva en
+    DEFAULTS que no se agregue a ese mapa nunca llega al overlay, y no falla
+    nada — simplemente no anda."""
 
     def test_every_crt_key_reaches_the_overlay(self):
         ev = c._config_event()
@@ -656,6 +657,30 @@ class TestConfigEvent(unittest.TestCase):
 
     def test_the_event_is_json(self):
         json.dumps(c._config_event())
+
+    def test_config_event_map_points_at_real_defaults_keys(self):
+        # cada (evento, sección, clave) del mapa tiene que apuntar a algo que
+        # exista de verdad en DEFAULTS: una entrada con una sección/clave con
+        # un typo rompería silenciosamente en runtime (KeyError) recién cuando
+        # se manda el primer evento, no al importar el módulo
+        for event_key, section, cfg_key in ipc.CONFIG_EVENT_MAP:
+            self.assertIn(section, c.DEFAULTS, f"{event_key}: sección {section} no existe")
+            self.assertIn(cfg_key, c.DEFAULTS[section],
+                          f"{event_key}: {section}.{cfg_key} no existe en DEFAULTS")
+
+    def test_config_event_map_has_no_duplicate_event_keys(self):
+        event_keys = [ek for ek, _, _ in ipc.CONFIG_EVENT_MAP]
+        self.assertEqual(len(event_keys), len(set(event_keys)),
+                          "CONFIG_EVENT_MAP repite una clave de evento")
+
+    def test_config_event_matches_the_map(self):
+        # el evento no es más que el mapa evaluado contra CFG: si algún día
+        # alguien vuelve a escribir _config_event a mano, esto lo detecta
+        ev = c._config_event()
+        expected = {"cmd": "config"}
+        for event_key, section, cfg_key in ipc.CONFIG_EVENT_MAP:
+            expected[event_key] = config.CFG[section][cfg_key]
+        self.assertEqual(ev, expected)
 
 
 class TestCrtOrder(unittest.TestCase):
@@ -1299,17 +1324,38 @@ class TestTuneChannel(unittest.TestCase):
 
 
 class TestKnobsAreReachable(unittest.TestCase):
-    """Una perilla nueva se agrega en cuatro lugares (DEFAULTS, el TOML de
-    ejemplo, el evento al overlay y, si tiene slider, tune.qml). Olvidarse de
-    uno no rompe nada: simplemente la perilla no hace nada, que es peor."""
+    """Una perilla nueva se agrega hoy en tres lugares: DEFAULTS (valor),
+    CONFIG_EVENT_MAP (si el overlay la necesita) y, si tiene slider, tune.qml.
+    El TOML de ejemplo (DEFAULT_CONFIG) ya NO es un cuarto lugar: se genera
+    solo a partir de DEFAULTS + un dict de comentarios (_CONFIG_COMMENTS), así
+    que sólo hace falta agregar el comentario ahí si se quiere prosa — la
+    clave y el valor salen solos. Olvidarse de un lugar no rompe nada:
+    simplemente la perilla no hace nada, que es peor — de ahí que estos tests
+    verifiquen la sincronía en vez de sólo documentarla en prosa."""
 
     SHELL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shell")
 
-    def test_the_sample_toml_declares_every_crt_key(self):
-        # `fatal edit` abre este archivo: lo que no está escrito no existe
+    def test_the_sample_toml_declares_every_key_with_the_default_value(self):
+        # `fatal edit` abre este archivo: lo que no está escrito no existe.
+        # Se parsea el TOML generado y se compara contra DEFAULTS entero (no
+        # sólo [crt]): así un DEFAULT_CONFIG desincronizado de DEFAULTS revienta
+        # el test en vez de silenciosamente servir otro default al usuario.
+        import tomllib
+        parsed = tomllib.loads(c.DEFAULT_CONFIG)
+        self.assertEqual(parsed, c.DEFAULTS,
+                          "el TOML de ejemplo generado no coincide con DEFAULTS")
+
+    def test_default_config_is_generated_from_defaults(self):
+        # si alguien vuelve a escribir DEFAULT_CONFIG a mano en vez de generarlo,
+        # este test lo detecta aunque el contenido coincida por casualidad
+        self.assertEqual(c.DEFAULT_CONFIG, config._render_default_config(c.DEFAULTS))
+
+    def test_every_crt_key_has_a_comment(self):
+        # no es obligatorio, pero una perilla sin prosa en `fatal config` es
+        # una perilla que nadie sabe que existe
         for key in c.DEFAULTS["crt"]:
-            self.assertRegex(c.DEFAULT_CONFIG, rf"(?m)^{key} = ",
-                             f"crt.{key} no está en el TOML de ejemplo")
+            self.assertIn(key, config._CONFIG_COMMENTS["crt"],
+                          f"crt.{key} no tiene comentario en _CONFIG_COMMENTS")
 
     def test_every_slider_is_a_numeric_crt_key(self):
         # el panel escribe `clave=valor` y parse_tune descarta lo que no es un

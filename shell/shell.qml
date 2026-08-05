@@ -896,52 +896,37 @@ ShellRoot {
         root.dialogList = root.dialogList.filter(d => d.serial !== serial);
     }
 
+    // evento -> propiedad. Es sólo una tabla de datos leída por applyConfig
+    // (abajo): asignaciones planas `x = ev.k ?? x`, sin lógica ni orden que
+    // importe entre ellas (ninguna de estas propiedades tiene un
+    // onXxxChanged que dependa de las demás), así que iterarla en vez de
+    // repetirla a mano no cambia nada de lo que se ve ni de cuándo dispara.
+    readonly property var _configEventMap: ({
+        screen: "targetScreen", max_dialogs: "maxDialogs", scale: "cfgScale",
+        current_scale: "cfgCurrentScale", spawn_area: "spawnArea", glitch: "glitchLevel",
+        effects_on_current: "effectsOnCurrent", tearing: "tearingOn",
+        death_age_min: "deathAgeMin", death_age_max: "deathAgeMax", max_lifetime: "maxLifetime",
+        click_through: "clickThrough", troll_no: "trollNo", burn_in: "burnIn",
+        cascade: "cascadeDeath", karaoke: "karaokeOn",
+        np_corner: "npCorner", np_margin: "npMargin", np_vinyl: "npVinyl",
+        crt_screens: "crtScreens", crt_order: "crtOrder", crt_exit_on: "crtExitOn",
+        crt_palette: "crtPalette", crt_split: "crtSplit", crt_font: "crtFont",
+        crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
+        crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
+        crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
+        crt_director: "crtDirector", crt_focus: "crtFocusMode",
+        crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
+        crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
+        crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
+        crt_water: "crtWater", crt_water_amp: "crtWaterAmp",
+    })
+
     function applyConfig(ev) {
-        targetScreen = ev.screen ?? targetScreen;
-        maxDialogs = ev.max_dialogs ?? maxDialogs;
-        cfgScale = ev.scale ?? cfgScale;
-        cfgCurrentScale = ev.current_scale ?? cfgCurrentScale;
-        spawnArea = ev.spawn_area ?? spawnArea;
-        glitchLevel = ev.glitch ?? glitchLevel;
-        effectsOnCurrent = ev.effects_on_current ?? effectsOnCurrent;
-        tearingOn = ev.tearing ?? tearingOn;
-        deathAgeMin = ev.death_age_min ?? deathAgeMin;
-        deathAgeMax = ev.death_age_max ?? deathAgeMax;
-        maxLifetime = ev.max_lifetime ?? maxLifetime;
-        clickThrough = ev.click_through ?? clickThrough;
-        trollNo = ev.troll_no ?? trollNo;
-        burnIn = ev.burn_in ?? burnIn;
-        cascadeDeath = ev.cascade ?? cascadeDeath;
-        karaokeOn = ev.karaoke ?? karaokeOn;
-        npCorner = ev.np_corner ?? npCorner;
-        npMargin = ev.np_margin ?? npMargin;
-        npVinyl = ev.np_vinyl ?? npVinyl;
-        crtScreens = ev.crt_screens ?? crtScreens;
-        crtOrder = ev.crt_order ?? crtOrder;
-        crtExitOn = ev.crt_exit_on ?? crtExitOn;
-        crtPalette = ev.crt_palette ?? crtPalette;
-        crtSplit = ev.crt_split ?? crtSplit;
-        crtFont = ev.crt_font ?? crtFont;
-        crtCurvature = ev.crt_curvature ?? crtCurvature;
-        crtScanlines = ev.crt_scanlines ?? crtScanlines;
-        crtChroma = ev.crt_chroma ?? crtChroma;
-        crtBloom = ev.crt_bloom ?? crtBloom;
-        crtNoise = ev.crt_noise ?? crtNoise;
-        crtRoll = ev.crt_roll ?? crtRoll;
-        crtVignette = ev.crt_vignette ?? crtVignette;
-        crtIntensity = ev.crt_intensity ?? crtIntensity;
-        crtChrome = ev.crt_chrome ?? crtChrome;
-        crtDirector = ev.crt_director ?? crtDirector;
-        crtFocusMode = ev.crt_focus ?? crtFocusMode;
-        crtColorFromPitch = ev.crt_color_from_pitch ?? crtColorFromPitch;
-        crtColorHold = ev.crt_color_hold ?? crtColorHold;
-        crtMotifs = ev.crt_motifs ?? crtMotifs;
-        crtCamera = ev.crt_camera ?? crtCamera;
-        crtQuality = ev.crt_quality ?? crtQuality;
-        crtFlicker = ev.crt_flicker ?? crtFlicker;
-        crtWordFlash = ev.crt_word_flash ?? crtWordFlash;
-        crtWater = ev.crt_water ?? crtWater;
-        crtWaterAmp = ev.crt_water_amp ?? crtWaterAmp;
+        const map = root._configEventMap;
+        for (const key in map) {
+            const prop = map[key];
+            root[prop] = ev[key] ?? root[prop];
+        }
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear

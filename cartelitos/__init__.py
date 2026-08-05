@@ -40,7 +40,7 @@ from .lyrics import (
 from .art import album_colors, parse_histogram, send_album_colors
 
 from .system import (
-    NOT_A_GAME, OPTIONAL_TOOLS, gaming, health_lines, is_game_window,
+    OPTIONAL_TOOLS, gaming, health_lines, is_game_window,
     missing_tools, playerctl_state,
     _daemon_pid, _monitors, _monitors_lr, _players, _terminal, _tray_available,
 )

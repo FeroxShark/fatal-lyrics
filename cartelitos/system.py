@@ -81,24 +81,18 @@ def playerctl_state():
         return None
 
 
-# Ventanas que se ponen en pantalla completa TODO el tiempo y no son un juego:
-# un video a pantalla completa es justo cuando uno quiere que esto siga andando.
-# El default vive en config.DEFAULTS["system"]["not_a_game"]; esto es sólo el
-# valor de fábrica expuesto con el nombre de siempre — is_game_window() lee
-# la lista viva (config.CFG), que el usuario puede pisar en config.toml.
-NOT_A_GAME = tuple(config.DEFAULTS["system"]["not_a_game"])
-
-
 def is_game_window(win):
     """¿Esa ventana a pantalla completa es un juego, o alguien mirando un video?
 
     La heurística de "fullscreen = juego" sola es demasiado ancha: un YouTube a
     pantalla completa apagaba la letra entera, que es exactamente cuando uno la
-    quiere. Se mira la clase de la ventana antes de cortar.
+    quiere. Se mira la clase de la ventana antes de cortar contra la lista
+    configurable config.CFG["system"]["not_a_game"] (default en
+    config.DEFAULTS, ver config.toml).
 
     `win` es el JSON de `hyprctl activewindow -j` (claves fullscreen,
-    fullscreenClient, class, initialClass): la forma es de Hyprland, aunque la
-    función en sí es pura y no shellea nada."""
+    fullscreenClient, class, initialClass): la forma es de Hyprland. La
+    función no shellea nada — sí lee la config viva, así que no es pura."""
     if not win:
         return False
     if win.get("fullscreen", 0) == 0 and win.get("fullscreenClient", 0) == 0:

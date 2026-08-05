@@ -1144,10 +1144,9 @@ class TestNotAGameConfigurable(unittest.TestCase):
         self.addCleanup(lambda: config.CFG["system"].__setitem__("not_a_game", self.old))
 
     def test_default_matches_the_old_hardcoded_tuple(self):
-        # el valor de fábrica de system.py (NOT_A_GAME) tiene que seguir
-        # siendo exactamente el default de config, para que nadie que no
-        # toque config.toml note ninguna diferencia
-        self.assertEqual(tuple(config.DEFAULTS["system"]["not_a_game"]), system.NOT_A_GAME)
+        # el valor de fábrica que antes era la tupla NOT_A_GAME hardcodeada en
+        # system.py tiene que seguir siendo exactamente el default de config,
+        # para que nadie que no toque config.toml note ninguna diferencia
         for name in ("chrome", "chromium", "firefox", "zen", "brave", "vivaldi",
                      "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid",
                      "haruna", "totem", "spotify", "netflix", "youtube"):

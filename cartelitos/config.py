@@ -163,6 +163,13 @@ _SECTION_INTRO = {
            "# It covers the whole desktop, so it is opt-in and toggled by hand:\n"
            "#   fatal crt on | off | toggle     (works even if the daemon is dead)",
 }
+# Un assign más largo que esto (una lista larga, p.ej. las de [system]) no
+# alinea su comentario al lado: estiraría la columna de TODA la sección para
+# una sola clave. Se comenta arriba en su lugar. Ninguna clave de las demás
+# secciones pasa este umbral hoy, así que no las mueve.
+_INLINE_COMMENT_MAX = 40
+
+
 def _render_default_config(defaults):
     """Arma el TOML de ejemplo a partir de DEFAULTS (valores, y también el
     orden de despliegue: no hay una lista de orden aparte que se pueda
@@ -176,13 +183,19 @@ def _render_default_config(defaults):
             lines.append(intro)
         comments = _CONFIG_COMMENTS.get(section, {})
         assigns = {k: f"{k} = {_toml_val(v)}" for k, v in values.items()}
-        width = max(len(a) for a in assigns.values())
+        inline = [a for a in assigns.values() if len(a) <= _INLINE_COMMENT_MAX]
+        width = max((len(a) for a in inline), default=0)
         for key, assign in assigns.items():
             comment = comments.get(key)
             if not comment:
                 lines.append(assign)
                 continue
             clines = comment.split("\n")
+            if len(assign) > _INLINE_COMMENT_MAX:
+                for cl in clines:
+                    lines.append("# " + cl)
+                lines.append(assign)
+                continue
             pad = " " * (width - len(assign) + 1)
             lines.append(f"{assign}{pad}# {clines[0]}")
             for extra in clines[1:]:

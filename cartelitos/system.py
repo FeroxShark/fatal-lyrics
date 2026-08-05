@@ -5,6 +5,7 @@ import shutil
 import subprocess
 
 from . import config
+from . import util
 from .util import FIELD_SEP
 
 def playerctl_state():
@@ -128,7 +129,7 @@ def _daemon_pid():
     """PID del daemon, o None. Confirma el cmdline: un PID reciclado con
     SIGUSR1 encima mata un proceso ajeno."""
     try:
-        with open("/tmp/cartelitos-daemon.pid") as f:
+        with open(util.DAEMON_PID_PATH) as f:
             pid = int(f.read().strip())
         with open(f"/proc/{pid}/cmdline", "rb") as f:
             if b"cartelitos" not in f.read():
@@ -136,6 +137,50 @@ def _daemon_pid():
         return pid
     except (OSError, ValueError):
         return None
+
+# Nada de esto es obligatorio: cada cosa que falta apaga UNA función y el resto
+# sigue andando. El problema era enterarse — sin bandeja, sin colores de tapa o
+# con el tubo quieto parecía un bug, no un paquete que no estaba instalado.
+OPTIONAL_TOOLS = [
+    (("magick", "convert"),
+     "no album-cover colours (the tube falls back to its own palettes)"),
+    (("pw-record", "parec"),
+     "audio-reactive CRT mode off (the tube won't move with the music)"),
+    (("pactl",),
+     "the default sink can't be found, so audio capture never starts"),
+    (("hyprctl",),
+     "no auto-pause on games and no monitor list in the config menu"),
+]
+
+
+def _tray_available():
+    """Si el ícono de la bandeja puede levantarse: gi + el typelib de Ayatana."""
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        gi.require_version("AyatanaAppIndicator3", "0.1")
+        return True
+    except Exception:
+        return False
+
+
+def missing_tools():
+    """[(qué falta, qué queda degradado)] de las herramientas OPCIONALES."""
+    out = []
+    for names, consequence in OPTIONAL_TOOLS:
+        if not any(shutil.which(n) for n in names):
+            out.append(("/".join(names), consequence))
+    if not _tray_available():
+        out.append(("python-gobject + AyatanaAppIndicator3",
+                    "no tray icon (fatal-lyrics still runs, just without it)"))
+    return out
+
+
+def health_lines():
+    """Las mismas líneas que muestra `fatal status`, listas para imprimir."""
+    return [f"{what} not found → {consequence}"
+            for what, consequence in missing_tools()]
+
 
 def _terminal():
     """Terminal para abrir el menú completo. $TERMINAL primero: en un repo público

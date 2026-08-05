@@ -5,9 +5,11 @@ three-way lyrics result that the cache and the retry both depend on.
 Run with:  python3 -m unittest discover -s tests
 """
 import builtins
+import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -25,7 +27,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
-from cartelitos import audio, config, ipc, lyrics, system  # noqa: E402
+from cartelitos import audio, config, ipc, lyrics, system, util  # noqa: E402
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _wait_cmdline(pid, timeout=5.0):
+    """El /proc de un hijo recién forkeado tiene el cmdline VACÍO hasta que
+    termina el exec: sin esperarlo, el guard de PID reciclado da falso negativo."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                if f.read().strip(b"\x00"):
+                    return True
+        except OSError:
+            return False
+        time.sleep(0.01)
+    return False
 
 
 class TestParseLrc(unittest.TestCase):
@@ -1097,3 +1116,310 @@ class TestKnobsAreReachable(unittest.TestCase):
             body = open(path).read()
             self.assertIn("water = false", body)
             self.assertIn("water_amp = 0.9", body)
+
+
+class TestLogRotation(unittest.TestCase):
+    """El daemon corre semanas: sin tope el log llena el tmpfs (que es RAM)."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.path = os.path.join(self.dir.name, "daemon.log")
+
+    def test_a_small_log_is_left_alone(self):
+        with open(self.path, "w") as f:
+            f.write("chico\n")
+        self.assertFalse(util.rotate_log(self.path, limit=1024))
+        self.assertEqual(open(self.path).read(), "chico\n")
+        self.assertFalse(os.path.exists(self.path + ".1"))
+
+    def test_over_the_limit_it_rotates_into_one_backup(self):
+        with open(self.path, "w") as f:
+            f.write("x" * 2048)
+        self.assertTrue(util.rotate_log(self.path, limit=1024))
+        self.assertEqual(os.path.getsize(self.path), 0)
+        self.assertEqual(os.path.getsize(self.path + ".1"), 2048)
+
+    def test_only_one_backup_is_kept(self):
+        for body in ("viejo", "nuevo"):
+            with open(self.path, "w") as f:
+                f.write(body * 1024)
+            util.rotate_log(self.path, limit=1024)
+        self.assertEqual(sorted(os.listdir(self.dir.name)),
+                         ["daemon.log", "daemon.log.1"])
+        self.assertTrue(open(self.path + ".1").read().startswith("nuevo"))
+
+    def test_the_inode_survives_the_rotation(self):
+        # se trunca el mismo archivo, no se renombra: el redirect de bin/fatal ya
+        # lo tiene abierto y con un rename seguiría escribiendo en el backup
+        with open(self.path, "w") as f:
+            f.write("x" * 2048)
+        before = os.stat(self.path).st_ino
+        util.rotate_log(self.path, limit=1024)
+        self.assertEqual(os.stat(self.path).st_ino, before)
+
+    def test_an_open_append_writer_keeps_writing_to_the_live_log(self):
+        # bin/fatal redirige con `>>` justamente por esto
+        with open(self.path, "a") as writer:
+            writer.write("x" * 2048)
+            writer.flush()
+            util.rotate_log(self.path, limit=1024)
+            writer.write("después\n")
+            writer.flush()
+        self.assertEqual(open(self.path).read(), "después\n")
+
+    def test_a_log_that_is_not_there_is_not_an_error(self):
+        self.assertFalse(util.rotate_log(os.path.join(self.dir.name, "nope.log")))
+
+    def test_nothing_rotates_when_stdout_is_not_a_file(self):
+        # corriendo el daemon a mano, stdout es la terminal: nada que rotar
+        old_stdout, old_target = sys.stdout, util._log_target
+        util._log_target = False
+        sys.stdout = io.StringIO()
+        try:
+            self.assertIsNone(util._stdout_log())
+            util.log("sin archivo detrás")     # no tiene que explotar
+        finally:
+            sys.stdout, util._log_target = old_stdout, old_target
+
+    def test_log_rotates_the_file_behind_stdout(self):
+        old_stdout, old_target = sys.stdout, util._log_target
+        util._log_target = False
+        sys.stdout = open(self.path, "a")
+        try:
+            sys.stdout.write("x" * 2048)
+            self.assertEqual(util._stdout_log(), self.path)
+            util.log("la línea que dispara la rotación", )
+        finally:
+            sys.stdout.close()
+            sys.stdout, util._log_target = old_stdout, old_target
+        util.rotate_log(self.path, limit=1024)
+        self.assertTrue(os.path.exists(self.path + ".1"))
+
+
+class TestRuntimePaths(unittest.TestCase):
+    """PID y logs viven en $XDG_RUNTIME_DIR/cartelitos/, no en /tmp: /tmp lo
+    comparten todas las sesiones y no se limpia al salir."""
+
+    def test_every_runtime_path_hangs_off_the_runtime_dir(self):
+        for path in (util.DAEMON_PID_PATH, util.QS_PID_PATH,
+                     util.LOG_PATH, util.QS_LOG_PATH):
+            self.assertTrue(path.startswith(util.RUN_DIR + os.sep), path)
+        self.assertTrue(util.RUN_DIR.endswith(os.sep + "cartelitos"))
+
+    def test_nothing_points_at_slash_tmp_when_the_runtime_dir_exists(self):
+        if os.environ.get("XDG_RUNTIME_DIR"):
+            self.assertFalse(util.RUN_DIR.startswith("/tmp/"))
+
+
+class TestDaemonPid(unittest.TestCase):
+    """_daemon_pid() confirma el cmdline: el sistema recicla PIDs y un SIGUSR1
+    al número equivocado le pega a un proceso ajeno."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.pidfile = os.path.join(self.dir.name, "daemon.pid")
+        old = util.DAEMON_PID_PATH
+        util.DAEMON_PID_PATH = self.pidfile
+        self.addCleanup(lambda: setattr(util, "DAEMON_PID_PATH", old))
+
+    def _write(self, body):
+        with open(self.pidfile, "w") as f:
+            f.write(body)
+
+    def test_no_pidfile_is_none(self):
+        self.assertIsNone(c._daemon_pid())
+
+    def test_garbage_is_none_not_a_crash(self):
+        self._write("no soy un pid\n")
+        self.assertIsNone(c._daemon_pid())
+
+    def test_a_pid_that_is_not_cartelitos_is_rejected(self):
+        # nuestro propio proceso: vivo, pero su cmdline no es el del daemon
+        self._write(str(os.getpid()))
+        with open(f"/proc/{os.getpid()}/cmdline", "rb") as f:
+            if b"cartelitos" in f.read():
+                self.skipTest("el runner se llama cartelitos")
+        self.assertIsNone(c._daemon_pid())
+
+    def test_a_dead_pid_is_none(self):
+        self._write("999999999")
+        self.assertIsNone(c._daemon_pid())
+
+    def test_it_reads_the_runtime_pidfile(self):
+        proc = subprocess.Popen([sys.executable, "-c",
+                                 "import time; time.sleep(30)  # cartelitos"])
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        _wait_cmdline(proc.pid)
+        self._write(str(proc.pid))
+        self.assertEqual(c._daemon_pid(), proc.pid)
+
+
+class TestOptionalTools(unittest.TestCase):
+    """`fatal status` tiene que decir qué falta y qué se pierde: media app
+    apagada por un paquete que no está parecía un bug."""
+
+    def test_nothing_missing_prints_nothing(self):
+        old = system.OPTIONAL_TOOLS
+        system.OPTIONAL_TOOLS = []
+        self.addCleanup(lambda: setattr(system, "OPTIONAL_TOOLS", old))
+        with _patched_tray(True):
+            self.assertEqual(system.health_lines(), [])
+
+    def test_a_missing_tool_names_the_feature_it_costs(self):
+        old_which = system.shutil.which
+        system.shutil.which = lambda n: None if n in ("pw-record", "parec") else "/usr/bin/" + n
+        self.addCleanup(lambda: setattr(system.shutil, "which", old_which))
+        with _patched_tray(True):
+            lines = system.health_lines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("pw-record/parec not found", lines[0])
+        self.assertIn("→", lines[0])
+        self.assertTrue(len(lines[0].split("→")[1].strip()) > 5)
+
+    def test_an_alternative_that_is_there_is_enough(self):
+        # magick O convert: con uno de los dos alcanza
+        old_which = system.shutil.which
+        system.shutil.which = lambda n: None if n == "magick" else "/usr/bin/" + n
+        self.addCleanup(lambda: setattr(system.shutil, "which", old_which))
+        with _patched_tray(True):
+            self.assertEqual(system.health_lines(), [])
+
+    def test_the_tray_is_reported_too(self):
+        old_which = system.shutil.which
+        system.shutil.which = lambda n: "/usr/bin/" + n
+        self.addCleanup(lambda: setattr(system.shutil, "which", old_which))
+        with _patched_tray(False):
+            lines = system.health_lines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("AyatanaAppIndicator3", lines[0])
+
+    def test_every_entry_says_what_breaks(self):
+        for names, consequence in system.OPTIONAL_TOOLS:
+            self.assertTrue(names and all(names))
+            self.assertTrue(len(consequence) > 10, names)
+
+    def test_the_check_flag_prints_the_same_lines(self):
+        out = subprocess.run(
+            [sys.executable, os.path.join(REPO, "cartelitos.py"), "--check"],
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0)
+        printed = [l for l in out.stdout.splitlines() if l.strip()]
+        for line in printed:
+            self.assertIn("not found →", line)
+
+
+class _patched_tray:
+    def __init__(self, available):
+        self.available = available
+
+    def __enter__(self):
+        self._old = system._tray_available
+        system._tray_available = lambda: self.available
+
+    def __exit__(self, *exc):
+        system._tray_available = self._old
+        return False
+
+
+class TestFatalRunningGuard(unittest.TestCase):
+    """running() en bin/fatal: `kill -0` solo daba ON con un PID reciclado de
+    otra sesión, y stop le mandaba la señal a un proceso ajeno."""
+
+    @classmethod
+    def setUpClass(cls):
+        body = open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8").read()
+        start = body.index("running() {")
+        cls.fn = body[start:body.index("\n}\n", start) + 3]
+
+    def _run(self, pidfile, want):
+        script = f'{self.fn}\nrunning "{pidfile}" "{want}" && echo YES || echo NO\n'
+        out = subprocess.run(["bash", "-c", script], capture_output=True,
+                             text=True, timeout=30)
+        return out.stdout.strip()
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.pidfile = os.path.join(self.dir.name, "daemon.pid")
+
+    def _spawn(self, marker):
+        proc = subprocess.Popen([sys.executable, "-c",
+                                 f"import time; time.sleep(30)  # {marker}"])
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        _wait_cmdline(proc.pid)
+        with open(self.pidfile, "w") as f:
+            f.write(str(proc.pid))
+        return proc
+
+    def test_a_live_process_with_the_right_cmdline_is_running(self):
+        self._spawn("cartelitos.py")
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "YES")
+
+    def test_a_recycled_pid_is_not_running(self):
+        self._spawn("otra-cosa")
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "NO")
+
+    def test_no_pidfile_is_not_running(self):
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "NO")
+
+    def test_garbage_in_the_pidfile_is_not_running(self):
+        with open(self.pidfile, "w") as f:
+            f.write("not a pid\n")
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "NO")
+
+    def test_an_empty_pidfile_is_not_running(self):
+        open(self.pidfile, "w").close()
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "NO")
+
+    def test_a_dead_pid_is_not_running(self):
+        with open(self.pidfile, "w") as f:
+            f.write("999999999")
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "NO")
+
+    def test_an_empty_cmdline_falls_back_to_kill_minus_zero(self):
+        # entre el fork y el exec (y en un zombie) el cmdline está vacío: exigirlo
+        # ahí haría que `fatal on; fatal status` dijera OFF con todo arrancando bien
+        proc = subprocess.Popen([sys.executable, "-c", ""])
+        self.addCleanup(proc.wait)
+        # sin poll()/wait(): eso lo reapea y el PID desaparece. Se espera al
+        # estado Z leyendo /proc, que es lo que ve running()
+        end = time.monotonic() + 5
+        while time.monotonic() < end:
+            with open(f"/proc/{proc.pid}/stat") as f:
+                if f.read().rsplit(") ", 1)[1].split()[0] == "Z":
+                    break
+            time.sleep(0.01)
+        with open(f"/proc/{proc.pid}/cmdline", "rb") as f:   # zombie sin reapear
+            self.assertEqual(f.read(), b"")
+        with open(self.pidfile, "w") as f:
+            f.write(str(proc.pid))
+        self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "YES")
+
+
+class TestFatalRuntimeLayout(unittest.TestCase):
+    """bin/fatal y el paquete tienen que apuntar a los MISMOS archivos."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.body = open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8").read()
+
+    def test_no_pidfile_or_log_lives_in_tmp(self):
+        for line in self.body.splitlines():
+            if line.startswith("OLD_"):   # los viejos, sólo para poder matarlos
+                continue
+            self.assertNotIn("/tmp/cartelitos", line)
+
+    def test_the_daemon_pidfile_matches_the_python_side(self):
+        self.assertIn('D_PID="$RUN/daemon.pid"', self.body)
+        self.assertTrue(util.DAEMON_PID_PATH.endswith("/cartelitos/daemon.pid"))
+
+    def test_the_logs_are_opened_in_append_mode(self):
+        # con `>` el truncado de la rotación dejaría un agujero del tamaño del log
+        self.assertIn('>>"$LOGFILE"', self.body)
+
+    def test_status_asks_the_package_what_is_missing(self):
+        self.assertIn("--check", self.body)

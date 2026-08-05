@@ -16,7 +16,10 @@ referencia. Para pisar un global hay que hacerlo en su módulo:
 """
 from . import art, audio, config, daemon, ipc, lyrics, setup, system, tray, util
 
-from .util import FIELD_SEP, UA, log
+from .util import (
+    DAEMON_PID_PATH, FIELD_SEP, LOG_MAX, LOG_PATH, QS_LOG_PATH, QS_PID_PATH,
+    RUN_DIR, UA, log, rotate_log, run_dir,
+)
 
 from .config import (
     CFG, CONFIG_DIR, CONFIG_PATH, CRT_PATH, DEFAULT_CONFIG, DEFAULTS,
@@ -36,8 +39,9 @@ from .lyrics import (
 from .art import album_colors, parse_histogram, send_album_colors
 
 from .system import (
-    NOT_A_GAME, gaming, is_game_window, playerctl_state,
-    _daemon_pid, _monitors, _monitors_lr, _players, _terminal,
+    NOT_A_GAME, OPTIONAL_TOOLS, gaming, health_lines, is_game_window,
+    missing_tools, playerctl_state,
+    _daemon_pid, _monitors, _monitors_lr, _players, _terminal, _tray_available,
 )
 
 from .ipc import (

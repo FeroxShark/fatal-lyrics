@@ -263,7 +263,7 @@ git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
 fatal            # toggle on/off
 fatal on|off     # explicit
 fatal restart    # restart it
-fatal status     # ON / OFF
+fatal status     # ON / OFF, plus anything optional that's missing and what it costs you
 fatal config     # settings menu — every option on one screen, applies live
 fatal setup      # same as `fatal config` (first-run alias)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
@@ -279,7 +279,10 @@ On first run it creates `~/.config/cartelitos/config.toml` with defaults.
 **Nothing needs a restart.** Saving the config — from the menu or from your
 own editor — is picked up within about a second and applied to the dialogs
 already on screen. If the file has a typo, the running config is kept as is
-and the error goes to `/tmp/cartelitos.log`; nothing gets reset.
+and the error goes to `$XDG_RUNTIME_DIR/cartelitos/daemon.log`; nothing gets
+reset. Logs (and the PID files next to them) live under
+`$XDG_RUNTIME_DIR/cartelitos/`, and are rotated at 5 MB keeping one `.1` backup,
+so a daemon that runs for weeks can't fill your tmpfs.
 
 `fatal config` opens a menu with every setting and its current value on one
 screen. Type a number to change that one thing, and you're back at the menu —
@@ -400,11 +403,11 @@ package:
 
 | Module      | What's in it                                                        |
 |-------------|---------------------------------------------------------------------|
-| `util`      | `log()`, `UA`, `FIELD_SEP`                                           |
+| `util`      | `log()` + rotation, runtime paths (PID/log), `UA`, `FIELD_SEP`        |
 | `config`    | defaults, TOML read/write, live reload, CRT switch, sliders watcher   |
 | `lyrics`    | lrclib client, on-disk cache, line splitting into beats               |
 | `art`       | album-cover colours (ImageMagick, optional)                           |
-| `system`    | playerctl / hyprctl / terminal lookups                                |
+| `system`    | playerctl / hyprctl / terminal lookups, daemon PID, optional-tool check |
 | `ipc`       | the Unix socket and every event sent to the overlay                   |
 | `audio`     | capture, DSP (RMS/DFT/beats/peaks) and the per-track energy profile    |
 | `tray`      | system-tray icon (GTK + AyatanaAppIndicator3, optional)               |

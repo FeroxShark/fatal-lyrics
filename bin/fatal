@@ -8,14 +8,55 @@ TUNE_QML="$BASE/shell/tune.qml"
 DAEMON="$BASE/cartelitos.py"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/cartelitos/config.toml"
 
-QS_PID=/tmp/cartelitos-qs.pid
-D_PID=/tmp/cartelitos-daemon.pid
+RUN="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos"
+mkdir -p "$RUN" 2>/dev/null
+QS_PID="$RUN/qs.pid"
+D_PID="$RUN/daemon.pid"
+QS_LOG="$RUN/qs.log"
+D_LOG="$RUN/daemon.log"
+# dónde vivían los PID antes de mudarlos al runtime: sirven para poder apagar
+# una instancia que había arrancado con la versión vieja
+OLD_QS_PID=/tmp/cartelitos-qs.pid
+OLD_D_PID=/tmp/cartelitos-daemon.pid
+LOG_MAX=5242880   # 5 MB, igual que el tope del daemon en cartelitos/util.py
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos.sock"
 # interruptor del modo CRT: un archivo, no el socket — apagarlo tiene que
 # funcionar aunque el daemon esté colgado (el tubo tapa todas las pantallas)
 CRT="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt"
 
-running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+# Un PID vivo no alcanza: el sistema recicla números, y con el pidfile de una
+# sesión anterior `kill -0` daba OK sobre un proceso ajeno — status decía ON sin
+# nada corriendo y stop le mandaba la señal a otro. Se confirma el cmdline, igual
+# que _daemon_pid() del lado de Python.
+running() {
+    local pidfile="$1" want="$2" pid
+    [ -f "$pidfile" ] || return 1
+    pid=$(cat "$pidfile" 2>/dev/null)
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null || return 1
+    # sin /proc no hay con qué confirmar: queda el kill -0 de antes
+    [ -n "$want" ] && [ -r "/proc/$pid/cmdline" ] || return 0
+    local cmd
+    cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline")
+    # entre el fork y el exec el cmdline está VACÍO (y en un zombie también):
+    # exigirlo ahí haría que `fatal on; fatal status` dijera OFF con el proceso
+    # arrancando bien. El chequeo es contra PIDs reciclados, no contra los recién
+    # nacidos: sin cmdline vale el kill -0.
+    [ -n "$cmd" ] || return 0
+    printf '%s' "$cmd" | grep -qF -- "$want"
+}
+
+# Rotación por tamaño con UN backup, para que un daemon de semanas no llene el
+# tmpfs. Acá se rota antes de abrir el archivo (renombrar y listo); ya en marcha
+# rota el propio daemon truncando el mismo inodo, porque el redirect lo tiene
+# abierto. Por eso spawn() usa `>>`: en append el truncado no deja un agujero.
+rotate_log() {
+    local f="$1" size
+    [ -f "$f" ] || return 0
+    size=$(stat -c %s "$f" 2>/dev/null) || return 0
+    [ "$size" -gt "$LOG_MAX" ] && mv -f "$f" "$f.1"
+    return 0
+}
 
 # Lanza en una sesión propia: un `cmd &` pelado se muere junto con la shell que
 # lo largó (terminal que cerrás, script que termina, autostart efímero), y el
@@ -26,7 +67,7 @@ spawn() {
     local pidfile="$1" logfile="$2"
     shift 2
     PIDFILE="$pidfile" LOGFILE="$logfile" setsid sh -c \
-        'echo $$ > "$PIDFILE"; exec "$@" >"$LOGFILE" 2>&1' sh "$@" &
+        'echo $$ > "$PIDFILE"; exec "$@" >>"$LOGFILE" 2>&1' sh "$@" &
 }
 
 # El daemon y el overlay son dos procesos y se mueren por separado: si una
@@ -35,15 +76,19 @@ spawn() {
 # solo hacía que `status` dijera ON con medio programa muerto y que `toggle`
 # apagara lo poco que quedaba en vez de levantarlo.
 status_line() {
-    if running $D_PID && running $QS_PID; then
+    if running "$D_PID" "$DAEMON" && running "$QS_PID" "$QML"; then
         echo ON
-    elif running $D_PID; then
+    elif running "$D_PID" "$DAEMON"; then
         echo "HALF (the overlay died — run: fatal restart)"
-    elif running $QS_PID; then
+    elif running "$QS_PID" "$QML"; then
         echo "HALF (the daemon died — run: fatal restart)"
     else
         echo OFF
     fi
+    # qué falta instalar y qué función se pierde por cada cosa: no imprime nada
+    # si está todo. Sin esto, media app apagada parecía un bug.
+    [ -f "$DAEMON" ] && python3 "$DAEMON" --check 2>/dev/null
+    return 0
 }
 
 start() {
@@ -51,25 +96,33 @@ start() {
         echo "can't find the fatal-lyrics files in $BASE" >&2
         exit 1
     fi
-    if ! running $QS_PID; then
-        spawn "$QS_PID" /tmp/cartelitos-qs.log qs -p "$QML"
+    if ! running "$QS_PID" "$QML"; then
+        rotate_log "$QS_LOG"
+        spawn "$QS_PID" "$QS_LOG" qs -p "$QML"
     fi
     # wait for the overlay to bring up the socket before starting the daemon
     for _ in $(seq 1 25); do
         [ -S "$SOCK" ] && break
         sleep 0.2
     done
-    if ! running $D_PID; then
-        spawn "$D_PID" /tmp/cartelitos.log python3 "$DAEMON"
+    if ! running "$D_PID" "$DAEMON"; then
+        rotate_log "$D_LOG"
+        spawn "$D_PID" "$D_LOG" python3 "$DAEMON"
     fi
     echo "fatal ON"
 }
 
 stop() {
-    for f in $D_PID $QS_PID; do
-        running "$f" && kill "$(cat "$f")" 2>/dev/null
-        rm -f "$f"
-    done
+    running "$D_PID" "$DAEMON" && kill "$(cat "$D_PID")" 2>/dev/null
+    running "$QS_PID" "$QML" && kill "$(cat "$QS_PID")" 2>/dev/null
+    rm -f "$D_PID" "$QS_PID"
+    # una instancia levantada por la versión anterior dejó el PID en /tmp:
+    # sin esto quedaba corriendo para siempre, invisible para el nuevo status
+    # ojo: por el mismo camino que los de ahora, con confirmación de cmdline —
+    # un PID viejo de /tmp es justamente el caso más probable de número reciclado
+    running "$OLD_D_PID" cartelitos.py && kill "$(cat "$OLD_D_PID")" 2>/dev/null
+    running "$OLD_QS_PID" shell.qml && kill "$(cat "$OLD_QS_PID")" 2>/dev/null
+    rm -f "$OLD_D_PID" "$OLD_QS_PID"
     # without this, the next start sees the stale socket and starts the daemon too early
     rm -f "$SOCK"
     printf '0' > "$CRT" 2>/dev/null   # que no quede el tubo prendido en el archivo
@@ -103,8 +156,8 @@ crt() {
 }
 
 demo() {
-    if running $D_PID; then
-        kill -USR1 "$(cat $D_PID)"
+    if running "$D_PID" "$DAEMON"; then
+        kill -USR1 "$(cat "$D_PID")"
     else
         echo "fatal-lyrics isn't running — start it with: fatal on" >&2
         exit 1
@@ -118,7 +171,7 @@ case "${1:-toggle}" in
     status)    status_line ;;
     # medio muerto cuenta como apagado: así el toggle lo levanta entero en vez
     # de rematar la mitad que seguía viva
-    toggle)    running $D_PID && running $QS_PID && stop || start ;;
+    toggle)    running "$D_PID" "$DAEMON" && running "$QS_PID" "$QML" && stop || start ;;
     config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;

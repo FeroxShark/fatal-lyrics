@@ -1384,6 +1384,51 @@ class TestKnobsAreReachable(unittest.TestCase):
             self.assertIn("water = false", body)
             self.assertIn("water_amp = 0.9", body)
 
+    def test_editing_a_multiline_commented_key_survives_on_the_generated_toml(self):
+        # el camino real: `fatal edit` crea el config con DEFAULT_CONFIG (el
+        # generado), y `fatal tune`/el menú despues reescriben una clave
+        # puntual con _save_config. "flicker" y "palette" tienen los
+        # comentarios más largos (varias líneas): si el regex de _save_config
+        # se llevara puesto el comentario, sería acá donde se vería
+        import tomllib
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.toml")
+            with open(path, "w") as f:
+                f.write(c.DEFAULT_CONFIG)
+            old = config.CONFIG_PATH
+            config.CONFIG_PATH = path
+            self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
+            c._save_config({"flicker": ("crt", 0.9), "palette": ("crt", "dragons")})
+            with open(path) as f:
+                body = f.read()
+            parsed = tomllib.loads(body)
+            self.assertEqual(parsed["crt"]["flicker"], 0.9)
+            self.assertEqual(parsed["crt"]["palette"], "dragons")
+            # el resto del archivo (todas las demás claves y su prosa) no se tocó
+            for key, value in c.DEFAULTS["crt"].items():
+                if key in ("flicker", "palette"):
+                    continue
+                self.assertEqual(parsed["crt"][key], value)
+            self.assertIn("kick drum", body)  # medio del comentario de flicker
+            self.assertIn("ImageMagick", body)  # medio del comentario de palette
+
+    def test_read_config_always_fills_every_default_key(self):
+        # read_config mezcla el TOML del usuario SOBRE una copia de DEFAULTS
+        # (nunca al revés), así que aunque el usuario haya borrado una clave
+        # a mano, CFG (y por lo tanto _config_event) siempre las tiene todas
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.toml")
+            with open(path, "w") as f:
+                f.write("[display]\nscale = 2.0\n")  # el resto de las claves falta
+            old = config.CONFIG_PATH
+            config.CONFIG_PATH = path
+            self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
+            cfg = c.read_config()
+            self.assertEqual(cfg["display"]["scale"], 2.0)
+            for section, values in c.DEFAULTS.items():
+                for key in values:
+                    self.assertIn(key, cfg[section], f"{section}.{key} no sobrevivió al merge")
+
 
 class TestLogRotation(unittest.TestCase):
     """El daemon corre semanas: sin tope el log llena el tmpfs (que es RAM)."""

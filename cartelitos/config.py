@@ -151,25 +151,11 @@ _SECTION_INTRO = {
            "# It covers the whole desktop, so it is opt-in and toggled by hand:\n"
            "#   fatal crt on | off | toggle     (works even if the daemon is dead)",
 }
-# Orden de despliegue en el TOML de ejemplo (DEFAULTS trae un orden distinto
-# adentro de [crt], agrupado por afinidad para _config_event/tune, no por
-# lectura). Las claves que falten acá se listan al final en el orden de
-# DEFAULTS, así que no hace falta tocar esto para que una perilla nueva
-# aparezca — sólo para elegir DÓNDE cae entre las demás.
-_CRT_READING_ORDER = (
-    "enabled", "screens", "order", "palette", "split", "director", "focus",
-    "audio", "color_from_pitch", "color_hold", "motifs", "water", "water_amp",
-    "camera", "quality", "exit_on", "font", "chrome", "intensity",
-    "word_flash", "flicker", "curvature", "scanlines", "chroma", "bloom",
-    "noise", "roll", "vignette",
-)
-_SECTION_KEY_ORDER = {"crt": _CRT_READING_ORDER}
-
-
 def _render_default_config(defaults):
-    """Arma el TOML de ejemplo a partir de DEFAULTS (valores) y
-    _CONFIG_COMMENTS (prosa): una única fuente para los valores, en vez de
-    mantenerlos escritos dos veces (acá y en DEFAULTS)."""
+    """Arma el TOML de ejemplo a partir de DEFAULTS (valores, y también el
+    orden de despliegue: no hay una lista de orden aparte que se pueda
+    desincronizar) y _CONFIG_COMMENTS (prosa): una única fuente para los
+    valores, en vez de mantenerlos escritos dos veces (acá y en DEFAULTS)."""
     lines = [_CONFIG_HEADER, ""]
     for section, values in defaults.items():
         lines.append(f"[{section}]")
@@ -177,12 +163,9 @@ def _render_default_config(defaults):
         if intro:
             lines.append(intro)
         comments = _CONFIG_COMMENTS.get(section, {})
-        order = _SECTION_KEY_ORDER.get(section, ())
-        keys = list(order) + [k for k in values if k not in order]
-        assigns = {k: f"{k} = {_toml_val(values[k])}" for k in keys}
+        assigns = {k: f"{k} = {_toml_val(v)}" for k, v in values.items()}
         width = max(len(a) for a in assigns.values())
-        for key in keys:
-            assign = assigns[key]
+        for key, assign in assigns.items():
             comment = comments.get(key)
             if not comment:
                 lines.append(assign)
@@ -215,10 +198,10 @@ DEFAULTS = {
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "audio": True,
-        "color_from_pitch": True, "color_hold": 10, "motifs": True, "camera": 1.0,
-        "quality": 1.0, "water": True, "water_amp": 0.55,
-        "exit_on": "mouse", "font": "",
-        "chrome": False, "intensity": 0.45, "flicker": 0.25, "word_flash": 0.3, "curvature": 1.0, "scanlines": 0.5,
+        "color_from_pitch": True, "color_hold": 10, "motifs": True,
+        "water": True, "water_amp": 0.55, "camera": 1.0, "quality": 1.0,
+        "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
+        "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
     },
 }

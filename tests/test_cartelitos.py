@@ -16,6 +16,7 @@ import threading
 import time
 import unittest
 import urllib.error
+from unittest import mock
 
 # El módulo lee la config al importarse, y la CREA si no existe: sin esto un
 # test tocaría la config real de quien corra la suite.
@@ -356,8 +357,22 @@ class TestFetchAsync(unittest.TestCase):
         self._old = lyrics.CACHE_DIR
         lyrics.CACHE_DIR = self.dir.name
         self.addCleanup(lambda: setattr(lyrics, "CACHE_DIR", self._old))
+        # un hilo de otro test que siga vivo se lleva un lugar del cupo y hace
+        # fallar al que viene: se espera a que muera antes de tocar el contador
+        self.wait_quiet()
         with c._fetch_lock:
             c._fetch.update(gen=0, id=None, lyrics=None, done=False)
+            lyrics._inflight = 0
+            lyrics._pending = None
+        self.addCleanup(self.wait_quiet)
+
+    def lyrics_threads(self):
+        return [t for t in threading.enumerate() if t.name == "lyrics" and t.is_alive()]
+
+    def wait_quiet(self, timeout=3.0):
+        end = time.time() + timeout
+        while time.time() < end and self.lyrics_threads():
+            time.sleep(0.01)
 
     def patch_fetch(self, fn):
         old = lyrics.fetch_lyrics
@@ -450,6 +465,129 @@ class TestFetchAsync(unittest.TestCase):
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
         self.assertIsNone(c._fetch["lyrics"])
+
+    def test_a_burst_of_skips_doesnt_pile_up_threads(self):
+        # saltando temas rápido con lrclib lento, antes quedaba un hilo por
+        # cambio de tema: la generación tiraba el resultado, pero no el hilo
+        release = threading.Event()
+        self.addCleanup(release.set)
+        started = threading.Semaphore(0)
+
+        def slow(track):
+            started.release()
+            release.wait(5.0)
+            return "ok", [(1.0, track["title"])]
+        self.patch_fetch(slow)
+        for i in range(6):
+            c.fetch_lyrics_async(dict(TRACK, id=f"/t/{i}", title=f"T{i}"))
+        for _ in range(c.MAX_INFLIGHT):
+            self.assertTrue(started.acquire(timeout=2.0))
+        time.sleep(0.2)   # que alcance a arrancar cualquier hilo de más
+        self.assertLessEqual(len(self.lyrics_threads()), c.MAX_INFLIGHT)
+        release.set()
+
+    def test_the_last_track_of_the_burst_still_gets_its_lyrics(self):
+        # el cupo no puede comerse el tema que quedó sonando: el que no
+        # encuentra lugar espera, y lo levanta el primer hilo que se libera
+        release = threading.Event()
+        self.addCleanup(release.set)
+        started = threading.Semaphore(0)
+
+        def slow(track):
+            started.release()
+            release.wait(5.0)
+            return "ok", [(1.0, track["title"])]
+        self.patch_fetch(slow)
+        for i in range(6):
+            c.fetch_lyrics_async(dict(TRACK, id=f"/t/{i}", title=f"T{i}"))
+        for _ in range(c.MAX_INFLIGHT):
+            self.assertTrue(started.acquire(timeout=2.0))
+        release.set()
+        self.assertTrue(self.wait_done())
+        self.assertEqual(c._fetch["id"], "/t/5")
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "T5")])
+
+    def test_the_queue_keeps_the_newest_track_only(self):
+        # esperando lugar hay UNO solo: el último cambio pisa al anterior
+        release = threading.Event()
+        self.addCleanup(release.set)
+        started = threading.Semaphore(0)
+        seen = []
+
+        def slow(track):
+            started.release()
+            seen.append(track["title"])
+            release.wait(5.0)
+            return "ok", [(1.0, track["title"])]
+        self.patch_fetch(slow)
+        for i in range(5):
+            c.fetch_lyrics_async(dict(TRACK, id=f"/t/{i}", title=f"T{i}"))
+        for _ in range(c.MAX_INFLIGHT):
+            self.assertTrue(started.acquire(timeout=2.0))
+        release.set()
+        self.assertTrue(self.wait_done())
+        self.wait_quiet()
+        # dos hilos + el que esperaba: T2 y T3 nunca se buscaron
+        self.assertEqual(len(seen), c.MAX_INFLIGHT + 1)
+        self.assertIn("T4", seen)
+        self.assertNotIn("T3", seen)
+
+    def test_a_thread_that_wont_start_gives_the_slot_back(self):
+        # si no se devuelve el cupo, dos fallos así y no hay más letra hasta
+        # reiniciar el daemon
+        with mock.patch.object(lyrics.threading.Thread, "start",
+                               side_effect=RuntimeError("can't start new thread")):
+            c.fetch_lyrics_async(TRACK)
+        self.assertEqual(lyrics._inflight, 0)
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one")]))
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+
+    def test_the_retry_waits_the_jittered_delay(self):
+        # el reintento duerme lo que dice el jitter, no el número pelado
+        calls = []
+
+        def flaky(track):
+            calls.append(1)
+            return ("error", None) if len(calls) == 1 else ("ok", [(1.0, "one")])
+        self.patch_fetch(flaky)
+        with mock.patch.object(lyrics, "_retry_delay", return_value=0.6) as delay:
+            start = time.time()
+            c.fetch_lyrics_async(TRACK)
+            self.assertTrue(self.wait_done())
+            elapsed = time.time() - start
+        delay.assert_called_once_with()
+        self.assertGreaterEqual(elapsed, 0.4)   # una vuelta de 0.5s
+        self.assertLess(elapsed, 1.5)           # y no las dos que pediría 1.2s
+
+
+class TestRetryJitter(unittest.TestCase):
+    """El delay del reintento con ruido: sin él, dos temas que fallan juntos
+    vuelven a lrclib en el mismo segundo, para siempre."""
+
+    def test_the_jitter_is_symmetric_around_the_base(self):
+        with mock.patch.object(lyrics.random, "uniform", return_value=0.2) as uniform:
+            self.assertAlmostEqual(lyrics._retry_delay(), lyrics.RETRY_DELAY * 1.2)
+        uniform.assert_called_once_with(-lyrics.RETRY_JITTER, lyrics.RETRY_JITTER)
+        with mock.patch.object(lyrics.random, "uniform", return_value=-0.2):
+            self.assertAlmostEqual(lyrics._retry_delay(), lyrics.RETRY_DELAY * 0.8)
+
+    def test_the_delay_never_leaves_the_band(self):
+        for _ in range(200):
+            delay = lyrics._retry_delay()
+            self.assertGreaterEqual(delay, lyrics.RETRY_DELAY * 0.8)
+            self.assertLessEqual(delay, lyrics.RETRY_DELAY * 1.2)
+
+    def test_two_retries_dont_land_on_the_same_second(self):
+        self.assertGreater(len({lyrics._retry_delay() for _ in range(20)}), 1)
+
+    def test_a_zero_delay_stays_zero(self):
+        # los tests que apuran el reintento ponen RETRY_DELAY=0: el ruido no
+        # puede convertir eso en una espera
+        old = lyrics.RETRY_DELAY
+        lyrics.RETRY_DELAY = 0
+        self.addCleanup(lambda: setattr(lyrics, "RETRY_DELAY", old))
+        self.assertEqual(lyrics._retry_delay(), 0)
 
 
 if __name__ == "__main__":

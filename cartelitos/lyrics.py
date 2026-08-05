@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import random
 import re
 import threading
 import time
@@ -126,54 +127,109 @@ def cache_put(track, status, lines):
 _fetch_lock = threading.Lock()
 _fetch = {"gen": 0, "id": None, "lyrics": None, "done": False}
 RETRY_DELAY = 10
+RETRY_JITTER = 0.2      # ±20%: dos temas que fallan juntos no vuelven al mismo segundo
 RETRIES = 2
+
+# Techo de hilos vivos. `gen` invalida el resultado viejo, pero no mata al hilo:
+# un hilo colgado en un request sigue vivo hasta el timeout, y saltando temas
+# rápido se apilaban tantos como cambios de tema. Con el techo puesto, el tema
+# que no encuentra lugar espera en `_pending` — y como sólo importa el último,
+# el que llega pisa al que estaba esperando.
+MAX_INFLIGHT = 2
+_inflight = 0           # hilos vivos, protegido por _fetch_lock
+_pending = None         # (track, gen) esperando lugar, protegido por _fetch_lock
+
+
+def _retry_delay():
+    """RETRY_DELAY con un ruido de ±20%.
+
+    Sin el ruido, todos los reintentos caen en el mismo instante: si lrclib se
+    cae con varios temas en cola, vuelven todos juntos y en sincronía, que es
+    justo la forma de martillarlo mientras se está levantando."""
+    return RETRY_DELAY * (1 + random.uniform(-RETRY_JITTER, RETRY_JITTER))
+
+
+def _mine(gen):
+    return _fetch["gen"] == gen
+
+
+def _publish(gen, lines):
+    with _fetch_lock:
+        if not _mine(gen):
+            return False
+        _fetch.update(lyrics=lines, done=True)
+    return True
+
+
+def _work(track, gen):
+    hit = cache_get(track)
+    if hit:
+        if _publish(gen, hit[1]):
+            log(f"cached lyrics: {len(hit[1])} lines" if hit[1]
+                else "no synced lyrics (cached)")
+        return
+    for attempt in range(RETRIES + 1):
+        status, lines = fetch_lyrics(track)
+        if status != "error":
+            break
+        if attempt == RETRIES:
+            log("lrclib unreachable, giving up on this track")
+            return
+        # red caída: esperar y reintentar, salvo que ya haya cambiado de tema
+        delay = _retry_delay()
+        log(f"lrclib unreachable, retrying in {delay:.0f}s")
+        for _ in range(int(delay * 2)):
+            time.sleep(0.5)
+            if not _mine(gen):
+                return
+    cache_put(track, status, lines)
+    if _publish(gen, lines):
+        log(f"synced lyrics: {len(lines)} lines" if lines
+            else "no synced lyrics (no dialogs)")
+
+
+def _worker(track, gen):
+    """Atiende un tema y, si quedó otro esperando, sigue con ése sin morirse:
+    el hilo es el lugar, no el trabajo."""
+    global _inflight, _pending
+    while True:
+        try:
+            if _mine(gen):   # el que esperaba puede haber quedado viejo
+                _work(track, gen)
+        except Exception as e:
+            log(f"lyrics thread died ({e})")
+        with _fetch_lock:
+            # bajar el contador y decidir la salida van juntos bajo el lock: si
+            # no, alguien ve el cupo lleno y deja un `_pending` que no levanta nadie
+            if _pending is None:
+                _inflight -= 1
+                return
+            track, gen = _pending
+            _pending = None
 
 
 def fetch_lyrics_async(track):
     """Busca la letra en un hilo. Son dos requests con timeout de 10s cada uno:
     hechos en el loop principal, un lrclib lento o caído congelaba todo —
     detección de juego, eventos de progreso y limpieza incluidos."""
+    global _inflight, _pending
     with _fetch_lock:
         _fetch["gen"] += 1
         gen = _fetch["gen"]
         _fetch.update(id=track["id"], lyrics=None, done=False)
-
-    def mine():
-        return _fetch["gen"] == gen
-
-    def publish(lines):
-        with _fetch_lock:
-            if not mine():
-                return False
-            _fetch.update(lyrics=lines, done=True)
-        return True
-
-    def work():
-        hit = cache_get(track)
-        if hit:
-            if publish(hit[1]):
-                log(f"cached lyrics: {len(hit[1])} lines" if hit[1]
-                    else "no synced lyrics (cached)")
+        if _inflight >= MAX_INFLIGHT:
+            _pending = (track, gen)
             return
-        for attempt in range(RETRIES + 1):
-            status, lines = fetch_lyrics(track)
-            if status != "error":
-                break
-            if attempt == RETRIES:
-                log("lrclib unreachable, giving up on this track")
-                return
-            # red caída: esperar y reintentar, salvo que ya haya cambiado de tema
-            log(f"lrclib unreachable, retrying in {RETRY_DELAY}s")
-            for _ in range(RETRY_DELAY * 2):
-                time.sleep(0.5)
-                if not mine():
-                    return
-        cache_put(track, status, lines)
-        if publish(lines):
-            log(f"synced lyrics: {len(lines)} lines" if lines
-                else "no synced lyrics (no dialogs)")
+        _inflight += 1
 
-    threading.Thread(target=work, daemon=True, name="lyrics").start()
+    try:
+        threading.Thread(target=_worker, args=(track, gen), daemon=True, name="lyrics").start()
+    except RuntimeError as e:
+        # sin lugar para un hilo más: devolver el cupo, o queda tomado para
+        # siempre y la letra no vuelve nunca
+        with _fetch_lock:
+            _inflight -= 1
+        log(f"couldn't start the lyrics thread ({e})")
 
 def current_line_index(lyrics, pos):
     idx = -1

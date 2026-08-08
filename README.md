@@ -1,5 +1,7 @@
 # fatal-lyrics
 
+[![tests](https://github.com/FeroxShark/fatal-lyrics/actions/workflows/tests.yml/badge.svg)](https://github.com/FeroxShark/fatal-lyrics/actions/workflows/tests.yml)
+
 Synced Spotify lyrics shown as Windows 95 error dialogs popping up on your
 desktop.
 
@@ -269,17 +271,19 @@ Lyrics come from [lrclib.net](https://lrclib.net) (free, no API key).
 
 ## Installation
 
-### Arch Linux (AUR)
-
-```bash
-yay -S fatal-lyrics-git
-```
-
-### Manual
-
 ```bash
 git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
 ~/fatal-lyrics/install.sh
+```
+
+### Arch Linux (AUR)
+
+Not published yet. The `PKGBUILD` lives in `packaging/` and works today if you
+want to build it yourself:
+
+```bash
+git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
+cd ~/fatal-lyrics/packaging && makepkg -si
 ```
 
 ## Usage
@@ -361,6 +365,10 @@ track you already skipped could overwrite the current one, the daemon's main
 loop (via a dependency-injected `DaemonLoop`), the tray's fallback when `gi`
 isn't available, and the `fatal config` TUI's validation/retry paths. No
 dependencies beyond the standard library.
+
+GitHub Actions runs the same command on Python 3.11, 3.12 and 3.13 for every
+push and pull request (`.github/workflows/tests.yml`) — no install step,
+because there is nothing to install.
 
 | Section    | Option               | What it does                                                    | Default     |
 |------------|----------------------|------------------------------------------------------------------|-------------|

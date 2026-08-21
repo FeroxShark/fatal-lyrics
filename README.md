@@ -5,6 +5,12 @@
 Synced Spotify lyrics shown as Windows 95 error dialogs popping up on your
 desktop.
 
+![Win95 dialogs popping up with fatal demo](docs/demo-dialogs.gif)
+
+*Recorded with `fatal demo`, which throws fake dialogs so you can see the thing
+without music playing. Fresh lines land crisp; older ones vibrate, tear and
+glitch until they collapse.*
+
 - Every lyric line appears as an error dialog at a random position.
 - The dialog for the line playing **right now** is bigger and stays still.
 - Older dialogs vibrate like holograms, glitch with broken-GPU artifacts
@@ -44,6 +50,12 @@ takes the whole machine, on every monitor at once.
 ```bash
 fatal crt on | off | toggle | status
 ```
+
+![CRT mode: the whole screen turns into a cathode ray tube showing the lyric](docs/crt-mode.jpg)
+
+*One monitor in CRT mode: barrel curvature, scanlines, phosphor bleed and
+vignette, with the hint at the top reminding you that any mouse move drops you
+back to the desktop (`exit_on`).*
 
 What the tube does:
 

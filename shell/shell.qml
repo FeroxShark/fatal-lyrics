@@ -1494,12 +1494,28 @@ ShellRoot {
 
                                 // barra de título (arrastrable)
                                 Rectangle {
+                                    id: titlebar
                                     width: parent.width
                                     height: Math.round(26 * win.k)
+                                    clip: true
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
                                         GradientStop { position: 0.0; color: "#000080" }
                                         GradientStop { position: 1.0; color: "#1084d0" }
+                                    }
+
+                                    // barrido blanco al nacer, como un reflejo cruzando el vidrio
+                                    Rectangle {
+                                        width: Math.round(40 * win.k)
+                                        height: titlebar.height
+                                        color: "#ffffff"
+                                        opacity: 0.5
+                                        NumberAnimation on x {
+                                            from: -Math.round(40 * win.k)
+                                            to: titlebar.width
+                                            duration: 220
+                                            running: true
+                                        }
                                     }
 
                                     MouseArea {

@@ -779,8 +779,22 @@ ShellRoot {
         onTriggered: crtSwitch.reload()
     }
 
+    // T0.11: hotplug de monitores. matchScreens/orderScreens leen
+    // Quickshell.screens dentro de una función, y esa lectura no siempre basta
+    // para que el binding se marque sucio con un hotplug real — por eso el
+    // recálculo se fuerza a mano leyendo screensGen, que Connections empuja
+    // cada vez que la lista de pantallas cambia.
+    property int screensGen: 0
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            root.screensGen++;
+        }
+    }
+
     // pantallas donde corre el overlay según la config
     function matchScreens(v) {
+        const _dep = root.screensGen;   // dependencia: ver el comentario de arriba
         const ss = Quickshell.screens;
         if (v === "all")
             return [...ss];

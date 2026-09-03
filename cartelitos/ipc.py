@@ -58,6 +58,7 @@ CONFIG_EVENT_MAP = (
     ("tearing", "effects", "tearing"), ("death_age_min", "effects", "death_age_min"),
     ("death_age_max", "effects", "death_age_max"), ("max_lifetime", "effects", "max_lifetime"),
     ("burn_in", "effects", "burn_in"), ("cascade", "effects", "cascade"),
+    ("mirror", "effects", "mirror"),
     ("cascade_style", "effects", "cascade_style"),
     ("click_through", "behavior", "click_through"), ("troll_no", "behavior", "troll_no"),
     ("np_corner", "behavior", "np_corner"), ("np_margin", "behavior", "np_margin"),

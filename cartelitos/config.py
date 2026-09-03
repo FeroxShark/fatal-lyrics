@@ -46,6 +46,7 @@ _CONFIG_COMMENTS = {
         "max_lifetime": "max lifetime per dialog in seconds; 0 = unlimited",
         "burn_in": "dead dialogs leave a fading burnt shadow",
         "cascade": "on track change, dialogs die in a chain (CRT domino)",
+        "mirror": "the current dialog stands on its own reflection",
         "cascade_style": "chain order: random (picks one of the three below\n"
                           "each time) | age (oldest first) | top (top of\n"
                           "screen first) | center (center outward)",
@@ -223,6 +224,7 @@ DEFAULTS = {
         "glitch": "normal", "effects_on_current": False, "tearing": True,
         "death_age_min": 3, "death_age_max": 7, "max_lifetime": 60,
         "burn_in": True, "cascade": True, "cascade_style": "random",
+        "mirror": False,
     },
     "behavior": {
         "now_playing": True, "np_corner": "top-right", "np_margin": 14,

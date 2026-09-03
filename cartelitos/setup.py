@@ -154,6 +154,8 @@ SETTINGS = [
      lambda c: _pick("Fading burnt shadow when a dialog dies (burn-in)", YESNO, c)),
     ("cascade", "effects", "Chain death on track change",
      lambda c: _pick("Dialogs die in a chain on track change", YESNO, c)),
+    ("mirror", "effects", "Reflection under the current dialog",
+     lambda c: _pick("The current dialog stands on its own reflection", YESNO, c)),
     ("death_age_min", "effects", "A dialog dies after at least",
      lambda c: _ask_int("A dialog dies between... (new dialogs after it appears)", c, 1, 50)),
     ("death_age_max", "effects", "...and at most",

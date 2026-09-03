@@ -28,6 +28,8 @@ ShellRoot {
     property int maxLifetime: 60
     property bool clickThrough: false
     property bool trollNo: true
+    // T4.4: el cartel de la línea que suena se para sobre su propio reflejo
+    property bool mirrorOn: false
     property bool burnIn: true
     property bool cascadeDeath: true
     property string cascadeStyle: "random"
@@ -1153,6 +1155,7 @@ ShellRoot {
         death_age_min: "deathAgeMin", death_age_max: "deathAgeMax", max_lifetime: "maxLifetime",
         click_through: "clickThrough", troll_no: "trollNo", burn_in: "burnIn",
         cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn",
+        mirror: "mirrorOn",
         np_corner: "npCorner", np_margin: "npMargin", np_vinyl: "npVinyl",
         crt_screens: "crtScreens", crt_order: "crtOrder", crt_exit_on: "crtExitOn",
         crt_palette: "crtPalette", crt_split: "crtSplit", crt_font: "crtFont",
@@ -1439,8 +1442,16 @@ ShellRoot {
 
                     readonly property int dlgW: Math.max(300 * k, Math.min(tm.width, 360 * k) + (iconW + 78) * k)
 
+                    // El reflejo vive DENTRO de la ventana del cartel (así se
+                    // arrastra con él sin plumbing extra), pero cae por debajo:
+                    // la ventana tiene que crecer o queda recortado.
+                    // muriendo no: el colapso encoge el cartel y el reflejo no lo
+                    // acompaña, así que quedaría una copia flotando abajo
+                    readonly property bool mirrored: root.mirrorOn && current && !ghosting && !dying
+                    readonly property int mirrorH: mirrored ? Math.round(content.height * 0.5) : 0
+
                     implicitWidth: dlgW + tearPad * 2
-                    implicitHeight: content.height
+                    implicitHeight: content.height + mirrorH
 
                     // en multi-pantalla cada monitor randomiza su propia posición
                     // (mismo cartel, lugar distinto en cada una)
@@ -2080,6 +2091,47 @@ ShellRoot {
                             y: modelData.y0
                             width: content.width
                             height: modelData.h
+                        }
+                    }
+
+                    // ---- el reflejo (T4.4)
+                    // Ocho tajadas en vez de una sola imagen con degradado: el
+                    // degradado necesitaría OpacityMask (Qt5Compat.GraphicalEffects),
+                    // que este shell no importa en ningún lado. Cada tajada copia
+                    // su franja del cartel y baja de opacidad — el corte no se ve
+                    // porque el salto entre una y la siguiente es de 3 puntos.
+                    Item {
+                        id: mirror
+                        x: win.tearPad
+                        y: content.height
+                        width: win.dlgW
+                        height: win.mirrorH
+                        visible: win.mirrored
+                        opacity: win.deathOpacity
+
+                        Repeater {
+                            model: win.mirrored ? 8 : 0
+
+                            ShaderEffectSource {
+                                required property int index
+                                readonly property real bandH: mirror.height / 8
+                                // la franja de ABAJO del cartel es la de ARRIBA
+                                // del reflejo: el espejo da vuelta el orden
+                                sourceItem: content
+                                hideSource: false
+                                live: true
+                                sourceRect: Qt.rect(0, content.height - (index + 1) * bandH,
+                                                    content.width, bandH)
+                                x: 0
+                                y: index * bandH
+                                width: mirror.width
+                                height: bandH
+                                opacity: 0.25 * (1 - index / 8)
+                                transform: Scale {
+                                    origin.y: bandH / 2
+                                    yScale: -1
+                                }
+                            }
                         }
                     }
 

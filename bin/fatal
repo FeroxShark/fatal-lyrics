@@ -33,6 +33,10 @@ CRT_SETUP="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt-setup"
 # gesto de sync fino (T0.13): otro archivo, mismo motivo — este proceso es
 # corto y se muere, el daemon (otro proceso) es el que tiene que verlo
 SYNCF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sync"
+# modo karaoke (`fatal sing`): mismo mecanismo de archivo, pero acá el archivo
+# es sólo el timbre — el estado vive en la perilla `[behavior] sing` del TOML,
+# que es lo que el daemon manda al overlay y lo que sobrevive al reinicio
+SINGF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sing"
 
 # Un PID vivo no alcanza: el sistema recicla números, y con el pidfile de una
 # sesión anterior `kill -0` daba OK sobre un proceso ajeno — status decía ON sin
@@ -186,6 +190,31 @@ crt() {
     esac
 }
 
+# El estado del modo karaoke es la perilla del TOML, no el timbre de $SINGF:
+# este proceso es corto y no puede preguntarle nada al daemon (el socket va
+# sólo daemon → overlay), pero el archivo de config sí lo puede leer.
+sing_state() {
+    grep -qE '^[[:space:]]*sing[[:space:]]*=[[:space:]]*true' "$CONFIG" 2>/dev/null \
+        && echo ON || echo OFF
+}
+
+# T5.1: el modo karaoke abre el MICRÓFONO, así que no se prende solo por
+# accidente: hay que pedirlo. Lo aplica el daemon (config.watch_sing), que es
+# quien puede escribir la config y levantar la captura.
+sing_lyrics() {
+    case "${1:-toggle}" in
+        on|off|toggle) ;;
+        status) sing_state; return 0 ;;
+        *) echo "usage: fatal sing [on|off|toggle|status]" >&2; exit 1 ;;
+    esac
+    if ! running "$D_PID" "$DAEMON"; then
+        echo "fatal-lyrics isn't running — start it with: fatal on" >&2
+        exit 1
+    fi
+    printf '%s' "$1" > "$SINGF.tmp" && mv "$SINGF.tmp" "$SINGF"
+    echo "sing $1"
+}
+
 demo() {
     if running "$D_PID" "$DAEMON"; then
         kill -USR1 "$(cat "$D_PID")"
@@ -223,6 +252,7 @@ case "${1:-toggle}" in
     demo)      demo ;;
     crt)       crt "$2" "$3" ;;
     sync)      sync_lyrics "$2" ;;
+    sing)      sing_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|sync +|-]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|sync +|-|sing on|off|toggle]" ;;
 esac

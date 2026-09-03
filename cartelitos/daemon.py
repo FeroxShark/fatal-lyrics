@@ -324,6 +324,10 @@ class DaemonLoop:
         threading.Thread(target=self._audio.audio_loop, daemon=True, name="audio").start()
         threading.Thread(target=self._config.watch_tune, daemon=True, name="tune").start()
         threading.Thread(target=self._watch_sync, daemon=True, name="sync").start()
+        # T5.1: el hilo del micrófono existe siempre, pero no abre nada mientras
+        # `sing` esté apagada (que es el default): dormita mirando la perilla
+        threading.Thread(target=self._config.watch_sing, daemon=True, name="sing").start()
+        threading.Thread(target=self._audio.voice_loop, daemon=True, name="voice").start()
         signal.signal(signal.SIGUSR1, self._ipc.demo)
         while True:
             self.tick()

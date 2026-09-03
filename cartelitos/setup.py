@@ -259,6 +259,9 @@ SETTINGS = [
      lambda c: _ask_int("Seconds paused before clearing everything (0 = never)", c, 0, 300)),
     ("game_pause", "behavior", "Auto-pause on fullscreen games",
      lambda c: _pick("Auto-pause when a game is in fullscreen", YESNO, c)),
+    ("sing", "behavior", "Karaoke mode (listens to the mic)",
+     lambda c: _pick("Karaoke mode: the mic is listened to and everything only "
+                     "lights up while you sing (fatal sing on|off)", YESNO, c)),
 ]
 
 DIM, BOLD, YEL, OFF = "\033[2m", "\033[1m", "\033[33m", "\033[0m"

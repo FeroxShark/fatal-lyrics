@@ -61,6 +61,10 @@ _CONFIG_COMMENTS = {
         "pause_clear": "seconds paused before clearing everything; 0 = never",
         "player": "MPRIS player name (see: playerctl -l)",
         "offset": "sync lead time in seconds",
+        "sing": "karaoke mode: the mic is listened to and everything (the tube,\n"
+                "the dialogs) only lights up WHILE you are singing. Off by\n"
+                "default — it is the only thing here that opens the microphone.\n"
+                "Switch it from anywhere with: fatal sing on | off | toggle",
         "game_pause": 'auto-pause when a window goes fullscreen (generic "game" heuristic\n'
                        "via Hyprland, doesn't depend on a specific process);\n"
                        "false = never pause for games",
@@ -230,7 +234,7 @@ DEFAULTS = {
         "now_playing": True, "np_corner": "top-right", "np_margin": 14,
         "np_vinyl": True, "troll_no": True, "click_through": False,
         "pause_clear": 15, "player": "spotify", "offset": 0.15,
-        "game_pause": True,
+        "game_pause": True, "sing": False,
     },
     "system": {
         "not_a_game": ["chrome", "chromium", "firefox", "zen", "brave", "vivaldi",
@@ -399,6 +403,57 @@ def watch_tune():
         for key, value in changes.items():
             log(f"tune: crt.{key} = {value}")
             set_option(key, "crt", value)
+
+
+# ------------------------------------------------- interruptor del karaoke
+# `fatal sing on|off|toggle` es OTRO proceso y no puede tocar el CFG vivo: deja
+# el pedido en un archivo y el daemon lo pasa a la config (mismo camino que
+# `fatal tune`). A diferencia del CRT, acá el archivo NO es el estado: el estado
+# es la perilla del TOML, que es lo que viaja al overlay y lo que sobrevive al
+# reinicio. Este archivo es sólo el timbre.
+SING_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-sing")
+
+
+def parse_sing(text, current):
+    """Qué pide el timbre: True, False o None si no se entiende. `toggle`
+    necesita saber cómo está ahora, de ahí el segundo argumento."""
+    raw = (text or "").strip().lower()
+    if raw in ("1", "on", "true", "yes"):
+        return True
+    if raw in ("0", "off", "false", "no"):
+        return False
+    if raw == "toggle":
+        return not current
+    return None
+
+
+def watch_sing():
+    """Aplica lo que pide `fatal sing`. Se anota el mtime que YA estaba al
+    arrancar: un timbre que quedó de la sesión anterior no puede abrir el
+    micrófono solo al boot."""
+    try:
+        last = os.stat(SING_PATH).st_mtime_ns
+    except OSError:
+        last = None
+    while True:
+        time.sleep(0.35)
+        try:
+            stamp = os.stat(SING_PATH).st_mtime_ns
+        except OSError:
+            continue
+        if stamp == last:
+            continue
+        last = stamp
+        try:
+            with open(SING_PATH) as f:
+                raw = f.read()
+        except OSError:
+            continue
+        want = parse_sing(raw, CFG["behavior"]["sing"])
+        if want is None or want == CFG["behavior"]["sing"]:
+            continue
+        log(f"sing mode {'on' if want else 'off'}")
+        set_option("sing", "behavior", want)
 
 
 def watch_config():

@@ -1596,6 +1596,132 @@ class TestSinkChanged(unittest.TestCase):
         self.assertFalse(c.sink_changed("alsa_output.foo", lambda: None))
 
 
+class TestVoiceRms(unittest.TestCase):
+    """T5.1: del micrófono sólo interesa el volumen. El análisis completo
+    (bandas + centroide) son seis DFT por bloque que nadie lee."""
+
+    def pcm(self, values):
+        return b"".join(int(v * 32767).to_bytes(2, "little", signed=True) for v in values)
+
+    def test_silence_is_zero(self):
+        self.assertEqual(c.voice_rms(self.pcm([0.0] * 100)), 0.0)
+
+    def test_an_empty_block_does_not_divide_by_zero(self):
+        self.assertEqual(c.voice_rms(b""), 0.0)
+
+    def test_a_square_wave_is_its_own_amplitude(self):
+        self.assertAlmostEqual(c.voice_rms(self.pcm([0.5, -0.5] * 50)), 0.5, places=3)
+
+    def test_louder_input_gives_a_bigger_number(self):
+        quiet = c.voice_rms(self.pcm([0.02, -0.02] * 50))
+        loud = c.voice_rms(self.pcm([0.4, -0.4] * 50))
+        self.assertGreater(loud, quiet * 10)
+
+    def test_the_block_is_a_tenth_of_a_second(self):
+        # el plan pide 10 Hz: si alguien toca el hop, que se note acá
+        self.assertEqual(c.VOICE_HOP, c.AUDIO_RATE // 10)
+
+
+class TestVoiceCommand(unittest.TestCase):
+    """Con qué se graba el micrófono. Lo importante no es el comando: es que
+    NO se grabe cuando la entrada por default es el monitor de una salida (ahí
+    lo que entra es la propia música y el modo diría "está cantando" siempre)."""
+
+    def cmd(self, source, node="77", pw=True, parec=True):
+        with mock.patch.object(audio, "_default_source", return_value=source), \
+             mock.patch.object(audio, "_source_node_id", return_value=node), \
+             mock.patch.object(audio.shutil, "which",
+                               side_effect=lambda t: {"pw-record": pw, "parec": parec}.get(t)):
+            return audio._voice_command()
+
+    def test_it_records_the_default_input_by_node_id(self):
+        cmd = self.cmd("alsa_input.usb-Blue.analog-stereo")
+        self.assertEqual(cmd[0], "pw-record")
+        self.assertIn("--target=77", cmd)
+
+    def test_a_monitor_as_default_input_is_refused(self):
+        self.assertIsNone(self.cmd("alsa_output.pci-0000_01_00.1.hdmi-stereo.monitor"))
+
+    def test_without_a_default_input_there_is_nothing_to_record(self):
+        self.assertIsNone(self.cmd(None))
+
+    def test_parec_is_the_fallback_and_takes_the_name(self):
+        cmd = self.cmd("alsa_input.usb-Blue.analog-stereo", pw=False)
+        self.assertEqual(cmd[0], "parec")
+        self.assertIn("alsa_input.usb-Blue.analog-stereo", cmd)
+
+    def test_without_a_recorder_there_is_no_command(self):
+        self.assertIsNone(self.cmd("alsa_input.usb-Blue.analog-stereo", pw=False, parec=False))
+
+    def test_pw_record_without_a_node_id_falls_back_to_parec(self):
+        # mismo motivo que con los sinks: pw-record por nombre graba silencio
+        cmd = self.cmd("alsa_input.usb-Blue.analog-stereo", node=None)
+        self.assertEqual(cmd[0], "parec")
+
+
+class TestVoiceCapture(unittest.TestCase):
+    """El micrófono no se abre si nadie lo pidió, y se suelta al apagar el modo."""
+
+    def test_with_sing_off_no_process_is_ever_spawned(self):
+        opened = []
+        with mock.patch.dict(config.CFG["behavior"], {"sing": False}), \
+             mock.patch.object(audio, "_voice_command",
+                               side_effect=lambda: opened.append(1) or ["true"]), \
+             mock.patch.object(audio.time, "sleep", side_effect=StopIteration):
+            with self.assertRaises(StopIteration):
+                audio._voice_capture()
+        self.assertEqual(opened, [])
+
+    def test_it_feeds_the_sink_and_releases_the_mic_when_sing_goes_off(self):
+        block = b"\x00\x10" * c.VOICE_HOP        # un bloque entero, con señal
+        heard = []
+        proc = mock.Mock()
+        # tres bloques y se apaga el modo: la captura tiene que cortar sola
+        def read(_n):
+            if len(heard) >= 3:
+                config.CFG["behavior"]["sing"] = False
+            return block
+        proc.stdout.read.side_effect = read
+        with mock.patch.dict(config.CFG["behavior"], {"sing": True}), \
+             mock.patch.object(audio, "_voice_command", return_value=["pw-record"]), \
+             mock.patch.object(audio.subprocess, "Popen", return_value=proc), \
+             mock.patch.object(audio.time, "sleep", side_effect=StopIteration):
+            audio.set_voice_sink(lambda rms, now: heard.append(rms))
+            self.addCleanup(audio.set_voice_sink, None)
+            with self.assertRaises(StopIteration):
+                audio._voice_capture()   # la segunda vuelta ya duerme: sing off
+        self.assertEqual(len(heard), 4)
+        self.assertTrue(all(r > 0 for r in heard))
+        proc.terminate.assert_called_once()
+
+
+class TestSingSwitch(unittest.TestCase):
+    """`fatal sing` es otro proceso: deja el pedido en un archivo y el daemon lo
+    pasa a la perilla. El archivo es el timbre, la perilla es el estado."""
+
+    def test_on_and_off(self):
+        self.assertTrue(c.parse_sing("on", False))
+        self.assertTrue(c.parse_sing("1", False))
+        self.assertFalse(c.parse_sing("off", True))
+        self.assertFalse(c.parse_sing("0\n", True))
+
+    def test_toggle_needs_to_know_how_it_is_now(self):
+        self.assertTrue(c.parse_sing("toggle", False))
+        self.assertFalse(c.parse_sing("toggle", True))
+
+    def test_garbage_asks_for_nothing(self):
+        # lo escribe otro proceso: no se le cree nada
+        self.assertIsNone(c.parse_sing("", False))
+        self.assertIsNone(c.parse_sing("banana", False))
+        self.assertIsNone(c.parse_sing(None, False))
+
+    def test_the_bash_side_writes_the_same_file(self):
+        with open(os.path.join(REPO, "bin", "fatal"), encoding="utf-8") as f:
+            body = f.read()
+        self.assertIn("cartelitos-sing", body)
+        self.assertTrue(c.SING_PATH.endswith("/cartelitos-sing"))
+
+
 class TestAlbumColours(unittest.TestCase):
     """Los colores del tubo salen de la tapa. Lo que importa es el ORDEN: la
     portada típica es mayormente oscura, y si se ordena por cantidad pelada el

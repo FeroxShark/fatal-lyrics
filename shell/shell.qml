@@ -40,6 +40,10 @@ ShellRoot {
     property string npCorner: "top-right"
     property int npMargin: 14
     property bool npVinyl: true
+    // T5: modo karaoke. Es una perilla del daemon (`[behavior] sing`), no un
+    // archivo: acá sólo cambia lo que se dibuja, y el que escucha el micrófono
+    // es el daemon. `singing` (abajo, T5.3) es el estado en vivo.
+    property bool singMode: false
 
     // ---- modo CRT: el tubo full-bleed que tapa cada monitor (opt-in)
     property bool crtOn: false
@@ -1167,6 +1171,7 @@ ShellRoot {
         cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn",
         mirror: "mirrorOn",
         np_corner: "npCorner", np_margin: "npMargin", np_vinyl: "npVinyl",
+        sing: "singMode",
         crt_screens: "crtScreens", crt_order: "crtOrder", crt_exit_on: "crtExitOn",
         crt_palette: "crtPalette", crt_split: "crtSplit", crt_font: "crtFont",
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",

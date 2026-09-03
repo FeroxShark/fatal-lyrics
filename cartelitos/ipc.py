@@ -63,6 +63,7 @@ CONFIG_EVENT_MAP = (
     ("click_through", "behavior", "click_through"), ("troll_no", "behavior", "troll_no"),
     ("np_corner", "behavior", "np_corner"), ("np_margin", "behavior", "np_margin"),
     ("np_vinyl", "behavior", "np_vinyl"),
+    ("sing", "behavior", "sing"),
     ("crt_screens", "crt", "screens"), ("crt_order", "crt", "order"),
     ("crt_palette", "crt", "palette"), ("crt_split", "crt", "split"),
     ("crt_exit_on", "crt", "exit_on"), ("crt_director", "crt", "director"),

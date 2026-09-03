@@ -639,6 +639,140 @@ def _audio_command():
     return None
 
 
+# ---------------------------------------------------- el micrófono (T5.1)
+# El modo karaoke escucha lo que canta Ferox, no lo que sale de la placa: es
+# una SEGUNDA captura, sobre la fuente de entrada por default, y sólo existe
+# mientras `[behavior] sing` está prendida. Por default está apagada: es lo
+# único de todo el programa que abre el micrófono.
+VOICE_HOP = AUDIO_RATE // 10      # un bloque cada 100 ms (10 Hz, como el plan)
+
+
+def voice_rms(pcm):
+    """Cuánto suena este bloque de mic. s16 mono, igual que la otra captura.
+
+    Acá NO se usa AudioAnalyzer a propósito: el análisis completo son seis DFT
+    por bloque (bandas + centroide) y del micrófono no se lee ninguna — sólo el
+    volumen. Con bloques de 1600 muestras eso sería trabajo puro para tirar."""
+    n = len(pcm) // 2
+    if n == 0:
+        return 0.0
+    total = 0.0
+    for i in range(n):
+        x = int.from_bytes(pcm[i * 2:i * 2 + 2], "little", signed=True) / 32768.0
+        total += x * x
+    return math.sqrt(total / n)
+
+
+def _default_source():
+    """Nombre de la ENTRADA por default (el micrófono), o None."""
+    try:
+        out = subprocess.run(["pactl", "get-default-source"],
+                             capture_output=True, text=True, timeout=3)
+        name = out.stdout.strip()
+        if out.returncode == 0 and name:
+            return name
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        log(f"couldn't ask for the default source ({type(e).__name__}: {e})")
+    return None
+
+
+def _source_node_id(name):
+    # `pactl list sources short` tiene el mismo formato que el de los sinks, así
+    # que el parser (sink_node_id) es el mismo — uno solo, probado una vez
+    try:
+        out = subprocess.run(["pactl", "list", "sources", "short"],
+                             capture_output=True, text=True, timeout=3)
+        if out.returncode == 0:
+            return sink_node_id(out.stdout, name)
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        log(f"couldn't list the sources ({type(e).__name__}: {e})")
+    return None
+
+
+def _voice_command():
+    """Con qué grabar el micrófono, o None si no se puede.
+
+    Si la entrada por default es el MONITOR de una salida, no se graba: lo que
+    entraría por ahí es la propia música, y el modo diría "está cantando" cada
+    vez que suena un tema. Mejor no hacer nada y decirlo en el log."""
+    name = _default_source()
+    if not name:
+        return None
+    if name.endswith(".monitor"):
+        log(f"voice: the default input is a monitor ({name}), not a mic — "
+            "sing mode has nothing to listen to")
+        return None
+    if shutil.which("pw-record"):
+        node = _source_node_id(name)
+        if node:
+            return ["pw-record", "--format=s16", f"--rate={AUDIO_RATE}",
+                    "--channels=1", "--latency=20ms", f"--target={node}", "-"]
+    if shutil.which("parec"):
+        return ["parec", "--format=s16le", f"--rate={AUDIO_RATE}",
+                "--channels=1", "-d", name]
+    return None
+
+
+# Quién se come el nivel del micrófono. Lo registra el daemon (SingGate, T5.2):
+# es el mismo proceso, así que no hay razón para que 10 mensajes por segundo den
+# la vuelta por el socket para volver acá al lado. Sin nadie registrado la
+# captura igual anda (y no hace nada), que es lo que quiere un test.
+_voice_sink = None
+
+
+def set_voice_sink(fn):
+    global _voice_sink
+    _voice_sink = fn
+
+
+def voice_loop():
+    """Supervisor del hilo del micrófono. Mismo motivo que audio_loop: si se
+    escapa una excepción, el hilo muere y el modo karaoke deja de funcionar
+    para siempre sin decir nada."""
+    while True:
+        try:
+            _voice_capture()
+        except Exception:
+            log("voice thread blew up, restarting it:\n" + traceback.format_exc())
+            time.sleep(5)
+
+
+def _voice_capture():
+    """Graba el mic mientras `sing` esté prendida. Apagada, no se abre ni el
+    proceso: el micrófono no queda abierto cuando nadie lo pidió."""
+    while True:
+        if not config.CFG["behavior"]["sing"]:
+            time.sleep(0.5)
+            continue
+        cmd = _voice_command()
+        if not cmd:
+            time.sleep(10)
+            continue
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL)
+        except OSError as e:
+            log(f"couldn't capture the mic ({type(e).__name__}: {e})")
+            time.sleep(5)
+            continue
+        log("voice: listening to the mic (sing mode)")
+        try:
+            while config.CFG["behavior"]["sing"]:
+                chunk = proc.stdout.read(VOICE_HOP * 2)
+                if not chunk or len(chunk) < VOICE_HOP * 2:
+                    break        # se cayó la captura (mic desenchufado, etc.)
+                sink = _voice_sink
+                if sink:
+                    sink(voice_rms(chunk), time.monotonic())
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        log("voice: mic released")
+
+
 def audio_loop():
     """Supervisor del hilo de audio.
 

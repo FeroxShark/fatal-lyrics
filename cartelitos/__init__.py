@@ -23,8 +23,9 @@ from .util import (
 
 from .config import (
     CFG, CONFIG_DIR, CONFIG_PATH, CRT_PATH, DEFAULT_CONFIG, DEFAULTS,
-    TUNE_PATH, apply_config, crt_on, load_config, parse_tune, read_config,
-    reload_config, set_crt, set_option, watch_config, watch_tune,
+    SING_PATH, TUNE_PATH, apply_config, crt_on, load_config, parse_sing,
+    parse_tune, read_config,
+    reload_config, set_crt, set_option, watch_config, watch_sing, watch_tune,
     _save_config, _toml_val,
 )
 
@@ -60,9 +61,11 @@ from .audio import (
     BPM_SEND_DELTA, BPM_SEND_EVERY, BPM_TOL, BpmTracker,
     PEAK_GAP, PEAK_HARD, PEAK_MAX, PEAK_PCT, PROFILE_DIR, PROFILE_STEP,
     PeakGate, SECTIONS, SECTION_HOLD, SECTION_SMOOTH, SINK_CHECK_EVERY,
-    TrackProfile, audio_loop, band_energy, classify_level, profile_for,
-    set_profile, sink_changed, sink_node_id, _audio_command, _band_table,
-    _default_sink, _fold_interval, _profile_lock, _sink_node_id,
+    TrackProfile, VOICE_HOP, audio_loop, band_energy, classify_level,
+    profile_for, set_profile, set_voice_sink, sink_changed, sink_node_id,
+    voice_loop, voice_rms, _audio_command, _band_table,
+    _default_sink, _default_source, _fold_interval, _profile_lock,
+    _sink_node_id, _source_node_id, _voice_capture, _voice_command,
 )
 
 from .offsets import OFFSETS_DIR, OFFSETS_PATH, get as offset_get, record as offset_record

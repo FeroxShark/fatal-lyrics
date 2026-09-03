@@ -723,6 +723,82 @@ class TestCrtSwitch(unittest.TestCase):
         self.assertFalse(c.crt_on())
 
 
+class TestSocketBackoff(unittest.TestCase):
+    """Con el overlay muerto, send() no puede seguir intentando conectar en
+    cada evento: cada connect() fallido cuelga hasta su timeout."""
+
+    def setUp(self):
+        self._old_sock = ipc._sock
+        self._old_dead = ipc._dead_until
+        self._old_fail = ipc._fail_count
+        ipc._sock = None
+        ipc._dead_until = 0.0
+        ipc._fail_count = 0
+
+        def restore():
+            ipc._sock = self._old_sock
+            ipc._dead_until = self._old_dead
+            ipc._fail_count = self._old_fail
+        self.addCleanup(restore)
+
+    def test_only_the_first_two_calls_attempt_to_connect(self):
+        attempts = []
+
+        class FailingSocket:
+            def __init__(self, *a, **k):
+                attempts.append(1)
+            def settimeout(self, *a, **k):
+                pass
+            def connect(self, *a, **k):
+                raise OSError("no one home")
+            def close(self):
+                pass
+
+        with mock.patch("socket.socket", side_effect=FailingSocket):
+            ipc.send({"cmd": "clear"})
+            ipc.send({"cmd": "clear"})
+            ipc.send({"cmd": "clear"})
+
+        self.assertEqual(len(attempts), 2)
+
+    def test_a_successful_send_resets_the_failure_count(self):
+        class OkSocket:
+            def settimeout(self, *a, **k):
+                pass
+            def connect(self, *a, **k):
+                pass
+            def sendall(self, *a, **k):
+                pass
+            def close(self):
+                pass
+
+        attempts = []
+
+        class FailingSocket:
+            def __init__(self, *a, **k):
+                attempts.append(1)
+            def settimeout(self, *a, **k):
+                pass
+            def connect(self, *a, **k):
+                raise OSError("no one home")
+            def close(self):
+                pass
+
+        with mock.patch("socket.socket", side_effect=FailingSocket):
+            ipc.send({"cmd": "clear"})
+        with mock.patch("socket.socket", return_value=OkSocket()):
+            ipc.send({"cmd": "clear"})
+        ipc._sock = None   # el overlay cerró la conexión que acababa de andar
+        with mock.patch("socket.socket", side_effect=FailingSocket):
+            ipc.send({"cmd": "clear"})
+            ipc.send({"cmd": "clear"})
+
+        # el éxito en el medio resetea el contador: hacen falta otros dos
+        # fallos seguidos para el backoff, así que las dos últimas llamadas
+        # (tras el éxito) sí intentan conectar
+        self.assertEqual(len(attempts), 3)
+
+
 class TestConfigEvent(unittest.TestCase):
     """El evento de config se arma con CONFIG_EVENT_MAP: una clave nueva en
     DEFAULTS que no se agregue a ese mapa nunca llega al overlay, y no falla

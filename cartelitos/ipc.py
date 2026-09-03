@@ -15,6 +15,15 @@ _last_np = None
 # posición de la canción, para que el hilo de audio sepa en qué minuto está
 _song_where = {"pos": 0.0, "at": 0.0, "playing": False}
 
+# backoff: con el overlay muerto, cada evento (varios por segundo con el CRT
+# prendido) intentaba conectar y fallaba — un connect() colgado durante 2s de
+# timeout, por evento, congela al que llama. Dos fallos seguidos y se deja de
+# intentar por un rato.
+_dead_until = 0.0
+_fail_count = 0
+DEAD_BACKOFF = 2.0
+DEAD_AFTER = 2
+
 
 def _song_pos():
     """Segundo de la canción ahora mismo, extrapolado del último dato."""
@@ -67,31 +76,42 @@ def _config_event():
 
 def send(event):
     """Manda un evento JSON al overlay; en cada reconexión manda la config primero
-    y reenvía el último Now Playing (el overlay nuevo arranca sin estado)."""
-    global _sock, _last_np
+    y reenvía el último Now Playing (el overlay nuevo arranca sin estado).
+
+    Con el overlay muerto, cada llamada intenta reconectar: sin el backoff,
+    con el CRT prendido eso son varios connect() fallidos por segundo, cada
+    uno colgando hasta su timeout. Tras DEAD_AFTER fallos seguidos se deja de
+    intentar por DEAD_BACKOFF segundos."""
+    global _sock, _last_np, _dead_until, _fail_count
     if event.get("cmd") == "np":
         _last_np = event
     data = (json.dumps(event, ensure_ascii=False) + "\n").encode()
     with _send_lock:
-        for _ in range(2):
+        now = time.monotonic()
+        if _sock is None and now < _dead_until:
+            return
+        try:
+            if _sock is None:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(2)
+                s.connect(SOCK_PATH)
+                s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
+                if _last_np is not None and _last_np is not event:
+                    s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
+                _sock = s
+            _sock.sendall(data)
+            _fail_count = 0
+            return
+        except Exception:
             try:
-                if _sock is None:
-                    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                    s.settimeout(2)
-                    s.connect(SOCK_PATH)
-                    s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
-                    if _last_np is not None and _last_np is not event:
-                        s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
-                    _sock = s
-                _sock.sendall(data)
-                return
+                if _sock:
+                    _sock.close()
             except Exception:
-                try:
-                    if _sock:
-                        _sock.close()
-                except Exception:
-                    pass
-                _sock = None
+                pass
+            _sock = None
+            _fail_count += 1
+            if _fail_count >= DEAD_AFTER:
+                _dead_until = now + DEAD_BACKOFF
 
 
 def send_soft(event):

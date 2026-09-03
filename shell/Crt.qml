@@ -239,13 +239,17 @@ PanelWindow {
     property real beatPulse: 0
     property real beatBlink: 0
     property int surgeGen: 0
+    // Con el compás medido (T4.1) el fogonazo dura una fracción del tiempo en
+    // vez de unos ms fijos: así se apaga justo antes del golpe siguiente en vez
+    // de quedar corto en un tema lento y pisado en uno rápido.
     NumberAnimation {
         id: beatAnim
         target: crt
         property: "beatPulse"
         from: 1
         to: 0
-        duration: 190
+        duration: crt.ctl.bpmLive
+            ? Math.round(Math.min(Math.max(crt.ctl.beatMs * 0.4, 120), 400)) : 190
         easing.type: Easing.OutQuad
     }
     NumberAnimation {
@@ -254,8 +258,34 @@ PanelWindow {
         property: "beatBlink"
         from: 0.5 * crt.ctl.flickerAmt
         to: 0
-        duration: 90
+        duration: crt.ctl.bpmLive
+            ? Math.round(Math.min(Math.max(crt.ctl.beatMs * 0.2, 60), 200)) : 90
         easing.type: Easing.OutQuad
+    }
+
+    // ---- el pulso del compás
+    // El fogonazo del pico es un momento del tema (flickerGen, un par por
+    // canción). Esto es lo otro: el tubo respirando EN TIEMPO, todo el tema,
+    // apenas — lo que hace que la pared se lea como si siguiera la música y no
+    // como si reaccionara tarde. Lo gradúa la misma perilla del parpadeo, así
+    // que con flicker = 0 la pantalla sigue quieta.
+    property real gridPulse: 0
+    NumberAnimation {
+        id: gridAnim
+        target: crt
+        property: "gridPulse"
+        from: 1
+        to: 0
+        duration: crt.ctl.beatMs > 0 ? Math.round(Math.max(crt.ctl.beatMs * 0.5, 90)) : 250
+        easing.type: Easing.OutQuad
+    }
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible && crt.ctl.bpmLive
+        function onBeatTickChanged() {
+            if (crt.ctl.crtFlicker > 0.01)
+                gridAnim.restart();
+        }
     }
     Connections {
         target: crt.ctl
@@ -285,7 +315,10 @@ PanelWindow {
     // parar. Ahora entra uno cada tanto: el que llega tarde se descarta, salvo
     // que venga mucho más fuerte que el que está sonando.
     property double lastHitAt: 0
-    readonly property int hitGap: Math.round(1200 / Math.max(ctl.crtIntensity, 0.25))
+    // con el compás medido la espera se redondea a un número entero de tiempos:
+    // el glitch entra en el pulso del tema, no en el medio
+    readonly property int hitGap: Math.round(
+        ctl.quantize(1200 / Math.max(ctl.crtIntensity, 0.25)))
     function hit(amount) {
         const now = Date.now();
         if (now - lastHitAt < hitGap && amount < glitchAmt * 1.5)
@@ -503,8 +536,10 @@ PanelWindow {
                 Scale {
                     origin.x: camera.width / 2
                     origin.y: camera.height / 2
-                    xScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
-                    yScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
+                    xScale: crt.camZoom * (1 + 0.035 * crt.beatPulse
+                                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
+                    yScale: crt.camZoom * (1 + 0.035 * crt.beatPulse
+                                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
                 },
                 // el colapso del apagado: va aparte del encuadre para no pisarle
                 // el binding a la cámara mientras el tubo se muere

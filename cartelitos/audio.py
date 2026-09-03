@@ -83,6 +83,10 @@ class TrackProfile:
         self.rms = []        # una muestra cada PROFILE_STEP, en orden
         self.cen = []
         self.known = False   # True si vino del cache: entonces se puede anticipar
+        # el compás medido la vez pasada: la segunda escucha arranca sabiendo a
+        # qué velocidad va el tema, sin los primeros segundos de tanteo
+        self.bpm = 0.0
+        self.conf = 0.0
         self.section = "verse"
         self.since = 0.0
         # Curva suavizada aparte para decidir la PARTE. Con el rms crudo, un tema
@@ -109,6 +113,8 @@ class TrackProfile:
             return False
         self.rms = data["rms"]
         self.cen = data.get("cen", [])
+        self.bpm = data.get("bpm", 0.0) or 0.0
+        self.conf = data.get("conf", 0.0) or 0.0
         self.known = True
         return True
 
@@ -121,7 +127,8 @@ class TrackProfile:
             with open(tmp, "w") as f:
                 json.dump({"step": PROFILE_STEP, "len": self.length,
                            "rms": [round(v, 4) for v in self.rms],
-                           "cen": [round(v, 3) for v in self.cen]}, f)
+                           "cen": [round(v, 3) for v in self.cen],
+                           "bpm": round(self.bpm, 1), "conf": round(self.conf, 2)}, f)
             os.replace(tmp, self.path())
             return True
         except OSError as e:
@@ -366,6 +373,157 @@ class AudioAnalyzer:
         }
 
 
+# ---- el compás: a qué velocidad va el tema, de verdad
+# Los golpes ya se detectan (AudioAnalyzer.feed), pero un golpe suelto no es un
+# tempo: hay bombos que faltan, palmas que sobran y el intervalo entre dos
+# golpes se mueve unas decenas de ms aunque el tema esté cuadrado. El tempo es
+# el intervalo que MÁS SE REPITE, no el último ni el promedio — un promedio con
+# un solo golpe perdido (el doble de intervalo) se va veinte BPM.
+BPM_MIN_MS = 300.0        # 200 BPM
+BPM_MAX_MS = 1200.0       # 50 BPM
+BPM_BIN_MS = 10.0         # el ancho del bin del histograma
+BPM_HISTORY = 24          # cuántos intervalos entran en la cuenta
+BPM_TOL = 0.08            # ±8%: qué tan cerca del período cuenta como "en tiempo"
+BPM_MIN_INTERVALS = 6     # menos que esto no es un histograma, son dos números
+BPM_HARMONIC_SHARE = 0.4  # cuánto tiene que pesar el pico rápido para ganarle al modal
+# Un hueco más largo que esto no es un compás lento: es una pausa, un silencio o
+# la captura que se cayó. Doblarlo/partirlo daría un número inventado — se tira
+# y el conteo arranca del golpe siguiente.
+BPM_MAX_GAP = 2 * BPM_MAX_MS / 1000.0
+BPM_SEND_DELTA = 2.0      # BPM de diferencia que ameritan avisar antes de tiempo
+BPM_SEND_EVERY = 5.0      # ...y cada cuánto se avisa igual aunque no cambie
+
+
+def _fold_interval(dt_ms):
+    """Mete un intervalo en el rango musical doblándolo o partiéndolo al medio.
+
+    Un tema a 120 puede marcar cada corchea (250 ms) o perder un bombo y marcar
+    cada dos tiempos (1000 ms): las tres cosas son el MISMO compás. Sin plegar,
+    los 250 ms se caen del rango y el tema queda sin tempo."""
+    if dt_ms <= 0:
+        return None
+    for _ in range(8):
+        if dt_ms < BPM_MIN_MS:
+            dt_ms *= 2
+        elif dt_ms > BPM_MAX_MS:
+            dt_ms /= 2
+        else:
+            return dt_ms
+    return None
+
+
+class BpmTracker:
+    """De los golpes al compás: cuántos BPM y con cuánta confianza.
+
+    La confianza importa tanto como el número. Con un tema sin batería marcada
+    los golpes salen donde quieren y el histograma da cualquier cosa; el overlay
+    sólo se cuelga del compás si la confianza pasa el umbral, y si no sigue
+    moviéndose con la letra como siempre."""
+
+    def __init__(self):
+        self.intervals = []
+        self.bpm = 0.0
+        self.conf = 0.0
+        self.last_beat = None
+        self.last_sent = 0.0
+        self.sent_bpm = 0.0
+
+    def reset(self):
+        """Tema nuevo: el compás anterior no dice nada del que arranca."""
+        self.intervals = []
+        self.bpm = 0.0
+        self.conf = 0.0
+        self.last_beat = None
+        self.sent_bpm = 0.0
+
+    def seed(self, bpm, conf):
+        """Arranca sabiendo lo que se midió la vez pasada (viene del perfil del
+        tema). No mete intervalos falsos: es sólo el número que se manda hasta
+        que los golpes de esta pasada digan otra cosa."""
+        if bpm and conf:
+            self.bpm = float(bpm)
+            self.conf = float(conf)
+
+    def beat(self, now):
+        """Un golpe. Devuelve el período estimado en ms, o 0 si todavía no hay."""
+        if self.last_beat is not None:
+            gap = now - self.last_beat
+            if 0 < gap <= BPM_MAX_GAP:
+                folded = _fold_interval(gap * 1000.0)
+                if folded is not None:
+                    self.intervals.append(folded)
+                    del self.intervals[:-BPM_HISTORY]
+        self.last_beat = now
+        return self._estimate()
+
+    def _bin(self, ms):
+        return int((ms - BPM_MIN_MS) // BPM_BIN_MS)
+
+    def _weight(self, counts, b):
+        """Cuánto pesa un bin contando a sus vecinos: con jitter de unos ms el
+        mismo compás cae en dos o tres bins pegados, y sin sumarlos el modal es
+        el que tuvo suerte."""
+        return counts.get(b - 1, 0) + counts.get(b, 0) + counts.get(b + 1, 0)
+
+    def _estimate(self):
+        if len(self.intervals) < BPM_MIN_INTERVALS:
+            return 0.0
+        counts = {}
+        for ms in self.intervals:
+            b = self._bin(ms)
+            counts[b] = counts.get(b, 0) + 1
+        best = max(counts, key=lambda b: (self._weight(counts, b), -b))
+        # Armónico al revés del plegado: los intervalos pueden estar repartidos
+        # entre el compás y su mitad (bombos que se pierden). Si la mitad tiene
+        # un pico propio con peso, el compás es el RÁPIDO — el lento es el que
+        # se armó con los golpes que faltaron.
+        half = self._bin((self._center(best)) / 2.0)
+        if (self._center(best)) / 2.0 >= BPM_MIN_MS and \
+                self._weight(counts, half) >= self._weight(counts, best) * BPM_HARMONIC_SHARE:
+            best = half
+        # El centro del bin es un número redondo de 10 ms; el promedio de los
+        # intervalos que caen cerca es el período de verdad (la tolerancia es
+        # más ancha que el bin, así que esto usa todas las muestras buenas).
+        # Se re-centra un par de veces: con la ventana clavada en el bin, un
+        # centro corrido 10 ms recorta una de las dos colas y el promedio se va
+        # detrás del recorte (medido: 3 BPM de error con jitter de ±20 ms).
+        period = self._center(best)
+        for _ in range(3):
+            near = [ms for ms in self.intervals if abs(ms - period) <= period * BPM_TOL]
+            if not near:
+                return 0.0
+            moved = sum(near) / len(near)
+            if abs(moved - period) < 0.05:
+                period = moved
+                break
+            period = moved
+        self.bpm = 60000.0 / period
+        self.conf = len([ms for ms in self.intervals
+                         if abs(ms - period) <= period * BPM_TOL]) / len(self.intervals)
+        return period
+
+    def _center(self, b):
+        return BPM_MIN_MS + (b + 0.5) * BPM_BIN_MS
+
+    def event(self, now):
+        """El evento para el overlay, o None si no toca mandar nada todavía.
+
+        `phase` va como la EDAD del último golpe, no como su marca de tiempo: el
+        reloj del daemon (`time.monotonic`) y el del overlay (`Date.now`) no son
+        el mismo, así que un instante crudo del daemon allá no significa nada.
+        La edad sí: el overlay hace `Date.now() - phase*1000` y queda anclado."""
+        if self.bpm <= 0 or self.conf <= 0:
+            return None
+        if (abs(self.bpm - self.sent_bpm) <= BPM_SEND_DELTA
+                and now - self.last_sent < BPM_SEND_EVERY):
+            return None
+        self.last_sent = now
+        self.sent_bpm = self.bpm
+        age = 0.0 if self.last_beat is None else max(now - self.last_beat, 0.0)
+        return {"cmd": "bpm", "v": round(self.bpm, 1), "conf": round(self.conf, 2),
+                "phase": round(age, 3)}
+
+
 class PeakGate:
     """El portero de los picos: de todos los golpes del tema deja pasar unos
     pocos, los más altos.
@@ -528,6 +686,9 @@ def _capture_loop():
         # dónde está este momento dentro de la canción entera
         cur_pct = None
         gate = PeakGate(now=time.monotonic())
+        # el compás: lo alimentan los mismos golpes que ya se detectan
+        bpm = BpmTracker()
+        last_bpm_logged = 0.0
         last_save = time.monotonic()
         quiet_since = time.monotonic()
         last_sink_check = time.monotonic()
@@ -556,6 +717,16 @@ def _capture_loop():
                         "the tube won't react to the music")
                 # ¿este golpe es de los que valen? Lo decide el portero: sólo la
                 # pantalla lo dibuja, pero quién late y cuándo se resuelve acá.
+                if ev["b"]:
+                    bpm.beat(now)
+                    msg = bpm.event(now)
+                    if msg:
+                        # queda en el log: si algún día el tubo va a destiempo,
+                        # esto dice qué compás creyó ver y con cuánta confianza
+                        if abs(msg["v"] - last_bpm_logged) > 2:
+                            last_bpm_logged = msg["v"]
+                            log(f"tempo: {msg['v']:.0f} BPM (conf {msg['conf']:.0%})")
+                        ipc.send_soft(msg)
                 if gate.hit(now, ev["b"] == 1, ev["h"] == 1, cur_pct):
                     ev["pk"] = 1
                     # queda en el log: si algún día "no late nunca" o "late todo
@@ -576,6 +747,16 @@ def _capture_loop():
                 if prof.key != gate.key:
                     cur_pct = None
                     gate.track(prof.key, now)
+                    # tema nuevo: el compás anterior no dice nada del que
+                    # arranca, pero el del perfil (si ya se escuchó) sí
+                    bpm.reset()
+                    bpm.seed(prof.bpm, prof.conf)
+                # el número vive en el perfil, que es quien lo guarda: set_profile
+                # salva el perfil VIEJO desde el hilo del daemon, así que el valor
+                # ya tiene que estar escrito acá cuando eso pase
+                if bpm.bpm > 0:
+                    prof.bpm = bpm.bpm
+                    prof.conf = bpm.conf
                 # se guarda cada tanto, no sólo al cambiar de tema: si el daemon
                 # se cae en la mitad, el mapa de lo escuchado no se pierde
                 if now - last_save > PROFILE_SAVE_EVERY:

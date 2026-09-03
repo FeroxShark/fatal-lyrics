@@ -9,6 +9,7 @@ import builtins
 import io
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -1463,6 +1464,98 @@ class TestPeakGate(unittest.TestCase):
         self.assertTrue(self.gate.hit(100.0, True, True, 0.99))
         self.gate.track("tema")
         self.assertFalse(self.gate.hit(103.0, True, True, 0.99))
+
+
+class TestBpmTracker(unittest.TestCase):
+    """El compás de verdad. Lo difícil no es contar golpes: es que falten
+    bombos, que sobren palmas y que el intervalo se mueva unos ms por golpe."""
+
+    def feed(self, tracker, intervals, start=100.0):
+        """Golpes separados por `intervals` (segundos). Devuelve el último t."""
+        t = start
+        tracker.beat(t)
+        for dt in intervals:
+            t += dt
+            tracker.beat(t)
+        return t
+
+    def test_beats_every_half_second_are_120_bpm(self):
+        rnd = random.Random(7)
+        tr = c.BpmTracker()
+        # el jitter va en el MOMENTO de cada golpe, que es como sale de la vida
+        # real (el bombo no cae clavado); ±15 ms deja los intervalos dentro de
+        # la tolerancia del ±8% sin quedar sentados justo en el borde
+        t = 100.0
+        tr.beat(t)
+        for _ in range(24):
+            t += 0.5
+            tr.beat(t + rnd.uniform(-0.015, 0.015))
+        self.assertAlmostEqual(tr.bpm, 120.0, delta=2.0)
+        self.assertGreater(tr.conf, 0.8)
+
+    def test_the_harmonic_at_250_ms_is_still_120(self):
+        # marcar cada corchea es el MISMO compás: 250 ms se pliega a 500 (y si
+        # no se plegara, se caería del rango 300–1200 y el tema no tendría tempo)
+        tr = c.BpmTracker()
+        self.feed(tr, [0.25] * 24)
+        self.assertAlmostEqual(tr.bpm, 120.0, delta=2.0)
+        self.assertGreater(tr.conf, 0.8)
+
+    def test_a_missed_kick_does_not_drag_the_tempo(self):
+        # un golpe perdido da el doble de intervalo: con un promedio pelado eso
+        # se lleva el tempo veinte BPM, con el histograma no lo mueve
+        tr = c.BpmTracker()
+        self.feed(tr, [0.5, 0.5, 1.0, 0.5, 0.5, 0.5, 1.0, 0.5, 0.5, 0.5,
+                       0.5, 1.0, 0.5, 0.5, 0.5, 0.5])
+        self.assertAlmostEqual(tr.bpm, 120.0, delta=2.0)
+
+    def test_a_silence_is_not_a_very_slow_beat(self):
+        # una pausa (o la captura caída) no es un compás lentísimo: ese hueco
+        # se tira entero, no se pliega
+        tr = c.BpmTracker()
+        self.feed(tr, [0.5] * 10)
+        before = tr.bpm
+        tr.beat(tr.last_beat + 30.0)
+        self.assertEqual(len(tr.intervals), 10)
+        self.assertAlmostEqual(tr.bpm, before, delta=0.01)
+
+    def test_it_says_nothing_until_it_has_a_histogram(self):
+        tr = c.BpmTracker()
+        self.feed(tr, [0.5, 0.5])
+        self.assertEqual(tr.bpm, 0.0)
+        self.assertIsNone(tr.event(200.0))
+
+    def test_it_only_speaks_up_when_it_changes_or_every_five_seconds(self):
+        tr = c.BpmTracker()
+        t = self.feed(tr, [0.5] * 12)
+        first = tr.event(t)
+        self.assertIsNotNone(first)
+        self.assertAlmostEqual(first["v"], 120.0, delta=2.0)
+        self.assertIsNone(tr.event(t + 1.0))          # mismo tempo, hace nada
+        self.assertIsNotNone(tr.event(t + 6.0))       # ...pero cada 5 s avisa igual
+
+    def test_the_phase_travels_as_an_age_not_as_a_timestamp(self):
+        # el reloj del daemon y el del overlay no son el mismo: lo único que
+        # significa algo del otro lado es hace cuánto fue el último golpe
+        tr = c.BpmTracker()
+        t = self.feed(tr, [0.5] * 12)
+        ev = tr.event(t + 0.2)
+        self.assertAlmostEqual(ev["phase"], 0.2, delta=0.01)
+
+    def test_a_new_track_starts_from_scratch_but_can_be_seeded(self):
+        tr = c.BpmTracker()
+        self.feed(tr, [0.5] * 12)
+        tr.reset()
+        self.assertEqual(tr.bpm, 0.0)
+        self.assertEqual(tr.intervals, [])
+        tr.seed(96.0, 0.9)
+        self.assertEqual(tr.bpm, 96.0)
+
+    def test_folding_leaves_a_musical_interval_alone(self):
+        self.assertAlmostEqual(c._fold_interval(500.0), 500.0)
+        self.assertAlmostEqual(c._fold_interval(250.0), 500.0)
+        self.assertAlmostEqual(c._fold_interval(1400.0), 700.0)
+        self.assertIsNone(c._fold_interval(0.0))
 
 
 class TestSinkNodeId(unittest.TestCase):

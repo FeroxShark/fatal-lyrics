@@ -109,6 +109,47 @@ ShellRoot {
     // si la captura se cae o está apagada, todo vuelve a moverse con la letra
     readonly property bool audLive: crtOn && (Date.now() - audAt) < 1500
 
+    // ---- el compás (T4.1: eventos "bpm" del daemon)
+    // `bpmPhase` NO es una marca de tiempo del daemon: es la EDAD del último
+    // golpe cuando se mandó el evento. El reloj del daemon (time.monotonic) y
+    // el de acá (Date.now) no son el mismo, así que lo único que significa algo
+    // de este lado es "hace tanto fue el último golpe" — con eso se ancla.
+    property real bpm: 0
+    property real bpmConf: 0
+    property double lastBeatAt: 0
+    property double bpmAt: 0
+    readonly property real beatMs: bpm > 0 ? 60000 / bpm : 0
+    // debajo de 0.6 el número es una adivinanza: todo sigue moviéndose con la
+    // letra, como antes de que existiera esto
+    readonly property bool bpmLive: crtOn && bpm > 0 && bpmConf > 0.6
+        && (liveTick, Date.now() - bpmAt < 15000)
+    // Cuantizar = redondear a un número ENTERO de tiempos, no reemplazar por un
+    // tiempo: el compás acomoda lo que ya pasaba, no lo hace pasar más seguido.
+    function quantize(ms) {
+        if (!bpmLive)
+            return ms;
+        return Math.max(1, Math.round(ms / beatMs)) * beatMs;
+    }
+    // El pulso del compás. Es un poll de 25 ms y no un Timer con el intervalo
+    // del tiempo: un Timer hay que restart()earlo en cada re-anclaje de fase, y
+    // eso le rompe el binding de `running` (queda prendido con el tubo apagado).
+    // Acá el reloj es la resta contra `lastBeatAt`, así que re-anclar es asignar
+    // una property y listo.
+    property int beatTick: 0
+    property int lastBeatIndex: -1
+    Timer {
+        interval: 25
+        repeat: true
+        running: root.crtOn && root.bpmLive
+        onTriggered: {
+            const n = Math.floor((Date.now() - root.lastBeatAt) / root.beatMs);
+            if (n !== root.lastBeatIndex) {
+                root.lastBeatIndex = n;
+                root.beatTick++;
+            }
+        }
+    }
+
     // T3.8: ¿suena algo AHORA? No es lo mismo que haya letra: en un
     // instrumental la pantalla tiene que estar viva, no decir "NO SIGNAL".
     // Los `pos` llegan 1/s con el tema andando (y paran en pausa) y los `aud`
@@ -789,7 +830,9 @@ ShellRoot {
         if (!crtOn || crtFlicker <= 0.01)
             return;
         const now = Date.now();
-        if (now - lastFlickerAt < 4000)
+        // el seguro contra dos picos juntos también se cuantiza: si el tubo va
+        // a esperar, que espere un número entero de tiempos
+        if (now - lastFlickerAt < quantize(4000))
             return;
         lastFlickerAt = now;
         flickerHard = sectionEnergy > 1.45 && Math.random() < 0.35 && crtFlicker > 0.5;
@@ -1152,6 +1195,12 @@ ShellRoot {
                             // colores: es el momento en el que el tema respira
                             root.sectionGen++;
                             root.motifGen++;
+                        } else if (ev.cmd === "bpm") {
+                            root.bpm = ev.v;
+                            root.bpmConf = ev.conf;
+                            root.bpmAt = Date.now();
+                            // ver bpmPhase: llega la EDAD del último golpe
+                            root.lastBeatAt = Date.now() - (ev.phase || 0) * 1000;
                         } else if (ev.cmd === "cue") {
                             root.audComing = ev.kind;
                             root.audComingAt = Date.now();
@@ -1178,6 +1227,8 @@ ShellRoot {
                             }
                         } else if (ev.cmd === "clear") {
                             root.npShown = false;
+                            root.bpm = 0;      // otro tema, otro compás
+                            root.bpmConf = 0;
                             // el tubo se queda sin señal y rota el fósforo
                             root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [], words: [] };
                             root.crtTrackSeed++;

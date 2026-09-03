@@ -355,6 +355,38 @@ class TestLyricsCache(unittest.TestCase):
         self.assertIsNone(c.cache_get(TRACK))
 
 
+class TestPurgeCache(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self._old = lyrics.CACHE_DIR
+        lyrics.CACHE_DIR = self.dir.name
+        self.addCleanup(lambda: setattr(lyrics, "CACHE_DIR", self._old))
+        os.makedirs(self.dir.name, exist_ok=True)
+
+    def _write(self, name, lines, at):
+        with open(os.path.join(self.dir.name, name), "w") as f:
+            json.dump({"lines": lines, "at": at}, f)
+
+    def test_purges_stale_none_and_stale_ok_but_keeps_the_rest(self):
+        now = time.time()
+        self._write("fresh_none.json", None, now - 10)
+        self._write("stale_none.json", None, now - lyrics.NONE_TTL - 10)
+        self._write("fresh_ok.json", [(1.0, "one")], now - 10)
+        self._write("stale_ok.json", [(1.0, "one")], now - lyrics.OK_TTL - 10)
+
+        lyrics.purge_cache(now)
+
+        remaining = set(os.listdir(self.dir.name))
+        self.assertEqual(remaining, {"fresh_none.json", "fresh_ok.json"})
+
+    def test_ignores_files_it_cannot_parse(self):
+        with open(os.path.join(self.dir.name, "broken.json"), "w") as f:
+            f.write("{ not json")
+        lyrics.purge_cache(time.time())   # no debe explotar
+        self.assertTrue(os.path.exists(os.path.join(self.dir.name, "broken.json")))
+
+
 class TestFetchAsync(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()

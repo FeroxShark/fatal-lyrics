@@ -13,7 +13,8 @@ import urllib.request
 from .util import FIELD_SEP, UA, log
 
 CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "cartelitos", "lyrics")
-NONE_TTL = 7 * 86400   # cuánto vale un "este tema no tiene letra" cacheado
+NONE_TTL = 7 * 86400    # cuánto vale un "este tema no tiene letra" cacheado
+OK_TTL = 180 * 86400    # una letra encontrada tampoco es para siempre: el cache no crece sin límite
 
 TS_RE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
 
@@ -119,6 +120,32 @@ def cache_put(track, status, lines):
         os.replace(tmp, path)   # atómico: nadie lee un archivo a medio escribir
     except Exception as e:
         log(f"couldn't cache the lyrics ({e})")
+
+
+def purge_cache(now):
+    """Borra del cache lo que ya no vale la pena guardar: un "no hay letra"
+    más viejo que NONE_TTL, o una letra encontrada de hace más de OK_TTL —
+    ninguna de las dos vive para siempre, o el cache crece sin límite."""
+    try:
+        names = os.listdir(CACHE_DIR)
+    except OSError:
+        return
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(CACHE_DIR, name)
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        age = now - data.get("at", 0)
+        ttl = NONE_TTL if not data.get("lines") else OK_TTL
+        if age > ttl:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 # resultado de la búsqueda en curso. `gen` sube en cada cambio de tema: el hilo

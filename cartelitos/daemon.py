@@ -197,6 +197,7 @@ class DaemonLoop:
     def run(self):
         """El while True de siempre, delegando cada vuelta a tick()."""
         self._log("fatal-lyrics daemon started")
+        self._lyr.purge_cache(time.time())
         # el modo CRT arranca como diga la config: un `fatal crt on` de la sesión
         # anterior no se hereda (tapa las tres pantallas, mejor que sea deliberado)
         self._config.set_crt(self._config.CFG["crt"]["enabled"])

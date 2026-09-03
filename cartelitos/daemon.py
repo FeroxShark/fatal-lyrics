@@ -183,9 +183,13 @@ class DaemonLoop:
                 i = self._lyr.current_line_index(self.lyrics, t["pos"] + pos_offset)
                 if i != self.idx:
                     self.idx = i
-                    if i >= 0 and self.lyrics[i][1]:
-                        t1 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else self.lyrics[i][0] + 5
-                        self._ipc.show(self.lyrics[i][1], t["title"], self.lyrics[i][0], t1)
+                    line = self.lyrics[i] if i >= 0 else None
+                    if line and line[1]:
+                        t1 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else line[0] + 5
+                        # el tercer campo (tiempos por palabra) es de T1.1: una
+                        # letra que venga de dos campos sigue andando igual
+                        self._ipc.show(line[1], t["title"], line[0], t1,
+                                       line[2] if len(line) > 2 else None)
 
         # Cada vuelta spawnea un playerctl (~4 ms de CPU). El poll fino sólo hace
         # falta para pegarle al momento de cada verso: en pausa, o en un tema sin

@@ -137,10 +137,15 @@ def send_soft(event):
     return True
 
 
-def show(text, title, t0=0.0, t1=0.0):
+def show(text, title, t0=0.0, t1=0.0, words=None):
     # t0/t1: comienzo y fin estimado de la línea, para el karaoke del overlay
     ev = {"cmd": "show", "text": text, "title": title,
           "t0": round(t0, 2), "t1": round(t1, 2)}
+    # LRC "enhanced" (T1.1): con el tiempo real de cada palabra el overlay
+    # deja de repartir el pintado por largo. Va sólo cuando lo hay: el campo
+    # ausente ES la señal de "estimalo vos".
+    if words:
+        ev["words"] = [[round(t, 2), w] for t, w in words]
     segs = lyrics.split_repeats(text)
     if len(segs) > 1:
         ev["segs"] = segs      # golpes repetidos: cada uno a una pantalla

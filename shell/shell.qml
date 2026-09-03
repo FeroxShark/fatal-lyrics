@@ -161,7 +161,7 @@ ShellRoot {
 
     // ------------------------------------------------- estado del modo CRT
     // La línea que suena, sin diálogos de por medio: el tubo la dibuja entera.
-    property var crtLine: ({ text: "", t0: 0, t1: 0, serial: 0, segs: [] })
+    property var crtLine: ({ text: "", t0: 0, t1: 0, serial: 0, segs: [], words: [] })
     property int crtSerial: 0
     property int crtTrackSeed: 0
 
@@ -222,13 +222,19 @@ ShellRoot {
 
     // Avance de la línea actual (0..1) para el pintado palabra por palabra;
     // mismo cálculo que el karaoke de los carteles.
-    function karaokeFraction(t0, t1) {
+    // karaokeFracAt() es lo mismo para un instante cualquiera, no sólo para
+    // "ahora": con los tiempos por palabra del LRC "enhanced" hay que poder
+    // preguntar en qué punto de la barra cae una palabra que todavía no sonó.
+    function karaokeFracAt(t0, t1, t) {
         const dur = t1 - t0;
         if (dur <= 0)
             return 1;
         // termina de pintar ~1 s antes de la próxima línea
         const lead = Math.min(1.0, dur * 0.35);
-        return Math.max(0, Math.min((songPos() - t0) / Math.max(dur - lead, 0.5), 1));
+        return Math.max(0, Math.min((t - t0) / Math.max(dur - lead, 0.5), 1));
+    }
+    function karaokeFraction(t0, t1) {
+        return karaokeFracAt(t0, t1, songPos());
     }
     function crtProgress() {
         const e = crtLine;
@@ -917,19 +923,21 @@ ShellRoot {
         }
     }
 
-    function show(text, title, icon, t0, t1, segs) {
+    function show(text, title, icon, t0, t1, segs, words) {
         // el tubo dibuja la línea entera; los carteles son el otro modo
         // el serial viaja adentro del objeto: una sola señal de cambio lleva
         // texto y sorteo juntos, y el layout no parpadea al aparecer la línea
+        // `words`: tiempo real de cada palabra (LRC "enhanced"). Vacío = no lo
+        // manda el daemon y el karaoke lo estima por largo, como siempre.
         crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: crtSerial + 1,
-                    segs: segs || [] };
+                    segs: segs || [], words: words || [] };
         crtSerial++;
         updatePitchPalette();
         if (crtOn)
             return;
         pushDialog({
             text: text, title: title || "Spotify", icon: icon || randomIcon(),
-            t0: t0 ?? 0, t1: t1 ?? 0,
+            t0: t0 ?? 0, t1: t1 ?? 0, words: words || null,
         }, true);
     }
 
@@ -997,7 +1005,7 @@ ShellRoot {
                     try {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
-                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs);
+                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs, ev.words);
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
                         else if (ev.cmd === "pos") {
@@ -1039,7 +1047,7 @@ ShellRoot {
                         } else if (ev.cmd === "clear") {
                             root.npShown = false;
                             // el tubo se queda sin señal y rota el fósforo
-                            root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [] };
+                            root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [], words: [] };
                             root.crtTrackSeed++;
                             // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
                             if (root.cascadeDeath && root.dialogList.length > 0)
@@ -1116,18 +1124,36 @@ ShellRoot {
                         const words = modelData.text.split(" ").filter(w => w.length > 0);
                         if (words.length === 0)
                             return;
+                        let cut = 0;
+                        // LRC "enhanced": cada palabra trae su segundo, no hay
+                        // nada que estimar. El daemon garantiza un tiempo por
+                        // palabra del texto, pero el largo se chequea igual: si
+                        // no coincide, los índices no son los mismos y pintar
+                        // por índice pintaría cualquier cosa.
+                        const timed = modelData.words || null;
+                        if (timed && timed.length === words.length) {
+                            const p = root.songPos();
+                            while (cut < timed.length && timed[cut][0] <= p)
+                                cut++;
+                            karaokeText = win.karaokeHtml(words, cut);
+                            return;
+                        }
                         // mismo avance que usa el tubo del modo CRT: una sola cuenta
                         // (termina de pintar ~1 s antes del próximo cartel; si no, la
                         // última palabra nunca llega a verse pintada)
                         const f = root.karaokeFraction(modelData.t0, modelData.t1);
                         let total = 0;
                         const weights = words.map(w => { const n = w.length + 1; total += n; return n; });
-                        let acc = 0, cut = 0;
+                        let acc = 0;
                         for (let i = 0; i < words.length; i++) {
                             acc += weights[i];
                             if (acc <= f * total + 0.001)
                                 cut = i + 1;
                         }
+                        karaokeText = win.karaokeHtml(words, cut);
+                    }
+                    // las primeras `cut` palabras pintadas, el resto crudo
+                    function karaokeHtml(words, cut) {
                         let out = "";
                         if (cut > 0)
                             out = '<font color="#000080">' + htmlEsc(words.slice(0, cut).join(" ")) + "</font>";
@@ -1135,7 +1161,7 @@ ShellRoot {
                             out += " ";
                         if (cut < words.length)
                             out += htmlEsc(words.slice(cut).join(" "));
-                        karaokeText = out;
+                        return out;
                     }
                     Timer {
                         interval: 120

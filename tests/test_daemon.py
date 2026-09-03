@@ -217,7 +217,7 @@ class TestSeekBack(unittest.TestCase):
 
         loop._ipc.clear.assert_called_once()
         loop._log.assert_any_call("seek back: reset")
-        loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0)
+        loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0, None)
 
     def test_small_backward_jitter_does_not_reset(self):
         loop = make_loop()
@@ -246,6 +246,32 @@ class TestSeekBack(unittest.TestCase):
         loop._ipc.clear.assert_called_once()
         for call in loop._log.call_args_list:
             self.assertNotEqual(call.args[0], "seek back: reset")
+
+
+class TestWordTimes(unittest.TestCase):
+    """T1.1: si la línea trae tiempos por palabra (LRC "enhanced"), viajan con
+    el evento; una línea vieja de dos campos no rompe nada."""
+
+    def test_word_times_go_out_with_the_line(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 0
+        loop.lyrics = [(0.0, "one two", [(0.0, "one"), (0.5, "two")]), (10.0, "b", None)]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        loop._ipc.show.assert_called_with("one two", "Song", 0.0, 10.0,
+                                          [(0.0, "one"), (0.5, "two")])
+
+    def test_a_two_field_line_still_works(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 0
+        loop.lyrics = [(0.0, "a")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        loop._ipc.show.assert_called_with("a", "Song", 0.0, 5.0, None)
 
 
 class TestPauseNearEnd(unittest.TestCase):

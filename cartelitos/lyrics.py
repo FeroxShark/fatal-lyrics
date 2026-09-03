@@ -17,6 +17,9 @@ NONE_TTL = 7 * 86400    # cuánto vale un "este tema no tiene letra" cacheado
 OK_TTL = 180 * 86400    # una letra encontrada tampoco es para siempre: el cache no crece sin límite
 
 TS_RE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
+# LRC "enhanced": además de la marca de la línea, cada palabra puede traer la
+# suya entre `<>`. Cuando están, el karaoke deja de estimar por largo.
+WORD_TS_RE = re.compile(r"<(\d+):(\d+(?:\.\d+)?)>")
 
 # lo que lrclib no matchea: sufijos de edición que van en el título de Spotify
 # pero no en el nombre "canónico" con el que está guardada la letra
@@ -36,15 +39,62 @@ def clean_title(s):
         s = pat.sub("", s)
     return s.strip()
 
+def _stamp(mins, secs):
+    return int(mins) * 60 + float(secs)
+
+
+def _parse_words(body):
+    """Palabras con tiempo propio de una línea "enhanced", o None si no tiene.
+
+    Cada marca `<mm:ss.xx>` abre un tramo y TODAS las palabras del tramo se
+    quedan con ese tiempo. Así `len(words) == len(texto.split())` por
+    construcción, que es la única forma de que el overlay pueda mapear palabra
+    ↔ tiempo por índice: si un tramo con dos palabras contara como una, todo
+    lo que viene después quedaría corrido."""
+    marks = list(WORD_TS_RE.finditer(body))
+    if not marks:
+        return None
+    words = []
+    # lo que va ANTES de la primera marca arranca con la línea: el tiempo se
+    # completa en parse_lrc, que es quien sabe el de cada marca de línea
+    for w in body[:marks[0].start()].split():
+        words.append((None, w))
+    for k, m in enumerate(marks):
+        end = marks[k + 1].start() if k + 1 < len(marks) else len(body)
+        t = _stamp(m.group(1), m.group(2))
+        # una marca al final sin texto detrás cierra la línea: no es palabra
+        for w in body[m.end():end].split():
+            words.append((t, w))
+    return words or None
+
+
 def parse_lrc(text):
+    """Líneas `(t0, texto, words)`, ordenadas por tiempo.
+
+    `words` es `[(t, palabra), ...]` sólo en el formato "enhanced"; en el LRC
+    de siempre queda None y el karaoke estima el reparto por largo. El tercer
+    campo va SIEMPRE (aunque valga None) para que nadie tenga que preguntar
+    cuántos campos trae la línea."""
     lines = []
     for raw in text.splitlines():
         stamps = TS_RE.findall(raw)
         if not stamps:
             continue
-        content = TS_RE.sub("", raw).strip()
+        body = TS_RE.sub("", raw)
+        words = _parse_words(body)
+        # sin palabras cronometradas, las marcas `<>` que hubiera igual se
+        # sacan: una marca suelta no es texto de la letra
+        content = (" ".join(w for _, w in words) if words
+                   else WORD_TS_RE.sub("", body).strip())
+        base = _stamp(*stamps[0])
         for mins, secs in stamps:
-            lines.append((int(mins) * 60 + float(secs), content))
+            t0 = _stamp(mins, secs)
+            # los tiempos por palabra son absolutos y valen para la PRIMERA
+            # marca de la línea: un verso marcado en varios momentos repite el
+            # mismo patrón corrido, no los mismos segundos
+            shifted = None if words is None else [
+                (t0 if t is None else round(t + (t0 - base), 3), w) for t, w in words]
+            lines.append((t0, content, shifted))
     lines.sort(key=lambda x: x[0])
     return lines or None
 
@@ -117,7 +167,7 @@ def fetch_lyrics(track):
     # no hay letra sincronizada, pero lrclib a veces sólo tiene el texto
     # plano: mejor eso que nada
     if get_data and get_data.get("plainLyrics"):
-        return "plain", [(0.0, get_data["plainLyrics"])]
+        return "plain", [(0.0, get_data["plainLyrics"], None)]
 
     return ("none", None) if reached else ("error", None)
 
@@ -147,7 +197,17 @@ def cache_get(track):
         if time.time() - data.get("at", 0) > NONE_TTL:
             return None
         return "none", None
-    return status, [(ts, text) for ts, text in data["lines"]]
+    return status, [_cached_line(row) for row in data["lines"]]
+
+
+def _cached_line(row):
+    """Una línea del JSON a la forma `(t0, texto, words)`.
+
+    Un cache escrito antes de T1.1 tiene dos campos por línea: se completa con
+    None en vez de tirarlo, que si no la primera vez que suena cada tema viejo
+    vuelve a pegarle a lrclib para nada."""
+    words = row[2] if len(row) > 2 else None
+    return (row[0], row[1], [(t, w) for t, w in words] if words else None)
 
 
 def cache_put(track, status, lines):
@@ -309,8 +369,8 @@ def fetch_lyrics_async(track):
 
 def current_line_index(lyrics, pos):
     idx = -1
-    for i, (ts, _) in enumerate(lyrics):
-        if ts <= pos:
+    for i, line in enumerate(lyrics):
+        if line[0] <= pos:
             idx = i
         else:
             break

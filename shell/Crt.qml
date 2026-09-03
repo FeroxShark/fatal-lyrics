@@ -97,7 +97,20 @@ PanelWindow {
     function painted(i) {
         return i < Math.ceil(reveal * myWords.length + 0.001);
     }
+    // Tiempos por palabra de la línea (LRC "enhanced"), pero SÓLO si esta
+    // pantalla está mostrando la línea entera: con el texto partido (layout
+    // "split" o modo director) el índice de la palabra acá no es el índice de
+    // la palabra en la línea, y además `reveal` avanza sobre la ventana del
+    // pedazo, no sobre la de la línea. Ahí el reparto por largo es lo único
+    // que cierra.
+    readonly property var lineWords: (allMode && layout !== "split"
+        && (ctl.crtLine.words || []).length === myWords.length)
+        ? ctl.crtLine.words : null
+
     function dueFrac(i) {
+        const lw = lineWords;
+        if (lw)
+            return ctl.karaokeFracAt(ctl.crtLine.t0 || 0, ctl.crtLine.t1 || 0, lw[i][0]);
         const n = myWords.length;
         if (n <= 1)
             return 0;

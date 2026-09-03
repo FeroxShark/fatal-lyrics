@@ -53,17 +53,17 @@ def _wait_cmdline(pid, timeout=5.0):
 class TestParseLrc(unittest.TestCase):
     def test_parses_timestamps_in_order(self):
         lines = c.parse_lrc("[00:12.50]second\n[00:05.00]first\n")
-        self.assertEqual([ts for ts, _ in lines], [5.0, 12.5])
-        self.assertEqual([text for _, text in lines], ["first", "second"])
+        self.assertEqual([ts for ts, _, _ in lines], [5.0, 12.5])
+        self.assertEqual([text for _, text, _ in lines], ["first", "second"])
 
     def test_minutes_add_up(self):
-        (ts, _), = c.parse_lrc("[02:03.25]x")
+        (ts, _, _), = c.parse_lrc("[02:03.25]x")
         self.assertEqual(ts, 123.25)
 
     def test_repeated_timestamps_become_separate_lines(self):
         # un mismo verso marcado en varios momentos: una entrada por marca
         lines = c.parse_lrc("[00:01.00][00:09.00]chorus")
-        self.assertEqual([ts for ts, _ in lines], [1.0, 9.0])
+        self.assertEqual([ts for ts, _, _ in lines], [1.0, 9.0])
 
     def test_lines_without_timestamps_are_dropped(self):
         self.assertIsNone(c.parse_lrc("[ar:someone]\nplain text\n"))
@@ -74,7 +74,76 @@ class TestParseLrc(unittest.TestCase):
     def test_keeps_blank_content_as_a_gap(self):
         # una marca sin texto es un silencio: se conserva, el loop la saltea
         lines = c.parse_lrc("[00:04.00]")
-        self.assertEqual(lines, [(4.0, "")])
+        self.assertEqual(lines, [(4.0, "", None)])
+
+    def test_a_plain_line_has_no_word_times(self):
+        (_, _, words), = c.parse_lrc("[00:04.00]hola mundo")
+        self.assertIsNone(words)
+
+
+class TestParseLrcEnhanced(unittest.TestCase):
+    """T1.1: LRC "enhanced" — cada palabra puede traer su propia marca
+    `<mm:ss.xx>`. El texto de la línea sale igual que siempre; los tiempos van
+    aparte, y el largo de la lista tiene que coincidir SIEMPRE con el de
+    `texto.split()`: el overlay mapea palabra ↔ tiempo por índice."""
+
+    def test_inline_word_times(self):
+        (t0, text, words), = c.parse_lrc("[00:10.00] <00:10.00> hola <00:10.50> mundo")
+        self.assertEqual(t0, 10.0)
+        self.assertEqual(text, "hola mundo")
+        self.assertEqual(words, [(10.0, "hola"), (10.5, "mundo")])
+
+    def test_word_count_matches_the_text(self):
+        # un tramo con dos palabras reparte su tiempo entre las dos, para que
+        # len(words) == len(text.split()) por construcción
+        (_, text, words), = c.parse_lrc("[00:01.00]<00:01.00>hola mundo <00:02.00>chau")
+        self.assertEqual(len(words), len(text.split()))
+        self.assertEqual(words, [(1.0, "hola"), (1.0, "mundo"), (2.0, "chau")])
+
+    def test_text_before_the_first_mark_starts_with_the_line(self):
+        (_, text, words), = c.parse_lrc("[00:05.00]hola <00:06.00>mundo")
+        self.assertEqual(text, "hola mundo")
+        self.assertEqual(words, [(5.0, "hola"), (6.0, "mundo")])
+
+    def test_a_trailing_mark_with_no_text_is_dropped(self):
+        # marca de fin de línea: no es una palabra
+        (_, text, words), = c.parse_lrc("[00:01.00]<00:01.00>hola<00:02.00>")
+        self.assertEqual(text, "hola")
+        self.assertEqual(words, [(1.0, "hola")])
+
+    def test_repeated_line_stamps_shift_the_word_times(self):
+        # los tiempos por palabra son absolutos y valen para la PRIMERA marca:
+        # la repetición se corre el mismo delta
+        first, second = c.parse_lrc("[00:01.00][00:09.00]<00:01.00>na <00:01.50>na")
+        self.assertEqual(first[2], [(1.0, "na"), (1.5, "na")])
+        self.assertEqual(second[2], [(9.0, "na"), (9.5, "na")])
+
+    def test_only_marks_and_no_words_falls_back_to_no_times(self):
+        (_, text, words), = c.parse_lrc("[00:01.00]<00:01.00>")
+        self.assertEqual(text, "")
+        self.assertIsNone(words)
+
+
+class TestShowWords(unittest.TestCase):
+    """El evento `show` lleva los tiempos por palabra sólo cuando los hay: sin
+    eso el overlay los estima por largo, que es lo de siempre."""
+
+    def sent(self):
+        out = []
+        old = ipc.send
+        ipc.send = lambda ev: out.append(ev)
+        self.addCleanup(lambda: setattr(ipc, "send", old))
+        return out
+
+    def test_words_travel_in_the_event(self):
+        out = self.sent()
+        c.show("hola mundo", "t", 10.0, 12.0, [(10.0, "hola"), (10.5, "mundo")])
+        self.assertEqual(out[0]["words"], [[10.0, "hola"], [10.5, "mundo"]])
+
+    def test_without_word_times_the_field_is_not_sent(self):
+        out = self.sent()
+        c.show("hola mundo", "t", 10.0, 12.0)
+        self.assertNotIn("words", out[0])
 
 
 class TestCurrentLineIndex(unittest.TestCase):
@@ -315,7 +384,7 @@ class TestFetchLyrics(unittest.TestCase):
         self.patch_http(http)
         status, lines = c.fetch_lyrics(TRACK)
         self.assertEqual(status, "plain")
-        self.assertEqual(lines, [(0.0, "line one\nline two")])
+        self.assertEqual(lines, [(0.0, "line one\nline two", None)])
 
     def test_does_not_repeat_the_search_when_the_title_is_already_clean(self):
         calls = {"search": 0}
@@ -364,10 +433,24 @@ class TestLyricsCache(unittest.TestCase):
         self.assertIsNone(c.cache_get(TRACK))
 
     def test_round_trip(self):
-        c.cache_put(TRACK, "ok", [(1.0, "one"), (2.0, "two")])
+        c.cache_put(TRACK, "ok", [(1.0, "one", None), (2.0, "two", None)])
         status, lines = c.cache_get(TRACK)
         self.assertEqual(status, "ok")
-        self.assertEqual(lines, [(1.0, "one"), (2.0, "two")])
+        self.assertEqual(lines, [(1.0, "one", None), (2.0, "two", None)])
+
+    def test_word_times_survive_the_round_trip(self):
+        c.cache_put(TRACK, "ok", [(1.0, "one two", [(1.0, "one"), (1.5, "two")])])
+        _, lines = c.cache_get(TRACK)
+        self.assertEqual(lines, [(1.0, "one two", [(1.0, "one"), (1.5, "two")])])
+
+    def test_an_entry_from_before_word_times_still_reads(self):
+        # cache escrito por una versión anterior: dos campos por línea, sin
+        # palabras. Se normaliza a la forma nueva en vez de reventar al leer.
+        os.makedirs(lyrics.CACHE_DIR, exist_ok=True)
+        with open(c._cache_path(TRACK), "w") as f:
+            json.dump({"lines": [[1.0, "one"]], "status": "ok",
+                       "at": int(time.time())}, f)
+        self.assertEqual(c.cache_get(TRACK), ("ok", [(1.0, "one", None)]))
 
     def test_a_network_failure_is_never_cached(self):
         # si no, cada tema que sonó sin internet queda marcado como sin letra
@@ -381,8 +464,8 @@ class TestLyricsCache(unittest.TestCase):
     def test_plain_lyrics_round_trip(self):
         # T0.14: "plain" no puede leerse de vuelta como "ok" — son casos
         # distintos para el daemon (una línea sincronizada vs. un bloque)
-        c.cache_put(TRACK, "plain", [(0.0, "whole text")])
-        self.assertEqual(c.cache_get(TRACK), ("plain", [(0.0, "whole text")]))
+        c.cache_put(TRACK, "plain", [(0.0, "whole text", None)])
+        self.assertEqual(c.cache_get(TRACK), ("plain", [(0.0, "whole text", None)]))
 
     def test_no_lyrics_expires(self):
         # lrclib suma letras con el tiempo: el "no hay" no puede ser para siempre
@@ -573,20 +656,20 @@ class TestFetchAsync(unittest.TestCase):
         self.assertEqual(c._fetch["id"], "/t/2")
 
     def test_a_cache_hit_skips_the_network(self):
-        c.cache_put(TRACK, "ok", [(1.0, "cached")])
+        c.cache_put(TRACK, "ok", [(1.0, "cached", None)])
 
         def boom(track):
             raise AssertionError("should not have hit the network")
         self.patch_fetch(boom)
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
-        self.assertEqual(c._fetch["lyrics"], [(1.0, "cached")])
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "cached", None)])
 
     def test_a_result_is_cached_for_next_time(self):
-        self.patch_fetch(lambda t: ("ok", [(1.0, "one")]))
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)]))
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
-        self.assertEqual(c.cache_get(TRACK), ("ok", [(1.0, "one")]))
+        self.assertEqual(c.cache_get(TRACK), ("ok", [(1.0, "one", None)]))
 
     def test_retries_a_network_failure_then_succeeds(self):
         calls = []

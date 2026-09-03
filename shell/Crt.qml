@@ -287,6 +287,49 @@ PanelWindow {
                 gridAnim.restart();
         }
     }
+    // ---- el aviso del golpe (T4.2)
+    // El daemon avisa un par de segundos antes de que cambie la parte, pero
+    // sólo si el tema ya se escuchó otra vez. La cámara se acerca despacio
+    // durante esos segundos y REVIENTA cuando el golpe llega de verdad: eso es
+    // lo que se lee como que el tubo lo estaba esperando, y no que se enteró
+    // tarde. Sin mapa del tema no llega ningún aviso y todo queda como antes.
+    property real cueZoom: 1
+    NumberAnimation {
+        id: cueAnim
+        target: crt
+        property: "cueZoom"
+        from: 1
+        to: 1.055
+        duration: 2000
+        easing.type: Easing.InQuad
+    }
+    NumberAnimation {
+        id: cueRelease
+        target: crt
+        property: "cueZoom"
+        to: 1
+        duration: 340
+        easing.type: Easing.OutQuad
+    }
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible
+        function onCueGenChanged() {
+            if (crt.ctl.crtCamera <= 0.01)
+                return;
+            cueRelease.stop();
+            cueAnim.duration = Math.round(Math.max(crt.ctl.cueIn * 1000, 400));
+            cueAnim.restart();
+        }
+        function onSectionGenChanged() {
+            // llegó el golpe: se suelta el acercamiento y se rompe la pantalla
+            if (crt.cueZoom <= 1.001)
+                return;
+            cueAnim.stop();
+            cueRelease.restart();
+            crt.hit(1);
+        }
+    }
     Connections {
         target: crt.ctl
         enabled: crt.visible
@@ -536,9 +579,9 @@ PanelWindow {
                 Scale {
                     origin.x: camera.width / 2
                     origin.y: camera.height / 2
-                    xScale: crt.camZoom * (1 + 0.035 * crt.beatPulse
+                    xScale: crt.camZoom * crt.cueZoom * (1 + 0.035 * crt.beatPulse
                                            + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
-                    yScale: crt.camZoom * (1 + 0.035 * crt.beatPulse
+                    yScale: crt.camZoom * crt.cueZoom * (1 + 0.035 * crt.beatPulse
                                            + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
                 },
                 // el colapso del apagado: va aparte del encuadre para no pisarle

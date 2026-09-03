@@ -105,6 +105,12 @@ ShellRoot {
     property real audPct: 0.5
     property string audComing: ""      // lo que se viene, si el tema ya se escuchó
     property double audComingAt: 0
+    // T4.2: cuántos segundos faltan para lo que se viene, y el pulso que arranca
+    // el acercamiento lento de la cámara. `motifPreCued` evita el doble cambio
+    // de dibujo (uno al avisar, otro al llegar el `sec` dos segundos después).
+    property real cueIn: 2.0
+    property int cueGen: 0
+    property bool motifPreCued: false
     property int sectionGen: 0
     // si la captura se cae o está apagada, todo vuelve a moverse con la letra
     readonly property bool audLive: crtOn && (Date.now() - audAt) < 1500
@@ -1194,7 +1200,13 @@ ShellRoot {
                             // cambiar de parte cambia el dibujo y el reparto de
                             // colores: es el momento en el que el tema respira
                             root.sectionGen++;
-                            root.motifGen++;
+                            // el aviso (T4.2) ya cambió el dibujo hace dos
+                            // segundos: cambiarlo otra vez ahora sería un
+                            // parpadeo, no una anticipación
+                            if (root.motifPreCued)
+                                root.motifPreCued = false;
+                            else
+                                root.motifGen++;
                         } else if (ev.cmd === "bpm") {
                             root.bpm = ev.v;
                             root.bpmConf = ev.conf;
@@ -1204,6 +1216,17 @@ ShellRoot {
                         } else if (ev.cmd === "cue") {
                             root.audComing = ev.kind;
                             root.audComingAt = Date.now();
+                            root.cueIn = ev.in || 2.0;
+                            // T4.2: el aviso sólo llega en la SEGUNDA escucha
+                            // del tema (el mapa tiene que existir). Es lo único
+                            // que puede prepararse para un golpe en vez de
+                            // reaccionar tarde: la pantalla de al lado ya cambia
+                            // de dibujo y la cámara empieza a acercarse ANTES.
+                            if (ev.kind === "drop") {
+                                root.motifGen++;
+                                root.motifPreCued = true;
+                                root.cueGen++;
+                            }
                         } else if (ev.cmd === "art") {
                             root.artColors = ev.colors || [];
                         } else if (ev.cmd === "aud") {
@@ -1229,6 +1252,8 @@ ShellRoot {
                             root.npShown = false;
                             root.bpm = 0;      // otro tema, otro compás
                             root.bpmConf = 0;
+                            root.audComing = "";
+                            root.motifPreCued = false;
                             // el tubo se queda sin señal y rota el fósforo
                             root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [], words: [] };
                             root.crtTrackSeed++;

@@ -23,7 +23,11 @@ PanelWindow {
     required property int total
 
     screen: scr
-    visible: ctl.crtOn
+    // No es `ctl.crtOn` directo: apagar el tubo es una animación (el colapso de
+    // abajo), y la ventana tiene que sobrevivir a esos ~400 ms. Se prende de
+    // una y se apaga cuando el colapso termina.
+    property bool tubeOn: false
+    visible: tubeOn
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "cartelitos-crt"
     exclusionMode: ExclusionMode.Ignore
@@ -50,6 +54,48 @@ PanelWindow {
             crt.ctl.crtExit();
         }
     }
+
+    // ------------------------------------------------------ apagado de tubo
+    // Un tubo no se apaga: la imagen se cae a una línea horizontal, la línea se
+    // junta en un punto y el punto se queda un momento prendido en el fósforo.
+    // Esconder la ventana de una es lo único que delata que esto es software.
+    property real offX: 1
+    property real offY: 1
+    property real dotOpacity: 0
+    SequentialAnimation {
+        id: offAnim
+        NumberAnimation { target: crt; property: "offY"; from: 1; to: 0.01; duration: 180; easing.type: Easing.InQuad }
+        ParallelAnimation {
+            NumberAnimation { target: crt; property: "offX"; from: 1; to: 0; duration: 120; easing.type: Easing.InQuad }
+            NumberAnimation { target: crt; property: "dotOpacity"; to: 1; duration: 60 }
+        }
+        PauseAnimation { duration: 80 }
+        ScriptAction {
+            script: {
+                crt.tubeOn = false;
+                crt.offX = 1;
+                crt.offY = 1;
+                crt.dotOpacity = 0;
+            }
+        }
+    }
+    Connections {
+        target: crt.ctl
+        function onCrtOnChanged() {
+            if (crt.ctl.crtOn) {
+                offAnim.stop();
+                crt.offX = 1;
+                crt.offY = 1;
+                crt.dotOpacity = 0;
+                crt.tubeOn = true;
+            } else if (crt.tubeOn) {
+                offAnim.restart();
+            }
+        }
+    }
+    // el interruptor puede estar prendido ANTES de que exista esta ventana (el
+    // FileView carga primero): sin esto no hay cambio del que enterarse
+    Component.onCompleted: tubeOn = ctl.crtOn
 
     // ------------------------------------------------------------- fósforos
     // Ya no elige la pantalla: el root sirve DOS caras que combinan (una
@@ -421,12 +467,22 @@ PanelWindow {
             anchors.fill: parent
             // el tirón del latido va acá, así la pantalla CON la letra también
             // acompaña el parpadeo y no sólo las de al lado
-            transform: Scale {
-                origin.x: camera.width / 2
-                origin.y: camera.height / 2
-                xScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
-                yScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
-            }
+            transform: [
+                Scale {
+                    origin.x: camera.width / 2
+                    origin.y: camera.height / 2
+                    xScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
+                    yScale: crt.camZoom * (1 + 0.035 * crt.beatPulse)
+                },
+                // el colapso del apagado: va aparte del encuadre para no pisarle
+                // el binding a la cámara mientras el tubo se muere
+                Scale {
+                    origin.x: camera.width / 2
+                    origin.y: camera.height / 2
+                    xScale: crt.offX
+                    yScale: crt.offY
+                }
+            ]
 
             // la pantalla prendida respira: el fondo sube y baja con la música,
             // no hay un "resplandor" separado porque el fondo YA es la luz
@@ -926,6 +982,19 @@ PanelWindow {
                 PauseAnimation { duration: 3200 }
                 NumberAnimation { target: hint; property: "opacity"; to: 0.08; duration: 2500 }
             }
+        }
+
+        // El punto blanco en el que termina el colapso. Va acá adentro, no
+        // encima del shader: el punto tiene que quedar detrás del mismo vidrio
+        // que todo lo demás, si no se ve como un pixel dibujado sobre el tubo.
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.max(3, Math.round(crt.shortSide * 0.014))
+            height: width
+            radius: width / 2
+            color: "#ffffff"
+            opacity: crt.dotOpacity
+            visible: crt.dotOpacity > 0.01
         }
     }
 

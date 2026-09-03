@@ -1575,6 +1575,10 @@ ShellRoot {
                         dying = true;
                         modelData.dying = true;   // spawnPos() no lo cuenta como ocupado
                         burst = true;
+                        // la foto del burn-in se saca ACÁ, con el cartel entero
+                        // todavía en pantalla: 370 ms más tarde, cuando el
+                        // fantasma se prende, el colapso ya lo dejó en una raya
+                        ghostShot.scheduleUpdate();
                         deathAnim.start();
                         deathEnd.start();
                     }
@@ -1979,11 +1983,30 @@ ShellRoot {
                         x: win.tearPad
                         width: win.dlgW
                         height: content.height
-                        visible: win.ghosting
+                        // Se suma a la escena en cuanto el cartel empieza a
+                        // morir, con opacidad 0: un ShaderEffectSource adentro
+                        // de un item invisible no dibuja, y entonces la captura
+                        // de die() saldría vacía.
+                        visible: win.dying || win.ghosting
                         opacity: 0
 
-                        Rectangle { anchors.fill: parent; color: "#e8d5ff"; opacity: 0.10 }
-                        Rectangle { width: parent.width; height: Math.round(26 * win.k) + 2; color: "#b9a4ff"; opacity: 0.16 }
+                        // el fósforo tiñe lo quemado; va DEBAJO de la foto para
+                        // que el color se lea a través de ella
+                        Rectangle { anchors.fill: parent; color: "#e8d5ff"; opacity: 0.06 }
+
+                        // Lo quemado es el cartel, no un rectángulo del tamaño
+                        // del cartel: el título, el ícono y los botones quedan
+                        // marcados donde estaban. Es la foto que sacó die(),
+                        // congelada (`live: false`) — el contenido de abajo ya
+                        // no existe cuando esto se prende.
+                        ShaderEffectSource {
+                            id: ghostShot
+                            anchors.fill: parent
+                            sourceItem: content
+                            live: false
+                            opacity: 0.35
+                        }
+
                         Rectangle {
                             anchors.fill: parent
                             color: "transparent"

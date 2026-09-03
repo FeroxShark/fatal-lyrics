@@ -1968,7 +1968,7 @@ ShellRoot {
 
                 // un solo parámetro anima posición y tamaño juntos → trayectoria recta
                 property real dockT: root.npDocked ? 1 : 0
-                Behavior on dockT { NumberAnimation { duration: 550; easing.type: Easing.OutCubic } }
+                Behavior on dockT { NumberAnimation { duration: 320; easing.type: Easing.OutBack; easing.overshoot: 1.15 } }
 
                 // disco de vinilo que asoma girando por el costado de la funda
                 // (np_vinyl); declarado antes de npCard para quedar DETRÁS

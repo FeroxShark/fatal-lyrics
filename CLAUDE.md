@@ -37,7 +37,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 
 ## Mapa
 
-- `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sync +|-`.
+- `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sync +|-|sing on|off`.
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — seis animaciones para las pantallas sin letra.
@@ -163,6 +163,24 @@ no-op → boot roto. No reintroducir un segundo.)
   verdad — `shouldDie` compara esas dos cosas.
 - **El aviso `cue` sólo llega en la SEGUNDA escucha del tema** (necesita el mapa de energía
   guardado): no se puede ver con `fatal demo` ni con un tema nuevo, sólo en el log del daemon.
+- **El umbral del karaoke se mide con el cuarto CALLADO, y en muestras, no en reloj.** Si la
+  ventana de 20 s se alimenta también con la voz, el percentil 60 sube hasta la voz y el modo se
+  apaga solo en la mitad del estribillo; si además se filtra por reloj, un estribillo largo la
+  deja entera vencida y el primer respiro la borra. Es un deque de las últimas 200 muestras
+  calladas (llegan a 10 Hz).
+- **Los dos multiplicadores de la histéresis del karaoke son > 1.** El umbral ES el nivel del
+  cuarto: con el de apagado por debajo de 1, un ruido de fondo parejo (un ventilador) queda para
+  siempre encima de su propio umbral y el modo no se apaga nunca más.
+- **`cartelitos-sing` es un TIMBRE, no el estado** (al revés que `cartelitos-crt`): el estado es
+  la perilla `[behavior] sing` del TOML, que es la que viaja al overlay y sobrevive al reinicio.
+  `fatal sing` sólo deja el pedido escrito y el daemon lo pasa a la config (igual que `fatal tune`).
+- **Si la entrada por default es un `.monitor`, el karaoke no graba.** Lo que entraría por ahí es
+  la propia música y el modo diría "está cantando" cada vez que suena un tema.
+- **Oscurecer el tubo con `stage.opacity` funciona porque `crt.frag` ya multiplica por
+  `qt_Opacity`.** Si alguna vez el shader deja de hacerlo, el modo karaoke se queda sin su
+  apagado y hay que poner un rectángulo negro encima en su lugar.
+- **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
+  test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
 
 ## Números medidos
 
@@ -190,6 +208,10 @@ no-op → boot roto. No reintroducir un segundo.)
 - De la lista de Ferox para el CRT: transición de canal (estática → rojo un microsegundo → texto
   deformado → se estabiliza), efecto IOWN (letra gigante desplazándose entre pantallas), setup
   visual con un número gigante en cada monitor.
+- **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
+  FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
+  del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral
+  quedó duro o blando, se toca `SING_ON`/`SING_OFF` en `cartelitos/daemon.py`.
 
 ## Decisiones cerradas (Ferox las descartó, no re-proponer)
 

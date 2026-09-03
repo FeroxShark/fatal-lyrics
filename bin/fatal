@@ -14,6 +14,10 @@ QS_PID="$RUN/qs.pid"
 D_PID="$RUN/daemon.pid"
 QS_LOG="$RUN/qs.log"
 D_LOG="$RUN/daemon.log"
+# de dónde salió la letra del tema que suena: lo escribe el daemon (ver
+# cartelitos/lyrics.py write_state), porque este proceso es corto y no tiene
+# forma de preguntárselo — el socket va sólo del daemon al overlay
+LYRICS="$RUN/lyrics"
 # dónde vivían los PID antes de mudarlos al runtime: sirven para poder apagar
 # una instancia que había arrancado con la versión vieja
 OLD_QS_PID=/tmp/cartelitos-qs.pid
@@ -88,6 +92,9 @@ status_line() {
     else
         echo OFF
     fi
+    # con el daemon apagado el archivo es del tema de la sesión anterior: no
+    # dice nada de ahora y confunde más de lo que informa
+    running "$D_PID" "$DAEMON" && [ -f "$LYRICS" ] && cat "$LYRICS"
     # qué falta instalar y qué función se pierde por cada cosa: no imprime nada
     # si está todo. Sin esto, media app apagada parecía un bug.
     [ -f "$DAEMON" ] && python3 "$DAEMON" --check 2>/dev/null
@@ -128,6 +135,7 @@ stop() {
     rm -f "$OLD_D_PID" "$OLD_QS_PID"
     # without this, the next start sees the stale socket and starts the daemon too early
     rm -f "$SOCK"
+    rm -f "$LYRICS"                   # sin daemon no hay letra de la que informar
     printf '0' > "$CRT" 2>/dev/null   # que no quede el tubo prendido en el archivo
 
     echo "fatal OFF"

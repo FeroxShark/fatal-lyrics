@@ -27,6 +27,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
   (`split_repeats`) y cada golpe cae en otra pantalla. `focus = "all"` vuelve al comportamiento
   viejo.
+- **La letra va en el idioma en que se canta.** Hay una cadena de proveedores
+  (`lrclib` match exacto → `lrclib` búsqueda → `NetEase`), se prueba con el título
+  original y después con el limpio, y gana el primer `ok`. De NetEase se usa `lrc`
+  y **nunca** `tlyric`, que es la traducción al chino. Nada de campos de traducción,
+  en ningún proveedor.
 - **Casi todo lo raro tiene una razón medida.** Los gotchas caros están documentados EN EL CÓDIGO.
   Leerlos antes de "optimizar" algo que parece raro.
 
@@ -36,11 +41,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — seis animaciones para las pantallas sin letra.
+- `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
+  palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
   `config.py` porque la escribe el propio daemon, no Ferox a mano.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 306 tests, stdlib puro.
+- `tests/` — 353 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -71,6 +78,11 @@ no-op → boot roto. No reintroducir un segundo.)
   (T0.14: sólo hay texto sin sincronizar), el status se guarda **explícito** en el JSON — antes se
   infería de si `lines` venía con contenido, y "plain" también tiene `lines` no vacío, así que se
   habría leído como "ok" al volver de cache.
+- **`fatal status` tampoco puede preguntarle nada al daemon** (misma razón que el
+  punto de abajo, al revés): el proveedor de la letra sale de un archivo que escribe
+  el daemon, `$XDG_RUNTIME_DIR/cartelitos/lyrics`, **ya formateado**. Parsear JSON
+  desde bash para imprimir una línea no vale la pena. Lo borra `fatal stop` y no se
+  imprime con el daemon muerto: si no, es la letra de la sesión anterior.
 - **El daemon vivo no es alcanzable desde afuera salvo por archivo.** El socket Unix es
   unidireccional (daemon → overlay); un proceso corto como `bin/fatal` no puede escribirle nada al
   daemon por ahí. Mismo mecanismo que `crt`/`tune`: un archivo en `$XDG_RUNTIME_DIR` que un hilo
@@ -84,6 +96,21 @@ no-op → boot roto. No reintroducir un segundo.)
 - **`Super+Shift+Left/Right` ya estaban tomados** (mueven la ventana enfocada, en
   `hyprland/keybinds.conf`). El gesto de sync (T0.13) usa `Super+Alt+Left/Right` en su lugar —
   chequear binds existentes antes de proponer una combinación nueva.
+- **Alcanza con que UN proveedor no llegue para que el resultado sea `error`**, no
+  `none`. `none` se cachea 7 días: cachearlo porque NetEase estaba caído deja el tema
+  marcado como instrumental por una semana.
+- **La búsqueda de NetEase es difusa a lo bruto:** con una consulta que no existe
+  igual devuelve cinco temas cualesquiera. Lo único que separa el match del relleno
+  es la duración (±3 s) — no sacar ese filtro. Su LRC además trae la ficha técnica
+  como versos con marca de tiempo (`作词`/`作曲`/`制作人`): sin filtrarla, el tema
+  arranca con tres cartelitos de créditos.
+- **Los tiempos por palabra tienen que ser tantos como `texto.split()`.** En el LRC
+  "enhanced" un tramo `<t>` puede traer dos palabras; si contara como una, todo lo
+  que sigue queda corrido. `_parse_words` le da a CADA palabra del tramo el tiempo
+  del tramo, así el largo coincide por construcción y el overlay puede mapear por
+  índice. En el CRT se usan **sólo** si esa pantalla muestra la línea entera: con
+  `split` o con el director, el índice no es el mismo y `reveal` corre sobre la
+  ventana del pedazo, no la de la línea.
 - **Carrera de la búsqueda de letra:** un hilo viejo pisaba la letra del tema nuevo. Está resuelto
   con lock + contador de generación. No sacar ninguno de los dos.
 - **caelestia dibuja submenús pero NO checkmarks** (su `TrayMenu.qml` pinta sólo icon+text). El

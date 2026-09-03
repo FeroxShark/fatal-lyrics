@@ -2837,6 +2837,101 @@ class TestFatalRunningGuard(unittest.TestCase):
         self.assertEqual(self._run(self.pidfile, "cartelitos.py"), "YES")
 
 
+class TestLyricsState(unittest.TestCase):
+    """T1.3: `fatal status` dice de dónde salió la letra. Corre en otro proceso
+    y no puede preguntarle nada al daemon (el socket va sólo del daemon al
+    overlay), así que el daemon deja la línea ya formateada en el runtime."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        old = lyrics.STATE_PATH
+        lyrics.STATE_PATH = os.path.join(self.dir.name, "lyrics")
+        self.addCleanup(lambda: setattr(lyrics, "STATE_PATH", old))
+
+    def read(self):
+        with open(lyrics.STATE_PATH) as f:
+            return f.read().strip()
+
+    def test_the_line_names_the_provider_and_the_count(self):
+        self.assertEqual(c.state_line("ok", [(1.0, "a", None)] * 42, "netease"),
+                         "lyrics: netease (synced, 42 lines)")
+
+    def test_unsynced_says_so(self):
+        self.assertEqual(c.state_line("plain", [(0.0, "text", None)], "lrclib"),
+                         "lyrics: lrclib (unsynced text)")
+
+    def test_no_lyrics_and_no_provider_read_differently(self):
+        # "este tema no tiene letra" y "no contestó nadie" son distintos: uno
+        # se cachea y el otro se reintenta, y el status tiene que dejarlo ver
+        self.assertEqual(c.state_line("none"), "lyrics: none for this track")
+        self.assertEqual(c.state_line("error"), "lyrics: no provider answered")
+
+    def test_it_is_written_to_the_runtime_file(self):
+        lyrics.write_state("ok", [(1.0, "a", None)], "lrclib")
+        self.assertEqual(self.read(), "lyrics: lrclib (synced, 1 lines)")
+
+    def test_publishing_a_result_updates_it(self):
+        with lyrics._fetch_lock:
+            lyrics._fetch.update(gen=7)
+        self.assertTrue(lyrics._publish(7, "ok", [(1.0, "a", None)], "netease"))
+        self.assertEqual(self.read(), "lyrics: netease (synced, 1 lines)")
+
+    def test_a_thread_of_an_old_track_does_not_write_it(self):
+        # mismo motivo que el chequeo de generación de la letra: el hilo viejo
+        # no puede dejar en el status el tema que ya no suena
+        with lyrics._fetch_lock:
+            lyrics._fetch.update(gen=9)
+        lyrics.write_state("ok", [(1.0, "new", None)], "lrclib")
+        self.assertFalse(lyrics._publish(8, "none", None, None))
+        self.assertEqual(self.read(), "lyrics: lrclib (synced, 1 lines)")
+
+    def test_a_missing_runtime_dir_is_not_a_crash(self):
+        lyrics.STATE_PATH = "/proc/nope/lyrics"
+        lyrics.write_state("ok", [(1.0, "a", None)], "lrclib")   # no debe explotar
+
+
+class TestFatalStatusLyrics(unittest.TestCase):
+    """La otra mitad de T1.3: que bin/fatal imprima ese archivo, y sólo cuando
+    el daemon está vivo — con el daemon apagado la línea es del tema de la
+    sesión anterior y miente."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.run_dir = os.path.join(self.dir.name, "cartelitos")
+        os.makedirs(self.run_dir)
+        with open(os.path.join(self.run_dir, "lyrics"), "w") as f:
+            f.write("lyrics: netease (synced, 33 lines)\n")
+
+    def fake_daemon(self):
+        """Un proceso cuyo cmdline contiene el path del daemon: es lo único que
+        mira running(), y evita levantar el daemon de verdad."""
+        marker = os.path.join(REPO, "cartelitos.py")
+        proc = subprocess.Popen([sys.executable, "-c",
+                                 f"import time; time.sleep(30)  # {marker}"])
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        _wait_cmdline(proc.pid)
+        with open(os.path.join(self.run_dir, "daemon.pid"), "w") as f:
+            f.write(str(proc.pid))
+
+    def status(self):
+        env = dict(os.environ, XDG_RUNTIME_DIR=self.dir.name, CARTELITOS_HOME=REPO)
+        out = subprocess.run([os.path.join(REPO, "bin", "fatal"), "status"],
+                             capture_output=True, text=True, timeout=60, env=env)
+        return out.stdout
+
+    def test_it_shows_the_provider_while_the_daemon_runs(self):
+        self.fake_daemon()
+        self.assertIn("lyrics: netease (synced, 33 lines)", self.status())
+
+    def test_with_the_daemon_down_it_says_nothing_about_lyrics(self):
+        out = self.status()
+        self.assertIn("OFF", out)
+        self.assertNotIn("lyrics:", out)
+
+
 class TestFatalRuntimeLayout(unittest.TestCase):
     """bin/fatal y el paquete tienen que apuntar a los MISMOS archivos."""
 
@@ -2861,3 +2956,7 @@ class TestFatalRuntimeLayout(unittest.TestCase):
 
     def test_status_asks_the_package_what_is_missing(self):
         self.assertIn("--check", self.body)
+
+    def test_the_lyrics_state_file_matches_the_python_side(self):
+        self.assertIn('LYRICS="$RUN/lyrics"', self.body)
+        self.assertTrue(lyrics.STATE_PATH.endswith("/cartelitos/lyrics"))

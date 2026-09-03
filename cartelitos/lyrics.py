@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from .util import FIELD_SEP, UA, log
+from .util import FIELD_SEP, RUN_DIR, UA, log, run_dir
 
 CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "cartelitos", "lyrics")
 NONE_TTL = 7 * 86400    # cuánto vale un "este tema no tiene letra" cacheado
@@ -369,6 +369,39 @@ def purge_cache(now):
                 pass
 
 
+# ------------------------------------------------------------ estado visible
+# `fatal status` corre en OTRO proceso y no tiene forma de preguntarle nada al
+# daemon: el socket va sólo de acá para el overlay. Mismo mecanismo de archivo
+# que crt/tune pero al revés — lo escribe el daemon y lo lee el CLI.
+STATE_PATH = os.path.join(RUN_DIR, "lyrics")
+
+
+def state_line(status, lines=None, provider=None):
+    """La línea que muestra `fatal status`. En inglés, como el resto del CLI."""
+    if status == "ok":
+        return f"lyrics: {provider} (synced, {len(lines or [])} lines)"
+    if status == "plain":
+        return f"lyrics: {provider} (unsynced text)"
+    if status == "none":
+        return "lyrics: none for this track"
+    if status == "searching":
+        return "lyrics: searching..."
+    return "lyrics: no provider answered"
+
+
+def write_state(status, lines=None, provider=None):
+    """Deja en el runtime lo último que se supo de la letra, ya formateado:
+    parsear JSON desde bash para imprimir una línea no vale la pena."""
+    try:
+        run_dir()
+        tmp = STATE_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(state_line(status, lines, provider) + "\n")
+        os.replace(tmp, STATE_PATH)     # nadie lee un archivo a medio escribir
+    except OSError:
+        pass
+
+
 # resultado de la búsqueda en curso. `gen` sube en cada cambio de tema: el hilo
 # sólo publica si sigue siendo el suyo, y lo chequea con el lock tomado — sin eso,
 # un hilo que pasó el chequeo justo antes del cambio pisa el tema nuevo.
@@ -407,6 +440,9 @@ def _publish(gen, status, lines, provider):
         if not _mine(gen):
             return False
         _fetch.update(lyrics=lines, status=status, provider=provider, done=True)
+    # después del chequeo de generación: un hilo viejo no puede dejar en el
+    # status la letra de un tema que ya no suena
+    write_state(status, lines, provider)
     return True
 
 
@@ -427,6 +463,10 @@ def _work(track, gen):
             break
         if attempt == RETRIES:
             log("no lyrics provider answered, giving up on this track")
+            with _fetch_lock:
+                stale = not _mine(gen)
+            if not stale:
+                write_state("error")
             return
         # red caída: esperar y reintentar, salvo que ya haya cambiado de tema
         delay = _retry_delay()
@@ -463,18 +503,25 @@ def _worker(track, gen):
 
 
 def fetch_lyrics_async(track):
-    """Busca la letra en un hilo. Son dos requests con timeout de 10s cada uno:
-    hechos en el loop principal, un lrclib lento o caído congelaba todo —
-    detección de juego, eventos de progreso y limpieza incluidos."""
+    """Busca la letra en un hilo. Es la cadena entera de proveedores, con hasta
+    10s de timeout por request: hecha en el loop principal, un proveedor lento o
+    caído congelaba todo — detección de juego, eventos de progreso y limpieza
+    incluidos."""
     global _inflight, _pending
     with _fetch_lock:
         _fetch["gen"] += 1
         gen = _fetch["gen"]
         _fetch.update(id=track["id"], lyrics=None, status=None, provider=None, done=False)
-        if _inflight >= MAX_INFLIGHT:
+        queued = _inflight >= MAX_INFLIGHT
+        if queued:
             _pending = (track, gen)
-            return
-        _inflight += 1
+        else:
+            _inflight += 1
+    # el status no puede seguir mostrando la letra del tema anterior mientras
+    # se busca la de éste, ni siquiera si este tema quedó esperando lugar
+    write_state("searching")
+    if queued:
+        return
 
     try:
         threading.Thread(target=_worker, args=(track, gen), daemon=True, name="lyrics").start()

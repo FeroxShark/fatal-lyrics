@@ -32,12 +32,12 @@ from .lyrics import (
     CACHE_DIR, MAX_INFLIGHT, NETEASE_CREDIT_RE, NETEASE_HEADERS, NETEASE_LIMIT,
     NETEASE_SLACK, NETEASE_TIMEOUT, NONE_TTL, OK_TTL, PROVIDERS, RETRIES,
     RETRY_DELAY, RETRY_JITTER, SEG_MAX, SEG_MAX_SHORT, SEG_PUNCT, SEG_SPLIT,
-    SPELL_SEP, TS_RE, WORD_TS_RE,
+    SPELL_SEP, STATE_PATH, TS_RE, WORD_TS_RE,
     cache_get, cache_put, clean_title, current_line_index, expand_repeats,
     expand_spelled, fetch_lyrics, fetch_lyrics_async, http_json, lrclib_get,
     lrclib_search, netease, netease_pick, parse_lrc,
-    purge_cache, seg_key, spelled_run, split_repeats, _cache_path, _fetch,
-    _fetch_lock, _retry_delay,
+    purge_cache, seg_key, spelled_run, split_repeats, state_line, write_state,
+    _cache_path, _fetch, _fetch_lock, _retry_delay,
 )
 
 from .art import album_colors, parse_histogram, send_album_colors

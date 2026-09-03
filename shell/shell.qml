@@ -1129,6 +1129,9 @@ ShellRoot {
                     readonly property int age: root.lyricGen - modelData.gen
                     readonly property bool current: modelData.serial === root.currentLyricSerial
                     readonly property real glitchiness: Math.min(age / 5, 1)
+                    // signo determinístico por serial: mitad de los carteles se
+                    // inclina para un lado, la otra mitad para el otro
+                    readonly property int rotSign: modelData.serial % 2 === 0 ? 1 : -1
                     property bool dying: false
                     property bool ghosting: false
 
@@ -1565,10 +1568,18 @@ ShellRoot {
                             color: "#c0c0c0"
                             clip: true
                             opacity: win.burstOpacity * win.deathOpacity * win.holoOpacity
-                            transform: Scale {
-                                origin.y: frame.height / 2
-                                yScale: win.deathScale
-                            }
+                            transform: [
+                                Scale {
+                                    origin.y: frame.height / 2
+                                    yScale: win.deathScale
+                                },
+                                // micro-rotación por edad: cero con glitch = "off"
+                                Rotation {
+                                    origin.x: frame.width / 2
+                                    origin.y: frame.height / 2
+                                    angle: root.gStr > 0 ? win.glitchiness * 0.6 * win.rotSign : 0
+                                }
+                            ]
 
                             Rectangle { anchors { top: parent.top; left: parent.left; right: parent.right } height: 2; color: "#ffffff" }
                             Rectangle { anchors { top: parent.top; left: parent.left; bottom: parent.bottom } width: 2; color: "#ffffff" }

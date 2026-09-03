@@ -48,6 +48,7 @@ class DaemonLoop:
         self.pause_cleared = False
         self.resend_np = False
         self.last_pos_sent = 0.0
+        self.last_pos = 0.0
 
     def check_game(self, now):
         """Actualiza paused_by_game según gaming(); devuelve el estado resultante.
@@ -107,6 +108,14 @@ class DaemonLoop:
         self._ipc._song_where["pos"] = t["pos"]
         self._ipc._song_where["at"] = now
         self._ipc._song_where["playing"] = t["status"] == "Playing"
+
+        # el usuario saltó para atrás en el mismo tema (rebobinó, repitió un
+        # verso): la línea vieja quedaba pegada porque `idx` sólo avanza
+        if t["id"] == self.track_id and t["pos"] < self.last_pos - 2.0:
+            self.idx = -1
+            self._ipc.clear()
+            self._log("seek back: reset")
+        self.last_pos = t["pos"]
 
         if t["id"] != self.track_id:
             self.track_id = t["id"]

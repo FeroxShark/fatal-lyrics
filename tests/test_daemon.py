@@ -196,6 +196,51 @@ class TestTrackChangeCleanup(unittest.TestCase):
         loop._ipc.clear.assert_not_called()
 
 
+class TestSeekBack(unittest.TestCase):
+    def test_seek_back_resets_and_reshows_current_line(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.side_effect = [2, 0]
+        loop.lyrics = [(0.0, "a"), (10.0, "b"), (20.0, "c")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=60.0), now=0.0)
+        loop._ipc.reset_mock()
+
+        loop.handle_track(track(id="t1", pos=20.0), now=1.0)
+
+        loop._ipc.clear.assert_called_once()
+        loop._log.assert_any_call("seek back: reset")
+        loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0)
+
+    def test_small_backward_jitter_does_not_reset(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 1
+        loop.lyrics = [(0.0, "a"), (10.0, "b")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=30.0), now=0.0)
+        loop._ipc.reset_mock()
+        loop.handle_track(track(id="t1", pos=29.0), now=1.0)
+
+        loop._ipc.clear.assert_not_called()
+
+    def test_new_track_is_not_treated_as_a_seek_back(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = -1
+        loop.lyrics = [(0.0, "a")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=60.0), now=0.0)
+        loop._ipc.reset_mock()
+
+        loop.handle_track(track(id="t2", pos=0.0), now=1.0)
+
+        # se llama una vez (por el cambio de track), no dos (track-change + seek-back)
+        loop._ipc.clear.assert_called_once()
+        for call in loop._log.call_args_list:
+            self.assertNotEqual(call.args[0], "seek back: reset")
+
+
 class TestLongPauseClear(unittest.TestCase):
     def test_clears_after_the_configured_pause_window(self):
         loop = make_loop(config=make_config(pause_clear=15))

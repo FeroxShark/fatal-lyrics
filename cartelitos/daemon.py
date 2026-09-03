@@ -16,6 +16,11 @@ from .util import log
 
 POLL = 0.3
 POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
+# T4.5: silencio con la letra cargada y el tema sonando. Un instrumental largo
+# (una intro, un solo, el puente) deja la pantalla vacía y parece que el
+# programa se murió. Que se cuelgue A PROPÓSITO, como un programa de Windows,
+# es mejor que quedarse sin decir nada. Una vez por tema.
+HANG_AFTER = 30.0
 
 
 class DaemonLoop:
@@ -57,6 +62,8 @@ class DaemonLoop:
         self.crt_was_on = False
         self.last_pos_sent = 0.0
         self.last_pos = 0.0
+        self.last_show_at = 0.0
+        self.hang_sent = False
 
     def check_game(self, now):
         """Actualiza paused_by_game según gaming(); devuelve el estado resultante.
@@ -169,6 +176,8 @@ class DaemonLoop:
             self.lyrics = None
             self.lyrics_kind = None
             self.plain_shown = False
+            self.hang_sent = False
+            self.last_show_at = now
             if t["title"]:
                 self._lyr.fetch_lyrics_async(t)
             else:
@@ -178,6 +187,9 @@ class DaemonLoop:
         if self.lyrics is None and self._lyr._fetch["done"] and self._lyr._fetch["id"] == self.track_id:
             self.lyrics = self._lyr._fetch["lyrics"]
             self.lyrics_kind = self._lyr._fetch.get("status")
+            # el reloj del "no responde" arranca cuando HAY letra: la búsqueda
+            # va en otro hilo y puede tardar, y esa espera no es un silencio
+            self.last_show_at = now
 
         # progreso de la canción: barra de la funda + karaoke (1 evento por segundo)
         # el modo CRT los necesita SIEMPRE: el director reparte los pedazos en
@@ -196,6 +208,7 @@ class DaemonLoop:
                 # por vez (no hay tiempos con los que seguirla)
                 if not self.plain_shown:
                     self.plain_shown = True
+                    self.last_show_at = now
                     preview = "\n".join(self.lyrics[0][1].splitlines()[:6])
                     self._ipc.show(preview, "unsynced lyrics")
             else:
@@ -210,8 +223,18 @@ class DaemonLoop:
                         t1 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else line[0] + 5
                         # el tercer campo (tiempos por palabra) es de T1.1: una
                         # letra que venga de dos campos sigue andando igual
+                        self.last_show_at = now
                         self._ipc.show(line[1], t["title"], line[0], t1,
                                        line[2] if len(line) > 2 else None)
+
+            # silencio largo con la letra cargada: el programa se cuelga solo.
+            # Con la letra sin sincronizar no aplica: ahí no viene ninguna línea
+            # más por diseño, no porque el tema se haya quedado callado.
+            if (self.lyrics_kind != "plain" and not self.hang_sent
+                    and now - self.last_show_at > HANG_AFTER):
+                self.hang_sent = True
+                self._log("long silence: fatal-lyrics is not responding")
+                self._ipc.hang()
 
         # Cada vuelta spawnea un playerctl (~4 ms de CPU). El poll fino sólo hace
         # falta para pegarle al momento de cada verso: en pausa, o en un tema sin

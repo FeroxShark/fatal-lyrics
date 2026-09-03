@@ -140,10 +140,29 @@ def send_soft(event):
     return True
 
 
-def show(text, title, t0=0.0, t1=0.0, words=None):
+# T4.5: el cartel de Windows colgado. No es un verso — es el chiste de que el
+# programa que dibuja carteles de error se cuelgue como un programa de Windows.
+HANG_TEXT = ("fatal-lyrics no responde.\n"
+             "El programa no responde. Si espera, puede que responda.")
+HANG_TITLE = "fatal-lyrics"
+
+
+def hang():
+    """El cartel de "no responde" (silencio largo con la letra cargada)."""
+    show(HANG_TEXT, HANG_TITLE, kind="hang")
+
+
+def show(text, title, t0=0.0, t1=0.0, words=None, kind=None):
     # t0/t1: comienzo y fin estimado de la línea, para el karaoke del overlay
     ev = {"cmd": "show", "text": text, "title": title,
           "t0": round(t0, 2), "t1": round(t1, 2)}
+    # `kind`: un cartel que NO es una línea de la letra (hoy sólo "hang"). El
+    # overlay lo dibuja distinto y no lo cuenta como el verso actual; el campo
+    # ausente es un cartel normal, así que nada de lo viejo cambia.
+    if kind:
+        ev["kind"] = kind
+        send(ev)
+        return
     # LRC "enhanced" (T1.1): con el tiempo real de cada palabra el overlay
     # deja de repartir el pintado por largo. Va sólo cuando lo hay: el campo
     # ausente ES la señal de "estimalo vos".

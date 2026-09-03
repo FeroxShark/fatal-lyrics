@@ -49,9 +49,9 @@ from .system import (
 )
 
 from .ipc import (
-    DEMO_LINES, SOCK_PATH, SYNC_PATH, clear, demo, parse_sync, send,
-    send_soft, show, _config_event, _demo_burst, _send_lock, _song_pos,
-    _song_where,
+    DEMO_LINES, HANG_TEXT, HANG_TITLE, SOCK_PATH, SYNC_PATH, clear, demo, hang,
+    parse_sync, send, send_soft, show, _config_event, _demo_burst, _send_lock,
+    _song_pos, _song_where,
 )
 
 from .audio import (
@@ -75,4 +75,4 @@ from .setup import (
 )
 # el menú en sí es `cartelitos.setup.setup()`: acá `setup` es el módulo
 
-from .daemon import POLL, POLL_IDLE, main
+from .daemon import HANG_AFTER, POLL, POLL_IDLE, main

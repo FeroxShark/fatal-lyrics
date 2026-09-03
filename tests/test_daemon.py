@@ -361,6 +361,80 @@ class TestPlainLyrics(unittest.TestCase):
         self.assertFalse(loop.plain_shown)
 
 
+class TestHangDialog(unittest.TestCase):
+    """T4.5: silencio largo con la letra cargada. Que el programa se cuelgue a
+    propósito es mejor que una pantalla vacía que parece un programa muerto."""
+
+    def loop_with_lyrics(self, line=0):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop._lyr.current_line_index.return_value = line
+        loop.lyrics = [(0.0, "primera"), (120.0, "la que viene mucho después")]
+        loop.lyrics_kind = "synced"
+        loop.idx = line          # la línea ya se mostró: nada nuevo por mostrar
+        loop.last_show_at = 0.0
+        return loop
+
+    def test_thirty_seconds_of_silence_hang_the_program(self):
+        loop = self.loop_with_lyrics()
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+        loop._ipc.hang.assert_not_called()
+        loop.handle_track(track(id="t1", pos=36.0), now=35.0)
+        loop._ipc.hang.assert_called_once_with()
+
+    def test_it_only_hangs_once_per_track(self):
+        loop = self.loop_with_lyrics()
+        loop.handle_track(track(id="t1", pos=36.0), now=35.0)
+        loop.handle_track(track(id="t1", pos=50.0), now=50.0)
+        loop._ipc.hang.assert_called_once()
+
+    def test_a_line_that_just_showed_up_resets_the_clock(self):
+        # la línea entra en el primer tick (idx pasa de -1 a 0): el reloj del
+        # colgado arranca ahí, no cuando se cargó la letra
+        loop = self.loop_with_lyrics()
+        loop.idx = -1
+        loop.handle_track(track(id="t1", pos=1.0), now=20.0)
+        loop._ipc.show.assert_called_once()
+        loop.handle_track(track(id="t1", pos=30.0), now=45.0)
+        loop._ipc.hang.assert_not_called()
+
+    def test_a_new_track_gets_its_own_hang(self):
+        loop = self.loop_with_lyrics()
+        loop.hang_sent = True
+        loop.handle_track(track(id="t2", pos=1.0), now=10.0)
+        self.assertFalse(loop.hang_sent)
+        self.assertEqual(loop.last_show_at, 10.0)
+
+    def test_unsynced_lyrics_never_hang(self):
+        # con la letra sin sincronizar no viene ninguna línea más POR DISEÑO:
+        # eso no es un silencio del tema, es todo lo que había
+        loop = self.loop_with_lyrics()
+        loop.lyrics_kind = "plain"
+        loop.lyrics = [(0.0, "todo el texto junto")]
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+        loop.handle_track(track(id="t1", pos=40.0), now=40.0)
+        loop._ipc.hang.assert_not_called()
+
+    def test_a_paused_track_does_not_hang(self):
+        loop = self.loop_with_lyrics()
+        loop._config.CFG["behavior"]["pause_clear"] = 0
+        loop.handle_track(track(id="t1", status="Paused", pos=10.0), now=40.0)
+        loop._ipc.hang.assert_not_called()
+
+    def test_the_lyrics_search_does_not_count_as_silence(self):
+        # la búsqueda va en otro hilo y puede tardar veinte segundos: esa espera
+        # no es el tema quedándose callado
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.lyrics_kind = None
+        loop._lyr.current_line_index.return_value = 0
+        loop._lyr._fetch = {"id": "t1", "lyrics": [(0.0, "primera")],
+                            "status": "ok", "done": True}
+        loop.handle_track(track(id="t1", pos=1.0), now=40.0)
+        self.assertEqual(loop.last_show_at, 40.0)
+        loop._ipc.hang.assert_not_called()
+
+
 class TestSync(unittest.TestCase):
     def test_adjusts_the_session_offset_and_shows_feedback(self):
         loop = make_loop()

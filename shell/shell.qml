@@ -1095,7 +1095,17 @@ ShellRoot {
         }
     }
 
-    function show(text, title, icon, t0, t1, segs, words) {
+    function show(text, title, icon, t0, t1, segs, words, kind) {
+        // T4.5: "fatal-lyrics no responde". No es un verso: no toca el tubo, no
+        // envejece a nadie y no pasa a ser la línea actual. Muere solo cuando
+        // llegue la próxima línea de verdad (ver shouldDie).
+        if (kind === "hang") {
+            if (crtOn)
+                return;      // en el tubo no hay carteles: no hay dónde ponerlo
+            pushDialog({ text: text, title: title || "fatal-lyrics",
+                         icon: "warning", kind: "hang" }, false);
+            return;
+        }
         // el tubo dibuja la línea entera; los carteles son el otro modo
         // el serial viaja adentro del objeto: una sola señal de cambio lleva
         // texto y sorteo juntos, y el layout no parpadea al aparecer la línea
@@ -1189,7 +1199,8 @@ ShellRoot {
                     try {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
-                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs, ev.words);
+                            root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs,
+                                      ev.words, ev.kind);
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
                         else if (ev.cmd === "pos") {
@@ -1472,7 +1483,12 @@ ShellRoot {
                     // max_dialogs: pushDialog avisa por acá cuál es el más viejo que
                     // sobra; cada pantalla tiene su propia instancia de este cartel y
                     // todas lo ven, así que todas se mandan a morir juntas
+                    // el cartel colgado (T4.5) se va solo cuando aparece la línea
+                    // siguiente: `gen` quedó en el lyricGen del momento en que
+                    // nació, y lyricGen sólo sube con un verso de verdad
+                    readonly property bool hung: modelData.kind === "hang"
                     readonly property bool shouldDie: modelData.serial === root.dyingSerial
+                        || (hung && modelData.gen < root.lyricGen)
                     onShouldDieChanged: {
                         if (shouldDie && !dying)
                             die();
@@ -1798,10 +1814,13 @@ ShellRoot {
                                     width: parent.width
                                     height: Math.round(26 * win.k)
                                     clip: true
+                                    // el colgado no tiene el azul del cartel activo:
+                                    // Windows le pintaba la barra gris a la ventana
+                                    // que no respondía
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
-                                        GradientStop { position: 0.0; color: "#000080" }
-                                        GradientStop { position: 1.0; color: "#1084d0" }
+                                        GradientStop { position: 0.0; color: win.hung ? "#5a5a5a" : "#000080" }
+                                        GradientStop { position: 1.0; color: win.hung ? "#9a9a9a" : "#1084d0" }
                                     }
 
                                     // barrido blanco al nacer, como un reflejo cruzando el vidrio
@@ -1969,12 +1988,16 @@ ShellRoot {
                                     bottomPadding: Math.round(12 * win.k)
 
                                     Repeater {
-                                        model: ["Yes", "No", "Cancel"]
+                                        model: win.hung ? ["Esperar", "Finalizar ahora"]
+                                                        : ["Yes", "No", "Cancel"]
 
                                         Rectangle {
                                             required property string modelData
                                             required property int index
-                                            width: Math.round(76 * win.k)
+                                            // "Finalizar ahora" no entra en los 76 px
+                                            // de siempre: el botón se mide con su texto
+                                            width: Math.max(Math.round(76 * win.k),
+                                                            btnText.implicitWidth + Math.round(20 * win.k))
                                             height: Math.round(24 * win.k)
                                             color: btnMa.pressed ? "#a8a8a8" : "#c0c0c0"
                                             border.width: index === 0 ? 1 : 0
@@ -1986,6 +2009,7 @@ ShellRoot {
                                             Rectangle { anchors { top: parent.top; right: parent.right; bottom: parent.bottom; margins: index === 0 ? 1 : 0 } width: 1; color: "#404040" }
 
                                             Text {
+                                                id: btnText
                                                 anchors.centerIn: parent
                                                 text: parent.modelData
                                                 color: "#000000"
@@ -2006,7 +2030,10 @@ ShellRoot {
                                                 id: btnMa
                                                 anchors.fill: parent
                                                 onClicked: {
-                                                    if (parent.modelData === "No" && root.trollNo)
+                                                    // en el colgado los dos botones cierran:
+                                                    // "Esperar" tampoco sirve de nada, que es
+                                                    // exactamente el chiste
+                                                    if (!win.hung && parent.modelData === "No" && root.trollNo)
                                                         root.duplicate(win.modelData);
                                                     else
                                                         root.dismiss(win.modelData.serial);

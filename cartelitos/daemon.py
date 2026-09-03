@@ -88,13 +88,18 @@ class DaemonLoop:
         if t["status"] == "Paused":
             if self.pause_started is None:
                 self.pause_started = now
-            elif (self._config.CFG["behavior"]["pause_clear"] > 0 and not self.pause_cleared
-                    and now - self.pause_started > self._config.CFG["behavior"]["pause_clear"]):
+            # el tema termina en pausa (usuario paró justo al final): no tiene
+            # sentido esperar el pause_clear si ya no queda nada por mostrar
+            near_end = t["length"] - t["pos"] < 2.0
+            if not self.pause_cleared and (near_end or (
+                    self._config.CFG["behavior"]["pause_clear"] > 0
+                    and now - self.pause_started > self._config.CFG["behavior"]["pause_clear"])):
                 self._ipc.clear()
                 self.pause_cleared = True
                 self.resend_np = True
                 self.idx = -1
-                self._log("long pause: dialogs cleared")
+                self._log("track ending: dialogs cleared" if near_end
+                           else "long pause: dialogs cleared")
         else:
             self.pause_started = None
             self.pause_cleared = False

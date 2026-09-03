@@ -241,6 +241,23 @@ class TestSeekBack(unittest.TestCase):
             self.assertNotEqual(call.args[0], "seek back: reset")
 
 
+class TestPauseNearEnd(unittest.TestCase):
+    def test_paused_near_end_clears_immediately(self):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.handle_track(track(id="t1", status="Paused", pos=99.0, length=100.0), now=0.0)
+        self.assertTrue(loop.pause_cleared)
+        loop._ipc.clear.assert_called_once()
+        loop._log.assert_any_call("track ending: dialogs cleared")
+
+    def test_paused_far_from_end_does_not_clear_immediately(self):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.handle_track(track(id="t1", status="Paused", pos=10.0, length=100.0), now=0.0)
+        self.assertFalse(loop.pause_cleared)
+        loop._ipc.clear.assert_not_called()
+
+
 class TestLongPauseClear(unittest.TestCase):
     def test_clears_after_the_configured_pause_window(self):
         loop = make_loop(config=make_config(pause_clear=15))

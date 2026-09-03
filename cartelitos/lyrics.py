@@ -58,11 +58,12 @@ def http_json(url):
 def fetch_lyrics(track):
     """Letra sincronizada de lrclib: match exacto y si no, búsqueda.
 
-    Devuelve (estado, líneas) con TRES resultados, no dos: "ok", "none" (lrclib
-    contestó y este tema no tiene letra sincronizada) y "error" (no se pudo
-    llegar a lrclib). Mezclarlos rompe el cache y el reintento, que necesitan
-    lo contrario uno del otro: el "no hay" se cachea y no se reintenta, la
-    caída de red se reintenta y no se cachea nunca."""
+    Devuelve (estado, líneas) con CUATRO resultados: "ok" (sincronizada),
+    "plain" (lrclib sólo tiene el texto sin marcas de tiempo), "none" (lrclib
+    contestó y este tema no tiene letra) y "error" (no se pudo llegar a
+    lrclib). Mezclar "none" con "error" rompe el cache y el reintento, que
+    necesitan lo contrario uno del otro: el "no hay" se cachea y no se
+    reintenta, la caída de red se reintenta y no se cachea nunca."""
     reached = False
 
     def try_url(url):
@@ -83,9 +84,9 @@ def fetch_lyrics(track):
         "album_name": track["album"],
         "duration": str(int(round(track["length"]))),
     })
-    data = try_url("https://lrclib.net/api/get?" + params)
-    if data and data.get("syncedLyrics"):
-        lines = parse_lrc(data["syncedLyrics"])
+    get_data = try_url("https://lrclib.net/api/get?" + params)
+    if get_data and get_data.get("syncedLyrics"):
+        lines = parse_lrc(get_data["syncedLyrics"])
         if lines:
             return "ok", lines
 
@@ -113,6 +114,11 @@ def fetch_lyrics(track):
         if lines:
             return "ok", lines
 
+    # no hay letra sincronizada, pero lrclib a veces sólo tiene el texto
+    # plano: mejor eso que nada
+    if get_data and get_data.get("plainLyrics"):
+        return "plain", [(0.0, get_data["plainLyrics"])]
+
     return ("none", None) if reached else ("error", None)
 
 
@@ -123,24 +129,30 @@ def _cache_path(track):
 
 
 def cache_get(track):
-    """Resultado guardado, o None si no hay / caducó."""
+    """Resultado guardado, o None si no hay / caducó.
+
+    El status se guarda explícito desde T0.14: "ok" y "plain" son ambos
+    `lines` con contenido, y sin el campo no se podrían distinguir al leer
+    de vuelta. Un cache viejo (de antes de T0.14) no tiene "status": se
+    infiere de si trae líneas, igual que se comportaba antes."""
     try:
         with open(_cache_path(track)) as f:
             data = json.load(f)
     except Exception:
         return None
-    if not data.get("lines"):
+    status = data.get("status") or ("ok" if data.get("lines") else "none")
+    if status == "none":
         # el "no hay letra" caduca: lrclib suma letras con el tiempo y un tema
         # instrumental hoy puede tenerla el mes que viene
         if time.time() - data.get("at", 0) > NONE_TTL:
             return None
         return "none", None
-    return "ok", [(ts, text) for ts, text in data["lines"]]
+    return status, [(ts, text) for ts, text in data["lines"]]
 
 
 def cache_put(track, status, lines):
-    """Guarda "ok" y "none". Una caída de red NO se guarda: si no, cada tema que
-    sonó sin internet queda marcado como sin letra."""
+    """Guarda "ok", "plain" y "none". Una caída de red NO se guarda: si no,
+    cada tema que sonó sin internet queda marcado como sin letra."""
     if status == "error":
         return
     try:
@@ -148,7 +160,7 @@ def cache_put(track, status, lines):
         path = _cache_path(track)
         tmp = path + ".tmp"
         with open(tmp, "w") as f:
-            json.dump({"lines": lines, "at": int(time.time())}, f)
+            json.dump({"lines": lines, "status": status, "at": int(time.time())}, f)
         os.replace(tmp, path)   # atómico: nadie lee un archivo a medio escribir
     except Exception as e:
         log(f"couldn't cache the lyrics ({e})")
@@ -184,7 +196,7 @@ def purge_cache(now):
 # sólo publica si sigue siendo el suyo, y lo chequea con el lock tomado — sin eso,
 # un hilo que pasó el chequeo justo antes del cambio pisa el tema nuevo.
 _fetch_lock = threading.Lock()
-_fetch = {"gen": 0, "id": None, "lyrics": None, "done": False}
+_fetch = {"gen": 0, "id": None, "lyrics": None, "status": None, "done": False}
 RETRY_DELAY = 10
 RETRY_JITTER = 0.2      # ±20%: dos temas que fallan juntos no vuelven al mismo segundo
 RETRIES = 2
@@ -212,19 +224,20 @@ def _mine(gen):
     return _fetch["gen"] == gen
 
 
-def _publish(gen, lines):
+def _publish(gen, status, lines):
     with _fetch_lock:
         if not _mine(gen):
             return False
-        _fetch.update(lyrics=lines, done=True)
+        _fetch.update(lyrics=lines, status=status, done=True)
     return True
 
 
 def _work(track, gen):
     hit = cache_get(track)
     if hit:
-        if _publish(gen, hit[1]):
-            log(f"cached lyrics: {len(hit[1])} lines" if hit[1]
+        status, lines = hit
+        if _publish(gen, status, lines):
+            log(f"cached lyrics: {len(lines)} lines" if lines
                 else "no synced lyrics (cached)")
         return
     for attempt in range(RETRIES + 1):
@@ -245,8 +258,9 @@ def _work(track, gen):
             if not _mine(gen):
                 return
     cache_put(track, status, lines)
-    if _publish(gen, lines):
-        log(f"synced lyrics: {len(lines)} lines" if lines
+    if _publish(gen, status, lines):
+        log(f"synced lyrics: {len(lines)} lines" if status == "ok"
+            else f"plain lyrics: {len(lines)} lines" if status == "plain"
             else "no synced lyrics (no dialogs)")
 
 
@@ -278,7 +292,7 @@ def fetch_lyrics_async(track):
     with _fetch_lock:
         _fetch["gen"] += 1
         gen = _fetch["gen"]
-        _fetch.update(id=track["id"], lyrics=None, done=False)
+        _fetch.update(id=track["id"], lyrics=None, status=None, done=False)
         if _inflight >= MAX_INFLIGHT:
             _pending = (track, gen)
             return

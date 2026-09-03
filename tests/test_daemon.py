@@ -148,7 +148,7 @@ class TestTrackChangeCleanup(unittest.TestCase):
         loop = make_loop()
         loop.handle_track(track(id="new", title=""), now=0.0)
         loop._lyr.fetch_lyrics_async.assert_not_called()
-        self.assertEqual(loop._lyr._fetch, {"id": None, "lyrics": None, "done": False})
+        self.assertEqual(loop._lyr._fetch, {"id": None, "lyrics": None, "status": None, "done": False})
 
     def test_new_track_sends_now_playing_when_enabled(self):
         loop = make_loop()
@@ -256,6 +256,42 @@ class TestPauseNearEnd(unittest.TestCase):
         loop.handle_track(track(id="t1", status="Paused", pos=10.0, length=100.0), now=0.0)
         self.assertFalse(loop.pause_cleared)
         loop._ipc.clear.assert_not_called()
+
+
+class TestPlainLyrics(unittest.TestCase):
+    def test_shows_a_single_dialog_with_the_first_six_lines(self):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.lyrics = [(0.0, "\n".join(f"line {i}" for i in range(10)))]
+        loop.lyrics_kind = "plain"
+
+        loop.handle_track(track(id="t1", status="Playing"), now=0.0)
+
+        loop._ipc.show.assert_called_once_with(
+            "\n".join(f"line {i}" for i in range(6)), "unsynced lyrics")
+        self.assertTrue(loop.plain_shown)
+
+    def test_only_shows_it_once_per_track(self):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.lyrics = [(0.0, "line one")]
+        loop.lyrics_kind = "plain"
+
+        loop.handle_track(track(id="t1", status="Playing"), now=0.0)
+        loop.handle_track(track(id="t1", status="Playing", pos=5.0), now=1.0)
+
+        loop._ipc.show.assert_called_once()
+
+    def test_a_new_track_resets_plain_shown(self):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.lyrics = [(0.0, "line one")]
+        loop.lyrics_kind = "plain"
+        loop.plain_shown = True
+
+        loop.handle_track(track(id="t2", status="Playing"), now=0.0)
+
+        self.assertFalse(loop.plain_shown)
 
 
 class TestLongPauseClear(unittest.TestCase):

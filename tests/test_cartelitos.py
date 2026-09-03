@@ -307,6 +307,16 @@ class TestFetchLyrics(unittest.TestCase):
         self.assertEqual(status, "ok")
         self.assertEqual(len(lines), 2)
 
+    def test_falls_back_to_plain_lyrics_when_nothing_is_synced(self):
+        def http(url):
+            if "/get?" in url:
+                return {"syncedLyrics": None, "plainLyrics": "line one\nline two"}
+            return []   # la búsqueda tampoco encuentra nada sincronizado
+        self.patch_http(http)
+        status, lines = c.fetch_lyrics(TRACK)
+        self.assertEqual(status, "plain")
+        self.assertEqual(lines, [(0.0, "line one\nline two")])
+
     def test_does_not_repeat_the_search_when_the_title_is_already_clean(self):
         calls = {"search": 0}
 
@@ -367,6 +377,12 @@ class TestLyricsCache(unittest.TestCase):
     def test_no_lyrics_is_cached(self):
         c.cache_put(TRACK, "none", None)
         self.assertEqual(c.cache_get(TRACK), ("none", None))
+
+    def test_plain_lyrics_round_trip(self):
+        # T0.14: "plain" no puede leerse de vuelta como "ok" — son casos
+        # distintos para el daemon (una línea sincronizada vs. un bloque)
+        c.cache_put(TRACK, "plain", [(0.0, "whole text")])
+        self.assertEqual(c.cache_get(TRACK), ("plain", [(0.0, "whole text")]))
 
     def test_no_lyrics_expires(self):
         # lrclib suma letras con el tiempo: el "no hay" no puede ser para siempre

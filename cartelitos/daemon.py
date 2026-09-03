@@ -40,6 +40,8 @@ class DaemonLoop:
 
         self.track_id = None
         self.lyrics = None
+        self.lyrics_kind = None
+        self.plain_shown = False
         self.idx = -1
         self.paused_by_game = False
         self.crt_paused_by_game = False
@@ -133,14 +135,17 @@ class DaemonLoop:
                       "album": t["album"], "art": t["art"]})
             self._art.send_album_colors(t["art"])
             self.lyrics = None
+            self.lyrics_kind = None
+            self.plain_shown = False
             if t["title"]:
                 self._lyr.fetch_lyrics_async(t)
             else:
-                self._lyr._fetch.update(id=None, lyrics=None, done=False)
+                self._lyr._fetch.update(id=None, lyrics=None, status=None, done=False)
 
         # la búsqueda corre en un hilo: se recoge cuando llega
         if self.lyrics is None and self._lyr._fetch["done"] and self._lyr._fetch["id"] == self.track_id:
             self.lyrics = self._lyr._fetch["lyrics"]
+            self.lyrics_kind = self._lyr._fetch.get("status")
 
         # progreso de la canción: barra de la funda + karaoke (1 evento por segundo)
         # el modo CRT los necesita SIEMPRE: el director reparte los pedazos en
@@ -153,12 +158,21 @@ class DaemonLoop:
             self._ipc.send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
 
         if self.lyrics and t["status"] == "Playing":
-            i = self._lyr.current_line_index(self.lyrics, t["pos"] + self._config.CFG["behavior"]["offset"])
-            if i != self.idx:
-                self.idx = i
-                if i >= 0 and self.lyrics[i][1]:
-                    t1 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else self.lyrics[i][0] + 5
-                    self._ipc.show(self.lyrics[i][1], t["title"], self.lyrics[i][0], t1)
+            if self.lyrics_kind == "plain":
+                # lrclib no tiene la letra sincronizada para este tema, sólo el
+                # texto entero: un cartel único con el arranque, no una línea
+                # por vez (no hay tiempos con los que seguirla)
+                if not self.plain_shown:
+                    self.plain_shown = True
+                    preview = "\n".join(self.lyrics[0][1].splitlines()[:6])
+                    self._ipc.show(preview, "unsynced lyrics")
+            else:
+                i = self._lyr.current_line_index(self.lyrics, t["pos"] + self._config.CFG["behavior"]["offset"])
+                if i != self.idx:
+                    self.idx = i
+                    if i >= 0 and self.lyrics[i][1]:
+                        t1 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else self.lyrics[i][0] + 5
+                        self._ipc.show(self.lyrics[i][1], t["title"], self.lyrics[i][0], t1)
 
         # Cada vuelta spawnea un playerctl (~4 ms de CPU). El poll fino sólo hace
         # falta para pegarle al momento de cada verso: en pausa, o en un tema sin

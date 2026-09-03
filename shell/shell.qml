@@ -1107,6 +1107,23 @@ ShellRoot {
                     property bool dying: false
                     property bool ghosting: false
 
+                    // nacimiento: el cartel crece desde un punto y un flash blanco
+                    // recorre el bevel, como si el monitor recién lo encendiera.
+                    // Declarado antes de Component.onCompleted: en un delegate con
+                    // required property (ComponentBehavior: Bound implícito), un id
+                    // referenciado directo en un signal handler no resuelve si su
+                    // objeto se declara más abajo en el archivo.
+                    property real spawnFlash: 0
+                    ParallelAnimation {
+                        id: spawnAnim
+                        NumberAnimation { target: win; property: "deathScale"; from: 0.04; to: 1; duration: 140; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: win; property: "deathOpacity"; from: 0; to: 1; duration: 140; easing.type: Easing.OutQuad }
+                        SequentialAnimation {
+                            PropertyAction { target: win; property: "spawnFlash"; value: 1 }
+                            NumberAnimation { target: win; property: "spawnFlash"; to: 0; duration: 60 }
+                        }
+                    }
+
                     // factor de tamaño: config global + extra del cartel actual
                     readonly property real k: root.cfgScale * (current ? root.cfgCurrentScale : 1.0)
                     readonly property real iconW: 32
@@ -1222,6 +1239,8 @@ ShellRoot {
                         }
                         if (win.shouldDie)
                             win.die();
+                        else
+                            spawnAnim.start();
                     }
 
                     // max_dialogs: pushDialog avisa por acá cuál es el más viejo que
@@ -1725,6 +1744,13 @@ ShellRoot {
                                     color: modelData.c
                                     opacity: modelData.o
                                 }
+                            }
+
+                            // flash blanco al nacer, como si el monitor se acabara de encender
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "#ffffff"
+                                opacity: win.spawnFlash
                             }
                         }
                     }

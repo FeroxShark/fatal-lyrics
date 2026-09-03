@@ -42,8 +42,31 @@ ShellRoot {
     property bool npVinyl: true
     // T5: modo karaoke. Es una perilla del daemon (`[behavior] sing`), no un
     // archivo: acá sólo cambia lo que se dibuja, y el que escucha el micrófono
-    // es el daemon. `singing` (abajo, T5.3) es el estado en vivo.
+    // es el daemon, que manda `sing` cuando el estado cambia (no el nivel del
+    // micrófono: la decisión es suya, porque es el único que sabe si hay letra).
     property bool singMode: false
+    property bool singing: false
+    // Con el karaoke puesto, la pared no está apagada ni prendida: está
+    // esperando. Se prende rápido (300 ms: tiene que llegar con la primera
+    // palabra) y se apaga lento (800 ms), porque cortar en seco entre dos
+    // versos se lee como un parpadeo y no como que dejaste de cantar.
+    readonly property real singTarget: (!singMode || singing) ? 1 : 0
+    property real singGlow: 1
+    onSingTargetChanged: {
+        // asignado a mano y no con bindings: `to` y `duration` dependen del
+        // mismo cambio que dispara este handler, y el orden entre un binding y
+        // un handler de la misma señal no está garantizado
+        singFade.stop();
+        singFade.to = singTarget;
+        singFade.duration = singTarget > 0 ? 300 : 800;
+        singFade.start();
+    }
+    NumberAnimation {
+        id: singFade
+        target: root
+        property: "singGlow"
+        easing.type: Easing.InOutQuad
+    }
 
     // ---- modo CRT: el tubo full-bleed que tapa cada monitor (opt-in)
     property bool crtOn: false
@@ -1104,7 +1127,7 @@ ShellRoot {
         // envejece a nadie y no pasa a ser la línea actual. Muere solo cuando
         // llegue la próxima línea de verdad (ver shouldDie).
         if (kind === "hang") {
-            if (crtOn)
+            if (crtOn || (singMode && !singing))
                 return;      // en el tubo no hay carteles: no hay dónde ponerlo
             pushDialog({ text: text, title: title || "fatal-lyrics",
                          icon: "warning", kind: "hang" }, false);
@@ -1126,6 +1149,11 @@ ShellRoot {
         crtSerial++;
         updatePitchPalette();
         if (crtOn)
+            return;
+        // T5.3: con el karaoke puesto un cartel sólo nace mientras se canta. La
+        // línea igual se guarda arriba (crtLine): si arrancás a cantar en la
+        // mitad del verso, el tubo ya tiene qué mostrar sin esperar al próximo.
+        if (singMode && !singing)
             return;
         pushDialog({
             text: text, title: title || "Spotify", icon: icon || randomIcon(),
@@ -1267,6 +1295,10 @@ ShellRoot {
                                 root.lastPeakAt = Date.now();
                                 root.audPeak++;
                             }
+                        } else if (ev.cmd === "sing") {
+                            // T5.3: sólo llegan los cambios, no un nivel por
+                            // bloque — el que decide es el daemon
+                            root.singing = ev.on === true;
                         } else if (ev.cmd === "clear") {
                             root.npShown = false;
                             root.bpm = 0;      // otro tema, otro compás

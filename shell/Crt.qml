@@ -512,6 +512,13 @@ PanelWindow {
         id: stage
         anchors.fill: parent
 
+        // T5.3: modo karaoke. El tubo no se apaga (eso es el colapso, y deja la
+        // ventana muerta): se queda OSCURO, esperando. No es standby — standby
+        // dice "NO SIGNAL", que es la señal equivocada: acá hay señal, falta la
+        // voz. El shader ya multiplica todo por qt_Opacity, así que oscurecer
+        // el `stage` entero apaga también la estática y el fósforo.
+        opacity: crt.ctl.singGlow
+
         // el FBO sólo existe mientras el tubo se ve, y se dibuja a menos
         // resolución de la que sale: el shader después le pasa curvatura, bloom
         // y grilla de fósforo por arriba, así que la diferencia no se ve — y sí

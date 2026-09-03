@@ -102,6 +102,9 @@ status_line() {
     # con el daemon apagado el archivo es del tema de la sesión anterior: no
     # dice nada de ahora y confunde más de lo que informa
     running "$D_PID" "$DAEMON" && [ -f "$LYRICS" ] && cat "$LYRICS"
+    # el modo karaoke cambia lo que se ve entero (todo apagado hasta que
+    # cantás): si está puesto, tiene que decirlo — si no, parece que se rompió
+    echo "sing: $(sing_state)"
     # qué falta instalar y qué función se pierde por cada cosa: no imprime nada
     # si está todo. Sin esto, media app apagada parecía un bug.
     [ -f "$DAEMON" ] && python3 "$DAEMON" --check 2>/dev/null

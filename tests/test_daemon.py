@@ -21,6 +21,7 @@ def make_config(**behavior_overrides):
             "pause_clear": 15,
             "now_playing": True,
             "offset": 0.0,
+            "sing": False,
             **behavior_overrides,
         },
         "display": {"karaoke": False},
@@ -539,3 +540,195 @@ class TestFastPollDecision(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSingGate(unittest.TestCase):
+    """T5.2: ¿está cantando? El umbral sale de la sala, no de un número fijo."""
+
+    def quiet(self, gate, level=0.004, seconds=20.0, t=0.0):
+        """Llena la ventana del cuarto con ruido de fondo. Devuelve el reloj."""
+        for _ in range(int(seconds * 10)):
+            t += 0.1
+            gate.feed(level, t)
+        return t
+
+    def test_a_quiet_room_is_not_singing(self):
+        gate = daemon.SingGate()
+        self.quiet(gate)
+        self.assertFalse(gate.singing)
+
+    def test_nothing_is_decided_before_there_is_a_room_to_compare_with(self):
+        gate = daemon.SingGate()
+        t = 0.0
+        for _ in range(5):     # medio segundo de mic: todavía no alcanza
+            t += 0.1
+            self.assertFalse(gate.feed(0.5, t))
+        self.assertIsNone(gate.threshold())
+
+    def test_a_voice_over_the_room_turns_it_on(self):
+        gate = daemon.SingGate()
+        t = self.quiet(gate)
+        changed = False
+        for _ in range(20):
+            t += 0.1
+            changed = gate.feed(0.2, t) or changed
+        self.assertTrue(changed)
+        self.assertTrue(gate.singing)
+
+    def test_it_stays_on_through_a_whole_chorus(self):
+        # el que se comería un umbral que se alimenta con la propia voz: a los
+        # veinte segundos el percentil 60 SERÍA la voz y el modo se apagaría
+        # solo en la mitad del estribillo
+        gate = daemon.SingGate()
+        t = self.quiet(gate)
+        for _ in range(300):        # 30 s cantando sin parar
+            t += 0.1
+            gate.feed(0.2, t)
+        self.assertTrue(gate.singing)
+
+    def test_going_quiet_again_turns_it_off(self):
+        gate = daemon.SingGate()
+        t = self.quiet(gate)
+        for _ in range(100):
+            t += 0.1
+            gate.feed(0.2, t)
+        for _ in range(60):         # seis segundos callado
+            t += 0.1
+            gate.feed(0.004, t)
+        self.assertFalse(gate.singing)
+
+    def test_a_steady_fan_never_turns_it_on(self):
+        # ruido de fondo parejo y fuerte: el umbral ES ese ruido, así que no
+        # puede superarse a sí mismo (por eso los dos multiplicadores son > 1)
+        gate = daemon.SingGate()
+        self.quiet(gate, level=0.05, seconds=40.0)
+        self.assertFalse(gate.singing)
+
+    def test_absolute_silence_never_turns_it_on(self):
+        gate = daemon.SingGate()
+        self.quiet(gate, level=0.0, seconds=30.0)
+        self.assertFalse(gate.singing)
+
+    def test_without_a_line_playing_it_never_turns_on(self):
+        # hablar al lado del micrófono sin música no es cantar
+        gate = daemon.SingGate()
+        t = self.quiet(gate)
+        for _ in range(50):
+            t += 0.1
+            gate.feed(0.3, t, active=False)
+        self.assertFalse(gate.singing)
+
+    def test_the_line_going_away_turns_it_off(self):
+        gate = daemon.SingGate()
+        t = self.quiet(gate)
+        for _ in range(30):
+            t += 0.1
+            gate.feed(0.2, t)
+        self.assertTrue(gate.singing)
+        t += 0.1
+        self.assertTrue(gate.feed(0.2, t, active=False))
+        self.assertFalse(gate.singing)
+
+
+class TestVoiceEvents(unittest.TestCase):
+    """El daemon es el único que sabe si hay letra sonando: la decisión se toma
+    acá y al overlay le llega el resultado, no el nivel del micrófono."""
+
+    def loop_singing(self):
+        loop = make_loop(config=make_config(sing=True))
+        loop.voice_active = True
+        t = 0.0
+        for _ in range(200):
+            t += 0.1
+            loop.voice(0.004, t)
+        return loop, t
+
+    def sing_events(self, loop):
+        return [call.args[0] for call in loop._ipc.send.call_args_list
+                if call.args and call.args[0].get("cmd") == "sing"]
+
+    def test_it_tells_the_overlay_when_the_singing_starts(self):
+        loop, t = self.loop_singing()
+        for _ in range(20):
+            t += 0.1
+            loop.voice(0.2, t)
+        self.assertEqual(self.sing_events(loop), [{"cmd": "sing", "on": True}])
+
+    def test_only_the_changes_travel(self):
+        # 10 bloques por segundo: mandar cada uno sería un chorro por el socket
+        loop, t = self.loop_singing()
+        for _ in range(100):
+            t += 0.1
+            loop.voice(0.2, t)
+        for _ in range(60):
+            t += 0.1
+            loop.voice(0.004, t)
+        self.assertEqual(self.sing_events(loop),
+                         [{"cmd": "sing", "on": True}, {"cmd": "sing", "on": False}])
+
+    def test_with_the_mode_off_the_mic_decides_nothing(self):
+        loop = make_loop()      # sing = False
+        loop.voice_active = True
+        t = 0.0
+        for _ in range(300):
+            t += 0.1
+            loop.voice(0.5, t)
+        self.assertFalse(loop.sing.singing)
+        self.assertEqual(self.sing_events(loop), [])
+
+    def test_turning_the_mode_off_puts_the_screen_back(self):
+        # sin esto el overlay se queda esperando un "dejó de cantar" que ya
+        # nadie va a mandar: con el modo apagado no hay captura
+        loop = make_loop(config=make_config(sing=True))
+        loop.voice_active = True
+        t = 0.0
+        for _ in range(220):
+            t += 0.1
+            loop.voice(0.004 if _ < 200 else 0.2, t)
+        self.assertTrue(loop.sing.singing)
+        loop._config.CFG["behavior"]["sing"] = False
+        loop.voice(0.2, t + 0.1)
+        self.assertFalse(loop.sing.singing)
+        self.assertEqual(self.sing_events(loop)[-1], {"cmd": "sing", "on": False})
+
+
+class TestVoiceActive(unittest.TestCase):
+    """`voice_active` es la mitad de la decisión: cantar necesita una canción."""
+
+    def playing(self, **kw):
+        """Un loop con el tema ya en curso (mismo id que track(): no dispara
+        el camino de track nuevo, que borraría la letra)."""
+        loop = make_loop(**kw)
+        loop._lyr.current_line_index.return_value = -1
+        loop.track_id = "t1"
+        loop.lyrics = [(0.0, "line")]
+        return loop
+
+    def test_playing_with_lyrics_is_active(self):
+        loop = self.playing()
+        loop.handle_track(track(pos=1.0), 1.0)
+        self.assertTrue(loop.voice_active)
+
+    def test_paused_is_not_active(self):
+        loop = self.playing()
+        loop.handle_track(track(status="Paused", pos=1.0), 1.0)
+        self.assertFalse(loop.voice_active)
+
+    def test_without_lyrics_it_is_not_active(self):
+        # un instrumental no se canta: la pantalla no tiene que prenderse
+        loop = self.playing()
+        loop.lyrics = None
+        loop.handle_track(track(pos=1.0), 1.0)
+        self.assertFalse(loop.voice_active)
+
+    def test_the_player_going_away_is_not_active(self):
+        loop = self.playing()
+        loop.handle_track(track(pos=1.0), 1.0)
+        loop.clear_track_state()
+        self.assertFalse(loop.voice_active)
+
+    def test_a_game_pause_is_not_active(self):
+        loop = self.playing(gaming=mock.Mock(return_value=True))
+        loop.handle_track(track(pos=1.0), 1.0)
+        loop.check_game(100.0)
+        self.assertFalse(loop.voice_active)

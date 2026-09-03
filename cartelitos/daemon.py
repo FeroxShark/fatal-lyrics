@@ -22,6 +22,84 @@ POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
 # es mejor que quedarse sin decir nada. Una vez por tema.
 HANG_AFTER = 30.0
 
+# T5.2: ¿está cantando? El umbral NO puede ser un número fijo: depende del
+# micrófono, de cuánto se le escapa la música al mic y de cuánto grita Ferox.
+# Sale del propio cuarto — el percentil 60 de los últimos 20 segundos.
+SING_WINDOW = 1.5      # segundos de mic que se promedian para decidir
+SING_HISTORY = 20.0    # de dónde sale el umbral
+SING_PCT = 0.6         # percentil que hace de piso del cuarto
+# Los dos multiplicadores son > 1 a propósito: el umbral ES el nivel del cuarto,
+# así que volver al nivel del cuarto tiene que apagar. Con un multiplicador de
+# apagado por debajo de 1, un ruido de fondo parejo (un ventilador) queda para
+# siempre por encima de su propio umbral y el modo no se apaga nunca más.
+SING_ON = 1.6          # cuánto hay que superar el cuarto para que cuente como cantar
+SING_OFF = 1.15        # ...y por debajo de cuánto se apaga (histéresis)
+SING_FLOOR = 0.01      # rms mínimo: en un cuarto mudo, el percentil 60 es ruido
+SING_MIN_SAMPLES = 20  # dos segundos de mic antes de decidir nada
+
+
+class SingGate:
+    """Decide si hay alguien cantando, con un umbral que sale de la sala.
+
+    La ventana de 20 s se llena SÓLO mientras NO se está cantando. Con la voz
+    adentro, el percentil 60 sube hasta la voz misma y el promedio de 1.5 s deja
+    de superarlo: cantando el estribillo entero, el modo se apagaba solo a los
+    veinte segundos. Con la voz afuera, el umbral es el cuarto (el ventilador,
+    lo que se le escapa de la música al micrófono) y la voz siempre sobresale.
+
+    La histéresis (SING_ON para prender, SING_OFF para apagar) es lo que evita
+    que en el borde el estado parpadee entre verso y verso."""
+
+    def __init__(self, window=SING_WINDOW, history=SING_HISTORY, pct=SING_PCT,
+                 floor=SING_FLOOR):
+        self.window = window
+        self.history = history
+        self.pct = pct
+        self.floor = floor
+        self.singing = False
+        self.room = []      # (t, rms) del cuarto callado: de acá sale el umbral
+        self.recent = []    # (t, rms) de la ventana corta: con voz y todo
+
+    def threshold(self):
+        """El piso del cuarto ahora, o None si todavía no hay con qué medir."""
+        if len(self.room) < SING_MIN_SAMPLES:
+            return None
+        vals = sorted(r for _, r in self.room)
+        i = min(int(len(vals) * self.pct), len(vals) - 1)
+        return max(vals[i], self.floor)
+
+    def feed(self, rms, now, active=True):
+        """Un bloque de micrófono. Devuelve True si el estado CAMBIÓ.
+
+        `active` es "hay letra sonando ahora": sin canción no se está cantando,
+        se está hablando, y eso no tiene que prender nada."""
+        self.recent = [(t, r) for t, r in self.recent if t > now - self.window]
+        self.recent.append((now, rms))
+        if not self.singing:
+            # el umbral se mide con el cuarto callado, no con la voz adentro
+            self.room = [(t, r) for t, r in self.room if t > now - self.history]
+            self.room.append((now, rms))
+        thr = self.threshold()
+        level = sum(r for _, r in self.recent) / len(self.recent)
+        if thr is None:
+            want = False
+        elif self.singing:
+            want = level > thr * SING_OFF
+        else:
+            want = level > thr * SING_ON
+        want = bool(want and active)
+        if want == self.singing:
+            return False
+        self.singing = want
+        return True
+
+    def reset(self):
+        """El modo se apagó (o cambió el tema): que no quede el estado viejo."""
+        was = self.singing
+        self.singing = False
+        self.recent = []
+        return was
+
 
 class DaemonLoop:
     """Máquina de estados del loop principal, con las dependencias inyectadas.
@@ -64,6 +142,10 @@ class DaemonLoop:
         self.last_pos = 0.0
         self.last_show_at = 0.0
         self.hang_sent = False
+        # T5.2: el modo karaoke. `voice_active` es "hay letra sonando ahora":
+        # sin canción no se está cantando, se está hablando.
+        self.sing = SingGate()
+        self.voice_active = False
 
     def check_game(self, now):
         """Actualiza paused_by_game según gaming(); devuelve el estado resultante.
@@ -76,6 +158,7 @@ class DaemonLoop:
             if self._gaming():
                 if not self.paused_by_game:
                     self.paused_by_game = True
+                    self.voice_active = False
                     self.track_id = None
                     self.lyrics = None
                     self.idx = -1
@@ -240,7 +323,10 @@ class DaemonLoop:
         # falta para pegarle al momento de cada verso: en pausa, o en un tema sin
         # letra sincronizada, con una vuelta por segundo alcanza — y ésa es la
         # frecuencia de los eventos de progreso, así que no se pierde nada.
-        return t["status"] == "Playing" and bool(self.lyrics)
+        # el karaoke sólo cuenta como "cantar" con una canción y su letra
+        # encima: lo demás es hablar al lado del micrófono
+        self.voice_active = t["status"] == "Playing" and bool(self.lyrics)
+        return self.voice_active
 
     def sync(self, delta):
         """Gesto de ajuste fino (T0.13): keybind, menú de bandeja o el
@@ -283,8 +369,23 @@ class DaemonLoop:
             if delta is not None:
                 self.sync(delta)
 
+    def voice(self, rms, now):
+        """Un bloque de micrófono (T5.2). Lo llama el hilo de la captura.
+
+        El cambio de estado va por `send` y no por `send_soft`: son dos o tres
+        eventos por tema, y perder justo el que prende la pantalla es perder el
+        modo entero."""
+        if not self._config.CFG["behavior"]["sing"]:
+            if self.sing.reset():
+                self._ipc.send({"cmd": "sing", "on": False})
+            return
+        if self.sing.feed(rms, now, self.voice_active):
+            self._log("voice: singing" if self.sing.singing else "voice: quiet")
+            self._ipc.send({"cmd": "sing", "on": self.sing.singing})
+
     def clear_track_state(self):
         """Limpia el estado de track/letra en curso y avisa al overlay."""
+        self.voice_active = False
         if self.track_id is not None:
             self._ipc.clear()
             self.track_id = None
@@ -327,6 +428,7 @@ class DaemonLoop:
         # T5.1: el hilo del micrófono existe siempre, pero no abre nada mientras
         # `sing` esté apagada (que es el default): dormita mirando la perilla
         threading.Thread(target=self._config.watch_sing, daemon=True, name="sing").start()
+        self._audio.set_voice_sink(self.voice)
         threading.Thread(target=self._audio.voice_loop, daemon=True, name="voice").start()
         signal.signal(signal.SIGUSR1, self._ipc.demo)
         while True:

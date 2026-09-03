@@ -211,9 +211,13 @@ ShellRoot {
         const s = (text || "").trim();
         if (n <= 1 || s.length === 0)
             return s;
-        const a = Math.round(s.length * i / n);
-        const b = Math.round(s.length * (i + 1) / n);
-        return s.substring(a, b).trim();
+        // Array.from() corta por code point, no por unidad UTF-16: substring()
+        // partía un caracter japonés/coreano por la mitad y dejaba un � a cada
+        // lado del corte.
+        const cps = Array.from(s);
+        const a = Math.round(cps.length * i / n);
+        const b = Math.round(cps.length * (i + 1) / n);
+        return cps.slice(a, b).join("").trim();
     }
 
     // Avance de la línea actual (0..1) para el pintado palabra por palabra;

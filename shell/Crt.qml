@@ -267,9 +267,28 @@ PanelWindow {
     // que es ruido — plata tirada. Va a 60, que ya no se distingue, y la pantalla
     // sin letra a 20. Ahí está la mayor parte del ahorro de tener tres tubos.
     property real tubeTime: 0
+    // T0.12: modo degradado por GPU. Promedio móvil del frame time; tres
+    // segundos seguidos por encima de 28ms (bajo 36fps) y se baja quality a
+    // 0.75 una sola vez — no vuelve a subir sola, eso lo hace el hot-reload
+    // del TOML si Ferox toca la perilla.
+    property real frameAvgMs: 1000 / 60
+    property real slowSince: -1
     FrameAnimation {
         running: crt.visible && (crt.showsText || crt.standby)
-        onTriggered: crt.tubeTime += frameTime
+        onTriggered: {
+            crt.tubeTime += frameTime;
+            crt.frameAvgMs = crt.frameAvgMs * 0.9 + frameTime * 1000 * 0.1;
+            if (crt.frameAvgMs <= 28) {
+                crt.slowSince = -1;
+            } else {
+                if (crt.slowSince < 0)
+                    crt.slowSince = crt.tubeTime;
+                else if (crt.tubeTime - crt.slowSince > 3 && crt.ctl.crtQuality > 0.75) {
+                    crt.ctl.crtQuality = 0.75;
+                    console.log("crt: quality auto 0.75");
+                }
+            }
+        }
     }
     Timer {
         interval: 50

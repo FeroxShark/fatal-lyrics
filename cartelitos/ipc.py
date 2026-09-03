@@ -10,6 +10,19 @@ from . import lyrics
 
 SOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos.sock")
 
+# T0.13: el gesto de sync (`fatal sync +/-`) es OTRO proceso, no el daemon
+# vivo — no puede tocar self.session_offset directo. Igual que crt/tune, se
+# avisa con un archivo que el daemon vigila (ver DaemonLoop._watch_sync).
+SYNC_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-sync")
+
+
+def parse_sync(raw):
+    """Delta en segundos del archivo de sync, o None si no se pudo leer."""
+    try:
+        return float(raw.strip())
+    except (AttributeError, ValueError):
+        return None
+
 _sock = None
 _last_np = None
 # posición de la canción, para que el hilo de audio sepa en qué minuto está

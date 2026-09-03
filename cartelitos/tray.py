@@ -41,14 +41,18 @@ TRAY_TOGGLES = [
 SCALE_STEP = 0.1
 
 
-def start_tray():
+def start_tray(sync=None):
     """Ícono en la bandeja del sistema mientras el daemon está vivo (StatusNotifierItem
     vía AyatanaAppIndicator3). Opcional: si gtk3/libayatana-appindicator no están
     instalados, el daemon sigue andando igual, sin bandeja.
 
     El estado va en el TEXTO de cada ítem ("Glitch: normal", "• Soft"), no en
     checkboxes: DBusMenu los expone, pero varios shells (caelestia, entre otros)
-    dibujan sólo ícono + texto y el tilde no se ve. Los submenús sí se dibujan."""
+    dibujan sólo ícono + texto y el tilde no se ve. Los submenús sí se dibujan.
+
+    `sync`: DaemonLoop.sync (T0.13), inyectado porque la bandeja corre adentro
+    del proceso del daemon — llamarlo de acá adentro es directo, sin pasar
+    por el archivo que usa el gesto de teclado."""
     try:
         import gi
         gi.require_version("Gtk", "3.0")
@@ -125,6 +129,10 @@ def start_tray():
 
         item(menu, "CRT mode", on_click=toggle_crt,
              dynamic=lambda: f"CRT mode: {'on' if config.crt_on() else 'off'}")
+
+        if sync:
+            item(menu, "Letra: adelantar", on_click=lambda: sync(0.1))
+            item(menu, "Letra: atrasar", on_click=lambda: sync(-0.1))
 
         menu.append(Gtk.SeparatorMenuItem())
         item(menu, "Sliders…", on_click=lambda: subprocess.Popen([fatal_bin, "tune"]))

@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
-from cartelitos import audio, config, ipc, lyrics, system, tray, util  # noqa: E402
+from cartelitos import audio, config, ipc, lyrics, offsets, system, tray, util  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -454,6 +454,61 @@ class TestPurgeCache(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.dir.name, "broken.json")))
 
 
+class TestOffsets(unittest.TestCase):
+    """T0.13: dos correcciones seguidas en el mismo sentido persisten; una
+    sola, o dos que se cancelan, no."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self._old_dir = offsets.OFFSETS_DIR
+        self._old_path = offsets.OFFSETS_PATH
+        offsets.OFFSETS_DIR = self.dir.name
+        offsets.OFFSETS_PATH = os.path.join(self.dir.name, "offsets.toml")
+        self._old_pending = dict(offsets._pending)
+        offsets._pending.clear()
+
+        def restore():
+            offsets.OFFSETS_DIR = self._old_dir
+            offsets.OFFSETS_PATH = self._old_path
+            offsets._pending.clear()
+            offsets._pending.update(self._old_pending)
+        self.addCleanup(restore)
+
+    def test_unknown_artist_defaults_to_zero(self):
+        self.assertEqual(offsets.get("Nobody"), 0.0)
+
+    def test_two_corrections_the_same_way_persist_their_sum(self):
+        offsets.record("Artist", 0.1)
+        self.assertEqual(offsets.get("Artist"), 0.0)   # todavía no, es la primera
+        offsets.record("Artist", 0.1)
+        self.assertEqual(offsets.get("Artist"), 0.2)
+
+    def test_a_single_correction_does_not_persist(self):
+        offsets.record("Artist", 0.1)
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_opposite_corrections_cancel_the_streak_without_persisting(self):
+        offsets.record("Artist", 0.1)
+        offsets.record("Artist", -0.1)
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_a_later_streak_adds_on_top_of_what_was_already_saved(self):
+        offsets.record("Artist", 0.1)
+        offsets.record("Artist", 0.1)
+        self.assertEqual(offsets.get("Artist"), 0.2)
+        offsets.record("Artist", 0.1)
+        offsets.record("Artist", 0.1)
+        self.assertEqual(offsets.get("Artist"), 0.4)
+
+    def test_different_artists_do_not_share_a_streak(self):
+        offsets.record("A", 0.1)
+        offsets.record("B", 0.1)
+        offsets.record("B", 0.1)
+        self.assertEqual(offsets.get("A"), 0.0)
+        self.assertEqual(offsets.get("B"), 0.2)
+
+
 class TestFetchAsync(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -813,6 +868,22 @@ class TestSocketBackoff(unittest.TestCase):
         # fallos seguidos para el backoff, así que las dos últimas llamadas
         # (tras el éxito) sí intentan conectar
         self.assertEqual(len(attempts), 3)
+
+
+class TestParseSync(unittest.TestCase):
+    def test_a_positive_delta(self):
+        self.assertEqual(c.parse_sync("0.1"), 0.1)
+
+    def test_a_negative_delta(self):
+        self.assertEqual(c.parse_sync("-0.1"), -0.1)
+
+    def test_trailing_whitespace_is_ignored(self):
+        self.assertEqual(c.parse_sync(" 0.1 \n"), 0.1)
+
+    def test_garbage_is_none(self):
+        self.assertIsNone(c.parse_sync("nope"))
+        self.assertIsNone(c.parse_sync(""))
+        self.assertIsNone(c.parse_sync(None))
 
 
 class TestConfigEvent(unittest.TestCase):

@@ -14,7 +14,7 @@ de acá) NO cambia lo que lee el resto — estos nombres son una copia de la
 referencia. Para pisar un global hay que hacerlo en su módulo:
 `cartelitos.config.CFG`, `cartelitos.lyrics.CACHE_DIR`, etc.
 """
-from . import art, audio, config, daemon, ipc, lyrics, setup, system, tray, util
+from . import art, audio, config, daemon, ipc, lyrics, offsets, setup, system, tray, util
 
 from .util import (
     DAEMON_PID_PATH, FIELD_SEP, LOG_MAX, LOG_PATH, QS_LOG_PATH, QS_PID_PATH,
@@ -46,8 +46,9 @@ from .system import (
 )
 
 from .ipc import (
-    DEMO_LINES, SOCK_PATH, clear, demo, send, send_soft, show,
-    _config_event, _demo_burst, _send_lock, _song_pos, _song_where,
+    DEMO_LINES, SOCK_PATH, SYNC_PATH, clear, demo, parse_sync, send,
+    send_soft, show, _config_event, _demo_burst, _send_lock, _song_pos,
+    _song_where,
 )
 
 from .audio import (
@@ -58,6 +59,8 @@ from .audio import (
     set_profile, sink_changed, sink_node_id, _audio_command, _band_table,
     _default_sink, _profile_lock, _sink_node_id,
 )
+
+from .offsets import OFFSETS_DIR, OFFSETS_PATH, get as offset_get, record as offset_record
 
 from .tray import SCALE_STEP, TRAY_CHOICES, TRAY_TOGGLES, start_tray
 

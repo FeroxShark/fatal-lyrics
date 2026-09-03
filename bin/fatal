@@ -23,6 +23,9 @@ SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos.sock"
 # interruptor del modo CRT: un archivo, no el socket — apagarlo tiene que
 # funcionar aunque el daemon esté colgado (el tubo tapa todas las pantallas)
 CRT="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt"
+# gesto de sync fino (T0.13): otro archivo, mismo motivo — este proceso es
+# corto y se muere, el daemon (otro proceso) es el que tiene que verlo
+SYNCF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sync"
 
 # Un PID vivo no alcanza: el sistema recicla números, y con el pidfile de una
 # sesión anterior `kill -0` daba OK sobre un proceso ajeno — status decía ON sin
@@ -164,6 +167,21 @@ demo() {
     fi
 }
 
+# T0.13: el daemon vivo lee esto con DaemonLoop._watch_sync (mismo mecanismo
+# de archivo que crt/tune) y ajusta el offset del tema que está sonando ya.
+sync_lyrics() {
+    case "${1:-}" in
+        -) d=-0.1 ;;
+        +) d=0.1 ;;
+        *) echo "usage: fatal sync [+|-]" >&2; exit 1 ;;
+    esac
+    if ! running "$D_PID" "$DAEMON"; then
+        echo "fatal-lyrics isn't running — start it with: fatal on" >&2
+        exit 1
+    fi
+    printf '%s' "$d" > "$SYNCF.tmp" && mv "$SYNCF.tmp" "$SYNCF"
+}
+
 case "${1:-toggle}" in
     on|start)  start ;;
     off|stop)  stop ;;
@@ -176,6 +194,7 @@ case "${1:-toggle}" in
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
     crt)       crt "$2" ;;
+    sync)      sync_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|sync +|-]" ;;
 esac

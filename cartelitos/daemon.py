@@ -1,4 +1,5 @@
 """El loop principal: sigue al player y manda cada linea al overlay."""
+import os
 import signal
 import threading
 import time
@@ -8,6 +9,7 @@ from . import art
 from . import config
 from . import ipc
 from . import lyrics as lyr
+from . import offsets
 from . import system
 from . import tray
 from .util import log
@@ -24,7 +26,7 @@ class DaemonLoop:
     exactamente la que tenía el `while True` de antes, sólo movida a métodos."""
 
     def __init__(self, *, gaming=None, playerctl_state=None, ipc=ipc, config=config,
-                 audio=audio, art=art, lyr=lyr, tray=tray, log=log,
+                 audio=audio, art=art, lyr=lyr, offsets=offsets, tray=tray, log=log,
                  sleep=time.sleep, monotonic=time.monotonic):
         self._gaming = gaming or system.gaming
         self._playerctl_state = playerctl_state or system.playerctl_state
@@ -33,12 +35,15 @@ class DaemonLoop:
         self._audio = audio
         self._art = art
         self._lyr = lyr
+        self._offsets = offsets
         self._tray = tray
         self._log = log
         self._sleep = sleep
         self._monotonic = monotonic
 
         self.track_id = None
+        self.current_artist = None
+        self.session_offset = 0.0
         self.lyrics = None
         self.lyrics_kind = None
         self.plain_shown = False
@@ -126,6 +131,11 @@ class DaemonLoop:
 
         if t["id"] != self.track_id:
             self.track_id = t["id"]
+            self.current_artist = t["artist"]
+            # arranca en lo que ya se sabe de este artista (T0.13); un ajuste
+            # nuevo en esta sesión se suma encima, y recién si se repite dos
+            # veces seguidas offsets.record() lo deja guardado para la próxima
+            self.session_offset = self._offsets.get(t["artist"])
             self._audio.set_profile(self._audio.profile_for(t))
             self.idx = -1
             self._ipc.clear()
@@ -167,7 +177,10 @@ class DaemonLoop:
                     preview = "\n".join(self.lyrics[0][1].splitlines()[:6])
                     self._ipc.show(preview, "unsynced lyrics")
             else:
-                i = self._lyr.current_line_index(self.lyrics, t["pos"] + self._config.CFG["behavior"]["offset"])
+                # offset global (config) + el de este artista (T0.13: la
+                # persistida de sesiones pasadas más lo que se ajustó ahora)
+                pos_offset = self._config.CFG["behavior"]["offset"] + self.session_offset
+                i = self._lyr.current_line_index(self.lyrics, t["pos"] + pos_offset)
                 if i != self.idx:
                     self.idx = i
                     if i >= 0 and self.lyrics[i][1]:
@@ -179,6 +192,47 @@ class DaemonLoop:
         # letra sincronizada, con una vuelta por segundo alcanza — y ésa es la
         # frecuencia de los eventos de progreso, así que no se pierde nada.
         return t["status"] == "Playing" and bool(self.lyrics)
+
+    def sync(self, delta):
+        """Gesto de ajuste fino (T0.13): keybind, menú de bandeja o el
+        watcher del archivo de sync (otro proceso) llaman acá. Aplica ya
+        mismo al tema que está sonando y, si el mismo artista se corrige dos
+        veces seguidas en el mismo sentido, offsets.record() lo deja
+        guardado para la próxima vez que suene."""
+        self.session_offset = round(self.session_offset + delta, 3)
+        if self.current_artist:
+            self._offsets.record(self.current_artist, delta)
+        sign = "+" if delta >= 0 else "-"
+        self._log(f"sync {sign}{abs(delta):.1f}s (session offset now {self.session_offset:+.2f}s)")
+        self._ipc.show(f"sync {sign}{abs(delta):.1f} s", "fatal-lyrics")
+        self.idx = -1   # re-muestra la línea actual, ya con el offset nuevo
+
+    def _watch_sync(self):
+        """Vigila SYNC_PATH (lo escribe `fatal sync +/-`, otro proceso) y
+        aplica el ajuste acá — mismo mecanismo de archivo que crt/tune,
+        porque el daemon vivo no es alcanzable de otra forma desde afuera."""
+        last = None
+        try:
+            last = os.stat(self._ipc.SYNC_PATH).st_mtime_ns
+        except OSError:
+            pass
+        while True:
+            self._sleep(0.35)
+            try:
+                stamp = os.stat(self._ipc.SYNC_PATH).st_mtime_ns
+            except OSError:
+                continue
+            if stamp == last:
+                continue
+            last = stamp
+            try:
+                with open(self._ipc.SYNC_PATH) as f:
+                    raw = f.read()
+            except OSError:
+                continue
+            delta = self._ipc.parse_sync(raw)
+            if delta is not None:
+                self.sync(delta)
 
     def clear_track_state(self):
         """Limpia el estado de track/letra en curso y avisa al overlay."""
@@ -215,11 +269,12 @@ class DaemonLoop:
         # el modo CRT arranca como diga la config: un `fatal crt on` de la sesión
         # anterior no se hereda (tapa las tres pantallas, mejor que sea deliberado)
         self._config.set_crt(self._config.CFG["crt"]["enabled"])
-        self._tray.start_tray()
+        self._tray.start_tray(sync=self.sync)
         self._ipc.send(self._ipc._config_event())
         threading.Thread(target=self._config.watch_config, daemon=True, name="config").start()
         threading.Thread(target=self._audio.audio_loop, daemon=True, name="audio").start()
         threading.Thread(target=self._config.watch_tune, daemon=True, name="tune").start()
+        threading.Thread(target=self._watch_sync, daemon=True, name="sync").start()
         signal.signal(signal.SIGUSR1, self._ipc.demo)
         while True:
             self.tick()

@@ -41,6 +41,12 @@ def make_lyr():
     return lyr_mock
 
 
+def make_offsets():
+    offsets_mock = mock.MagicMock()
+    offsets_mock.get.return_value = 0.0
+    return offsets_mock
+
+
 def make_loop(**overrides):
     kwargs = dict(
         gaming=mock.Mock(return_value=False),
@@ -50,6 +56,7 @@ def make_loop(**overrides):
         audio=mock.MagicMock(),
         art=mock.MagicMock(),
         lyr=make_lyr(),
+        offsets=make_offsets(),
         tray=mock.MagicMock(),
         log=mock.Mock(),
         sleep=mock.Mock(),
@@ -292,6 +299,54 @@ class TestPlainLyrics(unittest.TestCase):
         loop.handle_track(track(id="t2", status="Playing"), now=0.0)
 
         self.assertFalse(loop.plain_shown)
+
+
+class TestSync(unittest.TestCase):
+    def test_adjusts_the_session_offset_and_shows_feedback(self):
+        loop = make_loop()
+        loop.current_artist = "Artist"
+        loop.session_offset = 0.15
+
+        loop.sync(0.1)
+
+        self.assertAlmostEqual(loop.session_offset, 0.25)
+        loop._ipc.show.assert_called_once_with("sync +0.1 s", "fatal-lyrics")
+        self.assertEqual(loop.idx, -1)
+
+    def test_a_negative_delta(self):
+        loop = make_loop()
+        loop.current_artist = "Artist"
+
+        loop.sync(-0.1)
+
+        self.assertAlmostEqual(loop.session_offset, -0.1)
+        loop._ipc.show.assert_called_once_with("sync -0.1 s", "fatal-lyrics")
+
+    def test_records_the_correction_for_the_current_artist(self):
+        loop = make_loop()
+        loop.current_artist = "Artist"
+
+        loop.sync(0.1)
+
+        loop._offsets.record.assert_called_once_with("Artist", 0.1)
+
+    def test_without_a_known_artist_does_not_touch_offsets(self):
+        loop = make_loop()
+        loop.current_artist = None
+
+        loop.sync(0.1)
+
+        loop._offsets.record.assert_not_called()
+
+    def test_a_new_track_seeds_the_session_offset_from_the_artist(self):
+        loop = make_loop(offsets=make_offsets())
+        loop._offsets.get.return_value = 0.3
+
+        loop.handle_track(track(id="new", artist="Artist"), now=0.0)
+
+        self.assertEqual(loop.current_artist, "Artist")
+        self.assertEqual(loop.session_offset, 0.3)
+        loop._offsets.get.assert_called_once_with("Artist")
 
 
 class TestLongPauseClear(unittest.TestCase):

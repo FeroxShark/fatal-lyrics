@@ -65,6 +65,8 @@ ShellRoot {
     property real crtInfectLead: 0.35
     // probabilidad de que un verso entre como un cambio de canal (T3.1)
     property real crtChannelSwitch: 0.25
+    // T3.2: la palabra gigante que cruza la pared en el drop
+    property bool crtIown: true
     // qué tan seguido una línea sale "critical" (pantalla roja): umbral del
     // sorteo determinístico en crtPlanFor, más alto = más raro
     property real crtAlarmThreshold: 0.87
@@ -394,7 +396,9 @@ ShellRoot {
 
     function updateInfection() {
         const sh = crtShot;
-        if (!crtOn || sh.mode === "all" || sh.chunks.length < 2)
+        // el IOWN no reparte la frase: las pantallas muestran LA MISMA palabra
+        // a la vez, así que no hay quién le pase el color a quién
+        if (!crtOn || sh.mode === "all" || sh.mode === "iown" || sh.chunks.length < 2)
             return;
         if (faceIdx.length !== activeCrtScreens.length) {
             resetFaces();
@@ -536,6 +540,20 @@ ShellRoot {
         const h = crtHash(serial * 31 + words.length);
         const dir = crtHash(serial * 11 + 7) < 0.5 ? 1 : -1;
 
+        // T3.2 — IOWN: la línea corta no se reparte, se vuelve UNA palabra del
+        // tamaño de la pantalla que cruza la pared entera de derecha a
+        // izquierda. Va en el drop (que es cuando el tema se abre y una
+        // palabra sola aguanta tres monitores) y, muy de vez en cuando, por
+        // sorteo. La parte del tema sale de la línea, congelada al mostrarla.
+        if (crtIown && words.length <= 3
+                && ((line.section || "verse") === "drop"
+                    || crtHash(serial * 53 + 17) < 0.10)) {
+            let chunks = [];
+            for (let i = 0; i < n; i++)
+                chunks.push({ text: text, screen: i, from: t0, to: t0 + dur });
+            return { mode: "iown", focus: focus, chunks: chunks, chan: chan };
+        }
+
         // Golpes repetidos: cada uno a una pantalla distinta. El corte viene
         // hecho del daemon (`segs`), que es donde se puede probar de verdad
         // contra todas las formas en que una letra escribe una repetición.
@@ -598,6 +616,24 @@ ShellRoot {
                  chunks: [{ text: text, screen: focus, from: t0, to: t0 + dur }] };
     }
     readonly property var crtShot: crtShotFor(crtLine)
+
+    // Dónde cae la palabra del IOWN en la pantalla i, medido sobre la PARED y
+    // no sobre el monitor: el pedazo que sale por el borde de uno tiene que
+    // entrar por el del otro, así que el offset descuenta el ancho de todas las
+    // pantallas anteriores. Respeta `crt.order` porque activeCrtScreens ya
+    // viene ordenado de izquierda a derecha.
+    function crtIownX(i) {
+        const scrs = activeCrtScreens;
+        let total = 0;
+        let before = 0;
+        for (let k = 0; k < scrs.length; k++) {
+            const w = (scrs[k] && scrs[k].width) || 1920;
+            if (k < i)
+                before += w;
+            total += w;
+        }
+        return (1 - crtProgress()) * total - before;
+    }
 
     // Qué le toca a la pantalla i AHORA: su pedazo encendido, el que ya pasó
     // (queda quemado, apagándose) o nada.
@@ -963,8 +999,11 @@ ShellRoot {
         // primer verso después de un clear = tema nuevo: ahí el cambio de canal
         // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
         crtTrackStart = (crtLine.text || "") === "";
+        // `section`: la parte del tema QUEDA CONGELADA en la línea. Leerla del
+        // vivo desde crtShotFor haría que el modo cambie a mitad de verso (los
+        // eventos `sec` llegan cuando quieren) y la palabra saltaría de lugar.
         crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: crtSerial + 1,
-                    segs: segs || [], words: words || [] };
+                    segs: segs || [], words: words || [], section: audSection };
         crtSerial++;
         updatePitchPalette();
         if (crtOn)
@@ -1016,7 +1055,7 @@ ShellRoot {
         crt_director: "crtDirector", crt_focus: "crtFocusMode",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
-        crt_channel_switch: "crtChannelSwitch",
+        crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",

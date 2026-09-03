@@ -67,6 +67,9 @@ PanelWindow {
     // la línea entera (el comportamiento de antes).
     property var shot: ({ text: "", active: false, past: false, reveal: 0 })
     readonly property bool allMode: ctl.crtShot.mode === "all"
+    // IOWN (T3.2): las pantallas no se reparten nada — todas dibujan LA MISMA
+    // palabra gigante, cada una en el tramo de pared que le toca
+    readonly property bool iownMode: ctl.crtShot.mode === "iown"
 
     readonly property string lineText: ctl.crtLine.text
     readonly property bool standby: lineText === ""
@@ -303,6 +306,9 @@ PanelWindow {
     // que es ruido — plata tirada. Va a 60, que ya no se distingue, y la pantalla
     // sin letra a 20. Ahí está la mayor parte del ahorro de tener tres tubos.
     property real tubeTime: 0
+    // posición de la palabra del IOWN en ESTA pantalla, refrescada por cuadro
+    property real iownX: 0
+    property real iownProg: 0
     // T0.12: modo degradado por GPU. Promedio móvil del frame time; tres
     // segundos seguidos por encima de 28ms (bajo 36fps) y se baja quality a
     // 0.75 una sola vez — no vuelve a subir sola, eso lo hace el hot-reload
@@ -313,6 +319,14 @@ PanelWindow {
         running: crt.visible && (crt.showsText || crt.standby)
         onTriggered: {
             crt.tubeTime += frameTime;
+            // el IOWN se mueve por cuadro: con el muestreo de 80 ms del reloj
+            // del contenido, una palabra cruzando tres pantallas va a saltos.
+            // songPos() extrapola con el reloj local, así que preguntarle cada
+            // cuadro sale gratis y da una traslación continua.
+            if (crt.iownMode) {
+                crt.iownProg = crt.ctl.crtProgress();
+                crt.iownX = crt.ctl.crtIownX(crt.idx);
+            }
             crt.frameAvgMs = crt.frameAvgMs * 0.9 + frameTime * 1000 * 0.1;
             if (crt.frameAvgMs <= 28) {
                 crt.slowSince = -1;
@@ -452,10 +466,29 @@ PanelWindow {
             // pega un tirón de señal y se asienta en el color. Nada de tener la
             // frase entera puesta y ir iluminándola — eso se lee como un karaoke,
             // y lo que se busca es que algo la escriba en la pantalla al momento.
+            // ---- IOWN: una palabra sola, del alto de la pantalla, cruzando la
+            // pared de derecha a izquierda mientras dura la línea. No se corta
+            // ni se reparte: sale por el borde de un monitor y entra por el del
+            // siguiente, así que la pared se lee como una pantalla sola.
+            Text {
+                id: iownWord
+                visible: crt.iownMode && crt.showsText
+                // el ancho propio entra en la cuenta para que la palabra salga
+                // ENTERA por la izquierda al terminar la línea
+                x: crt.iownX - crt.iownProg * implicitWidth
+                anchors.verticalCenter: parent.verticalCenter
+                text: crt.myText.toUpperCase()
+                color: crt.pal.ink
+                font.family: crt.fontFamily
+                font.bold: true
+                font.letterSpacing: 6
+                font.pixelSize: Math.round(crt.shortSide * 0.7)
+            }
+
             Item {
                 id: lyric
                 anchors { fill: parent; margins: crt.pad }
-                visible: crt.showsText
+                visible: crt.showsText && !crt.iownMode
                 // el pedazo que ya pasó queda prendido pero bajo, como fósforo
                 // que todavía no se apagó: así se lee la frase entera de un vistazo
                 opacity: crt.burned ? 0.42 : 1

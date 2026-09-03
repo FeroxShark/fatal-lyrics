@@ -421,6 +421,7 @@ because there is nothing to install.
 | `crt`      | `infect_lead`        | Seconds of lead the colour takes on the next screen before the line actually arrives there | `0.35` |
 | `crt`      | `alarm_threshold`    | How rare the full-red "critical" screen is (rolled against a peak); higher = rarer, `1.0` = never | `0.87` |
 | `crt`      | `channel_switch`     | Chance a line lands like a channel being changed: static, a red frame, then the words (the first line of a track always does) | `0.25` |
+| `crt`      | `iown`               | On a drop, a one-word line crosses the whole wall as one giant word travelling right to left | `true` |
 | `crt`      | `motifs`             | Animations on the screens without lyric                         | `true`      |
 | `crt`      | `water`              | The two water animations (the sea, and the pond that shivers with the song) take their turn | `true` |
 | `crt`      | `water_amp`          | How much the water moves (`0` = a flat field of points)         | `0.55`      |

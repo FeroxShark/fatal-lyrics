@@ -198,6 +198,9 @@ SETTINGS = [
      lambda c: _pick("The phosphor leans on the register of what's playing", YESNO, c)),
     ("color_hold", "crt", "Seconds before the colour may change",
      lambda c: _ask_int("Seconds a colour has to stay before it may change", c, 0, 600)),
+    ("iown", "crt", "One word crossing every screen on a drop",
+     lambda c: _pick("On a drop, a short line crosses the whole wall as one "
+                     "giant word", YESNO, c)),
     ("motifs", "crt", "Animations on the quiet screens",
      lambda c: _pick("Animations on the screens without lyric", YESNO, c)),
     ("water", "crt", "Water animations (sea, shivering pond)",

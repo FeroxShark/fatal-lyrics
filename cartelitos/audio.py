@@ -426,6 +426,18 @@ def _default_sink():
     return None
 
 
+SINK_CHECK_EVERY = 10.0    # segundos entre cada chequeo de la salida por default
+
+
+def sink_changed(prev, now_fn=_default_sink):
+    """True si la salida por default cambió desde que se abrió la captura.
+
+    Un None de `now_fn` (pactl que falló esta vez nomás) no cuenta como
+    cambio: si no, una falla transitoria reabriría la captura sin necesidad."""
+    current = now_fn()
+    return current is not None and current != prev
+
+
 def sink_node_id(listing, name):
     """Id de nodo de un sink dentro de la salida de `pactl list sinks short`."""
     for line in listing.splitlines():
@@ -492,6 +504,7 @@ def _capture_loop():
         if not (config.CFG["crt"]["audio"] and config.crt_on()):
             time.sleep(0.5)
             continue
+        cur_sink = _default_sink()
         cmd = _audio_command()
         if not cmd:
             log("no way to capture audio (pw-record/parec), the tube won't react")
@@ -517,6 +530,7 @@ def _capture_loop():
         gate = PeakGate(now=time.monotonic())
         last_save = time.monotonic()
         quiet_since = time.monotonic()
+        last_sink_check = time.monotonic()
         warned = False
         try:
             while config.CFG["crt"]["audio"] and config.crt_on():
@@ -524,6 +538,11 @@ def _capture_loop():
                 if not chunk or len(chunk) < AUDIO_HOP * 2:
                     break     # se cayó la captura (cambio de salida, sink muerto)
                 now = time.monotonic()
+                if now - last_sink_check > SINK_CHECK_EVERY:
+                    last_sink_check = now
+                    if sink_changed(cur_sink, _default_sink):
+                        log("audio: default sink changed, reopening the capture")
+                        break
                 ev = an.feed(chunk, now)
                 if not ev:
                     continue

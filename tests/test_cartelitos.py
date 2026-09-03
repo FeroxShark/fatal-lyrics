@@ -1086,6 +1086,21 @@ class TestSinkNodeId(unittest.TestCase):
         self.assertIsNone(c.sink_node_id("basura sin tabs\n", "whatever"))
 
 
+class TestSinkChanged(unittest.TestCase):
+    """T0.10: cambio de sink en caliente. `_capture_loop` sólo llama a esta
+    función; toda la lógica interesante vive acá, sin subprocess de por medio."""
+
+    def test_same_sink_is_not_a_change(self):
+        self.assertFalse(c.sink_changed("alsa_output.foo", lambda: "alsa_output.foo"))
+
+    def test_a_different_sink_is_a_change(self):
+        self.assertTrue(c.sink_changed("alsa_output.foo", lambda: "alsa_output.bar"))
+
+    def test_a_transient_pactl_failure_does_not_count_as_a_change(self):
+        # None es "no pude preguntar ahora", no "ya no hay salida por default"
+        self.assertFalse(c.sink_changed("alsa_output.foo", lambda: None))
+
+
 class TestAlbumColours(unittest.TestCase):
     """Los colores del tubo salen de la tapa. Lo que importa es el ORDEN: la
     portada típica es mayormente oscura, y si se ordena por cantidad pelada el

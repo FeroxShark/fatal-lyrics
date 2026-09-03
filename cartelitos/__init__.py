@@ -53,10 +53,10 @@ from .ipc import (
 from .audio import (
     AUDIO_BANDS, AUDIO_HOP, AUDIO_MIN_SEND, AUDIO_RATE, AudioAnalyzer,
     PEAK_GAP, PEAK_HARD, PEAK_MAX, PEAK_PCT, PROFILE_DIR, PROFILE_STEP,
-    PeakGate, SECTIONS, SECTION_HOLD, SECTION_SMOOTH, TrackProfile,
-    audio_loop, band_energy, classify_level, profile_for, set_profile,
-    sink_node_id, _audio_command, _band_table, _default_sink, _profile_lock,
-    _sink_node_id,
+    PeakGate, SECTIONS, SECTION_HOLD, SECTION_SMOOTH, SINK_CHECK_EVERY,
+    TrackProfile, audio_loop, band_energy, classify_level, profile_for,
+    set_profile, sink_changed, sink_node_id, _audio_command, _band_table,
+    _default_sink, _profile_lock, _sink_node_id,
 )
 
 from .tray import SCALE_STEP, TRAY_CHOICES, TRAY_TOGGLES, start_tray

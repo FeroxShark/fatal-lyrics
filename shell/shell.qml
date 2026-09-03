@@ -829,7 +829,7 @@ ShellRoot {
         return "info";
     }
 
-    function spawnPos() {
+    function _randomSpawnPos() {
         let rx = 0.02 + Math.random() * 0.90;
         let ry = 0.02 + Math.random() * 0.84;
         const a = root.spawnArea;
@@ -848,6 +848,29 @@ ShellRoot {
                 ry = Math.random() < 0.5 ? 0.02 + Math.random() * 0.12 : 0.72 + Math.random() * 0.14;
         }
         return { rx: rx, ry: ry };
+    }
+
+    // T0.4: hasta 6 intentos rechazando una posición que se pisaría con un
+    // cartel vivo (no muriendo). No hay tamaño real de pantalla acá todavía
+    // (el cartel ni se creó), así que el rect se estima en fracción de una
+    // referencia 1920x1080 — no hace falta exacto, sólo evitar que nazcan
+    // pegados uno encima del otro.
+    function spawnPos() {
+        const w = (320 * root.cfgScale) / 1920;
+        const h = (110 * root.cfgScale) / 1080;
+        let candidate = _randomSpawnPos();
+        for (let attempt = 0; attempt < 6; attempt++) {
+            candidate = _randomSpawnPos();
+            const collides = root.dialogList.some(d => {
+                if (d.dying)
+                    return false;
+                return candidate.rx < d.rx + w && candidate.rx + w > d.rx
+                    && candidate.ry < d.ry + h && candidate.ry + h > d.ry;
+            });
+            if (!collides)
+                return candidate;
+        }
+        return candidate;
     }
 
     function pushDialog(entry, markCurrent) {
@@ -1331,6 +1354,7 @@ ShellRoot {
 
                     function die() {
                         dying = true;
+                        modelData.dying = true;   // spawnPos() no lo cuenta como ocupado
                         burst = true;
                         deathAnim.start();
                         deathEnd.start();

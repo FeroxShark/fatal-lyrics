@@ -437,7 +437,13 @@ PanelWindow {
                 : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
                 * (crt.standby ? 3.5 : (crt.idle ? 1.6 : 1))
             property real glitch: Math.min(crt.glitchAmt, 1)
+            // La barra que rueda va atada al verso: arranca con el peso de
+            // siempre y llega al doble sobre el final de la línea, así el
+            // rodillo deja de ser un ciclo suelto del shader y acompaña a la
+            // letra. Se refresca con los eventos de posición (1/s), que es la
+            // velocidad a la que se percibe que la barra "carga".
             property real roll: crt.ctl.crtRoll * (0.25 + 0.75 * crt.rest)
+                * (1 + crt.ctl.crtProgress())
             property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
             property real vignette: crt.ctl.crtVignette
             // el titileo llega desde el audio, no del reloj del shader

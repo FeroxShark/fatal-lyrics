@@ -154,6 +154,12 @@ SETTINGS = [
      lambda c: _pick("Fading burnt shadow when a dialog dies (burn-in)", YESNO, c)),
     ("cascade", "effects", "Chain death on track change",
      lambda c: _pick("Dialogs die in a chain on track change", YESNO, c)),
+    ("cascade_style", "effects", "Chain death order",
+     lambda c: _pick("Order the chain death follows", [
+         ("random (a different one each time)", "random"),
+         ("age (oldest first)", "age"),
+         ("top (top of screen first)", "top"),
+         ("center (center outward)", "center")], c)),
     ("mirror", "effects", "Reflection under the current dialog",
      lambda c: _pick("The current dialog stands on its own reflection", YESNO, c)),
     ("death_age_min", "effects", "A dialog dies after at least",

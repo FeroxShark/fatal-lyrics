@@ -290,6 +290,57 @@ class TestFetchLyrics(unittest.TestCase):
                         if "/get?" in url else [])
         self.assertEqual(c.fetch_lyrics(TRACK), ("none", None))
 
+    def test_retries_the_search_with_the_clean_title(self):
+        remastered = dict(TRACK, title="Song - Remastered 2011")
+        seen = []
+
+        def http(url):
+            seen.append(url)
+            if "/get?" in url:
+                return {"syncedLyrics": None}
+            if "Song+-+Remastered" in url:
+                return [{"syncedLyrics": None}]   # búsqueda con el título crudo: nada
+            return [{"syncedLyrics": LRC}]        # con el título limpio: sí
+
+        self.patch_http(http)
+        status, lines = c.fetch_lyrics(remastered)
+        self.assertEqual(status, "ok")
+        self.assertEqual(len(lines), 2)
+
+    def test_does_not_repeat_the_search_when_the_title_is_already_clean(self):
+        calls = {"search": 0}
+
+        def http(url):
+            if "/get?" in url:
+                return {"syncedLyrics": None}
+            calls["search"] += 1
+            return []
+
+        self.patch_http(http)
+        c.fetch_lyrics(TRACK)   # TRACK["title"] == "Song": clean_title no cambia nada
+        self.assertEqual(calls["search"], 1)
+
+
+class TestCleanTitle(unittest.TestCase):
+    CASES = [
+        ("Song - Remastered 2011", "Song"),
+        ("Song - Remaster", "Song"),
+        ("Song - Radio Edit", "Song"),
+        ("Song - Live at Wembley", "Song"),
+        ("Song (feat. Someone)", "Song"),
+        ("Song (with Someone Else)", "Song"),
+        ("Song [Bonus Track]", "Song"),
+        ("Song - 2004 Remaster", "Song"),
+    ]
+
+    def test_table(self):
+        for raw, expected in self.CASES:
+            with self.subTest(raw=raw):
+                self.assertEqual(c.clean_title(raw), expected)
+
+    def test_a_plain_title_is_left_alone(self):
+        self.assertEqual(c.clean_title("Just a Song"), "Just a Song")
+
 
 class TestLyricsCache(unittest.TestCase):
     def setUp(self):

@@ -18,6 +18,24 @@ OK_TTL = 180 * 86400    # una letra encontrada tampoco es para siempre: el cache
 
 TS_RE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
 
+# lo que lrclib no matchea: sufijos de edición que van en el título de Spotify
+# pero no en el nombre "canónico" con el que está guardada la letra
+_CLEAN_TITLE_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
+    r" - Remaster(ed)?( \d{4})?",
+    r" - Radio Edit",
+    r" - Live.*",
+    r"\(feat\. .*?\)",
+    r"\(with .*?\)",
+    r"\[.*?\]",
+    r" - \d{4} Remaster",
+)]
+
+
+def clean_title(s):
+    for pat in _CLEAN_TITLE_PATTERNS:
+        s = pat.sub("", s)
+    return s.strip()
+
 def parse_lrc(text):
     lines = []
     for raw in text.splitlines():
@@ -71,15 +89,29 @@ def fetch_lyrics(track):
         if lines:
             return "ok", lines
 
-    params = urllib.parse.urlencode({
-        "track_name": track["title"],
-        "artist_name": track["artist"],
-    })
-    for data in try_url("https://lrclib.net/api/search?" + params) or []:
-        if data.get("syncedLyrics"):
-            lines = parse_lrc(data["syncedLyrics"])
-            if lines:
-                return "ok", lines
+    def try_search(title):
+        params = urllib.parse.urlencode({
+            "track_name": title,
+            "artist_name": track["artist"],
+        })
+        for data in try_url("https://lrclib.net/api/search?" + params) or []:
+            if data.get("syncedLyrics"):
+                lines = parse_lrc(data["syncedLyrics"])
+                if lines:
+                    return lines
+        return None
+
+    lines = try_search(track["title"])
+    if lines:
+        return "ok", lines
+
+    # "Song - Remastered 2011" no matchea en lrclib pero "Song" sí: sólo vale
+    # la pena repetir la búsqueda si el título limpio es de verdad otro
+    clean = clean_title(track["title"])
+    if clean and clean != track["title"]:
+        lines = try_search(clean)
+        if lines:
+            return "ok", lines
 
     return ("none", None) if reached else ("error", None)
 

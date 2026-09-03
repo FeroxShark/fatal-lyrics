@@ -205,9 +205,9 @@ no-op → boot roto. No reintroducir un segundo.)
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
-- De la lista de Ferox para el CRT: transición de canal (estática → rojo un microsegundo → texto
-  deformado → se estabiliza), efecto IOWN (letra gigante desplazándose entre pantallas), setup
-  visual con un número gigante en cada monitor.
+- README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
+  (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
+  en qué orden se prueban.
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
   del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral

@@ -109,6 +109,27 @@ ShellRoot {
     // si la captura se cae o está apagada, todo vuelve a moverse con la letra
     readonly property bool audLive: crtOn && (Date.now() - audAt) < 1500
 
+    // T3.8: ¿suena algo AHORA? No es lo mismo que haya letra: en un
+    // instrumental la pantalla tiene que estar viva, no decir "NO SIGNAL".
+    // Los `pos` llegan 1/s con el tema andando (y paran en pausa) y los `aud`
+    // varias veces por segundo si la captura está prendida; alcanza con
+    // cualquiera de los dos.
+    // liveTick existe sólo para que esto se vuelva a evaluar: Date.now() no es
+    // una propiedad, así que sin un empujón por segundo el binding se quedaría
+    // en "sí, suena" para siempre después del último evento (mismo truco que
+    // screensGen con las pantallas).
+    property int liveTick: 0
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.crtOn
+        onTriggered: root.liveTick++
+    }
+    readonly property bool musicLive: {
+        liveTick;
+        return Date.now() - Math.max(posAt, audAt) < 3500;
+    }
+
     // Cuánto empuja la parte en la que está el tema. Es el número que hace que
     // las animaciones estén "sintonizadas": en el silencio todo se aquieta, en
     // el estribillo todo aprieta, sin que nadie toque una perilla.
@@ -1042,12 +1063,16 @@ ShellRoot {
         }, true);
     }
 
+    // El daemon manda `np` también cuando el tubo está prendido y la funda
+    // apagada (el instrumental necesita saber qué suena), así que prender la
+    // funda acá se decide con el tubo a la vista: si no, al salir del CRT
+    // aparecería una funda que nadie pidió.
     function nowPlaying(title, artist, album, art) {
         npTitle = title || "Now Playing";
         npInfo = artist + (album ? " — " + album : "");
         npArt = art || "";
         npProgress = 0;
-        npShown = true;
+        npShown = !crtOn;
         npDocked = false;
         npSerial++;
         npDockTimer.restart();

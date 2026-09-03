@@ -118,11 +118,34 @@ PanelWindow {
     readonly property bool iownMode: ctl.crtShot.mode === "iown"
 
     readonly property string lineText: ctl.crtLine.text
-    readonly property bool standby: lineText === ""
-    readonly property bool showsText: !standby && (allMode || shot.active || shot.past)
-    readonly property bool focused: !standby && (allMode || shot.active)
+    // Sin letra hay DOS situaciones distintas y antes eran una sola:
+    //   standby      — no suena nada. Barras de ajuste y "NO SIGNAL".
+    //   instrumental — suena, pero este pedazo no tiene letra (o no la hay).
+    //                  La pared sigue viva: todas las pantallas con su
+    //                  animación al ritmo y la enfocada diciendo qué suena.
+    // "NO SIGNAL" con música puesta es la señal equivocada: dice que el
+    // programa se cayó cuando lo único que pasa es que nadie está cantando.
+    readonly property bool noLyric: lineText === ""
+    readonly property bool standby: noLyric && !ctl.musicLive
+    readonly property bool instrumental: noLyric && ctl.musicLive
+    readonly property bool showsText: !noLyric && (allMode || shot.active || shot.past)
+    readonly property bool focused: !noLyric && (allMode || shot.active)
     readonly property bool burned: !allMode && shot.past && !shot.active
-    readonly property bool idle: !standby && !showsText
+    readonly property bool idle: !noLyric && !showsText
+
+    // T3.8 (idea 24): tres minutos sin nada que mostrar y sin música, y el tubo
+    // se duerme — cinco cuadros por segundo y la estática apagada. Se despierta
+    // solo, en cuanto vuelve a haber señal.
+    property bool deepSleep: false
+    Timer {
+        interval: 180000
+        running: crt.visible && crt.standby && !crt.deepSleep
+        onTriggered: crt.deepSleep = true
+    }
+    onStandbyChanged: {
+        if (!standby)
+            deepSleep = false;
+    }
 
     // el texto de ESTA pantalla: el pedazo del director, o la línea entera
     // (partida por posición si `split` mandó cortarla) cuando no hay director
@@ -178,7 +201,7 @@ PanelWindow {
     Timer {
         interval: 80
         repeat: true
-        running: crt.visible && !crt.standby
+        running: crt.visible && !crt.noLyric
         triggeredOnStart: true
         onTriggered: {
             const st = crt.ctl.crtChunkState(crt.idx);
@@ -362,7 +385,7 @@ PanelWindow {
     property real frameAvgMs: 1000 / 60
     property real slowSince: -1
     FrameAnimation {
-        running: crt.visible && (crt.showsText || crt.standby)
+        running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep
         onTriggered: {
             crt.tubeTime += frameTime;
             // el IOWN se mueve por cuadro: con el muestreo de 80 ms del reloj
@@ -387,10 +410,12 @@ PanelWindow {
         }
     }
     Timer {
-        interval: 50
+        // el instrumental va por acá (20 fps, que es lo que necesita un motif);
+        // dormido, 5 fps
+        interval: crt.deepSleep ? 200 : 50
         repeat: true
-        running: crt.visible && !crt.showsText && !crt.standby
-        onTriggered: crt.tubeTime += 0.05
+        running: crt.visible && !crt.showsText && (!crt.standby || crt.deepSleep)
+        onTriggered: crt.tubeTime += crt.deepSleep ? 0.2 : 0.05
     }
 
     // Encuadre: la pantalla con la letra se acerca y abre el cuadro; la que no,
@@ -434,8 +459,9 @@ PanelWindow {
             // el cambio de canal se lleva puesta la perilla: la estática de la
             // transición no es "ruido de fondo", es la pantalla sin señal
             property real noiseAmt: crt.chanNoise > 0 ? 1
+                : crt.deepSleep ? 0
                 : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
-                * (crt.standby ? 3.5 : (crt.idle ? 1.6 : 1))
+                * (crt.standby ? 3.5 : (crt.showsText ? 1 : 1.6))
             property real glitch: Math.min(crt.glitchAmt, 1)
             // La barra que rueda va atada al verso: arranca con el peso de
             // siempre y llega al doble sobre el final de la línea, así el
@@ -745,7 +771,9 @@ PanelWindow {
             // ---- pantalla sin letra: la animación que la mantiene viva
             Motif {
                 anchors.fill: parent
-                visible: crt.idle
+                // en el instrumental corren TODAS: es la pared entera moviéndose
+                // con el tema, que es justo lo que "NO SIGNAL" mataba
+                visible: crt.idle || crt.instrumental
                 kind: crt.ctl.crtMotifFor(crt.idx)
                 energy: crt.ctl.sectionEnergy
                 waterAmp: crt.ctl.crtWaterAmp
@@ -765,7 +793,30 @@ PanelWindow {
                 // bajito, cuando pasa se tiene que ver acompañado.
                 kick: crt.surgeGen
                 clock: crt.tubeTime
-                spinning: crt.visible && crt.idle
+                spinning: crt.visible && (crt.idle || crt.instrumental)
+            }
+
+            // ---- instrumental: no hay letra pero SÍ hay música. La pantalla
+            // enfocada dice qué suena, en chico y abajo, como una consola; las
+            // demás se quedan con su animación. "NO SIGNAL" es sólo para el
+            // silencio.
+            Text {
+                anchors {
+                    horizontalCenter: parent.horizontalCenter
+                    bottom: parent.bottom
+                    bottomMargin: Math.round(crt.shortSide * 0.08)
+                }
+                width: parent.width * 0.8
+                visible: crt.instrumental && crt.idx === crt.ctl.crtShot.focus
+                    && crt.ctl.npTitle !== ""
+                text: (crt.ctl.npTitle + "  ·  " + crt.ctl.npInfo).toUpperCase()
+                color: crt.pal.dim
+                font.family: crt.fontFamily
+                font.bold: true
+                font.letterSpacing: 3
+                font.pixelSize: Math.max(11, Math.round(crt.shortSide * 0.022))
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
             }
 
             // ---- sin señal: barras de ajuste y estática

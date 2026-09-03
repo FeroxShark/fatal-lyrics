@@ -54,6 +54,7 @@ class DaemonLoop:
         self.pause_started = None
         self.pause_cleared = False
         self.resend_np = False
+        self.crt_was_on = False
         self.last_pos_sent = 0.0
         self.last_pos = 0.0
 
@@ -86,11 +87,32 @@ class DaemonLoop:
                 self._log("game closed: resuming")
         return self.paused_by_game
 
+    def _np_wanted(self):
+        """Si hay que mandar el evento `np` (qué suena).
+
+        `now_playing` es la perilla de la FUNDA, pero el tubo usa el mismo
+        evento para otra cosa: con música y sin letra, la pantalla enfocada dice
+        qué está sonando en vez de quedarse en "NO SIGNAL". Sin esto, con la
+        funda apagada el modo instrumental no tiene nada que decir. Mismo
+        criterio que los eventos de posición, que el CRT también necesita
+        siempre. (La funda no aparece por esto: el overlay no la prende si el
+        tubo está puesto.)"""
+        return self._config.CFG["behavior"]["now_playing"] or self._config.crt_on()
+
     def handle_track(self, t, now):
         """Procesa un tick con el estado del player (t puede ser None/parado).
 
         Devuelve True si conviene el poll rápido (canción sonando con letra
         sincronizada) — mismo cálculo que `fast` en el loop original."""
+        # El tubo prendido a mitad de un tema: el overlay nunca vio el `np` de
+        # lo que suena (con la funda apagada no se manda ninguno), y el modo
+        # instrumental se queda sin nada que decir hasta el tema siguiente. Se
+        # reenvía UNA vez, cuando el interruptor pasa de apagado a prendido.
+        crt_now = self._config.crt_on()
+        if crt_now and not self.crt_was_on:
+            self.resend_np = True
+        self.crt_was_on = crt_now
+
         # música en pausa mucho tiempo → limpiar carteles colgados
         if t["status"] == "Paused":
             if self.pause_started is None:
@@ -113,7 +135,7 @@ class DaemonLoop:
             # la pausa larga escondió la funda: al retomar, mostrarla de nuevo
             if self.resend_np:
                 self.resend_np = False
-                if self._config.CFG["behavior"]["now_playing"] and t["title"]:
+                if self._np_wanted() and t["title"]:
                     self._ipc.send({"cmd": "np", "title": t["title"], "artist": t["artist"],
                           "album": t["album"], "art": t["art"]})
 
@@ -140,7 +162,7 @@ class DaemonLoop:
             self.idx = -1
             self._ipc.clear()
             self._log(f"track: {t['artist']} — {t['title']}")
-            if self._config.CFG["behavior"]["now_playing"]:
+            if self._np_wanted():
                 self._ipc.send({"cmd": "np", "title": t["title"], "artist": t["artist"],
                       "album": t["album"], "art": t["art"]})
             self._art.send_album_colors(t["art"])

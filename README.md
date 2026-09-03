@@ -209,8 +209,13 @@ What the tube does:
 - **Karaoke built in**: words light up as they're sung and stay dim before.
 - **Console readouts**: REC dot, channel and phosphor, timecode, track, a
   block progress bar and framing brackets. Turn them off with `chrome = false`.
-- **No signal**: with nothing playing the tube falls back to colour bars,
-  heavy static and a blinking `NO SIGNAL`.
+- **Instrumental**: music playing and nobody singing is not a dead signal.
+  Every screen runs its animation to the beat and the one in focus says what
+  is playing, small, along the bottom.
+- **No signal**: with nothing playing — really nothing — the tube falls back to
+  colour bars, heavy static and a blinking `NO SIGNAL`. After three minutes
+  like that it drops to five frames a second and turns the static off, and
+  wakes up on the first sign of music.
 
 ### Getting out
 

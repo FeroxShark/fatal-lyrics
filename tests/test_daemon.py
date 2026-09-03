@@ -163,6 +163,40 @@ class TestTrackChangeCleanup(unittest.TestCase):
         sent = [c.args[0] for c in loop._ipc.send.call_args_list]
         self.assertTrue(any(e.get("cmd") == "np" for e in sent))
 
+    def test_new_track_sends_now_playing_for_the_crt_with_the_sleeve_off(self):
+        # la funda apagada, pero el tubo prendido: el evento sale igual porque
+        # el modo instrumental del CRT lo necesita para decir qué suena
+        cfg = make_config(now_playing=False)
+        cfg.crt_on.return_value = True
+        loop = make_loop(config=cfg)
+        loop.handle_track(track(id="new"), now=0.0)
+        sent = [c.args[0] for c in loop._ipc.send.call_args_list]
+        self.assertTrue(any(e.get("cmd") == "np" for e in sent))
+
+    def test_new_track_skips_now_playing_with_the_sleeve_and_the_crt_off(self):
+        cfg = make_config(now_playing=False)
+        cfg.crt_on.return_value = False
+        loop = make_loop(config=cfg)
+        loop.handle_track(track(id="new"), now=0.0)
+        sent = [c.args[0] for c in loop._ipc.send.call_args_list]
+        self.assertFalse(any(e.get("cmd") == "np" for e in sent))
+
+    def test_turning_the_crt_on_mid_track_resends_now_playing(self):
+        cfg = make_config(now_playing=False)
+        cfg.crt_on.return_value = False
+        loop = make_loop(config=cfg)
+        loop.handle_track(track(id="same"), now=0.0)
+        loop._ipc.send.reset_mock()
+        cfg.crt_on.return_value = True          # `fatal crt on` a mitad del tema
+        loop.handle_track(track(id="same"), now=1.0)
+        sent = [c.args[0] for c in loop._ipc.send.call_args_list]
+        self.assertTrue(any(e.get("cmd") == "np" for e in sent))
+        # y no lo repite en cada vuelta
+        loop._ipc.send.reset_mock()
+        loop.handle_track(track(id="same"), now=2.0)
+        sent = [c.args[0] for c in loop._ipc.send.call_args_list]
+        self.assertFalse(any(e.get("cmd") == "np" for e in sent))
+
     def test_new_track_sets_the_audio_profile(self):
         loop = make_loop()
         t = track(id="new")

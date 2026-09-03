@@ -30,6 +30,10 @@ ShellRoot {
     property bool trollNo: true
     property bool burnIn: true
     property bool cascadeDeath: true
+    property string cascadeStyle: "random"
+    // resuelto al disparar cada cascada: age | top | center (nunca "random"
+    // en sí, eso sólo elige entre estos tres)
+    property string cascadeMode: "age"
     property bool karaokeOn: false
     property string npCorner: "top-right"
     property int npMargin: 14
@@ -897,6 +901,23 @@ ShellRoot {
         return candidate;
     }
 
+    // orden de muerte de la cascada: dónde cae este cartel en la coreografía
+    // elegida (cascadeMode). "age" es el índice de aparición (el orden de
+    // siempre); "top"/"center" reordenan por posición normalizada (rx, ry).
+    function cascadeRank(d) {
+        const arr = root.dialogList;
+        if (root.cascadeMode === "top") {
+            const sorted = arr.slice().sort((a, b) => a.ry - b.ry);
+            return sorted.findIndex(x => x.serial === d.serial);
+        }
+        if (root.cascadeMode === "center") {
+            const dist = e => Math.abs(e.rx - 0.5) + Math.abs(e.ry - 0.5);
+            const sorted = arr.slice().sort((a, b) => dist(a) - dist(b));
+            return sorted.findIndex(x => x.serial === d.serial);
+        }
+        return arr.findIndex(x => x.serial === d.serial);
+    }
+
     function pushDialog(entry, markCurrent) {
         const pos = spawnPos();
         entry.serial = root.serial++;
@@ -972,7 +993,7 @@ ShellRoot {
         effects_on_current: "effectsOnCurrent", tearing: "tearingOn",
         death_age_min: "deathAgeMin", death_age_max: "deathAgeMax", max_lifetime: "maxLifetime",
         click_through: "clickThrough", troll_no: "trollNo", burn_in: "burnIn",
-        cascade: "cascadeDeath", karaoke: "karaokeOn",
+        cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn",
         np_corner: "npCorner", np_margin: "npMargin", np_vinyl: "npVinyl",
         crt_screens: "crtScreens", crt_order: "crtOrder", crt_exit_on: "crtExitOn",
         crt_palette: "crtPalette", crt_split: "crtSplit", crt_font: "crtFont",
@@ -1050,8 +1071,12 @@ ShellRoot {
                             root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [], words: [] };
                             root.crtTrackSeed++;
                             // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
-                            if (root.cascadeDeath && root.dialogList.length > 0)
+                            if (root.cascadeDeath && root.dialogList.length > 0) {
+                                root.cascadeMode = root.cascadeStyle === "random"
+                                    ? ["age", "top", "center"][Math.floor(Math.random() * 3)]
+                                    : root.cascadeStyle;
                                 root.clearGen++;
+                            }
                             else
                                 root.dialogList = [];
                         } else if (ev.cmd === "config")
@@ -1409,12 +1434,13 @@ ShellRoot {
                         onTriggered: win.die()
                     }
 
-                    // cascada: al limpiar mueren en cadena, del más viejo al más nuevo
+                    // cascada: al limpiar mueren en cadena, con la coreografía sorteada
+                    // en root.cascadeMode (age | top | center) para este disparo
                     Connections {
                         target: root
                         enabled: !win.dying
                         function onClearGenChanged() {
-                            const rank = root.dialogList.findIndex(d => d.serial === win.modelData.serial);
+                            const rank = root.cascadeRank(win.modelData);
                             cascadeTimer.interval = 60 + Math.max(0, rank) * 110;
                             cascadeTimer.restart();
                         }

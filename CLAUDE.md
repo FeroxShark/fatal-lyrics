@@ -125,6 +125,14 @@ no-op → boot roto. No reintroducir un segundo.)
   arrastre.
 - Poll fino de 0.3 s **sólo** si suena y hay letra cargada; si no, 1/s. La búsqueda de letra va en
   hilo aparte (antes bloqueaba el loop hasta 20 s si lrclib andaba lento).
+- **En `Component.onCompleted` de `win` (el `PanelWindow` del cartel, con `required property
+  modelData`), un `id` declarado MÁS ABAJO en el archivo no resuelve** si se lo llama directo en el
+  cuerpo del handler (`ReferenceError`) — el `required property` lo vuelve un delegate "bound" y
+  ahí la resolución de `id` hacia adelante no es la misma que en un binding de propiedad normal
+  (esos sí resuelven adelante sin problema, ver `closeBtn` referenciado por un `Text` anterior) ni
+  que dentro de una función (`die()` llama a `deathAnim` declarado bien después, y anda). Regla
+  práctica: toda animación que se dispare desde `Component.onCompleted` de `win` se declara ANTES
+  de ese handler, no después.
 
 ## Números medidos
 

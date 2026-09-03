@@ -711,6 +711,8 @@ PanelWindow {
                     id: noSignal
                     anchors.centerIn: parent
                     width: parent.width * 0.7
+                    // en el setup el número gigante va en el mismo lugar
+                    visible: !crt.ctl.crtSetupOn
                     text: "NO SIGNAL"
                     color: crt.pal.hot
                     font.family: crt.fontFamily
@@ -729,6 +731,37 @@ PanelWindow {
                         running: crt.visible && crt.standby
                         onTriggered: noSignal.blink = !noSignal.blink
                     }
+                }
+            }
+
+            // ---- `fatal crt setup`: qué número es esta pantalla. Se miran de
+            // izquierda a derecha y ése es el orden de `[crt] order`; abajo va
+            // el nombre del output, que es lo que se escribe en la lista.
+            Item {
+                anchors.fill: parent
+                visible: crt.ctl.crtSetupOn
+
+                Text {
+                    anchors.centerIn: parent
+                    text: crt.idx + 1
+                    color: crt.pal.ink
+                    font.family: crt.fontFamily
+                    font.bold: true
+                    font.pixelSize: Math.round(crt.shortSide * 0.8)
+                }
+
+                Text {
+                    anchors {
+                        horizontalCenter: parent.horizontalCenter
+                        bottom: parent.bottom
+                        bottomMargin: crt.pad * 2
+                    }
+                    text: (crt.scr.name || "?").toUpperCase()
+                    color: crt.pal.dim
+                    font.family: crt.fontFamily
+                    font.bold: true
+                    font.letterSpacing: 6
+                    font.pixelSize: Math.round(crt.shortSide * 0.05)
                 }
             }
         }

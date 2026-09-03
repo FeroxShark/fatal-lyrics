@@ -27,6 +27,9 @@ SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos.sock"
 # interruptor del modo CRT: un archivo, no el socket — apagarlo tiene que
 # funcionar aunque el daemon esté colgado (el tubo tapa todas las pantallas)
 CRT="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt"
+# `fatal crt setup`: otro archivo, mismo mecanismo — cada pantalla dibuja su
+# número y su nombre, que es lo que hay que escribir en `[crt] order`
+CRT_SETUP="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-crt-setup"
 # gesto de sync fino (T0.13): otro archivo, mismo motivo — este proceso es
 # corto y se muere, el daemon (otro proceso) es el que tiene que verlo
 SYNCF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sync"
@@ -137,6 +140,7 @@ stop() {
     rm -f "$SOCK"
     rm -f "$LYRICS"                   # sin daemon no hay letra de la que informar
     printf '0' > "$CRT" 2>/dev/null   # que no quede el tubo prendido en el archivo
+    rm -f "$CRT_SETUP"                # ni los números de pantalla de la sesión pasada
 
     echo "fatal OFF"
 }
@@ -156,13 +160,29 @@ crt_set() {
     echo "CRT $(crt_state)"
 }
 
+# Modo setup: prende el tubo con un número gigante en cada monitor. Se miran de
+# izquierda a derecha y ESE es el orden que va en `[crt] order`. Se apaga solo
+# al apagar el tubo: un número gigante tapando la pantalla no puede quedar
+# colgado porque alguien salió con el mouse.
+crt_setup() {
+    if [ "${1:-on}" = "off" ]; then
+        rm -f "$CRT_SETUP"
+        echo "CRT setup off"
+        return 0
+    fi
+    printf '1' > "$CRT_SETUP.tmp" && mv "$CRT_SETUP.tmp" "$CRT_SETUP"
+    crt_set 1
+    echo "read the numbers left to right — that's your [crt] order"
+}
+
 crt() {
     case "${1:-toggle}" in
         on)     crt_set 1 ;;
-        off)    crt_set 0 ;;
+        off)    rm -f "$CRT_SETUP"; crt_set 0 ;;
         status) crt_state ;;
-        toggle) [ "$(crt_state)" = "on" ] && crt_set 0 || crt_set 1 ;;
-        *)      echo "usage: fatal crt [on|off|toggle|status]" >&2; exit 1 ;;
+        setup)  crt_setup "$2" ;;
+        toggle) [ "$(crt_state)" = "on" ] && { rm -f "$CRT_SETUP"; crt_set 0; } || crt_set 1 ;;
+        *)      echo "usage: fatal crt [on|off|toggle|status|setup [off]]" >&2; exit 1 ;;
     esac
 }
 
@@ -201,8 +221,8 @@ case "${1:-toggle}" in
     config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
-    crt)       crt "$2" ;;
+    crt)       crt "$2" "$3" ;;
     sync)      sync_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|sync +|-]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|sync +|-]" ;;
 esac

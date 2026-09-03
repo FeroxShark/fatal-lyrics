@@ -49,7 +49,15 @@ takes the whole machine, on every monitor at once.
 
 ```bash
 fatal crt on | off | toggle | status
+fatal crt setup            # a giant number and the output name on each screen
+fatal crt setup off
 ```
+
+`crt setup` is how you fill in `[crt] order`: it turns the tube on with a
+number the height of the screen on every monitor. Read them left to right and
+write the names down in that order — that order is what decides where each
+piece of a split line lands, and where the big word of `iown` leaves one screen
+and enters the next.
 
 ![CRT mode: the whole screen turns into a cathode ray tube showing the lyric](docs/crt-mode.jpg)
 
@@ -310,6 +318,7 @@ fatal setup      # same as `fatal config` (first-run alias)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 fatal demo       # throws a few fake dialogs, to try settings without music
 fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
+fatal crt setup           # a number on each screen, to write down [crt] order
 fatal tune       # sliders for the CRT settings you want to move while it plays
 ```
 

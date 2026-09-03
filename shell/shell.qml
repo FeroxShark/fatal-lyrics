@@ -809,6 +809,22 @@ ShellRoot {
         onLoadFailed: root.crtOn = false
     }
 
+    // T3.3: modo setup. Cada pantalla dibuja su número y el nombre de su output,
+    // que es lo que hay que escribir en `[crt] order`. Otro archivo, mismo
+    // mecanismo que el interruptor — `fatal crt setup` es un proceso corto y no
+    // tiene forma de hablarle al overlay que no sea ésta.
+    property bool crtSetupOn: false
+    FileView {
+        id: crtSetupSwitch
+        path: `${Quickshell.env("XDG_RUNTIME_DIR")}/cartelitos-crt-setup`
+        watchChanges: true
+        preload: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.crtSetupOn = text().trim() === "1"
+        onLoadFailed: root.crtSetupOn = false
+    }
+
     // Al prender el tubo se barren los carteles: si no, los que ya estaban vivos
     // quedan esperando abajo y reaparecen enteros al salir (se veía como si el
     // modo viejo hubiera estado corriendo todo el tiempo).
@@ -827,6 +843,12 @@ ShellRoot {
             return;
         crtOn = false;
         crtSwitch.setText("0");
+        // salir con el mouse también tiene que apagar los números del setup: si
+        // no, quedan puestos y el próximo `fatal crt on` arranca en modo setup
+        if (crtSetupOn) {
+            crtSetupOn = false;
+            crtSetupSwitch.setText("0");
+        }
     }
 
     // el watcher no alcanza si el archivo todavía no existe cuando arranca el
@@ -836,7 +858,10 @@ ShellRoot {
         interval: 500
         repeat: true
         running: true
-        onTriggered: crtSwitch.reload()
+        onTriggered: {
+            crtSwitch.reload();
+            crtSetupSwitch.reload();
+        }
     }
 
     // T0.11: hotplug de monitores. matchScreens/orderScreens leen

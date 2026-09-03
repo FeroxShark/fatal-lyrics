@@ -1427,6 +1427,23 @@ ShellRoot {
                         }
                     }
 
+                    // sacudida al pico de audio: sólo el cartel actual, un empujón corto
+                    // sobre el jitter existente. Respeta glitch = "off" igual que el resto.
+                    Connections {
+                        target: root
+                        enabled: win.current && !win.dying
+                        function onAudPeakChanged() {
+                            if (root.gStr <= 0)
+                                return;
+                            peakShake.restart();
+                        }
+                    }
+                    SequentialAnimation {
+                        id: peakShake
+                        NumberAnimation { target: win; property: "jx"; to: 6 * root.flickerAmt; duration: 45; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: win; property: "jx"; to: 0; duration: 45; easing.type: Easing.InQuad }
+                    }
+
                     // al dejar de ser el actual: burst que tapa el achique + tearing permanente
                     onCurrentChanged: {
                         if (!current && !dying) {

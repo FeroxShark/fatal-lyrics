@@ -134,6 +134,10 @@ ShellRoot {
     property int serial: 0
     property int currentLyricSerial: -1
     property var dialogList: []
+    // T0.3: cuando max_dialogs se pasa, el sobrante muere con su animación en
+    // vez de un splice directo — pushDialog manda el serial acá, y cada
+    // instancia (una por pantalla) lo ve y se manda a morir sola
+    property int dyingSerial: -1
 
     // generación de líneas de letra: los carteles envejecen por líneas NUEVAS,
     // no por duplicados del botón "No" (spamear No no mata a los demás)
@@ -859,10 +863,17 @@ ShellRoot {
         entry.gen = root.lyricGen;
         let arr = root.dialogList.slice();
         arr.push(entry);
-        // max_dialogs = 0: sin límite (igual los carteles mueren por edad/TTL)
-        while (root.maxDialogs > 0 && arr.length > root.maxDialogs)
-            arr.shift();
         root.dialogList = arr;
+        // max_dialogs = 0: sin límite (igual los carteles mueren por edad/TTL).
+        // Nunca splice directo: el sobrante se manda a morir con su animación,
+        // igual que cualquier otro cartel — el más viejo (menor serial), nunca
+        // el actual.
+        if (root.maxDialogs > 0 && arr.length > root.maxDialogs) {
+            const oldest = arr.filter(d => d.serial !== root.currentLyricSerial)
+                              .reduce((a, b) => (a === null || b.serial < a.serial) ? b : a, null);
+            if (oldest)
+                root.dyingSerial = oldest.serial;
+        }
     }
 
     function show(text, title, icon, t0, t1, segs) {
@@ -1142,6 +1153,17 @@ ShellRoot {
                             prx = p.rx;
                             pry = p.ry;
                         }
+                        if (win.shouldDie)
+                            win.die();
+                    }
+
+                    // max_dialogs: pushDialog avisa por acá cuál es el más viejo que
+                    // sobra; cada pantalla tiene su propia instancia de este cartel y
+                    // todas lo ven, así que todas se mandan a morir juntas
+                    readonly property bool shouldDie: modelData.serial === root.dyingSerial
+                    onShouldDieChanged: {
+                        if (shouldDie && !dying)
+                            die();
                     }
 
                     readonly property real baseX: prx * (screen.width - implicitWidth)

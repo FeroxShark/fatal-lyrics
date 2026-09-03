@@ -619,6 +619,21 @@ PanelWindow {
                             readonly property bool landed: crt.reveal >= crt.dueFrac(index)
                             opacity: landed ? 1 : 0
 
+                            // T3.5, estilo "type": la palabra no aparece, se
+                            // escribe — un caracter cada 28 ms, con el cursor
+                            // pegado atrás mientras dura. Se cuenta por code
+                            // point y no por unidad UTF-16, si no un caracter
+                            // japonés se escribe en dos mitades rotas.
+                            readonly property int chars: Array.from(modelData).length
+                            property int typed: 0
+                            Timer {
+                                interval: 28
+                                repeat: true
+                                running: crt.entryStyle === "type" && slot.landed
+                                    && slot.typed < slot.chars
+                                onTriggered: slot.typed++
+                            }
+
                             transform: [
                                 Scale { id: sc; origin.x: slot.width / 2; origin.y: slot.height / 2 },
                                 Translate { id: tr }
@@ -627,7 +642,11 @@ PanelWindow {
                             Text {
                                 id: label
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: slot.modelData.toUpperCase()
+                                text: crt.entryStyle !== "type"
+                                    ? slot.modelData.toUpperCase()
+                                    : Array.from(slot.modelData.toUpperCase())
+                                        .slice(0, slot.typed).join("")
+                                        + (slot.typed < slot.chars ? "▮" : "")
                                 color: crt.pal.ink
                                 // la letra acompaña al fondo: si el fondo se
                                 // lava en un segundo y la tinta salta de golpe,
@@ -660,8 +679,10 @@ PanelWindow {
                             property real ghostFade: 0
 
                             onLandedChanged: {
-                                if (landed)
+                                if (landed) {
+                                    typed = 0;
                                     entry.restart();
+                                }
                             }
 
                             // La entrada: la palabra llega como si el televisor

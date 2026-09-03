@@ -672,6 +672,9 @@ ShellRoot {
             return "slam";
         if (r < 0.34)
             return "roll";
+        // T3.5: la escribe un teletipo, letra por letra, con el cursor atrás
+        if (r < 0.50)
+            return "type";
         return "snap";
     }
 

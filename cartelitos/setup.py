@@ -219,6 +219,10 @@ SETTINGS = [
     ("word_flash", "crt", "Jolt as each word lands (0 = none)",
      lambda c: _ask_num("How much each word jolts as it lands: flash, colour "
                         "ghosts and size kick (0 = it simply appears)", c, 0.0, 1.0)),
+    ("channel_switch", "crt", "Lines arriving as a channel change",
+     lambda c: _ask_num("How often a line lands like a channel being changed: "
+                        "static, a red frame, then the words (the first line of "
+                        "a track always does)", c, 0.0, 1.0)),
     ("flicker", "crt", "Beating on the peaks (0 = none)",
      lambda c: _ask_num("How hard the picture beats on the peaks of the song "
                         "(0 = nothing moves with the volume)", c, 0.0, 1.0)),

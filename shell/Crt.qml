@@ -224,6 +224,27 @@ PanelWindow {
         glitchDecay.start();
     }
 
+    // ------------------------------------------------------ cambio de canal
+    // El verso entra como cuando se cambiaba de canal a mano: la pantalla se
+    // llena de estática, pega un cuadro rojo y recién ahí aparece el texto,
+    // roto, que se acomoda solo (lo deshace glitchDecay, no otra animación).
+    // Quién lo dispara lo decide el root (crtShot.chan), así que la pared
+    // entera cambia de canal junta — que es lo que hace un televisor.
+    property real chanNoise: 0
+    property bool chanFlash: false
+    SequentialAnimation {
+        id: chanAnim
+        PropertyAction { target: crt; property: "chanNoise"; value: 1 }
+        PauseAnimation { duration: 60 }
+        PropertyAction { target: crt; property: "chanFlash"; value: true }
+        PauseAnimation { duration: 16 }
+        PropertyAction { target: crt; property: "chanFlash"; value: false }
+        PropertyAction { target: crt; property: "chanNoise"; value: 0 }
+        // el texto ya está puesto: la rotura es la del emisor de siempre, no
+        // una segunda fuente de glitch compitiendo con hit()
+        ScriptAction { script: crt.hit(1.0) }
+    }
+
     // cambio de línea: patada de señal, y el verso viejo queda quemado atrás
     property string ghostText: ""
     property real ghostFade: 0
@@ -245,6 +266,8 @@ PanelWindow {
                 crt.hit(0.35 + Math.random() * 0.3);
             }
             crt.reveal = 0;
+            if (sh.chan)
+                chanAnim.restart();
         }
     }
     NumberAnimation {
@@ -348,11 +371,14 @@ PanelWindow {
             // y el shader se saltea las ocho muestras del bloom
             property real bloom: crt.showsText
                 ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt) : 0
-            property real noiseAmt: crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
+            // el cambio de canal se lleva puesta la perilla: la estática de la
+            // transición no es "ruido de fondo", es la pantalla sin señal
+            property real noiseAmt: crt.chanNoise > 0 ? 1
+                : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
                 * (crt.standby ? 3.5 : (crt.idle ? 1.6 : 1))
             property real glitch: Math.min(crt.glitchAmt, 1)
             property real roll: crt.ctl.crtRoll * (0.25 + 0.75 * crt.rest)
-            property real alarm: crt.alarmLine ? 1 : 0
+            property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
             property real vignette: crt.ctl.crtVignette
             // el titileo llega desde el audio, no del reloj del shader
             // el latido tiene su propia perilla (`flicker`), aparte de la

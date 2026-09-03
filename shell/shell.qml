@@ -63,6 +63,8 @@ ShellRoot {
     // segundos de anticipación con que el color infecta la pantalla siguiente
     // (ver updateInfection más abajo)
     property real crtInfectLead: 0.35
+    // probabilidad de que un verso entre como un cambio de canal (T3.1)
+    property real crtChannelSwitch: 0.25
     // qué tan seguido una línea sale "critical" (pantalla roja): umbral del
     // sorteo determinístico en crtPlanFor, más alto = más raro
     property real crtAlarmThreshold: 0.87
@@ -168,6 +170,8 @@ ShellRoot {
     property var crtLine: ({ text: "", t0: 0, t1: 0, serial: 0, segs: [], words: [] })
     property int crtSerial: 0
     property int crtTrackSeed: 0
+    // true mientras la línea que suena es la primera del tema (ver show())
+    property bool crtTrackStart: false
 
     // Ruido determinístico: todas las pantallas tienen que elegir el MISMO
     // layout para la misma línea, y sin hablar entre ellas.
@@ -512,8 +516,14 @@ ShellRoot {
         const n = activeCrtScreens.length;
         const serial = line.serial || 0;
         const focus = n > 0 ? (serial + Math.floor(crtHash(serial * 17 + 3) * n)) % n : 0;
+        // T3.1: el verso llega como un cambio de canal (estática, un cuadro
+        // rojo, y ahí el texto). El sorteo es determinístico a propósito:
+        // crtShot es un binding y se recalcula por cosas que no son la línea
+        // (config, monitores), así que con Math.random() el mismo verso
+        // cambiaría de canal a mitad de camino.
+        const chan = crtTrackStart || crtHash(serial * 41 + 9) < crtChannelSwitch;
         if (!crtDirector || crtFocusMode === "all" || n <= 1 || words.length === 0)
-            return { mode: "all", focus: focus, chunks: [] };
+            return { mode: "all", focus: focus, chunks: [], chan: chan };
 
         const t0 = line.t0 || 0;
         // Termina antes que la línea (el último pedazo tiene que llegar a leerse)
@@ -544,7 +554,7 @@ ShellRoot {
                     to: t0 + dur * acc / total,
                 });
             }
-            return { mode: "relay", focus: focus, chunks: chunks };
+            return { mode: "relay", focus: focus, chunks: chunks, chan: chan };
         }
 
         // frase corta y sorteo a favor: salta de pantalla en pantalla, entera
@@ -558,7 +568,7 @@ ShellRoot {
                     from: t0 + dur * i / hops,
                     to: t0 + dur * (i + 1) / hops,
                 });
-            return { mode: "jump", focus: focus, chunks: chunks };
+            return { mode: "jump", focus: focus, chunks: chunks, chan: chan };
         }
 
         // frase larga: se reparte en pedazos que se encienden uno atrás del otro
@@ -581,10 +591,10 @@ ShellRoot {
                     to: t0 + dur * acc / total,
                 });
             }
-            return { mode: "relay", focus: focus, chunks: chunks };
+            return { mode: "relay", focus: focus, chunks: chunks, chan: chan };
         }
 
-        return { mode: "single", focus: focus,
+        return { mode: "single", focus: focus, chan: chan,
                  chunks: [{ text: text, screen: focus, from: t0, to: t0 + dur }] };
     }
     readonly property var crtShot: crtShotFor(crtLine)
@@ -950,6 +960,9 @@ ShellRoot {
         // texto y sorteo juntos, y el layout no parpadea al aparecer la línea
         // `words`: tiempo real de cada palabra (LRC "enhanced"). Vacío = no lo
         // manda el daemon y el karaoke lo estima por largo, como siempre.
+        // primer verso después de un clear = tema nuevo: ahí el cambio de canal
+        // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
+        crtTrackStart = (crtLine.text || "") === "";
         crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: crtSerial + 1,
                     segs: segs || [], words: words || [] };
         crtSerial++;
@@ -1003,6 +1016,7 @@ ShellRoot {
         crt_director: "crtDirector", crt_focus: "crtFocusMode",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
+        crt_channel_switch: "crtChannelSwitch",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",

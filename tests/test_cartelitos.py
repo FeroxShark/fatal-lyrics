@@ -311,16 +311,30 @@ LRC = "[00:01.00]one\n[00:02.00]two\n"
 
 class TestFetchLyrics(unittest.TestCase):
     """El resultado tiene que distinguir "no tiene letra" de "no llegué a lrclib":
-    el cache guarda el primero y el reintento sólo aplica al segundo."""
+    el cache guarda el primero y el reintento sólo aplica al segundo.
+
+    Acá la cadena queda en los dos proveedores de lrclib: estos casos son sobre
+    lrclib, y con NetEase adentro un http_json falso con forma de lrclib lo
+    haría salir a la red de verdad (o contestar cualquier cosa)."""
+
+    def setUp(self):
+        old = lyrics.PROVIDERS
+        lyrics.PROVIDERS = tuple(pr for pr in old if pr[0] == "lrclib")
+        self.addCleanup(lambda: setattr(lyrics, "PROVIDERS", old))
 
     def patch_http(self, fn):
         old = lyrics.http_json
         lyrics.http_json = fn
         self.addCleanup(lambda: setattr(lyrics, "http_json", old))
 
+    def fetch(self, track=None):
+        """(estado, líneas) — el proveedor lo miran los tests de la cadena."""
+        status, lines, _ = c.fetch_lyrics(track or TRACK)
+        return status, lines
+
     def test_found(self):
         self.patch_http(lambda url: {"syncedLyrics": LRC})
-        status, lines = c.fetch_lyrics(TRACK)
+        status, lines = self.fetch()
         self.assertEqual(status, "ok")
         self.assertEqual(len(lines), 2)
 
@@ -331,13 +345,13 @@ class TestFetchLyrics(unittest.TestCase):
             self.addCleanup(err.close)
             raise err
         self.patch_http(not_found)
-        self.assertEqual(c.fetch_lyrics(TRACK), ("none", None))
+        self.assertEqual(self.fetch(), ("none", None))
 
     def test_network_down_is_error(self):
         def down(url):
             raise urllib.error.URLError("no route to host")
         self.patch_http(down)
-        self.assertEqual(c.fetch_lyrics(TRACK), ("error", None))
+        self.assertEqual(self.fetch(), ("error", None))
 
     def test_falls_back_to_search_when_the_exact_match_has_no_synced_lyrics(self):
         def http(url):
@@ -345,19 +359,19 @@ class TestFetchLyrics(unittest.TestCase):
                 return {"syncedLyrics": None}
             return [{"syncedLyrics": None}, {"syncedLyrics": LRC}]
         self.patch_http(http)
-        status, lines = c.fetch_lyrics(TRACK)
+        status, lines = self.fetch()
         self.assertEqual(status, "ok")
         self.assertEqual(len(lines), 2)
 
     def test_answered_but_nothing_synced_anywhere_is_none(self):
         self.patch_http(lambda url: [] if "/search?" in url else {"syncedLyrics": None})
-        self.assertEqual(c.fetch_lyrics(TRACK), ("none", None))
+        self.assertEqual(self.fetch(), ("none", None))
 
     def test_unsynced_text_does_not_count_as_a_hit(self):
         # letra sin marcas de tiempo: parse_lrc devuelve None, no sirve
         self.patch_http(lambda url: {"syncedLyrics": "just words\nno timestamps"}
                         if "/get?" in url else [])
-        self.assertEqual(c.fetch_lyrics(TRACK), ("none", None))
+        self.assertEqual(self.fetch(), ("none", None))
 
     def test_retries_the_search_with_the_clean_title(self):
         remastered = dict(TRACK, title="Song - Remastered 2011")
@@ -372,7 +386,7 @@ class TestFetchLyrics(unittest.TestCase):
             return [{"syncedLyrics": LRC}]        # con el título limpio: sí
 
         self.patch_http(http)
-        status, lines = c.fetch_lyrics(remastered)
+        status, lines = self.fetch(remastered)
         self.assertEqual(status, "ok")
         self.assertEqual(len(lines), 2)
 
@@ -382,7 +396,7 @@ class TestFetchLyrics(unittest.TestCase):
                 return {"syncedLyrics": None, "plainLyrics": "line one\nline two"}
             return []   # la búsqueda tampoco encuentra nada sincronizado
         self.patch_http(http)
-        status, lines = c.fetch_lyrics(TRACK)
+        status, lines = self.fetch()
         self.assertEqual(status, "plain")
         self.assertEqual(lines, [(0.0, "line one\nline two", None)])
 
@@ -396,8 +410,194 @@ class TestFetchLyrics(unittest.TestCase):
             return []
 
         self.patch_http(http)
-        c.fetch_lyrics(TRACK)   # TRACK["title"] == "Song": clean_title no cambia nada
+        self.fetch()   # TRACK["title"] == "Song": clean_title no cambia nada
         self.assertEqual(calls["search"], 1)
+
+
+class TestProviderChain(unittest.TestCase):
+    """T1.2: varios proveedores en fila. El primer "ok" gana; "none" pide que
+    TODOS hayan contestado que no; alcanza con que uno no llegue para que el
+    resultado sea "error" y se reintente en vez de cachear un "no hay" falso."""
+
+    def chain(self, *provs):
+        old = lyrics.PROVIDERS
+        lyrics.PROVIDERS = tuple(provs)
+        self.addCleanup(lambda: setattr(lyrics, "PROVIDERS", old))
+
+    @staticmethod
+    def const(status, lines=None, seen=None):
+        def prov(track, title):
+            if seen is not None:
+                seen.append(title)
+            return status, lines
+        return prov
+
+    def test_the_first_ok_wins_and_names_its_provider(self):
+        found = [(1.0, "one", None)]
+        self.chain(("a", self.const("none")), ("b", self.const("ok", found)),
+                   ("c", self.const("ok", [(9.0, "late", None)])))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("ok", found, "b"))
+
+    def test_all_of_them_saying_no_is_none(self):
+        self.chain(("a", self.const("none")), ("b", self.const("none")))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("none", None, None))
+
+    def test_everyone_unreachable_is_error(self):
+        self.chain(("a", self.const("error")), ("b", self.const("error")))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("error", None, None))
+
+    def test_one_unreachable_and_no_hit_is_error_not_none(self):
+        # cachear "no hay letra" porque uno de los dos se cayó marcaría el tema
+        # como instrumental durante una semana
+        self.chain(("a", self.const("none")), ("b", self.const("error")))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("error", None, None))
+
+    def test_an_ok_beats_an_earlier_unreachable(self):
+        self.chain(("a", self.const("error")),
+                   ("b", self.const("ok", [(1.0, "one", None)])))
+        self.assertEqual(c.fetch_lyrics(TRACK)[0], "ok")
+
+    def test_plain_is_only_the_fallback(self):
+        # la letra sin sincronizar del primero no le gana a la sincronizada
+        # del segundo, aunque haya llegado antes
+        synced = [(1.0, "one", None)]
+        self.chain(("a", self.const("plain", [(0.0, "text", None)])),
+                   ("b", self.const("ok", synced)))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("ok", synced, "b"))
+
+    def test_plain_wins_when_nobody_has_it_synced(self):
+        plain = [(0.0, "text", None)]
+        self.chain(("a", self.const("plain", plain)), ("b", self.const("none")))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("plain", plain, "a"))
+
+    def test_every_provider_gets_the_clean_title_too(self):
+        seen = []
+        self.chain(("a", self.const("none", seen=seen)))
+        c.fetch_lyrics(dict(TRACK, title="Song - Remastered 2011"))
+        self.assertEqual(seen, ["Song - Remastered 2011", "Song"])
+
+    def test_a_provider_that_blows_up_does_not_kill_the_chain(self):
+        def boom(track, title):
+            raise ValueError("bad json")
+        found = [(1.0, "one", None)]
+        self.chain(("a", boom), ("b", self.const("ok", found)))
+        self.assertEqual(c.fetch_lyrics(TRACK), ("ok", found, "b"))
+
+
+NETEASE_LRC = ("[00:00.000] 作词 : Thom Yorke\n"
+               "[00:02.000] 制作人 : Sean Slade\n"
+               "[00:18.400]When you were here before\n"
+               "[00:23.599]Couldn't look you in the eye\n")
+NETEASE_SONG = {"id": 42, "name": "Song", "duration": 200000}
+
+
+class TestNetease(unittest.TestCase):
+    """T1.2: el segundo proveedor. Búsqueda difusa (devuelve temas cualesquiera
+    aunque la consulta no exista), así que el largo es lo único que separa el
+    match real del relleno; y la letra sale SIEMPRE de `lrc`, nunca de la
+    traducción."""
+
+    def patch_http(self, search=None, lyric=None):
+        def http(url, **kw):
+            if "/search/get?" in url:
+                return search
+            if "/song/lyric?" in url:
+                return lyric
+            raise AssertionError("unexpected url " + url)
+        old = lyrics.http_json
+        lyrics.http_json = http
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
+
+    @staticmethod
+    def found(songs):
+        return {"code": 200, "result": {"songs": songs}}
+
+    @staticmethod
+    def lyric(lrc, **extra):
+        return dict({"code": 200, "lrc": {"lyric": lrc}}, **extra)
+
+    def test_a_match_by_duration_gives_the_lyrics(self):
+        self.patch_http(self.found([NETEASE_SONG]), self.lyric(NETEASE_LRC))
+        status, lines = c.netease(TRACK, TRACK["title"])
+        self.assertEqual(status, "ok")
+        self.assertEqual([text for _, text, _ in lines],
+                         ["When you were here before", "Couldn't look you in the eye"])
+
+    def test_the_credits_are_not_lyrics(self):
+        # NetEase mete letrista/compositor/productor con marca de tiempo: sin
+        # sacarlos son tres cartelitos de ficha técnica antes del primer verso
+        self.patch_http(self.found([NETEASE_SONG]), self.lyric(NETEASE_LRC))
+        _, lines = c.netease(TRACK, TRACK["title"])
+        self.assertNotIn("作词 : Thom Yorke", [text for _, text, _ in lines])
+
+    def test_the_translation_is_never_used(self):
+        # `tlyric` es la traducción al chino: la letra va en el idioma en que
+        # se canta, aunque la traducción sea lo único que esté sincronizado
+        self.patch_http(self.found([NETEASE_SONG]),
+                        self.lyric(NETEASE_LRC, tlyric={"lyric": "[00:18.400]当你出现在我面前\n"}))
+        _, lines = c.netease(TRACK, TRACK["title"])
+        self.assertNotIn("当你出现在我面前", [text for _, text, _ in lines])
+
+    def test_a_result_with_another_length_is_not_this_song(self):
+        far = dict(NETEASE_SONG, duration=260000)
+        self.patch_http(self.found([far]), self.lyric(NETEASE_LRC))
+        self.assertEqual(c.netease(TRACK, TRACK["title"]), ("none", None))
+
+    def test_it_picks_the_one_that_matches_among_several(self):
+        self.patch_http(self.found([dict(NETEASE_SONG, id=1, duration=100000),
+                                    dict(NETEASE_SONG, id=2, duration=201500)]),
+                        self.lyric(NETEASE_LRC))
+        seen = []
+        old = lyrics.http_json
+
+        def http(url, **kw):
+            seen.append(url)
+            return old(url, **kw)
+        lyrics.http_json = http
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
+        self.assertEqual(c.netease(TRACK, TRACK["title"])[0], "ok")
+        self.assertTrue(any("id=2" in u for u in seen), seen)
+
+    def test_an_empty_search_is_none(self):
+        self.patch_http(self.found([]), None)
+        self.assertEqual(c.netease(TRACK, TRACK["title"]), ("none", None))
+
+    def test_an_instrumental_is_none_not_ok(self):
+        # `pureMusic`: contesta bien, con la letra vacía
+        self.patch_http(self.found([NETEASE_SONG]),
+                        self.lyric("", pureMusic=True))
+        self.assertEqual(c.netease(TRACK, TRACK["title"]), ("none", None))
+
+    def test_only_credits_is_none(self):
+        self.patch_http(self.found([NETEASE_SONG]),
+                        self.lyric("[00:00.000] 作词 : Alguien\n"))
+        self.assertEqual(c.netease(TRACK, TRACK["title"]), ("none", None))
+
+    def test_a_bad_code_in_the_body_is_an_error(self):
+        # contestó 200 por HTTP y "me fue mal" adentro: no es "no tiene letra"
+        self.patch_http({"code": 400}, None)
+        self.assertEqual(c.netease(TRACK, TRACK["title"]), ("error", None))
+
+    def test_the_network_being_down_is_an_error(self):
+        def down(url, **kw):
+            raise urllib.error.URLError("no route to host")
+        old = lyrics.http_json
+        lyrics.http_json = down
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
+        self.assertEqual(c.netease(TRACK, TRACK["title"]), ("error", None))
+
+    def test_it_asks_with_the_title_it_was_given(self):
+        seen = []
+
+        def http(url, **kw):
+            seen.append(url)
+            return self.found([])
+        old = lyrics.http_json
+        lyrics.http_json = http
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
+        c.netease(TRACK, "Clean Title")
+        self.assertIn("Clean%20Title", seen[0])
+        self.assertIn("Band", seen[0])
 
 
 class TestCleanTitle(unittest.TestCase):
@@ -433,14 +633,29 @@ class TestLyricsCache(unittest.TestCase):
         self.assertIsNone(c.cache_get(TRACK))
 
     def test_round_trip(self):
-        c.cache_put(TRACK, "ok", [(1.0, "one", None), (2.0, "two", None)])
-        status, lines = c.cache_get(TRACK)
+        c.cache_put(TRACK, "ok", [(1.0, "one", None), (2.0, "two", None)], "lrclib")
+        status, lines, provider = c.cache_get(TRACK)
         self.assertEqual(status, "ok")
         self.assertEqual(lines, [(1.0, "one", None), (2.0, "two", None)])
+        self.assertEqual(provider, "lrclib")
+
+    def test_the_provider_survives_the_round_trip(self):
+        # T1.3: `fatal status` dice de dónde salió la letra, también cuando
+        # vino del cache y no se tocó la red
+        c.cache_put(TRACK, "ok", [(1.0, "one", None)], "netease")
+        self.assertEqual(c.cache_get(TRACK)[2], "netease")
+
+    def test_an_entry_from_before_the_providers_reads_as_lrclib(self):
+        # cache viejo: lrclib era el único que había
+        os.makedirs(lyrics.CACHE_DIR, exist_ok=True)
+        with open(c._cache_path(TRACK), "w") as f:
+            json.dump({"lines": [[1.0, "one"]], "status": "ok",
+                       "at": int(time.time())}, f)
+        self.assertEqual(c.cache_get(TRACK)[2], "lrclib")
 
     def test_word_times_survive_the_round_trip(self):
-        c.cache_put(TRACK, "ok", [(1.0, "one two", [(1.0, "one"), (1.5, "two")])])
-        _, lines = c.cache_get(TRACK)
+        c.cache_put(TRACK, "ok", [(1.0, "one two", [(1.0, "one"), (1.5, "two")])], "lrclib")
+        _, lines, _ = c.cache_get(TRACK)
         self.assertEqual(lines, [(1.0, "one two", [(1.0, "one"), (1.5, "two")])])
 
     def test_an_entry_from_before_word_times_still_reads(self):
@@ -450,26 +665,27 @@ class TestLyricsCache(unittest.TestCase):
         with open(c._cache_path(TRACK), "w") as f:
             json.dump({"lines": [[1.0, "one"]], "status": "ok",
                        "at": int(time.time())}, f)
-        self.assertEqual(c.cache_get(TRACK), ("ok", [(1.0, "one", None)]))
+        self.assertEqual(c.cache_get(TRACK)[:2], ("ok", [(1.0, "one", None)]))
 
     def test_a_network_failure_is_never_cached(self):
         # si no, cada tema que sonó sin internet queda marcado como sin letra
-        c.cache_put(TRACK, "error", None)
+        c.cache_put(TRACK, "error", None, None)
         self.assertIsNone(c.cache_get(TRACK))
 
     def test_no_lyrics_is_cached(self):
-        c.cache_put(TRACK, "none", None)
-        self.assertEqual(c.cache_get(TRACK), ("none", None))
+        c.cache_put(TRACK, "none", None, None)
+        self.assertEqual(c.cache_get(TRACK), ("none", None, None))
 
     def test_plain_lyrics_round_trip(self):
         # T0.14: "plain" no puede leerse de vuelta como "ok" — son casos
         # distintos para el daemon (una línea sincronizada vs. un bloque)
-        c.cache_put(TRACK, "plain", [(0.0, "whole text", None)])
-        self.assertEqual(c.cache_get(TRACK), ("plain", [(0.0, "whole text", None)]))
+        c.cache_put(TRACK, "plain", [(0.0, "whole text", None)], "lrclib")
+        self.assertEqual(c.cache_get(TRACK),
+                         ("plain", [(0.0, "whole text", None)], "lrclib"))
 
     def test_no_lyrics_expires(self):
         # lrclib suma letras con el tiempo: el "no hay" no puede ser para siempre
-        c.cache_put(TRACK, "none", None)
+        c.cache_put(TRACK, "none", None, None)
         path = c._cache_path(TRACK)
         with open(path) as f:
             data = json.load(f)
@@ -479,7 +695,7 @@ class TestLyricsCache(unittest.TestCase):
         self.assertIsNone(c.cache_get(TRACK))
 
     def test_a_found_result_does_not_expire(self):
-        c.cache_put(TRACK, "ok", [(1.0, "one")])
+        c.cache_put(TRACK, "ok", [(1.0, "one", None)], "lrclib")
         path = c._cache_path(TRACK)
         with open(path) as f:
             data = json.load(f)
@@ -490,12 +706,12 @@ class TestLyricsCache(unittest.TestCase):
 
     def test_different_tracks_do_not_collide(self):
         other = dict(TRACK, title="Another")
-        c.cache_put(TRACK, "ok", [(1.0, "one")])
+        c.cache_put(TRACK, "ok", [(1.0, "one", None)], "lrclib")
         self.assertIsNone(c.cache_get(other))
 
     def test_a_different_length_is_a_different_entry(self):
         # el largo entra en la clave: otra versión del tema no reusa la letra
-        c.cache_put(TRACK, "ok", [(1.0, "one")])
+        c.cache_put(TRACK, "ok", [(1.0, "one", None)], "lrclib")
         self.assertIsNone(c.cache_get(dict(TRACK, length=300.0)))
 
     def test_a_corrupt_file_is_a_miss_not_a_crash(self):
@@ -630,10 +846,10 @@ class TestFetchAsync(unittest.TestCase):
         return False
 
     def test_publishes_the_result(self):
-        self.patch_fetch(lambda t: ("ok", [(1.0, "one")]))
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)], "lrclib"))
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
-        self.assertEqual(c._fetch["lyrics"], [(1.0, "one")])
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "one", None)])
         self.assertEqual(c._fetch["id"], TRACK["id"])
 
     def test_a_slow_result_for_an_old_track_is_dropped(self):
@@ -644,19 +860,19 @@ class TestFetchAsync(unittest.TestCase):
         def slow(track):
             started.set()
             time.sleep(0.3)
-            return "ok", [(1.0, "from A")]
+            return "ok", [(1.0, "from A", None)], "lrclib"
         self.patch_fetch(slow)
         c.fetch_lyrics_async(TRACK)
         started.wait(1.0)
-        self.patch_fetch(lambda t: ("ok", [(1.0, "from B")]))
+        self.patch_fetch(lambda t: ("ok", [(1.0, "from B", None)], "lrclib"))
         c.fetch_lyrics_async(dict(TRACK, id="/t/2", title="B"))
         self.assertTrue(self.wait_done())
         time.sleep(0.5)   # que el hilo viejo termine y trate de publicar
-        self.assertEqual(c._fetch["lyrics"], [(1.0, "from B")])
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "from B", None)])
         self.assertEqual(c._fetch["id"], "/t/2")
 
     def test_a_cache_hit_skips_the_network(self):
-        c.cache_put(TRACK, "ok", [(1.0, "cached", None)])
+        c.cache_put(TRACK, "ok", [(1.0, "cached", None)], "lrclib")
 
         def boom(track):
             raise AssertionError("should not have hit the network")
@@ -666,10 +882,26 @@ class TestFetchAsync(unittest.TestCase):
         self.assertEqual(c._fetch["lyrics"], [(1.0, "cached", None)])
 
     def test_a_result_is_cached_for_next_time(self):
-        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)]))
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)], "lrclib"))
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
-        self.assertEqual(c.cache_get(TRACK), ("ok", [(1.0, "one", None)]))
+        self.assertEqual(c.cache_get(TRACK), ("ok", [(1.0, "one", None)], "lrclib"))
+
+    def test_the_provider_is_published_with_the_result(self):
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)], "netease"))
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+        self.assertEqual(c._fetch["provider"], "netease")
+
+    def test_a_cache_hit_publishes_the_cached_provider(self):
+        c.cache_put(TRACK, "ok", [(1.0, "one", None)], "netease")
+
+        def boom(track):
+            raise AssertionError("should not have hit the network")
+        self.patch_fetch(boom)
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+        self.assertEqual(c._fetch["provider"], "netease")
 
     def test_retries_a_network_failure_then_succeeds(self):
         calls = []
@@ -679,12 +911,12 @@ class TestFetchAsync(unittest.TestCase):
 
         def flaky(track):
             calls.append(1)
-            return ("error", None) if len(calls) == 1 else ("ok", [(1.0, "one")])
+            return ("error", None, None) if len(calls) == 1 else ("ok", [(1.0, "one", None)], "lrclib")
         self.patch_fetch(flaky)
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
         self.assertEqual(len(calls), 2)
-        self.assertEqual(c._fetch["lyrics"], [(1.0, "one")])
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "one", None)])
 
     def test_gives_up_after_the_retries_without_caching(self):
         old_delay = lyrics.RETRY_DELAY
@@ -694,7 +926,7 @@ class TestFetchAsync(unittest.TestCase):
 
         def down(track):
             calls.append(1)
-            return "error", None
+            return "error", None, None
         self.patch_fetch(down)
         c.fetch_lyrics_async(TRACK)
         time.sleep(0.5)
@@ -703,7 +935,7 @@ class TestFetchAsync(unittest.TestCase):
         self.assertIsNone(c.cache_get(TRACK))
 
     def test_no_lyrics_publishes_an_empty_result(self):
-        self.patch_fetch(lambda t: ("none", None))
+        self.patch_fetch(lambda t: ("none", None, None))
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
         self.assertIsNone(c._fetch["lyrics"])
@@ -718,7 +950,7 @@ class TestFetchAsync(unittest.TestCase):
         def slow(track):
             started.release()
             release.wait(5.0)
-            return "ok", [(1.0, track["title"])]
+            return "ok", [(1.0, track["title"], None)], "lrclib"
         self.patch_fetch(slow)
         for i in range(6):
             c.fetch_lyrics_async(dict(TRACK, id=f"/t/{i}", title=f"T{i}"))
@@ -738,7 +970,7 @@ class TestFetchAsync(unittest.TestCase):
         def slow(track):
             started.release()
             release.wait(5.0)
-            return "ok", [(1.0, track["title"])]
+            return "ok", [(1.0, track["title"], None)], "lrclib"
         self.patch_fetch(slow)
         for i in range(6):
             c.fetch_lyrics_async(dict(TRACK, id=f"/t/{i}", title=f"T{i}"))
@@ -747,7 +979,7 @@ class TestFetchAsync(unittest.TestCase):
         release.set()
         self.assertTrue(self.wait_done())
         self.assertEqual(c._fetch["id"], "/t/5")
-        self.assertEqual(c._fetch["lyrics"], [(1.0, "T5")])
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "T5", None)])
 
     def test_the_queue_keeps_the_newest_track_only(self):
         # esperando lugar hay UNO solo: el último cambio pisa al anterior
@@ -760,7 +992,7 @@ class TestFetchAsync(unittest.TestCase):
             started.release()
             seen.append(track["title"])
             release.wait(5.0)
-            return "ok", [(1.0, track["title"])]
+            return "ok", [(1.0, track["title"], None)], "lrclib"
         self.patch_fetch(slow)
         for i in range(5):
             c.fetch_lyrics_async(dict(TRACK, id=f"/t/{i}", title=f"T{i}"))
@@ -781,7 +1013,7 @@ class TestFetchAsync(unittest.TestCase):
                                side_effect=RuntimeError("can't start new thread")):
             c.fetch_lyrics_async(TRACK)
         self.assertEqual(lyrics._inflight, 0)
-        self.patch_fetch(lambda t: ("ok", [(1.0, "one")]))
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)], "lrclib"))
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
 
@@ -791,7 +1023,7 @@ class TestFetchAsync(unittest.TestCase):
 
         def flaky(track):
             calls.append(1)
-            return ("error", None) if len(calls) == 1 else ("ok", [(1.0, "one")])
+            return ("error", None, None) if len(calls) == 1 else ("ok", [(1.0, "one", None)], "lrclib")
         self.patch_fetch(flaky)
         with mock.patch.object(lyrics, "_retry_delay", return_value=0.6) as delay:
             start = time.time()

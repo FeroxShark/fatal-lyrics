@@ -99,77 +99,191 @@ def parse_lrc(text):
     return lines or None
 
 
-def http_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=10) as resp:
+def http_json(url, timeout=10, headers=None):
+    hdrs = {"User-Agent": UA}
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, headers=hdrs)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.load(resp)
 
 
-def fetch_lyrics(track):
-    """Letra sincronizada de lrclib: match exacto y si no, búsqueda.
+def _json_or(url, **kw):
+    """(datos, por_qué_no). El segundo campo distingue "el servidor contestó
+    que no lo tiene" (`none`) de "no se llegó" (`error`): el primero se cachea
+    y no se reintenta, el segundo se reintenta y no se cachea nunca."""
+    try:
+        return http_json(url, **kw), "none"
+    except urllib.error.HTTPError:
+        return None, "none"     # es una respuesta, no una caída
+    except Exception:
+        return None, "error"
 
-    Devuelve (estado, líneas) con CUATRO resultados: "ok" (sincronizada),
-    "plain" (lrclib sólo tiene el texto sin marcas de tiempo), "none" (lrclib
-    contestó y este tema no tiene letra) y "error" (no se pudo llegar a
-    lrclib). Mezclar "none" con "error" rompe el cache y el reintento, que
-    necesitan lo contrario uno del otro: el "no hay" se cachea y no se
-    reintenta, la caída de red se reintenta y no se cachea nunca."""
-    reached = False
 
-    def try_url(url):
-        nonlocal reached
-        try:
-            data = http_json(url)
-        except urllib.error.HTTPError:
-            reached = True      # contestó "no lo tengo": es una respuesta, no una caída
-            return None
-        except Exception:
-            return None
-        reached = True
-        return data
+# ------------------------------------------------------------- proveedores
+# Cada uno recibe (track, título) y devuelve (estado, líneas) con los mismos
+# cuatro estados que fetch_lyrics. Ninguno sabe de los otros ni del orden: la
+# cadena la arma PROVIDERS y la recorre fetch_lyrics.
 
+def lrclib_get(track, title):
+    """Match exacto de lrclib: artista + tema + álbum + duración."""
     params = urllib.parse.urlencode({
         "artist_name": track["artist"],
-        "track_name": track["title"],
+        "track_name": title,
         "album_name": track["album"],
         "duration": str(int(round(track["length"]))),
     })
-    get_data = try_url("https://lrclib.net/api/get?" + params)
-    if get_data and get_data.get("syncedLyrics"):
-        lines = parse_lrc(get_data["syncedLyrics"])
+    data, why = _json_or("https://lrclib.net/api/get?" + params)
+    if data is None:
+        return why, None
+    if data.get("syncedLyrics"):
+        lines = parse_lrc(data["syncedLyrics"])
         if lines:
             return "ok", lines
+    # sin sincronizar, pero lrclib a veces tiene el texto plano: mejor que nada
+    if data.get("plainLyrics"):
+        return "plain", [(0.0, data["plainLyrics"], None)]
+    return "none", None
 
-    def try_search(title):
-        params = urllib.parse.urlencode({
-            "track_name": title,
-            "artist_name": track["artist"],
-        })
-        for data in try_url("https://lrclib.net/api/search?" + params) or []:
-            if data.get("syncedLyrics"):
-                lines = parse_lrc(data["syncedLyrics"])
-                if lines:
-                    return lines
-        return None
 
-    lines = try_search(track["title"])
-    if lines:
-        return "ok", lines
+def lrclib_search(track, title):
+    """Búsqueda de lrclib: sin álbum ni duración, el primero que esté sincronizado."""
+    params = urllib.parse.urlencode({"track_name": title, "artist_name": track["artist"]})
+    data, why = _json_or("https://lrclib.net/api/search?" + params)
+    if data is None:
+        return why, None
+    for hit in data or []:
+        if hit.get("syncedLyrics"):
+            lines = parse_lrc(hit["syncedLyrics"])
+            if lines:
+                return "ok", lines
+    return "none", None
 
-    # "Song - Remastered 2011" no matchea en lrclib pero "Song" sí: sólo vale
-    # la pena repetir la búsqueda si el título limpio es de verdad otro
+
+NETEASE_TIMEOUT = 6
+NETEASE_LIMIT = 5
+NETEASE_SLACK = 3.0     # segundos de diferencia de duración que se toleran
+# con el User-Agent del proyecto contesta distinto: acá hay que parecer un
+# navegador, que es el único cliente para el que esta API pública está pensada
+NETEASE_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+    "Referer": "https://music.163.com/",
+}
+
+# NetEase mete la ficha técnica adentro del LRC y CON marca de tiempo, así que
+# parse_lrc la toma por versos: "作词 : Thom Yorke" (letrista), "作曲" (compositor),
+# "制作人" (productor)... y el tema arranca con tres cartelitos de créditos.
+NETEASE_CREDIT_RE = re.compile(
+    r"^\s*(作词|作曲|编曲|制作人|出品人|出品|监制|混音|录音|母带|统筹|策划|和声|"
+    r"吉他|贝斯|鼓|键盘|弦乐|produced|written|composed|arranged|lyrics|lyricist|"
+    r"mixed|mastered|recorded)\b\s*(by)?\s*[:：]", re.IGNORECASE)
+
+
+def netease_pick(songs, length):
+    """El id del resultado que dura lo mismo que el tema (±NETEASE_SLACK).
+
+    La búsqueda de NetEase es difusa a lo bruto: con una consulta que no existe
+    igual devuelve cinco temas cualesquiera. El largo es lo único que separa el
+    match de verdad del relleno."""
+    for song in songs or []:
+        try:
+            dur = float(song["duration"]) / 1000.0
+        except (KeyError, TypeError, ValueError):
+            continue
+        if abs(dur - length) <= NETEASE_SLACK:
+            return song.get("id")
+    return None
+
+
+def netease(track, title):
+    """NetEase (music.163.com): sin API key y con LRC de verdad.
+
+    Va SIEMPRE `lrc.lyric`, que es el idioma en el que se canta la canción.
+    `tlyric` es la traducción al chino y no se usa ni cuando es lo único que
+    está sincronizado: la letra tiene que decir lo que se está escuchando."""
+    q = urllib.parse.quote(f"{track['artist']} {title}".strip())
+    data, why = _json_or(
+        f"https://music.163.com/api/search/get?s={q}&type=1&limit={NETEASE_LIMIT}",
+        timeout=NETEASE_TIMEOUT, headers=NETEASE_HEADERS)
+    if data is None:
+        return why, None
+    # el HTTP dice 200 y el "de verdad me fue mal" viene adentro del cuerpo:
+    # eso no es "este tema no tiene letra", es que no hubo respuesta útil
+    if data.get("code") != 200:
+        return "error", None
+    song_id = netease_pick((data.get("result") or {}).get("songs"), track["length"])
+    if song_id is None:
+        return "none", None
+
+    data, why = _json_or(
+        f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1",
+        timeout=NETEASE_TIMEOUT, headers=NETEASE_HEADERS)
+    if data is None:
+        return why, None
+    if data.get("code") != 200:
+        return "error", None
+    # instrumental (`pureMusic`) o id que no tiene nada cargado: `lyric` vacío
+    lines = parse_lrc((data.get("lrc") or {}).get("lyric") or "")
+    if not lines:
+        return "none", None
+    lines = [ln for ln in lines if not NETEASE_CREDIT_RE.match(ln[1])]
+    return ("ok", lines) if lines else ("none", None)
+
+
+# El orden es el de la confianza, no el de la velocidad: lrclib primero porque
+# el match exacto de artista + álbum + duración no se equivoca, y NetEase al
+# final porque su búsqueda es difusa y hay que filtrarla por duración.
+PROVIDERS = (
+    ("lrclib", lrclib_get),
+    ("lrclib", lrclib_search),
+    ("netease", netease),
+)
+
+
+def fetch_lyrics(track):
+    """Letra sincronizada, probando la cadena de proveedores con el título
+    original y después con el limpio.
+
+    Devuelve (estado, líneas, proveedor) con CUATRO estados: "ok"
+    (sincronizada), "plain" (sólo el texto sin marcas de tiempo), "none"
+    (contestaron todos y este tema no tiene letra) y "error" (alguno no
+    contestó). Mezclar "none" con "error" rompe el cache y el reintento, que
+    necesitan lo contrario uno del otro: el "no hay" se cachea y no se
+    reintenta, la caída de red se reintenta y no se cachea nunca. Por eso
+    alcanza con que UNO no llegue para que el resultado sea "error": si no,
+    un proveedor caído deja el tema marcado como instrumental por una semana.
+
+    El primer "ok" gana. "plain" es sólo el resguardo: aunque llegue primero,
+    se sigue buscando la sincronizada."""
+    titles = [track["title"]]
+    # "Song - Remastered 2011" no matchea en ningún lado pero "Song" sí; sólo
+    # vale la pena repetir la vuelta si el título limpio es de verdad otro
     clean = clean_title(track["title"])
     if clean and clean != track["title"]:
-        lines = try_search(clean)
-        if lines:
-            return "ok", lines
+        titles.append(clean)
 
-    # no hay letra sincronizada, pero lrclib a veces sólo tiene el texto
-    # plano: mejor eso que nada
-    if get_data and get_data.get("plainLyrics"):
-        return "plain", [(0.0, get_data["plainLyrics"], None)]
+    plain = None
+    unreachable = False
+    for title in titles:
+        for name, provider in PROVIDERS:
+            try:
+                status, lines = provider(track, title)
+            except Exception as e:
+                # un proveedor que revienta no puede llevarse puestos a los
+                # otros: cuenta como no haber llegado y la cadena sigue
+                log(f"lyrics provider {name} blew up ({e})")
+                status, lines = "error", None
+            if status == "ok":
+                return "ok", lines, name
+            if status == "plain" and plain is None:
+                plain = (lines, name)
+            elif status == "error":
+                unreachable = True
 
-    return ("none", None) if reached else ("error", None)
+    if plain:
+        return "plain", plain[0], plain[1]
+    return ("error", None, None) if unreachable else ("none", None, None)
 
 
 def _cache_path(track):
@@ -179,7 +293,7 @@ def _cache_path(track):
 
 
 def cache_get(track):
-    """Resultado guardado, o None si no hay / caducó.
+    """(estado, líneas, proveedor) guardado, o None si no hay / caducó.
 
     El status se guarda explícito desde T0.14: "ok" y "plain" son ambos
     `lines` con contenido, y sin el campo no se podrían distinguir al leer
@@ -191,13 +305,15 @@ def cache_get(track):
     except Exception:
         return None
     status = data.get("status") or ("ok" if data.get("lines") else "none")
+    # un cache escrito antes de T1.2 no tiene proveedor: lrclib era el único
+    provider = data.get("provider") or ("lrclib" if data.get("lines") else None)
     if status == "none":
         # el "no hay letra" caduca: lrclib suma letras con el tiempo y un tema
         # instrumental hoy puede tenerla el mes que viene
         if time.time() - data.get("at", 0) > NONE_TTL:
             return None
-        return "none", None
-    return status, [_cached_line(row) for row in data["lines"]]
+        return "none", None, provider
+    return status, [_cached_line(row) for row in data["lines"]], provider
 
 
 def _cached_line(row):
@@ -210,7 +326,7 @@ def _cached_line(row):
     return (row[0], row[1], [(t, w) for t, w in words] if words else None)
 
 
-def cache_put(track, status, lines):
+def cache_put(track, status, lines, provider):
     """Guarda "ok", "plain" y "none". Una caída de red NO se guarda: si no,
     cada tema que sonó sin internet queda marcado como sin letra."""
     if status == "error":
@@ -220,7 +336,8 @@ def cache_put(track, status, lines):
         path = _cache_path(track)
         tmp = path + ".tmp"
         with open(tmp, "w") as f:
-            json.dump({"lines": lines, "status": status, "at": int(time.time())}, f)
+            json.dump({"lines": lines, "status": status, "provider": provider,
+                       "at": int(time.time())}, f)
         os.replace(tmp, path)   # atómico: nadie lee un archivo a medio escribir
     except Exception as e:
         log(f"couldn't cache the lyrics ({e})")
@@ -256,7 +373,8 @@ def purge_cache(now):
 # sólo publica si sigue siendo el suyo, y lo chequea con el lock tomado — sin eso,
 # un hilo que pasó el chequeo justo antes del cambio pisa el tema nuevo.
 _fetch_lock = threading.Lock()
-_fetch = {"gen": 0, "id": None, "lyrics": None, "status": None, "done": False}
+_fetch = {"gen": 0, "id": None, "lyrics": None, "status": None,
+          "provider": None, "done": False}
 RETRY_DELAY = 10
 RETRY_JITTER = 0.2      # ±20%: dos temas que fallan juntos no vuelven al mismo segundo
 RETRIES = 2
@@ -284,43 +402,43 @@ def _mine(gen):
     return _fetch["gen"] == gen
 
 
-def _publish(gen, status, lines):
+def _publish(gen, status, lines, provider):
     with _fetch_lock:
         if not _mine(gen):
             return False
-        _fetch.update(lyrics=lines, status=status, done=True)
+        _fetch.update(lyrics=lines, status=status, provider=provider, done=True)
     return True
 
 
 def _work(track, gen):
     hit = cache_get(track)
     if hit:
-        status, lines = hit
-        if _publish(gen, status, lines):
-            log(f"cached lyrics: {len(lines)} lines" if lines
+        status, lines, provider = hit
+        if _publish(gen, status, lines, provider):
+            log(f"cached lyrics: {len(lines)} lines ({provider})" if lines
                 else "no synced lyrics (cached)")
         return
     for attempt in range(RETRIES + 1):
         t0 = time.monotonic()
-        status, lines = fetch_lyrics(track)
+        status, lines, provider = fetch_lyrics(track)
         ms = (time.monotonic() - t0) * 1000
-        log(f"lyrics {status} in {ms:.0f} ms (lrclib)")
+        log(f"lyrics {status} in {ms:.0f} ms ({provider or 'no provider'})")
         if status != "error":
             break
         if attempt == RETRIES:
-            log("lrclib unreachable, giving up on this track")
+            log("no lyrics provider answered, giving up on this track")
             return
         # red caída: esperar y reintentar, salvo que ya haya cambiado de tema
         delay = _retry_delay()
-        log(f"lrclib unreachable, retrying in {delay:.0f}s")
+        log(f"no lyrics provider answered, retrying in {delay:.0f}s")
         for _ in range(int(delay * 2)):
             time.sleep(0.5)
             if not _mine(gen):
                 return
-    cache_put(track, status, lines)
-    if _publish(gen, status, lines):
-        log(f"synced lyrics: {len(lines)} lines" if status == "ok"
-            else f"plain lyrics: {len(lines)} lines" if status == "plain"
+    cache_put(track, status, lines, provider)
+    if _publish(gen, status, lines, provider):
+        log(f"synced lyrics: {len(lines)} lines ({provider})" if status == "ok"
+            else f"plain lyrics: {len(lines)} lines ({provider})" if status == "plain"
             else "no synced lyrics (no dialogs)")
 
 
@@ -352,7 +470,7 @@ def fetch_lyrics_async(track):
     with _fetch_lock:
         _fetch["gen"] += 1
         gen = _fetch["gen"]
-        _fetch.update(id=track["id"], lyrics=None, status=None, done=False)
+        _fetch.update(id=track["id"], lyrics=None, status=None, provider=None, done=False)
         if _inflight >= MAX_INFLIGHT:
             _pending = (track, gen)
             return

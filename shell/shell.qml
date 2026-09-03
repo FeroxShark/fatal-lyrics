@@ -1264,6 +1264,35 @@ ShellRoot {
                         dy = Math.max(-baseY, Math.min(dy + ddy, screen.height - 60 - baseY));
                     }
 
+                    // click derecho en la titlebar: minimiza hacia la esquina de la
+                    // funda en vez de morir en el lugar. Sin burn-in: no queda
+                    // sombra quemada de algo que el usuario cerró a propósito.
+                    readonly property real minimizeDx: (root.npCorner === "center" ? (screen.width - implicitWidth) / 2
+                        : root.npCorner.indexOf("left") >= 0 ? root.npMargin
+                        : screen.width - implicitWidth - root.npMargin) - baseX
+                    readonly property real minimizeDy: (root.npCorner === "center" ? (screen.height - content.height) / 2
+                        : root.npCorner.indexOf("top") === 0 ? root.npMargin
+                        : screen.height - content.height - root.npMargin) - baseY
+
+                    function minimize() {
+                        if (dying)
+                            return;
+                        dying = true;
+                        modelData.dying = true;
+                        minimizeAnim.start();
+                    }
+
+                    SequentialAnimation {
+                        id: minimizeAnim
+                        ParallelAnimation {
+                            NumberAnimation { target: win; property: "dx"; to: win.minimizeDx; duration: 260; easing.type: Easing.InQuad }
+                            NumberAnimation { target: win; property: "dy"; to: win.minimizeDy; duration: 260; easing.type: Easing.InQuad }
+                            NumberAnimation { target: win; property: "deathScale"; to: 0.08; duration: 260; easing.type: Easing.InQuad }
+                            NumberAnimation { target: win; property: "deathOpacity"; to: 0; duration: 260; easing.type: Easing.InQuad }
+                        }
+                        ScriptAction { script: root.dismiss(win.modelData.serial) }
+                    }
+
                     anchors { left: true; top: true }
                     margins {
                         left: Math.round(Math.min(Math.max(0, win.baseX + win.dx + (win.dragHeld ? 0 : win.jx)), win.screen.width - 80))
@@ -1520,15 +1549,22 @@ ShellRoot {
 
                                     MouseArea {
                                         anchors.fill: parent
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                                         cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                         property real px: 0
                                         property real py: 0
-                                        onPressed: m => { px = m.x; py = m.y; win.dragHeld = true; }
+                                        onPressed: m => {
+                                            if (m.button === Qt.LeftButton) { px = m.x; py = m.y; win.dragHeld = true; }
+                                        }
                                         onReleased: win.dragHeld = false
                                         onCanceled: win.dragHeld = false
                                         onPositionChanged: m => {
-                                            if (pressed)
+                                            if (pressed && win.dragHeld)
                                                 win.dragBy(m.x - px, m.y - py);
+                                        }
+                                        onClicked: m => {
+                                            if (m.button === Qt.RightButton)
+                                                win.minimize();
                                         }
                                     }
 

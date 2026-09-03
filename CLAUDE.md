@@ -140,6 +140,29 @@ no-op → boot roto. No reintroducir un segundo.)
 - **El `ShaderEffectSource` del burn-in se agrega a la escena antes de que el cartel muera,
   con `opacity: 0`.** Adentro de un item `visible: false` no dibuja nada, y entonces la captura
   de `die()` sale vacía. El `visible` mira `dying || ghosting`, no sólo `ghosting`.
+- **La `phase` del evento `bpm` es la EDAD del último golpe, no su marca de tiempo.** El reloj
+  del daemon (`time.monotonic`) y el del overlay (`Date.now`) no son el mismo: un instante crudo
+  del daemon allá no significa nada. El overlay ancla con `Date.now() - phase*1000`.
+- **Los intervalos del `BpmTracker` se pliegan al rango 300–1200 ms, salvo los huecos.** Marcar
+  corcheas (250 ms) o perder un bombo (1000 ms) es el MISMO compás; pero un hueco de más de 2.4 s
+  es una pausa o la captura caída, y plegarlo daría un tempo inventado: ese se tira entero.
+- **El período se re-centra sobre su propio promedio, no se lee del bin.** Con la ventana de ±8%
+  clavada en el centro del bin, un centro corrido 10 ms recorta una de las dos colas y el promedio
+  se va detrás del recorte: 3 BPM de error medidos con jitter de ±20 ms.
+- **El pulso del compás en el overlay es un poll de 25 ms, no un `Timer` con el intervalo del
+  tiempo.** Re-anclar la fase obligaría a `restart()`earlo, y eso le rompe el binding de `running`
+  (queda prendido con el tubo apagado). Con la resta contra `lastBeatAt`, re-anclar es asignar
+  una property.
+- **Una perilla nueva son CUATRO lugares, no tres:** `DEFAULTS` + `_CONFIG_COMMENTS`
+  (`config.py`), `CONFIG_EVENT_MAP` (`ipc.py`), `_configEventMap` (`shell.qml`) y `SETTINGS`
+  (`setup.py`) — sin este último la perilla existe pero no aparece en `fatal config`.
+- **El reflejo (`mirror`) son 8 tajadas, no una imagen con degradado.** El degradado necesitaría
+  `OpacityMask` de `Qt5Compat.GraphicalEffects`, que este shell no importa en ningún lado.
+- **El cartel `kind: "hang"` muere solo sin plumbing propio:** nace con `pushDialog(..., false)`,
+  así que su `gen` queda en el `lyricGen` del momento y `lyricGen` sólo sube con un verso de
+  verdad — `shouldDie` compara esas dos cosas.
+- **El aviso `cue` sólo llega en la SEGUNDA escucha del tema** (necesita el mapa de energía
+  guardado): no se puede ver con `fatal demo` ni con un tema nuevo, sólo en el log del daemon.
 
 ## Números medidos
 

@@ -228,7 +228,10 @@ def _work(track, gen):
                 else "no synced lyrics (cached)")
         return
     for attempt in range(RETRIES + 1):
+        t0 = time.monotonic()
         status, lines = fetch_lyrics(track)
+        ms = (time.monotonic() - t0) * 1000
+        log(f"lyrics {status} in {ms:.0f} ms (lrclib)")
         if status != "error":
             break
         if attempt == RETRIES:

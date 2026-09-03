@@ -133,6 +133,13 @@ no-op → boot roto. No reintroducir un segundo.)
   que dentro de una función (`die()` llama a `deathAnim` declarado bien después, y anda). Regla
   práctica: toda animación que se dispare desde `Component.onCompleted` de `win` se declara ANTES
   de ese handler, no después.
+- **Los pedazos del modo `iown` se miden con la línea entera, no con `dur`.** La palabra viaja
+  con `crtProgress()`, que se reparte sobre toda la línea; si la ventana del chunk es `dur`
+  (los ~2 s de los otros modos) la palabra se apaga a un tercio de camino y la pared queda
+  vacía. La ventana es `Math.max(t0 + dur, line.t1)`.
+- **El `ShaderEffectSource` del burn-in se agrega a la escena antes de que el cartel muera,
+  con `opacity: 0`.** Adentro de un item `visible: false` no dibuja nada, y entonces la captura
+  de `die()` sale vacía. El `visible` mira `dying || ghosting`, no sólo `ghosting`.
 
 ## Números medidos
 

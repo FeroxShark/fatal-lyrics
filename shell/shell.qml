@@ -1516,6 +1516,21 @@ ShellRoot {
                         height: frame.implicitHeight
                         visible: !win.ghosting
 
+                        // sombra proyectada, para que el cartel no flote sobre el fondo
+                        Rectangle {
+                            id: shadow
+                            x: 4
+                            y: 4
+                            width: frame.width
+                            height: frame.height
+                            color: "#000000"
+                            opacity: 0.25 * win.deathOpacity
+                            transform: Scale {
+                                origin.y: shadow.height / 2
+                                yScale: win.deathScale
+                            }
+                        }
+
                         // marco con bevel clásico
                         Rectangle {
                             id: frame

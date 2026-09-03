@@ -1,4 +1,5 @@
 """El loop principal: sigue al player y manda cada linea al overlay."""
+import collections
 import os
 import signal
 import threading
@@ -26,7 +27,7 @@ HANG_AFTER = 30.0
 # micrófono, de cuánto se le escapa la música al mic y de cuánto grita Ferox.
 # Sale del propio cuarto — el percentil 60 de los últimos 20 segundos.
 SING_WINDOW = 1.5      # segundos de mic que se promedian para decidir
-SING_HISTORY = 20.0    # de dónde sale el umbral
+SING_HISTORY = 20.0    # de cuánto cuarto CALLADO sale el umbral
 SING_PCT = 0.6         # percentil que hace de piso del cuarto
 # Los dos multiplicadores son > 1 a propósito: el umbral ES el nivel del cuarto,
 # así que volver al nivel del cuarto tiene que apagar. Con un multiplicador de
@@ -47,6 +48,12 @@ class SingGate:
     veinte segundos. Con la voz afuera, el umbral es el cuarto (el ventilador,
     lo que se le escapa de la música al micrófono) y la voz siempre sobresale.
 
+    Por eso son 20 segundos DE CUARTO y no "los últimos 20 segundos de reloj":
+    son las últimas N muestras calladas, sin filtro por tiempo. Con el filtro por
+    reloj, un estribillo de más de veinte segundos dejaba toda la memoria vencida
+    y al primer respiro se borraba entera — el umbral se rearmaba con la voz que
+    venía enseguida y el modo no volvía a prender hasta el próximo silencio largo.
+
     La histéresis (SING_ON para prender, SING_OFF para apagar) es lo que evita
     que en el borde el estado parpadee entre verso y verso."""
 
@@ -57,14 +64,15 @@ class SingGate:
         self.pct = pct
         self.floor = floor
         self.singing = False
-        self.room = []      # (t, rms) del cuarto callado: de acá sale el umbral
+        # el cuarto se mide en MUESTRAS (llegan a 10 Hz), no en reloj: ver arriba
+        self.room = collections.deque(maxlen=max(int(history * 10), 1))
         self.recent = []    # (t, rms) de la ventana corta: con voz y todo
 
     def threshold(self):
         """El piso del cuarto ahora, o None si todavía no hay con qué medir."""
         if len(self.room) < SING_MIN_SAMPLES:
             return None
-        vals = sorted(r for _, r in self.room)
+        vals = sorted(self.room)
         i = min(int(len(vals) * self.pct), len(vals) - 1)
         return max(vals[i], self.floor)
 
@@ -77,8 +85,7 @@ class SingGate:
         self.recent.append((now, rms))
         if not self.singing:
             # el umbral se mide con el cuarto callado, no con la voz adentro
-            self.room = [(t, r) for t, r in self.room if t > now - self.history]
-            self.room.append((now, rms))
+            self.room.append(rms)
         thr = self.threshold()
         level = sum(r for _, r in self.recent) / len(self.recent)
         if thr is None:

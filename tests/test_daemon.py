@@ -597,6 +597,31 @@ class TestSingGate(unittest.TestCase):
             gate.feed(0.004, t)
         self.assertFalse(gate.singing)
 
+    def test_a_breath_in_the_middle_does_not_lose_the_room(self):
+        # la memoria del cuarto es de MUESTRAS calladas, no de reloj: con un
+        # filtro por tiempo, un estribillo de más de 20 s la deja toda vencida
+        # y el primer respiro la borra — el umbral se rearmaba con la voz que
+        # venía enseguida y el modo no volvía a prender nunca más
+        gate = daemon.SingGate()
+        t = self.quiet(gate)
+        for _ in range(300):        # 30 s cantando
+            t += 0.1
+            gate.feed(0.2, t)
+        for _ in range(20):         # dos segundos de respiro
+            t += 0.1
+            gate.feed(0.004, t)
+        self.assertFalse(gate.singing)
+        self.assertIsNotNone(gate.threshold())   # el cuarto sigue ahí
+        for _ in range(10):         # y se vuelve a cantar
+            t += 0.1
+            gate.feed(0.2, t)
+        self.assertTrue(gate.singing)
+
+    def test_the_room_only_remembers_its_own_size(self):
+        gate = daemon.SingGate()
+        self.quiet(gate, seconds=120.0)
+        self.assertEqual(len(gate.room), int(daemon.SING_HISTORY * 10))
+
     def test_a_steady_fan_never_turns_it_on(self):
         # ruido de fondo parejo y fuerte: el umbral ES ese ruido, así que no
         # puede superarse a sí mismo (por eso los dos multiplicadores son > 1)

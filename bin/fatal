@@ -148,6 +148,7 @@ stop() {
     rm -f "$LYRICS"                   # sin daemon no hay letra de la que informar
     printf '0' > "$CRT" 2>/dev/null   # que no quede el tubo prendido en el archivo
     rm -f "$CRT_SETUP"                # ni los números de pantalla de la sesión pasada
+    rm -f "$SINGF"                    # ni el timbre del karaoke
 
     echo "fatal OFF"
 }

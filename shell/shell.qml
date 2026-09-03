@@ -569,9 +569,14 @@ ShellRoot {
         if (crtIown && words.length <= 3
                 && ((line.section || "verse") === "drop"
                     || crtHash(serial * 53 + 17) < 0.10)) {
+            // La ventana del pedazo es la LÍNEA ENTERA, no el `dur` de los
+            // otros modos: la palabra viaja con crtProgress(), que se reparte
+            // sobre toda la línea. Con `dur` (dos segundos) la palabra se
+            // apagaba a un tercio de camino y la pared quedaba vacía.
+            const iownTo = Math.max(t0 + dur, line.t1 || 0);
             let chunks = [];
             for (let i = 0; i < n; i++)
-                chunks.push({ text: text, screen: i, from: t0, to: t0 + dur });
+                chunks.push({ text: text, screen: i, from: t0, to: iownTo });
             return { mode: "iown", focus: focus, chunks: chunks, chan: chan };
         }
 

@@ -283,8 +283,6 @@ no-op → boot roto. No reintroducir un segundo.)
   un item invisible no se dibuja nada y la captura sale vacía (la misma trampa que el burn-in de
   los carteles). Y lo que se va a formar se congela al arrancar la convergencia: `crtNext` cambia
   cuando cae la línea siguiente y la palabra mutaría a mitad de camino.
-- **`property real window` en un componente QML es un nombre pisado** (`Window.window`): en
-  `Static.qml` la ventana legible se llama `formMs`.
 - **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
   test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
 

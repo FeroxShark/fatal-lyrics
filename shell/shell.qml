@@ -1051,9 +1051,12 @@ ShellRoot {
     // Animación de la pantalla sin letra. Alguna palabra la elige a propósito
     // (el ojo cuando la letra habla de mirar o de silencio), el resto es sorteo.
     readonly property var motifWords: [
-        // en plural son varios: la grilla de ojos mirando a la frase
-        { re: /\b(eyes|watching|crowd|everyone|they)\b/i, kind: "eyes" },
-        { re: /\b(ojos|miran|mirando|gente|todos)\b/i, kind: "eyes" },
+        // En plural son varios: la grilla de ojos mirando a la frase. Van
+        // JUSTO estas palabras y ninguna más — "they" y "todos" están en casi
+        // toda letra, y con esas adentro la grilla salía en cada línea y el
+        // sorteo del resto de los dibujos dejaba de existir.
+        { re: /\b(eyes|watching)\b/i, kind: "eyes" },
+        { re: /\b(ojos|mirando)\b/i, kind: "eyes" },
         { re: /\b(eye|eyes|see|seen|look|watch|silence|silent|quiet|blind)\b/i, kind: "eye" },
         { re: /\b(ojo|ojos|mir[ao]|mirar|ver|silencio|callar|ciego)\b/i, kind: "eye" },
         // el mar: agua grande, hundirse, la marea

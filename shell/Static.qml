@@ -93,6 +93,9 @@ Item {
         shape = roll < 0.34 ? 0 : (roll < 0.67 && lineNo >= 0 ? 1 : 2);
         shownNo = Math.max(lineNo, 0) % 100;
         shownWord = nextWord !== "" ? nextWord.toUpperCase() : "?";
+        // la máscara se re-captura ACÁ y en ningún otro lado: es lo único que
+        // cambió. Ver el comentario de `maskSrc`.
+        maskSrc.scheduleUpdate();
         formAnim.restart();
     }
 
@@ -146,13 +149,21 @@ Item {
         }
     }
 
+    // `live: false`: la forma cambia UNA vez por compás, y con la captura viva
+    // el `Text` se re-renderiza en cada cuadro del tubo para dar exactamente la
+    // misma textura. Se re-captura a mano cuando la forma cambia (`converge`) y
+    // cuando cambia el tamaño — y una vez al nacer, porque con `live: false` no
+    // hay textura hasta la primera actualización y la máscara saldría vacía.
     ShaderEffectSource {
         id: maskSrc
         sourceItem: maskItem
         hideSource: true
-        live: true
+        live: false
         width: Math.max(snow.width, 1)
         height: Math.max(snow.height, 1)
+        onWidthChanged: scheduleUpdate()
+        onHeightChanged: scheduleUpdate()
+        Component.onCompleted: scheduleUpdate()
     }
 
     ShaderEffect {

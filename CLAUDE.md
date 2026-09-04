@@ -28,6 +28,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   letra entera del tema. Con eso el overlay calcula el reparto de la línea k+1 mientras suena la k
   y lo **consume** cuando llega: la anticipación es la verdad, no un pronóstico. De ahí salen el
   motif que huye (`foreshadow`) y el aro que cuenta (`ring`, `shell/Ring.qml`).
+- **Un salto largo se ve viajar.** Si la frase cae en una pantalla que no es la de al lado, la
+  perilla `hop` (`corridor|interference|both|off`) manda una franja de scanlines cruzando cada
+  pantalla del medio y la glitchea al pasar. El reloj del viaje (180 ms) lo publica `shell.qml`
+  UNA vez (`crtHopStart`) y cada monitor lo lee: es una sola franja atravesando la pared.
 - **En el CRT la letra no se clona.** Hay una pantalla enfocada, la frase sigue en la de al lado y
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
   (`split_repeats`) y cada golpe cae en otra pantalla. `focus = "all"` vuelve al comportamiento
@@ -190,6 +194,22 @@ no-op → boot roto. No reintroducir un segundo.)
   hace que la predicción y lo que después se ve no sean la misma cosa. Todo entra por el objeto de
   la línea. Lo único que la predicción no puede saber es la parte del tema — por eso una línea que
   cae en un drop se rehace como IOWN encima, y sólo eso.
+- **El reloj del salto es del root, no de cada pantalla.** `crtHopStart` es el `Date.now()` en que
+  arrancó, publicado una vez; cada monitor calcula su tramo contra ESE número. Con un reloj por
+  monitor la franja entra en la segunda pantalla antes de salir de la primera y deja de leerse como
+  una sola. Cancelar es asignarle 0 — lo hace `crtForget()`, así que el hotplug, la config y el
+  cambio de tema cortan el salto sin plumbing propio.
+- **La pantalla del medio corre a 20 fps** (el `Timer` del instrumental; el `FrameAnimation` de
+  `Crt.qml` sólo corre con texto o en standby). Un salto de 180 ms leído desde ahí serían cuatro
+  posiciones: el salto tiene su propio `FrameAnimation`, prendido sólo mientras dura.
+- **Los tres cuadros del glitch del salto se cuentan en CUADROS**, con un contador que baja en el
+  mismo `FrameAnimation`. Un `Timer` de 50 ms es otra cosa: en una pantalla que va lenta el color
+  separado queda puesto más de lo que dura el paso de la franja.
+- **En el QML la perilla `hop` se llama `crtHopMode`:** `crtHop` ya era el descriptor del salto de
+  la FASE 0 (`{from, to, dir}`). El mapeo es `crt_hop → crtHopMode`.
+- **`qsb` no está en el PATH** (vive en `/usr/lib/qt6/bin/qsb`). Después de recompilar, verificar
+  que los uniforms nuevos entraron: `qsb --dump shell/crt.frag.qsb | grep <nombre>`. Un uniform que
+  no está deja la property del `ShaderEffect` atada a nada, sin un solo warning.
 - **El `next` lleva también los `segs`.** El corte de las repeticiones ("take, take, take") se hace
   en el daemon: sin mandarlo, la predicción reparte la línea de una forma y la línea de verdad
   llega con otra.
@@ -235,9 +255,9 @@ no-op → boot roto. No reintroducir un segundo.)
 - README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
   (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
   en qué orden se prueban.
-- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas la FASE 0 y la FASE 1** (perillas `foreshadow` y
-  `ring`). Faltan las fases 2 a 5: saltos entre pantallas no adyacentes, entradas nuevas y director
-  por energía, ocho motifs nuevos, y el cierre de docs. Lo que hay que mirar a ojo está en
+- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0, 1 y 2** (perillas `foreshadow`,
+  `ring` y `hop`). Faltan las fases 3 a 5: entradas nuevas y director por energía, ocho motifs
+  nuevos, y el cierre de docs. Lo que hay que mirar a ojo está en
   `docs/plans/CHECKS-VISUALES.md`.
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura

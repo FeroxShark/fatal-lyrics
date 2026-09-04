@@ -158,18 +158,27 @@ Item {
     // La misma lente, chiquita y repetida: una grilla de ojos que miran todos
     // hacia la pantalla donde está la frase (y se dan vuelta cuando la frase
     // avisa que se va a otra).
-    Eyes {
+    //
+    // Por Loader y no siempre viva: la grilla son hasta quince ojos y cada ojo
+    // es un Canvas. Quince Canvas invisibles pesan lo mismo que quince Canvas
+    // visibles a la hora de existir, y la pantalla muestra otra cosa el 90 % del
+    // tiempo.
+    Loader {
         anchors.fill: parent
-        visible: motif.kind === "eyes"
-        colour: motif.colour
-        hot: motif.hot
-        level: motif.level
-        punch: motif.punch
-        surge: motif.surge
-        gaze: motif.gaze
-        kick: motif.kick
-        seed: motif.seed
-        running: motif.spinning
+        active: motif.kind === "eyes"
+        visible: active
+
+        sourceComponent: Eyes {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            punch: motif.punch
+            surge: motif.surge
+            gaze: motif.gaze
+            kick: motif.kick
+            seed: motif.seed
+            running: motif.spinning
+        }
     }
 
     // ------------------------------------------------------------ osciloscopio

@@ -30,13 +30,17 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   motif que huye (`foreshadow`) y el aro que cuenta (`ring`, `shell/Ring.qml`). Con el `next`
   viaja también el `due` — cuándo va a salir el próximo `show`, con el offset del daemon ya
   descontado — y con el `show`, el `v_end` de la línea que suena.
-- **Un salto largo se ve viajar.** Si la frase cae en una pantalla que no es la de al lado, la
-  perilla `hop` (`corridor|interference|both|off`) manda un rayo: nace como hebras estiradas de
+- **El salto de la frase se ve viajar, y ESA es la flecha.** Cuando la línea cae en otra pantalla,
+  la perilla `hop` (`corridor|interference|both|off`) manda un rayo: nace como hebras estiradas de
   la letra que se va, cruza cada pantalla del medio POR EL BORDE (arriba o abajo, alternando) y
   converge al centro de la de destino, encima de la línea que llega. Cabeza brillante y cola, y
   el color va del de la letra de origen al de la de destino a lo largo de todo el viaje. El reloj
-  (360 ms + 150 de cola) lo publica `shell.qml` UNA vez (`crtHopStart`) y cada monitor lo lee: es
-  un solo rayo atravesando la pared.
+  (360 ms + 150 de cola; 200 + 150 si es a la pantalla de al lado, que es la mitad de camino a la
+  misma velocidad) lo publica `shell.qml` UNA vez (`crtHopStart`) y cada monitor lo lee: es un
+  solo rayo atravesando la pared. **El rayo es lo que dice DÓNDE va a caer la letra** — textual
+  de Ferox: "me gusta la línea glitchada que indica 'tu ojo va a ir para acá', esa antes que un
+  timer" —, y por eso sale también en el salto de una sola pantalla (tanda 4). El aro no señala
+  nada: avisa que vuelve la voz.
 - **REGLA: una animación por pantalla.** Textual de Ferox: "no quiero que ninguna animación se
   superponga con ninguna". En cada pantalla hay UNA cosa a la vez — o el motivo, o el aro, o la
   letra con su entrada, o el instrumental. Por eso el aro apaga el motivo de su pantalla (`dim` a
@@ -305,7 +309,10 @@ no-op → boot roto. No reintroducir un segundo.)
   cambio de tema cortan el salto sin plumbing propio.
 - **El reparto del reloj del salto es 22 % origen / 56 % las del medio / 22 % destino**, y después
   quedan 150 ms de cola apagándose encima de la línea que ya entró. Por eso `hopClock` llega a
-  `1 + hopTailFrac` y no a 1.
+  `1 + hopTailFrac` y no a 1. En el salto a la de al lado no hay medio y el reparto es 45 / 55:
+  con los 22/56/22 clavados, el 56 % del reloj no lo dibujaría nadie y el rayo desaparecería a
+  mitad de camino. Los dos números salen del ROOT (`crtHopSplit0` / `crtHopSplit1`), como el
+  reloj: repartidos por pantalla se despegarían.
 - **El rayo del salto vive en `stage`, NO adentro de `camera`.** Su recorrido se mide contra los
   bordes del tubo: con el plano de la sección encima agarraría por un borde que no es el borde.
   Igual pasa por el vidrio, que es lo que importa.
@@ -332,8 +339,13 @@ no-op → boot roto. No reintroducir un segundo.)
 - **El aro sólo aparece en el hueco SIN VOZ, y eso no se puede leer del `t1`:** el `t1` que manda
   el daemon es el `t0` de la línea siguiente. El fin de la voz lo estima el daemon
   (`lyrics.voice_end`, viaja como `v_end` en el `show`): con LRC "enhanced", el último tiempo por
-  palabra más 0.45 s; sin tiempos, 0.32 s por palabra más 0.6. Con un hueco de menos de 1.7 s no
-  hay silencio y no hay aro. El que prende y apaga es `crtRingLive` en el ROOT, no un binding de
+  palabra más 0.45 s; sin tiempos, 0.32 s por palabra más 0.6. Y ese hueco tiene que pasar de
+  `crt.ring_gap` (10 s, tanda 4): el aro NO es una flecha, es el aviso de que el tema se fue a
+  instrumental. Entre verso y verso no aparece nunca, aunque la línea cambie de pantalla — dónde
+  cae la letra lo dice el rayo. OJO: el hueco es el SIN VOZ, no la distancia entre versos: con
+  una línea de cuatro palabras la voz se come ~1.9 s, así que 11 s entre `t0` son 9.1 s de
+  silencio y no llevan aro. Sin `v_end` (daemon viejo, o un driver de `docs/plans/`) el hueco no
+  se sabe y no hay aro: leerlo como largo es el aro de vuelta en cada verso. El que prende y apaga es `crtRingLive` en el ROOT, no un binding de
   `Crt.qml`: `show()` le pregunta dónde ESTABA el aro para elegir la entrada de esa pantalla, y en
   ese instante falta ~0 ms para la línea — cualquier condición sin memoria contesta "en ninguna"
   siempre. En un hueco largo aparece recién cuando faltan 8 s; antes de eso la pantalla es del
@@ -444,7 +456,16 @@ no-op → boot roto. No reintroducir un segundo.)
 - **`crtHopMs` sale de `Motion.enterMs + 40`.** `show()` publica el arranque del salto y sube el
   serial en el mismo milisegundo, así que la letra y el rayo arrancan juntos; medido en el log
   (`crt: hop land`), la cabeza converge a los 367–388 ms y la palabra termina de asentarse a los
-  320. El rayo aterriza sobre la frase ya puesta, que es el enganche.
+  320. El rayo aterriza sobre la frase ya puesta, que es el enganche. El salto de una pantalla
+  dura la MITAD (`Motion.enterMs / 2 + 40`, medido 202–228 ms): recorre la mitad del camino, y
+  con la misma duración iría a media velocidad y no se leería como el mismo objeto. Ahí aterriza
+  con la palabra todavía asentándose, pero a los 200 ms la `OutExpo` de la entrada ya recorrió el
+  99 %.
+- **`hopAnchors()` se mapea contra `stage`, no contra `crt`.** `crt` es el `PanelWindow`, no un
+  Item: `mapToItem(crt, …)` tira "Could not convert argument 0 … to const QQuickItem*" y devuelve
+  undefined, así que las hebras del rayo salían siempre del fallback centrado — el efecto que la
+  tanda 3 quería sacar, con el warning tapado porque el salto largo era raro. Y va con
+  `Qt.point()`: la forma de tres argumentos también falla.
 - **La cámara NUNCA se aleja por debajo de 1, y por eso no hay overscan** (tanda 4). Los cuatro
   factores del `Scale` de `camera` (`camZoom`, `cueZoom`, el latido y el plano de la sección) valen
   1 o más, así que un dibujo del tamaño del stage no puede dejar un marco de fondo plano alrededor.

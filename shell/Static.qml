@@ -144,7 +144,7 @@ Item {
             // el 0.38 es de la PANTALLA, no de la caja: el item viene
             // agrandado por el overscan de la cámara (T3.A1)
             font.pixelSize: Math.round(Math.min(parent.width, parent.height)
-                * 0.38 / snow.overscan)
+                * 0.38 / (snow.overscan > 0 ? snow.overscan : 1))
             font.bold: true
             // sin achicarse, una palabra larga se sale de la pantalla y la
             // máscara queda cortada por los dos costados

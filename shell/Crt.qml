@@ -854,7 +854,10 @@ PanelWindow {
         ? Math.max(1 - 0.18 * cam, 0.2) : 1
     // el 1.02 es el margen del redondeo a píxeles enteros; el techo de 3 es
     // para que una perilla `camera` disparatada no pida una textura enorme
-    readonly property real overscan: Math.min(1.02 / camZoomMin, 3)
+    // el `> 0` no es paranoia: el valor viaja a un `font.pixelSize`, que es un
+    // int, y un NaN o un infinito ahí es un warning por pantalla al arrancar
+    readonly property real overscan: camZoomMin > 0
+        ? Math.min(1.02 / camZoomMin, 3) : 1
 
     Item {
         id: stage

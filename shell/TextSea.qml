@@ -40,8 +40,9 @@ Item {
     // mide contra la PANTALLA, no contra la caja: si no, la marea de texto
     // sale un 22 % más grande que el resto de la pared.
     property real overscan: 1
-    readonly property real lineH: Math.max(2, Math.round(height * 0.032 / overscan))
-    readonly property real fontPx: Math.max(1, Math.round(height * 0.020 / overscan))
+    readonly property real _os: overscan > 0 ? overscan : 1
+    readonly property real lineH: Math.max(2, Math.round(height * 0.032 / _os))
+    readonly property real fontPx: Math.max(1, Math.round(height * 0.020 / _os))
 
     // Tope: una letra de doscientas líneas son doscientos bindings por cuadro y
     // nadie ve más allá de la pantalla. Se recorta alrededor del verso que

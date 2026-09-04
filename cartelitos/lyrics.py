@@ -695,8 +695,11 @@ def voice_end(t0, text, words=None, next_t0=None):
         n = len((text or "").split())
         end = t0 + VOICE_PER_WORD * n + VOICE_TAIL_BLIND
     if next_t0 is not None:
-        end = min(end, next_t0 - VOICE_MIN_GAP)
-    # nunca antes de que la línea empiece: con un hueco corto el recorte de
-    # arriba puede caer detrás de `t0`, y una voz que termina antes de empezar
-    # haría aparecer el aro debajo de la frase que se está cantando
+        room = next_t0 - VOICE_MIN_GAP
+        # Con un hueco de menos de 1.7 s no hay silencio en el que quepa un
+        # aro: el recorte caería detrás de `t0` y una voz que termina antes de
+        # empezar pondría el aro debajo de la frase que se está cantando —
+        # exactamente lo que se estaba arreglando. Ahí la voz se estira hasta la
+        # línea que sigue, que es lo que además se escucha.
+        end = min(end, room) if room > t0 else next_t0
     return round(max(end, t0), 2)

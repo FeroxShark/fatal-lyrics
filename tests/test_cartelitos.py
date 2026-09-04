@@ -231,11 +231,12 @@ class TestVoiceEnd(unittest.TestCase):
                              None, 12.0)
         self.assertAlmostEqual(v, 10.3, places=2)
 
-    def test_it_never_lands_before_the_line_starts(self):
-        # hueco cortísimo: el recorte caería detrás de t0, y una voz que
-        # termina antes de empezar pondría el aro debajo de la frase
+    def test_a_gap_too_short_for_a_ring_has_no_silence_at_all(self):
+        # hueco de medio segundo: el recorte caería detrás de t0, y una voz que
+        # termina antes de empezar pondría el aro debajo de la frase. La voz
+        # llega hasta la línea siguiente y no hay aro.
         v = lyrics.voice_end(10.0, "one two", None, 10.5)
-        self.assertEqual(v, 10.0)
+        self.assertEqual(v, 10.5)
 
     def test_the_last_line_of_the_song_has_no_clamp(self):
         v = lyrics.voice_end(10.0, "one two", None, None)

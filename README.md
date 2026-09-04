@@ -195,17 +195,31 @@ What the tube does:
   shader (`shell/ocean.frag`, `shell/pond.frag`): a few hundred QML rectangles
   with per-frame bindings on a 200 Hz screen is hundreds of thousands of
   evaluations a second, and this costs about 1% of a core.
-- **Animations where the lyric isn't** — six more, meant to look like
-  something a machine of that era would put on a tube rather than a music
-  visualiser bolted on top: a wireframe **eye** that opens and blinks with its
-  iris breathing, a **scope** tracing a Lissajous figure that twists with the
-  bass and treble, a **radar** sweep with echoes that light on the beat, a
-  **rain** of characters, a **hyperspace** of streaks, and a **test card** with
-  its hand going round. They change with the *part* of the song, not with every
+- **Animations where the lyric isn't** — sixteen in total (with the two water
+  ones above), meant to look like something a machine of that era would put on
+  a tube rather than a music visualiser bolted on top: a wireframe **eye** that
+  opens and blinks with its iris breathing, a **scope** tracing a Lissajous
+  figure that closes into a stable shape when the tempo is known and stays open
+  and restless otherwise, a **radar** sweep with echoes that light on the beat,
+  a **rain** of characters, a **hyperspace** of streaks that rushes into warp on
+  a drop, and a **test card** with its hand going round. Eight more read the
+  song rather than the beat clock: a **desert of dunes** seen low, the camera
+  drifting somewhere new each time, where footsteps raise sand on a beat and a
+  drop lifts the whole dune to float and shiver; **static** that once a bar
+  converges for an instant into a circle, a number, or the first word of the
+  *next* line, then dissolves back to noise; the **whole lyric** scrolling up
+  like credits with the sung line lit; a **grid of eyes** all looking at the
+  screen with the lyric, turning together toward wherever the next line is
+  about to land; an **EKG** that writes a heartbeat on every quantized beat and
+  goes flat with a blinking cursor in silence; a **Rorschach blot** that grows
+  and darkens with the volume and splashes on a beat; a **lava lamp** of
+  metaballs the bass pushes upward; and a **tunnel** that rushes faster the
+  louder it gets. They change with the *part* of the song, not with every
   line — otherwise the side screens flick between drawings every two seconds and
   read as a nervous screensaver. Two screens never run the same one, the quiet
-  parts pick the calm ones, and words like *eye*, *look*, *silence* (English or
-  Spanish) pull the eye up on purpose, on **one** screen, not all of them.
+  parts pick the calm ones, and words like *eye*, *look*, *silence*, *sand*,
+  *static*, *heart*, *stars* or *tunnel* (English or Spanish) pull up the
+  matching one on purpose, on **one** screen, not all of them.
 - **Karaoke built in**: words light up as they're sung and stay dim before.
 - **Console readouts**: REC dot, channel and phosphor, timecode, track, a
   block progress bar and framing brackets. Turn them off with `chrome = false`.
@@ -292,7 +306,8 @@ no capture, no textures, no timers. `quality` trades resolution for load, and
 - `python3` ≥ 3.11 (stdlib only)
 - Spotify (or any MPRIS player — configurable)
 
-Lyrics come from [lrclib.net](https://lrclib.net) (free, no API key).
+Lyrics come from [lrclib.net](https://lrclib.net) (free, no API key), falling
+back to NetEase (`music.163.com`) when lrclib has nothing for the track.
 
 ## Installation
 
@@ -368,14 +383,20 @@ runs exactly the same, just without an icon.
 
 ## Lyrics
 
-Synced lyrics come from [lrclib.net](https://lrclib.net). Results are cached
-under `~/.cache/cartelitos/lyrics/`, keyed by artist, title, album and
-duration — so replaying a song is instant and costs lrclib nothing, and songs
-you've already heard still work with no connection.
+Synced lyrics come from a chain of two providers, tried in order:
+[lrclib.net](https://lrclib.net) first (exact match, then a search), and
+NetEase (`music.163.com`) if lrclib has nothing — both tried with the
+original title and then a cleaned-up one, and the first `ok` wins. NetEase's
+LRC is filtered for its credits lines (`作词`/`作曲`/`制作人`) and matched by
+track duration (±3s), since its search is fuzzy enough to return unrelated
+songs. Results are cached under `~/.cache/cartelitos/lyrics/`, keyed by
+artist, title, album and duration — so replaying a song is instant and costs
+neither provider anything, and songs you've already heard still work with no
+connection.
 
-"This track has no synced lyrics" is cached too, but only for a week: lrclib
-gains lyrics over time. A failure to *reach* lrclib is never cached, and is
-retried a couple of times instead — otherwise every song played during a
+"This track has no synced lyrics" is cached too, but only for a week: a
+provider gains lyrics over time. A failure to *reach* a provider is never
+cached, and is retried instead — otherwise every song played during a
 dropout would be remembered as having no lyrics.
 
 ## Development
@@ -436,10 +457,14 @@ because there is nothing to install.
 | `crt`      | `alarm_threshold`    | How rare the full-red "critical" screen is (rolled against a peak); higher = rarer, `1.0` = never | `0.87` |
 | `crt`      | `channel_switch`     | Chance a line lands like a channel being changed: static, a red frame, then the words (the first line of a track always does) | `0.25` |
 | `crt`      | `iown`               | On a drop, a one-word line crosses the whole wall as one giant word travelling right to left | `true` |
+| `crt`      | `foreshadow`         | The screen the NEXT line will land on gives it away: it speeds up and takes the focus colour before the line arrives | `true` |
+| `crt`      | `ring`               | A ring counts the next line down on the screen it will land on, stepping with the beat and collapsing to a dot right where the line appears | `true` |
+| `crt`      | `hop`                | How a jump to a non-adjacent screen is shown: `corridor` (a band of scanlines sweeps the screens between), `interference` (each one glitches as it passes), `both`, or `off` | `"both"` |
 | `crt`      | `motifs`             | Animations on the screens without lyric                         | `true`      |
 | `crt`      | `water`              | The two water animations (the sea, and the pond that shivers with the song) take their turn | `true` |
 | `crt`      | `water_amp`          | How much the water moves (`0` = a flat field of points)         | `0.55`      |
 | `crt`      | `camera`             | How much the framing moves (letterbox, zoom); `0` = still       | `1.0`       |
+| `crt`      | `section_zoom`       | The camera also follows the part of the song: it stands back in a verse and pushes in on a drop; rides on `camera`, so `camera = 0` disables it too | `true` |
 | `crt`      | `quality`            | Resolution the tube is drawn at before the CRT pass (`1.0` = native) | `1.0`   |
 | `crt`      | `palette`            | Where the two colours come from: `album` (the cover) / `auto` (by register) / `dragons` / `ado` / `poison` / `bloodline` / `vapor` / `bone` | `"album"` |
 | `crt`      | `split`              | Line across screens: `mixed` / `whole` / `fragment`                 | `"mixed"`   |
@@ -466,7 +491,8 @@ exists for a quick read without opening it.
 ```
 Spotify ──playerctl (MPRIS)──▶ cartelitos.py ──Unix socket──▶ Quickshell overlay
                                     │
-                                    └──HTTP──▶ lrclib.net (synced LRC lyrics)
+                                    ├──HTTP──▶ lrclib.net (synced LRC lyrics)
+                                    └──HTTP──▶ music.163.com / NetEase (fallback)
 ```
 
 The daemon polls playback position, resolves which line applies, and sends

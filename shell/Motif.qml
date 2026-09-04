@@ -18,7 +18,7 @@ Item {
     id: motif
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
-    // | static | textsea | eyes | ekg | rorschach | none
+    // | static | textsea | eyes | ekg | rorschach | plasma | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -553,6 +553,28 @@ Item {
             seed: motif.seed
             energy: motif.energy
             kick: motif.kick
+            running: motif.spinning
+        }
+    }
+
+    // ---------------------------------------------------------------- plasma
+    // La lámpara de lava: bolas de campo que se funden entre sí
+    // (`plasma.frag`). Los graves las empujan para arriba y el golpe del tubo
+    // les hace temblar la superficie.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "plasma"
+        visible: active
+
+        sourceComponent: Plasma {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            low: motif.low
+            surge: motif.surge
+            energy: motif.energy
+            seed: motif.seed
+            quality: motif.quality
             running: motif.spinning
         }
     }

@@ -1095,7 +1095,7 @@ ShellRoot {
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
                                        "rain", "ocean", "pond", "dunes", "static",
                                        "textsea", "eyes", "ekg",
-                                       "rorschach"]
+                                       "rorschach", "plasma"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca

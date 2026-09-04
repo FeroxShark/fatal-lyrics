@@ -100,12 +100,16 @@ Item {
     }
 
     // El aviso de a dónde salta la frase (T2.1) apaga un poco las pantallas que
-    // NO son el destino. Va como factor aparte y no pisando `opacity` desde
-    // afuera: asignarle un binding nuevo desde Crt.qml se llevaría puesto el
-    // acompañamiento del golpe (`surge`), que es lo que hace que la pared
-    // entera pegue junta.
+    // NO son el destino, y el aro (T3.A5) las apaga del todo: por pantalla se
+    // ve UNA animación, nunca el aro contando encima de un dibujo. Va como
+    // factor aparte y no pisando `opacity` desde afuera: asignarle un binding
+    // nuevo desde Crt.qml se llevaría puesto el acompañamiento del golpe
+    // (`surge`), que es lo que hace que la pared entera pegue junta.
+    //
+    // Los 220 ms son los del apagado del aro: más largo y el aro cuenta un
+    // tiempo entero con el motivo todavía visible debajo.
     property real dim: 1
-    Behavior on dim { NumberAnimation { duration: 380; easing.type: Easing.OutQuad } }
+    Behavior on dim { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
 
     opacity: Math.min(0.62 + 0.30 * surge, 1) * dim
 

@@ -1296,7 +1296,12 @@ PanelWindow {
                     energy: crt.ctl.sectionEnergy
                         * (crt.foreTarget ? 1 + 0.6 * crt.foreRamp : 1)
                         * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
-                    dim: crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1
+                    // A5: con el aro contando en esta pantalla el motivo se
+                    // apaga entero. Dos animaciones a la vez en la misma
+                    // pantalla no se leen como una cosa esperando la frase:
+                    // se leen como ruido encima de un dibujo.
+                    dim: crt.ringShows ? 0
+                        : (crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1)
                     waterAmp: crt.ctl.crtWaterAmp
                     // la semilla de esta aparición: el reloj de los motivos cruzado
                     // con el número de pantalla, así dos pantallas con el mismo

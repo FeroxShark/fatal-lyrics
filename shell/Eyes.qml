@@ -32,8 +32,7 @@ Item {
     property real seed: 0
     property bool drop: false
     property bool running: true
-    // el lado corto SIN el overscan: el ojo grande tiene que medir lo mismo que
-    // medía antes de que el motivo se dibujara para el zoom más lejano
+    // el lado corto de la pantalla: la medida del ojo grande
     property real span: Math.min(width, height)
 
     readonly property bool tall: height > width
@@ -76,9 +75,13 @@ Item {
             id: slot
             required property int index
 
+            // T4.1: los lugares dejan el 4 % de aire contra el borde. Con
+            // 0.09 / 0.91 el ojo chico quedaba a 43 px del canto en una
+            // pantalla de 1920 — no cortado, pero pegado, que es la mitad de
+            // la sensación de "se sale de la pantalla".
             readonly property var spot: wall.tall
-                ? [[0.30, 0.11], [0.70, 0.89], [0.16, 0.63]][index]
-                : [[0.09, 0.28], [0.91, 0.72], [0.50, 0.11]][index]
+                ? [[0.30, 0.13], [0.70, 0.87], [0.19, 0.63]][index]
+                : [[0.13, 0.28], [0.87, 0.72], [0.50, 0.13]][index]
             readonly property int period: [2300, 3100, 4300][index]
 
             x: wall.width * spot[0] - width / 2

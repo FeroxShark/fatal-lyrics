@@ -77,7 +77,7 @@ CONFIG_EVENT_MAP = (
     ("crt_hop", "crt", "hop"),
     ("crt_motifs", "crt", "motifs"),
     ("crt_water", "crt", "water"), ("crt_water_amp", "crt", "water_amp"),
-    ("crt_camera", "crt", "camera"), ("crt_quality", "crt", "quality"),
+    ("crt_camera", "crt", "camera"), ("crt_section_zoom", "crt", "section_zoom"), ("crt_quality", "crt", "quality"),
     ("crt_flicker", "crt", "flicker"), ("crt_word_flash", "crt", "word_flash"),
     ("crt_font", "crt", "font"), ("crt_chrome", "crt", "chrome"),
     ("crt_intensity", "crt", "intensity"), ("crt_curvature", "crt", "curvature"),

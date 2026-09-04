@@ -152,6 +152,11 @@ _CONFIG_COMMENTS = {
                  "turn like every other animation; false = leave them out",
         "water_amp": "how much the water moves (0 = a flat field of points)",
         "camera": "how much the framing moves (letterbox, zoom); 0 = still",
+        "section_zoom": "the camera also follows the PART of the song: it stands\n"
+                        "back in a verse (the line reads smaller, more empty\n"
+                        "tube around it) and pushes in on a drop, where the\n"
+                        "line fills the screen. It rides on `camera`, so with\n"
+                        "camera = 0 nothing moves here either",
         "quality": "resolution the tube is drawn at, before the CRT pass (1.0 =\n"
                    "native). Lower it on a weaker GPU: the glass, the bloom and\n"
                    "the phosphor grid hide most of the difference",
@@ -270,7 +275,8 @@ DEFAULTS = {
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.25,
         "iown": True, "foreshadow": True, "ring": True, "hop": "both",
         "motifs": True,
-        "water": True, "water_amp": 0.55, "camera": 1.0, "quality": 1.0,
+        "water": True, "water_amp": 0.55, "camera": 1.0, "section_zoom": True,
+        "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,

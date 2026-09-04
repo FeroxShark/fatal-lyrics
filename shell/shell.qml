@@ -110,6 +110,10 @@ ShellRoot {
     property real crtAlarmThreshold: 0.87
     property bool crtMotifs: true
     property real crtCamera: 1.0
+    // T3.4: la cámara sigue también la PARTE del tema (lejos en la estrofa,
+    // encima en el drop). Cuelga de `camera`: con la cámara quieta esto
+    // tampoco se mueve.
+    property bool crtSectionZoom: true
     property real crtQuality: 1.0
     property real crtFlicker: 0.25
     // La perilla mueve el brillo al CUADRADO: medido, la respuesta lineal daba
@@ -1494,7 +1498,8 @@ ShellRoot {
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
         crt_hop: "crtHopMode",
-        crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
+        crt_motifs: "crtMotifs", crt_camera: "crtCamera",
+        crt_section_zoom: "crtSectionZoom", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",
     })

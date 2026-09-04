@@ -235,6 +235,9 @@ SETTINGS = [
      lambda c: _ask_num("Resolution the tube is drawn at (1.0 = native)", c, 0.4, 1.0)),
     ("camera", "crt", "Framing movement",
      lambda c: _ask_num("How much the framing moves (0 = still)", c, 0.0, 2.0)),
+    ("section_zoom", "crt", "Camera follows the part of the song",
+     lambda c: _pick("The camera stands back in a verse and pushes in on a drop",
+                     YESNO, c)),
     ("exit_on", "crt", "How you get out", lambda c: _pick(
         "How you get out of the tube", [
             ("mouse: cursor hidden, click or wheel returns", "mouse"),

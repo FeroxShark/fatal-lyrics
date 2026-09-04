@@ -472,9 +472,18 @@ PanelWindow {
                 return;
             cueRelease.stop();
             cueAnim.duration = Math.round(Math.max(crt.ctl.cueIn * 1000, 400));
+            // el mismo acercamiento, un poco más largo cuando lo que viene es
+            // el drop que el zoom por sección va a abrir: la anticipación es
+            // ÉSTA, no una rampa nueva al lado
+            cueAnim.to = crt.sectionZoomOn && crt.ctl.audComing === "drop"
+                ? 1.09 : 1.055;
             cueAnim.restart();
         }
         function onSectionGenChanged() {
+            // el drop se abre con un golpe, haya habido aviso o no: el plano
+            // nuevo entra en 350 ms y sin la patada se lee como un tween
+            if (crt.sectionZoomOn && crt.ctl.audSection === "drop")
+                crt.hit(1);
             // llegó el golpe: se suelta el acercamiento y se rompe la pantalla
             if (crt.cueZoom <= 1.001)
                 return;
@@ -762,6 +771,20 @@ PanelWindow {
         ? 0.030 + 0.022 * pump * ctl.crtFlicker : 0.004)
     Behavior on camZoom { NumberAnimation { duration: 520; easing.type: Easing.OutCubic } }
 
+    // T3.4: y la cámara sigue la PARTE del tema. En la estrofa se va atrás — la
+    // línea queda al 85 % y sobra tubo alrededor, que es el aire que después se
+    // cobra el drop, donde entra al 130 %. Es el mismo encuadre de arriba, otro
+    // plano: por eso multiplica a `cam` en vez de tener perilla de cantidad.
+    // El aviso del golpe (cueZoom) ya es la anticipación; acá no hay una
+    // segunda rampa, sólo el plano sostenido de la sección.
+    readonly property bool sectionZoomOn: ctl.crtSectionZoom && cam > 0.01
+    property real sectionZoom: !sectionZoomOn ? 1
+        : ctl.audSection === "drop" ? 1 + 0.30 * cam
+        : ctl.audSection === "build" ? 1 + 0.06 * cam
+        : ctl.audSection === "quiet" ? 1 - 0.18 * cam
+        : 1 - 0.15 * cam
+    Behavior on sectionZoom { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+
     Item {
         id: stage
         anchors.fill: parent
@@ -854,10 +877,12 @@ PanelWindow {
                 Scale {
                     origin.x: camera.width / 2
                     origin.y: camera.height / 2
-                    xScale: crt.camZoom * crt.cueZoom * (1 + 0.035 * crt.beatPulse
-                                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
-                    yScale: crt.camZoom * crt.cueZoom * (1 + 0.035 * crt.beatPulse
-                                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
+                    xScale: crt.camZoom * crt.cueZoom * crt.sectionZoom
+                        * (1 + 0.035 * crt.beatPulse
+                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
+                    yScale: crt.camZoom * crt.cueZoom * crt.sectionZoom
+                        * (1 + 0.035 * crt.beatPulse
+                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
                 },
                 // el colapso del apagado: va aparte del encuadre para no pisarle
                 // el binding a la cámara mientras el tubo se muere

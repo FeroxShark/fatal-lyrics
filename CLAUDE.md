@@ -335,13 +335,11 @@ no-op → boot roto. No reintroducir un segundo.)
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
-- README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
-  (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
-  en qué orden se prueban.
-- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0 a 4. Falta SÓLO la FASE 5**
-  (cierre de docs: README con las perillas nuevas y los dos proveedores de letra, y escribir
-  `docs/plans/2026-09-03-estado-tras-tanda2.md`). Lo que hay que mirar a ojo está en
-  `docs/plans/CHECKS-VISUALES.md`, y de la FASE 4 no lo vio nadie todavía.
+- **El plan `docs/plans/2026-09-03-crt-tanda2.md` quedó COMPLETO** (FASE 0 a FASE 5): foco
+  anticipado, aviso de destino (`foreshadow`/`ring`), saltos entre pantallas (`hop`), entradas
+  nuevas + director por energía, y ocho motifs nuevos. Estado y mapa actualizado en
+  `docs/plans/2026-09-03-estado-tras-tanda2.md`; lo que falta mirar a ojo está en
+  `docs/plans/CHECKS-VISUALES.md` (nadie lo vio prendido con música todavía).
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
   del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral

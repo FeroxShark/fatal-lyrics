@@ -42,6 +42,24 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   letra con su entrada, o el instrumental. Por eso el aro apaga el motivo de su pantalla (`dim` a
   0 en 220 ms) en vez de contar encima de él. La única excepción es el rayo del salto, y sólo
   porque va por el BORDE de la pantalla del medio: no pasa por encima de nada.
+- **REGLA: hay UN lenguaje de movimiento, y vive en `shell/Motion.qml`.** Todo lo que entra
+  entra igual — snap `OutExpo` con asentamiento visible (`enterMs`, 320 ms; `enterFastMs` para
+  lo que entra encima de algo que ya está pasando) —, todo lo que se va se va rápido (`exitMs`,
+  140, `InQuad`), la cámara se mueve una vez y se queda quieta (`cameraMs`), y el glitch es un
+  PUENTE de dos o tres cuadros entre escena y escena (`bridgeMs`), nunca un efecto que dura. Un
+  `Behavior` que quiera otra duración tiene que justificar por qué su movimiento no es ninguno
+  de ésos. Sale del video que pasó Ferox
+  (`docs/plans/2026-09-04-fluidez-referencia.md`): lo fluido no es tener más cuadros, es que
+  todo se mueva con la misma gramática, con holds largos entre evento y evento y una deriva de
+  velocidad uniforme por debajo que nunca para.
+- **REGLA: los eventos tienen PRESUPUESTO, y es la perilla `pace`** (`calm | normal | wild`,
+  default `normal`, tabla `crtPaceTable` en `shell.qml`). No es una velocidad: nada se mueve más
+  despacio. Es cuántas cosas tienen permiso de pasar por minuto — cuánto dura el dibujo de una
+  pantalla antes de poder cambiar (12 s), cada cuánto la pared puede cambiar de canal (20 s),
+  cada cuánto una pantalla puede romperse (4 s), y qué tan grande es el latido de la cámara y
+  del motivo. `wild` devuelve exactamente los números de la tanda 3. Un número de amplitud o de
+  frecuencia nuevo va a la TABLA: repartido en ternarios por los archivos, `wild` deja de ser
+  verificable.
 - **Una pantalla sin letra no dibuja cualquier cosa: dibuja algo del tema.** Los motivos de la
   tanda 2 leen lo que el tubo ya sabe — `dunes` es el único paisaje (el paisaje está quieto y lo
   que se mueve es la cámara, re-sembrada en cada aparición), `static` forma una vez por compás la
@@ -99,8 +117,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
-  `enterFastMs`, `exitMs`, `cameraMs`, `dimMs`, `holdMs`, `bridgeMs`). El aro ya las usa; el resto
-  de las animaciones migra en la corrida 3 de la tanda 4.
+  `enterFastMs`, `exitMs`, `cameraMs`, `dimMs`, `levelMs`, `holdMs`, `bridgeMs`). Las usan el
+  aro, las entradas del verso, el puente entre dibujos, el rayo del salto y los nueve motivos.
+- `crtPaceTable` + `pace` (`shell.qml`) — el presupuesto de eventos de la perilla `pace`, en
+  una tabla sola. `crtMotifKinds` / `crtMotifSince` / `crtMotifSeeds` + `crtMotifRefresh()` —
+  qué dibuja cada pantalla, desde cuándo y con qué semilla.
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
@@ -384,9 +405,41 @@ no-op → boot roto. No reintroducir un segundo.)
   tanda 4 ese plano DESCANSA EN 1 y sólo el drop lo empuja un momento (`sectionKick`): un zoom
   sostenido por sección es lo que Ferox leyó como "está todo agrandado por default".
 - **Un motivo no puede sacar el "drop" de `energy`.** Lo que le llega a `Motif` ya viene
-  multiplicado por el aviso del salto (×1.6 en la pantalla destino al final de CADA verso): un
+  multiplicado por el aviso del salto (×1.25 en la pantalla destino, y sólo en los versos que
+  cambian de foco con más de 2 s por delante; era ×1.6 en CADA verso hasta la tanda 4): un
   umbral ahí levanta la arena de `dunes` en cualquier estrofa. El drop viaja como booleano
   propio (`crt.ctl.audSection === "drop"`).
+- **El dibujo de una pantalla es ESTADO, no una función pura.** Hasta la tanda 4 `crtMotifFor`
+  se re-evaluaba sola por cinco caminos (el reloj de 25 s, cada `sec`, cada `cue`, la palabra
+  clave de cada línea y cualquier cambio del pool, que movía `pick % pool.length` en las TRES
+  pantallas juntas): 89 cambios de dibujo en 90 s, uno por verso y por pantalla. Ahora
+  `crtMotifRefresh()` reparte sólo lo que venció el hold, excluyendo los kinds vigentes en las
+  otras (que es cómo sobrevive la invariante de que dos pantallas apagadas nunca muestran lo
+  mismo). Sólo el tema nuevo y el drop reparten todo junto.
+- **La semilla del motivo se siembra al ASIGNARLO, no con `motifGen`.** Con el hold puesto, ese
+  reloj sigue corriendo debajo de un dibujo que se queda, y el paisaje de `dunes` se re-sembraba
+  solo cada 25 segundos — que es exactamente "cambia sin razón".
+- **El puente entre dos dibujos NO va por `dim`.** `dim` tiene un `Behavior` de 220 ms, así que
+  el cambio de `kind` caería con el dibujo viejo todavía a media luz. Va por `swap`, una property
+  sin `Behavior`: lo que se ve es exactamente la curva que manda `Crt.qml`.
+- **El portero del cambio de canal está en el CONSUMO, no en el sorteo.** El sorteo vive en
+  `crtShotFor`, que no puede leer nada vivo (se evalúa sobre una línea que todavía no llegó y
+  tiene que dar lo mismo cuando llega). El "no dos veces en menos de 20 s" lo pone `show()`
+  (`crtChanFire`), que es lo único que sabe cuánto hace. El cambio de PARTE también lo dispara:
+  ahí el glitch es el puente.
+- **`resetFaces()` en el pico tiene que mirar `color_hold`.** El comentario decía "un par de
+  veces por canción" desde la tanda 2, pero el pico no tenía portero ninguno: con un pico cada
+  12 s la pared se daba vuelta entera cinco veces por minuto.
+- **El rayo del salto NO toca la pantalla del medio** (tanda 4, al revés de la 3). Le pegaba un
+  `hit(0.25)` y la crominancia por 4 al pasar por su borde, y eso es lo que Ferox veía como "el
+  rayo pasa por encima de las animaciones" — el rayo va por el borde justamente para no tocar
+  ese motif. El modo `hop = interference` no desapareció: pasó a ser el remate de la LLEGADA
+  (120 ms de crominancia cuando la cabeza converge, encima de la letra que entra), y por eso va
+  sin `hit()`: es el mismo evento, no uno nuevo.
+- **`crtHopMs` sale de `Motion.enterMs + 40`.** `show()` publica el arranque del salto y sube el
+  serial en el mismo milisegundo, así que la letra y el rayo arrancan juntos; medido en el log
+  (`crt: hop land`), la cabeza converge a los 367–388 ms y la palabra termina de asentarse a los
+  320. El rayo aterriza sobre la frase ya puesta, que es el enganche.
 - **La cámara NUNCA se aleja por debajo de 1, y por eso no hay overscan** (tanda 4). Los cuatro
   factores del `Scale` de `camera` (`camZoom`, `cueZoom`, el latido y el plano de la sección) valen
   1 o más, así que un dibujo del tamaño del stage no puede dejar un marco de fondo plano alrededor.
@@ -470,6 +523,12 @@ no-op → boot roto. No reintroducir un segundo.)
 
 ## Números medidos
 
+- **El presupuesto de eventos, medido con `docs/plans/pace-count.py`** (tema falso de 90 s, un
+  verso cada 3 s, tres pantallas, secciones cada 13 s, un pico cada 12 s). Antes de la corrida 3
+  de la tanda 4: **89** cambios de dibujo (30 por pantalla: uno por verso), **55** roturas,
+  **2** cambios de canal, con el color de la pared dándose vuelta en cada pico. Después, en
+  `normal`: **14 cambios de dibujo en 60 s** (uno cada 12.8 s por pantalla) y el resto contra los
+  porteros de la tabla. `wild` devuelve los números de antes.
 - La corrida 2 de la tanda 3 NO subió el costo: con un aparejo fijo (motivos forzados por la
   letra, un verso cada 2 s, ocho muestras de 8 s) el overlay pasó de **41 %** de un core a
   **35 %**. Baja sobre todo porque la grilla de ojos eran quince Canvas y ahora son cuatro; lo
@@ -498,6 +557,11 @@ no-op → boot roto. No reintroducir un segundo.)
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
+- **CPU del overlay: falta re-medir en silencio.** El baseline de la corrida 3 de la tanda 4
+  (31.6 % de un core, ocho muestras) se tomó con el player en pausa; cuando estuvo el techo de
+  cuadros de los motivos ya había música sonando, y el A/B en esas condiciones (wild 42 % /
+  normal 52 %, con muestras de 29 a 68 %) es ruido. `docs/plans/cpu-bench.py`, con Spotify
+  parado.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
 - **La tanda 3 quedó COMPLETA** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): la corrida 1

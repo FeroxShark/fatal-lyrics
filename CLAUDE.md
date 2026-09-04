@@ -57,7 +57,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `config.py` porque la escribe el propio daemon, no Ferox a mano.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 432 tests, stdlib puro.
+- `tests/` — 433 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

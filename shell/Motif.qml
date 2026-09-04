@@ -385,12 +385,32 @@ Item {
     }
 
     // ------------------------------------------------------------ hiperespacio
-    // Puntos que salen del centro y se estiran: profundidad, y acelera con el
-    // volumen. Todo rectángulos movidos por bindings, cero dibujo.
+    // Puntos que salen del centro y se estiran. En el drop el salto: aceleran,
+    // la estela se alarga y vira al color caliente; en la calma casi se paran y
+    // el cielo queda quieto.
+    //
+    // La distancia se ACUMULA cuadro a cuadro y no sale de multiplicar el reloj
+    // por la velocidad: el reloj vale miles de segundos, así que cualquier
+    // cambio de velocidad (y el drop es el más grande de todos) saltaría
+    // multiplicado y las estrellas se teletransportarían enteras.
     Item {
         id: stars
         anchors.fill: parent
         visible: motif.kind === "stars"
+
+        // el salto al hiperespacio: entra y sale con rampa, nunca de golpe
+        property real warp: motif.drop ? 1 : 0
+        Behavior on warp { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+        // en la calma casi se paran: un cielo que se arrastra es lo que hace
+        // que después el drop se sienta
+        readonly property real speed: (motif.level < 0.12 && !motif.drop
+            ? 0.04 : 0.22 + 0.5 * motif.level) * motif.drive * (1 + 3 * stars.warp)
+
+        property real travel: 0
+        FrameAnimation {
+            running: stars.visible && motif.spinning
+            onTriggered: stars.travel += frameTime * stars.speed
+        }
 
         Repeater {
             model: stars.visible ? 46 : 0
@@ -398,16 +418,18 @@ Item {
             Rectangle {
                 required property int index
                 readonly property real ang: index * 2.399963      // ángulo áureo: reparte parejo
-                readonly property real phase: (motif.clock * (0.22 + 0.5 * motif.level) * motif.drive
-                    + index / 46) % 1
+                readonly property real phase: (stars.travel + index / 46) % 1
                 readonly property real dist: phase * motif.span * 0.75
                 x: stars.width / 2 + Math.cos(ang) * dist - width / 2
                 y: stars.height / 2 + Math.sin(ang) * dist - height / 2
-                width: Math.max(2, motif.span * 0.006 + dist * 0.03)
+                // la estela: en el hiperespacio el punto deja de ser un punto
+                width: Math.max(2, motif.span * 0.006 + dist * 0.03 * (1 + 4 * stars.warp))
                 height: Math.max(2, motif.span * 0.005)
                 radius: height / 2
                 rotation: ang * 180 / Math.PI
-                color: index % 7 === 0 ? motif.hot : motif.colour
+                color: index % 7 === 0 ? motif.hot
+                    : Qt.tint(motif.colour, Qt.rgba(motif.hot.r, motif.hot.g,
+                                                    motif.hot.b, 0.75 * stars.warp))
                 opacity: phase * (0.8 - 0.4 * phase)
             }
         }

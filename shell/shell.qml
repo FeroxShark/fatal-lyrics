@@ -1498,6 +1498,17 @@ ShellRoot {
         // primer verso después de un clear = tema nuevo: ahí el cambio de canal
         // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
         crtTrackStart = (crtLine.text || "") === "";
+        // ¿Es la MISMA línea otra vez? El ajuste de sync (tanda 3, C) resetea
+        // el índice del daemon a propósito, así que ~0.3 s después de cada
+        // golpe vuelve el mismo verso. Sin esto ese reenvío consumía el reparto
+        // que estaba anticipado para la línea SIGUIENTE: la frase saltaba de
+        // pantalla en cada golpe (`hop sweep 0->2` justo detrás de cada
+        // rótulo del sync), o sea que corregir el sync movía la letra de lugar
+        // — y el rótulo se quedaba en la pantalla que la letra acababa de
+        // dejar. La línea que vuelve conserva SU reparto; lo anticipado para la
+        // que viene sigue esperándola.
+        const again = (crtLine.text || "") !== "" && text === crtLine.text
+            && (t0 ?? 0) === crtLine.t0;
         const serial = crtSerial + 1;
         // dónde estaba el aro: se mira ANTES de pisar la línea vieja, porque
         // sale de lo que se estaba mostrando hasta recién
@@ -1505,9 +1516,13 @@ ShellRoot {
         // Se CONSUME el reparto que se calculó al llegar la línea anterior. No
         // se vuelve a sortear: volver a sortear sería admitir que lo que se
         // anticipó (el aro, el motif que huye) puede no cumplirse.
-        let taken = (crtPendingShot && crtPendingShot.serial === serial)
-            ? crtPendingShot : null;
-        crtPendingShot = null;
+        // el serial se re-sella: `crtShot` sólo usa el override si coincide con
+        // el de la línea, y la línea que vuelve viaja con uno nuevo
+        let taken = again && crtShotOverride
+            ? Object.assign({}, crtShotOverride, { serial: serial })
+            : ((crtPendingShot && crtPendingShot.serial === serial) ? crtPendingShot : null);
+        if (!again)
+            crtPendingShot = null;
         const prevFocus = (crtLine.text || "") !== "" ? crtShot.focus : -1;
         // `section`: la parte del tema QUEDA CONGELADA en la línea. Leerla del
         // vivo desde crtShotFor haría que el modo cambie a mitad de verso (los
@@ -1521,7 +1536,10 @@ ShellRoot {
         // pantallas hay) y el IOWN cruza la pared entera igual, así que lo que
         // se anticipó sigue siendo cierto.
         const fresh = crtShotFor(crtLine);
-        if (taken && fresh.mode === "iown" && taken.mode !== "iown") {
+        // ...salvo si es la misma línea de vuelta: ahí lo que ya se estaba
+        // viendo manda, y rehacerla como IOWN porque entretanto empezó el drop
+        // sería mover la letra por haber tocado el sync
+        if (!again && taken && fresh.mode === "iown" && taken.mode !== "iown") {
             fresh.serial = serial;
             taken = fresh;
         }

@@ -684,6 +684,7 @@ Item {
             seed: motif.seed
             energy: motif.energy
             kick: motif.kick
+            tick: motif.tick
             running: motif.spinning
         }
     }

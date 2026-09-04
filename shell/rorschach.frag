@@ -20,6 +20,17 @@
 // part in `hot`. A gradient here would look like a lava lamp, which is the
 // next motif over and a different idea.
 //
+// FAMILIES (T3.B2). Every plate used to be one round mass wobbling, so Ferox
+// saw "siempre una bola". The silhouette now comes from five parameters, and a
+// family is a set of values for them: spikes (high-frequency noise on the
+// threshold), lobes (the falloff hangs from two centres instead of one), holes
+// (a second, inverted threshold eats the body), elongated (anisotropy before
+// the noise) and splattered (small islands around the mass). They are
+// PARAMETERS and not five branches on purpose: crossfading between families is
+// then a lerp of six numbers, done in QML with a Behavior, and the shader stays
+// one evaluation. Two evaluations mixed would be sixteen octaves of fbm per
+// pixel to change a silhouette.
+//
 // Build:  qsb --glsl "100 es,120,150" -o rorschach.frag.qsb rorschach.frag
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -34,6 +45,13 @@ layout(std140, binding = 0) uniform buf {
     float pitch;    // 0 low .. 1 high: the twist
     float splash;   // 1 on a kick, decaying: the ink jumps
     float dim;
+    // the family, as parameters (see above). All of them are tweened in QML.
+    float famSpike; // ripple on the threshold: a spiky edge
+    float famLobe;  // how far apart the two centres of the falloff sit
+    float famHole;  // how much of the body the inverted threshold eats
+    float famSx;    // anisotropy: > 1 squeezes in x, so the blot stretches
+    float famSy;
+    float famSpat;  // islands scattered around the mass
     vec2 res;
     vec3 ink;
     vec3 hot;
@@ -83,22 +101,45 @@ void main() {
     float ca = cos(ang), sa = sin(ang);
     q = mat2(ca, -sa, sa, ca) * q;
 
+    // elongated: the squeeze goes in BEFORE the noise, so the grain stretches
+    // with the shape instead of a round blot being scaled afterwards
+    q *= vec2(famSx, famSy);
+
     vec2 off = vec2(seed * 91.0, seed * 47.0);
-    float n = fbm(q * 3.4 + off + vec2(0.0, t * 0.06));
-    n += 0.35 * fbm(q * 1.3 - off * 0.7 - vec2(t * 0.035, 0.0));
-    n /= 1.35;
+    float f1 = fbm(q * 3.4 + off + vec2(0.0, t * 0.06));
+    float f2 = fbm(q * 1.3 - off * 0.7 - vec2(t * 0.035, 0.0));
+    float n = (f1 + 0.35 * f2) / 1.35;
+
+    // spiky: a fast ripple straight on the value, which is the same as moving
+    // the threshold about, so the edge frays without the body moving
+    n += famSpike * (vnoise(q * 21.0 + off) - 0.5);
 
     // the blot has to end somewhere: a soft round falloff, or the ink reaches
-    // the corners and it stops being a blot and becomes a texture
-    float r = length(q * vec2(1.0, 1.12));
+    // the corners and it stops being a blot and becomes a texture. With
+    // `famLobe` it hangs from two centres up and down the spine, and the mass
+    // splits in two.
+    vec2 qa = q - vec2(famLobe * 0.22, -famLobe);
+    vec2 qb = q - vec2(famLobe * 0.22, famLobe);
+    float r = min(length(qa * vec2(1.0, 1.12)), length(qb * vec2(1.0, 1.12)));
     n *= smoothstep(0.62, 0.12, r);
     // and it hangs from the middle, like a plate folded down the spine
     n *= 0.75 + 0.35 * smoothstep(0.30, 0.0, abs(q.x));
+
+    // splattered: islands of their own around the mass, on the same fold, so
+    // they are mirrored too
+    float isl = vnoise(q * 8.5 - off * 1.7 + vec2(t * 0.02, 0.0));
+    n += famSpat * smoothstep(0.62, 0.95, isl) * smoothstep(0.95, 0.20, r);
 
     float thr = 0.30 - 0.10 * level - 0.09 * splash;
     float w = 0.020 + 0.010 * splash;      // the edge, antialiased
     float body = smoothstep(thr - w, thr + w, n);
     float core = smoothstep(thr + 0.055 - w, thr + 0.055 + w, n);
+
+    // holed: the SECOND octave, thresholded the other way round, bites the body
+    // open. It is the same noise the blot is made of, so the holes belong to it.
+    float hole = smoothstep(0.46, 0.60, f2);
+    body *= 1.0 - famHole * hole;
+    core *= 1.0 - famHole * hole;
 
     vec3 col = mix(ink, hot, core) * (0.85 + 0.35 * level);
     float a = clamp(body * (0.92 * dim), 0.0, 1.0);

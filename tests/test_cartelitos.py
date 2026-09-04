@@ -2709,6 +2709,25 @@ class TestKnobsAreReachable(unittest.TestCase):
         # a 0.08 y el overlay además no deja que caigan dos en menos de 20 s.
         self.assertLessEqual(c.DEFAULTS["crt"]["channel_switch"], 0.1)
 
+    def test_the_ring_only_arms_on_a_long_silence(self):
+        # T4.2b. El aro dejó de ser una flecha ("la letra va a caer acá") y pasó
+        # a ser el aviso de que el tema se fue a instrumental: se arma sólo si
+        # el hueco SIN VOZ pasa de `ring_gap`. Ferox: "el timer lo usás sólo
+        # cuando hay instrumental y nadie habla por un tiempo". El default tiene
+        # que ser el que él pidió — "sólo si no va a sonar nada de letra en más
+        # de 10 segundos" — y en segundos enteros, que es lo que el menú edita.
+        gap = c.DEFAULTS["crt"]["ring_gap"]
+        self.assertIsInstance(gap, int)
+        self.assertGreaterEqual(gap, 10)
+        # y el portero tiene que estar en el overlay, adentro del tick del aro:
+        # la perilla que viaja y no la lee nadie es una property muerta
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        tick = re.search(r"function crtRingTick\(\)\s*\{(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(tick, "no se encontró crtRingTick en shell.qml")
+        self.assertIn("crtRingGap", tick.group(1),
+                      "el aro no mira `ring_gap`: vuelve a aparecer entre verso y verso")
+
     def test_the_burnt_verse_does_not_outlive_the_new_one(self):
         # el quemado del verso viejo tiene que terminar dentro del asentamiento
         # de la entrada del nuevo, o los dos compiten (referencia de fluidez,

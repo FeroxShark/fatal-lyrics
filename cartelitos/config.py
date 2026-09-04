@@ -150,20 +150,24 @@ _CONFIG_COMMENTS = {
                       "focus, while the other quiet screens step back. The tube\n"
                       "reads as looking at where the phrase is about to go\n"
                       "instead of following it. Needs the director on",
-        "ring": "on the screen where the NEXT line is going to land, a ring\n"
-                "counts it down and gets eaten away — a step per beat when the\n"
-                "tempo is known, and breathing with the volume in between. It\n"
-                "opens into a spiral over the last seconds and collapses into a\n"
-                "dot exactly where the line then appears. Only on a screen with\n"
-                "nothing of the current line on it: over the text it would be an\n"
-                "ornament, not a warning",
-        "hop": "when the phrase jumps to a screen that is NOT the one next\n"
-               "door, the wall shows the trip instead of teleporting it:\n"
-               "`corridor` sends a band of bright scanlines across every\n"
-               "screen in between, `interference` glitches each one as the\n"
-               "band goes over it, `both` does the two, `off` nothing.\n"
-               "Screens side by side never do it \u2014 there is nothing in\n"
-               "between to cross",
+        "ring": "when nobody is going to sing for a long while, a ring counts\n"
+                "the wait down and collapses into a dot exactly when the voice\n"
+                "comes back. It is a sign that the song went instrumental, NOT\n"
+                "an arrow: where the line lands is what the ray of a jump\n"
+                "says. Only on a screen with nothing of the current line on it,\n"
+                "and only over the last seconds of the wait",
+        "ring_gap": "how long the song has to go without a single word for the\n"
+                    "ring to be worth drawing, in seconds. Under this the wait\n"
+                    "is just the gap between two lines and the ring would be an\n"
+                    "ornament chasing the lyric around the wall",
+        "hop": "when the phrase jumps to another screen the wall shows the\n"
+               "trip instead of teleporting it — a ray that is born out of the\n"
+               "letters leaving and lands where the new line appears, which is\n"
+               "the arrow that says where your eye has to go: `corridor` sends\n"
+               "it across, `interference` glitches the screen it lands on,\n"
+               "`both` does the two, `off` nothing. Over a screen in between it\n"
+               "goes along the edge, never over the animation down there. A\n"
+               "jump to the screen next door gets the same ray, shorter",
         "motifs": "animations on the quiet screens: an eye, a grid of eyes\n"
                   "watching the screen with the lyric, a scope tracing a\n"
                   "Lissajous figure that closes on the beat, a radar, falling\n"
@@ -305,7 +309,8 @@ DEFAULTS = {
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "ghost_ms": 550,
-        "iown": True, "foreshadow": True, "ring": True, "hop": "both",
+        "iown": True, "foreshadow": True, "ring": True, "ring_gap": 10,
+        "hop": "both",
         "motifs": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "section_zoom": True,
         "quality": 1.0,

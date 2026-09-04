@@ -176,11 +176,17 @@ ShellRoot {
     // T2.1: la pantalla a la que va a saltar la frase lo delata antes de que
     // llegue (ver foreRamp en Crt.qml)
     property bool crtForeshadow: true
-    // T2.2: el aro que se consume en la pantalla destino (ver Ring.qml)
+    // T2.2: el aro que cuenta la espera (ver Ring.qml)
     property bool crtRing: true
-    // T2.3: cómo se muestra un salto a una pantalla que NO es la de al lado:
-    // "corridor" (la franja que cruza las del medio), "interference" (el
-    // glitch al pasar), "both", "off". Cualquier otra cosa se lee como "off".
+    // T4.2b: cuánto tiene que durar el hueco SIN VOZ para que el aro valga la
+    // pena, en segundos. El aro avisa que el tema se fue a instrumental; no
+    // dice dónde va a caer la letra (eso lo dice el rayo). Con un umbral chico
+    // vuelve a ser un cronómetro entre verso y verso, que es exactamente lo
+    // que Ferox leyó como "confunde y es incómodo".
+    property int crtRingGap: 10
+    // T2.3: cómo se muestra el salto de la frase a otra pantalla: "corridor"
+    // (el rayo que cruza), "interference" (el glitch de la llegada), "both",
+    // "off". Cualquier otra cosa se lee como "off".
     property string crtHopMode: "both"
     // qué tan seguido una línea sale "critical" (pantalla roja): umbral del
     // sorteo determinístico en crtPlanFor, más alto = más raro
@@ -437,9 +443,10 @@ ShellRoot {
                 return -1;
         return t;
     }
-    // el hueco que el aro llega a contar: 8 s como máximo. En un instrumental
-    // largo (o en la intro) la pantalla es del motif hasta que faltan 8 s; un
-    // cronómetro de cuarenta segundos no es una espera, es un reloj de pared.
+    // lo que el aro llega a contar: 8 s como máximo. El hueco es siempre más
+    // largo que eso (`ring_gap`, 10 s), así que la pantalla es del motif hasta
+    // que faltan 8 s y ahí aparece el aro; un cronómetro de cuarenta segundos
+    // no es una espera, es un reloj de pared.
     readonly property int crtRingMaxMs: 8000
     function crtRingTick() {
         const place = crtRingPlace();
@@ -456,9 +463,20 @@ ShellRoot {
         }
         if (place < 0 || left <= 0)
             return;
+        // T4.2b: el aro es un aviso de INSTRUMENTAL, no una flecha. Sólo se
+        // arma si el hueco sin voz entero — de cuándo se dejó de cantar a
+        // cuándo el daemon manda la próxima línea — pasa de `ring_gap`. Entre
+        // verso y verso no hay aro nunca, aunque la línea cambie de pantalla:
+        // dónde cae la letra lo dice el rayo del salto. Sin `v_end` (daemon
+        // viejo, o un driver de `docs/plans/`) el hueco no se sabe y NO hay
+        // aro: leer un hueco desconocido como largo es el aro de vuelta en
+        // cada verso, que es justo lo que se está sacando.
+        const gap = crtVEndAt > 0 ? crtNextAt - crtVEndAt : -1;
+        if (gap <= crtRingGap * 1000)
+            return;
         // la voz de la línea que suena todavía no terminó: el aro encima de
         // ella es lo que Ferox vio como "aparece en medio de la letra"
-        if (crtVEndAt > 0 && Date.now() < crtVEndAt)
+        if (Date.now() < crtVEndAt)
             return;
         // 1400 y no 1500: el daemon ya recortó `v_end` para dejar 1.7 s, y
         // este tick llega hasta 100 ms tarde. Con el umbral clavado en 1500 el
@@ -467,7 +485,8 @@ ShellRoot {
             return;
         crtRingLive = place;
         console.log("crt: ring armed screen=" + place
-            + " in=" + Math.round(left) + " at=" + Date.now());
+            + " in=" + Math.round(left) + " gap=" + Math.round(gap)
+            + " at=" + Date.now());
     }
     onCrtNowChanged: crtRingTick()
 
@@ -1951,7 +1970,7 @@ ShellRoot {
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
-        crt_hop: "crtHopMode",
+        crt_ring_gap: "crtRingGap", crt_hop: "crtHopMode",
         crt_pace: "crtPace", crt_ghost_ms: "crtGhostMs",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera",
         crt_section_zoom: "crtSectionZoom", crt_quality: "crtQuality",

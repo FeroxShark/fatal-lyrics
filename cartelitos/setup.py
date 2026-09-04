@@ -234,16 +234,19 @@ SETTINGS = [
     ("foreshadow", "crt", "The next screen gives the jump away",
      lambda c: _pick("The screen the next line lands on speeds up its animation "
                      "and takes the focus colour before the line gets there", YESNO, c)),
-    ("ring", "crt", "Ring counting the next line down",
-     lambda c: _pick("A ring on the screen where the next line lands, eaten away "
-                     "beat by beat until the line arrives", YESNO, c)),
-    ("hop", "crt", "How a jump over a screen is shown",
-     lambda c: _pick("When the phrase jumps to a screen that is not next door, "
-                     "what the screens in between do", [
-        ("both: a band of scanlines crosses them and they glitch as it passes",
+    ("ring", "crt", "Ring counting the wait out on an instrumental",
+     lambda c: _pick("When nobody sings for a long while, a ring counting down "
+                     "to the voice coming back", YESNO, c)),
+    ("ring_gap", "crt", "How long a silence has to be for the ring",
+     lambda c: _ask_int("Seconds without a single word before the ring is worth "
+                        "drawing", c, 2, 120)),
+    ("hop", "crt", "How the jump of the phrase is shown",
+     lambda c: _pick("When the phrase jumps to another screen, what the wall "
+                     "does with the trip", [
+        ("both: a ray crosses the wall and the screen it lands on glitches",
          "both"),
-        ("corridor: only the band crossing them", "corridor"),
-        ("interference: only the glitch as the phrase goes by", "interference"),
+        ("corridor: only the ray crossing the wall", "corridor"),
+        ("interference: only the glitch where the phrase lands", "interference"),
         ("off: the phrase just appears on the other screen", "off")], c)),
     ("motifs", "crt", "Animations on the quiet screens",
      lambda c: _pick("Animations on the screens without lyric", YESNO, c)),

@@ -32,6 +32,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   perilla `hop` (`corridor|interference|both|off`) manda una franja de scanlines cruzando cada
   pantalla del medio y la glitchea al pasar. El reloj del viaje (180 ms) lo publica `shell.qml`
   UNA vez (`crtHopStart`) y cada monitor lo lee: es una sola franja atravesando la pared.
+- **Cómo entra la línea lo decide la música, no un sorteo parejo.** `crtEntriesFor` reparte UN
+  estilo de entrada por pantalla al consumir la línea, pesado por el nivel de los últimos ~2 s y
+  por la parte del tema (tabla `crtEntryTable` en `shell.qml`, con el comentario de cómo tunearla).
+  Se sumaron `interlace` (medio cuadro, uniform del shader), `tubeon` (punto → raya → imagen, el
+  apagado al revés) y `overburn` (cada palabra quemada en blanco, sólo en un drop con compás
+  confiable). La cámara además sigue la sección (`section_zoom`): lejos en la estrofa, encima en el
+  drop.
 - **En el CRT la letra no se clona.** Hay una pantalla enfocada, la frase sigue en la de al lado y
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
   (`split_repeats`) y cada golpe cae en otra pantalla. `focus = "all"` vuelve al comportamiento
@@ -51,6 +58,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — seis animaciones para las pantallas sin letra.
 - `shell/Ring.qml` — el aro que se consume contando la línea que viene.
+- `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
@@ -226,6 +234,21 @@ no-op → boot roto. No reintroducir un segundo.)
   de verdad, así que `next` viaja en `null` y `t0`/`t1` en 0. Hace falta música con letra
   sincronizada. Para probar sin depender de qué suena, se le puede hablar al overlay directo por
   `$XDG_RUNTIME_DIR/cartelitos.sock` (el socket es del overlay, el daemon es el cliente).
+- **El estilo de entrada NO se elige adentro de `crtShotFor`** (que no puede leer nada vivo), pero
+  tampoco en `Crt.qml`: si fuera un binding que mira el audio, cambiaría a mitad de verso. Se
+  calcula una vez por línea en `show()`, **antes de `crtSerial++`** — Crt.qml lo lee al recibir la
+  línea y para entonces ya tiene que estar puesto.
+- **El "estilo anterior" se anota sólo para las pantallas que mostraron la línea.** Anotando
+  también las vacías, "el anterior" deja de ser el que se vio y la regla de no repetir no dice
+  nada. Lo que sí se acumula entre líneas es el registro (`crtLastEntry` se mergea, no se pisa).
+- **`onLandedChanged` no se dispara con el valor inicial del delegate.** Por eso el contador del
+  `overburn` sin `words` arranca en 0 y no en 1: con 1, la palabra 0 nace ya encendida y no se
+  quema nunca. Y lleva paracaídas (`reveal >= 1`): si el compás se pierde a mitad de línea
+  (`bpmLive` vence a los 15 s) los tiempos dejan de llegar y las palabras que faltan no aparecerían
+  más.
+- **En el QML la perilla `section_zoom` se llama `crtSectionZoom`** y multiplica al `camZoom` y al
+  `cueZoom` en el mismo `Scale`: es otro plano de la misma cámara, no una cámara nueva. Achicar por
+  debajo de 1 no deja agujeros negros porque el fondo de `stage` está FUERA del item `camera`.
 - **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
   test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
 
@@ -255,10 +278,11 @@ no-op → boot roto. No reintroducir un segundo.)
 - README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
   (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
   en qué orden se prueban.
-- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0, 1 y 2** (perillas `foreshadow`,
-  `ring` y `hop`). Faltan las fases 3 a 5: entradas nuevas y director por energía, ocho motifs
-  nuevos, y el cierre de docs. Lo que hay que mirar a ojo está en
-  `docs/plans/CHECKS-VISUALES.md`.
+- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0, 1, 2 y 3** (perillas `foreshadow`,
+  `ring`, `hop` y `section_zoom`, más las entradas `interlace` / `tubeon` / `overburn` y el
+  director por energía). Faltan las fases 4 y 5: ocho motifs nuevos (dunes, static, textsea, eyes,
+  ekg, rorschach, plasma, tunnel) más dos mejorados, y el cierre de docs. Lo que hay que mirar a
+  ojo está en `docs/plans/CHECKS-VISUALES.md`.
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
   del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral

@@ -821,6 +821,31 @@ ShellRoot {
         crtNextIn = crtNextAt - Date.now();
     }
 
+    // En qué verso va el tema: el índice de la línea que suena adentro de la
+    // letra entera, o -1 si no se sabe. NO sale del `serial`, que es un contador
+    // de la sesión y no dice nada después de un rebobinado ni entrando a mitad
+    // de tema: se busca por `t0` (el daemon lo manda redondeado a dos decimales,
+    // de ahí la tolerancia).
+    readonly property int crtLineNo: {
+        const ls = crtLines;
+        const t0 = crtLine.t0 || 0;
+        if (!ls || ls.length === 0 || (crtLine.text || "") === "")
+            return -1;
+        for (let i = 0; i < ls.length; i++)
+            if (Math.abs((ls[i].t0 || 0) - t0) < 0.05)
+                return i;
+        return -1;
+    }
+
+    // la primera palabra de la línea que viene ("" si no hay próxima)
+    readonly property string crtNextWord: {
+        const nx = crtNext;
+        if (!nx || !nx.text)
+            return "";
+        const w = nx.text.trim().split(/\s+/).filter(x => x.length > 0);
+        return w.length > 0 ? w[0] : "";
+    }
+
     // ms que faltan para la próxima línea, ahora mismo (-1 si no se sabe)
     function crtNextLeft() {
         return crtNextAt > 0 ? crtNextAt - Date.now() : -1;
@@ -1031,6 +1056,9 @@ ShellRoot {
         // OJO: "rings" y "tunnel" existían hasta la 4ª pasada; hoy Motif.qml no
         // los conoce y estas palabras dejaban la pantalla en blanco. Van a los
         // motivos que quedaron con el mismo sentido.
+        // la estática: el ruido y la señal
+        { re: /\b(static|noise|signal|snow|channel)\b/i, kind: "static" },
+        { re: /\b(ruido|se[ñn]al|est[aá]tica|canal)\b/i, kind: "static" },
         // el desierto: arena, dunas, sed
         { re: /\b(sand|desert|dune|dunes|dust|thirst)\b/i, kind: "dunes" },
         { re: /\b(arena|desierto|duna|dunas|polvo|sed)\b/i, kind: "dunes" },
@@ -1049,7 +1077,7 @@ ShellRoot {
     }
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
-                                       "rain", "ocean", "pond", "dunes"]
+                                       "rain", "ocean", "pond", "dunes", "static"]
 
     // los dos de agua se pueden apagar juntos (`water = false`) sin tocar el
     // resto de las animaciones

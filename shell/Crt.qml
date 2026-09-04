@@ -1213,6 +1213,14 @@ PanelWindow {
                 // dibujo no arman el mismo paisaje
                 seed: crt.ctl.crtHash(crt.ctl.motifGen * 31 + crt.idx * 7 + 13)
                 quality: crt.ctl.crtQuality
+                // el compás y el verso: la estática forma algo una vez por
+                // compás, y lo que forma sale de la línea que viene
+                tick: crt.ctl.beatTick
+                beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
+                bpmLive: crt.ctl.bpmLive
+                lineNo: crt.ctl.crtLineNo
+                nextWord: crt.ctl.crtNextWord
+                fontFamily: crt.fontFamily
                 // el drop viaja como booleano: los motivos no pueden sacarlo de
                 // `energy`, que acá arriba ya viene multiplicada por el aviso
                 drop: crt.ctl.audSection === "drop"

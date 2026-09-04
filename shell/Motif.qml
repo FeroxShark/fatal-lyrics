@@ -17,7 +17,8 @@ import QtQuick
 Item {
     id: motif
 
-    // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes | none
+    // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
+    // | static | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -51,6 +52,18 @@ Item {
     // `crt.quality`: un motivo no puede bajarle los cuadros a la pantalla
     // enfocada, así que los que dibujan muchas cosas achican la cuenta acá.
     property real quality: 1.0
+    // El compás, para los motivos que se mueven POR COMPÁS y no por reloj:
+    // `tick` es el contador de tiempos del root (no el de bombos), `beatMs` lo
+    // que dura uno y `bpmLive` si hay que creerles.
+    property int tick: 0
+    property real beatMs: 500
+    property bool bpmLive: false
+    // en qué verso va el tema (índice dentro de la letra entera; -1 = no se
+    // sabe) y la primera palabra de la línea que VIENE. Los usa la estática
+    // para formar algo que signifique alguna cosa.
+    property int lineNo: -1
+    property string nextWord: ""
+    property string fontFamily: "monospace"
     // ¿el tema está en un drop? Llega como booleano y NO como umbral sobre
     // `energy`: la energía viene multiplicada por el aviso del salto, así que
     // un umbral acá se dispararía al final de cualquier verso.
@@ -579,6 +592,30 @@ Item {
             quality: motif.quality
             seed: motif.seed
             drop: motif.drop
+            running: motif.spinning
+        }
+    }
+
+    // -------------------------------------------------------------- estática
+    // La pantalla sin señal que una vez por compás casi engancha algo. El ruido
+    // y la máscara viven en `static.frag`.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "static"
+        visible: active
+
+        sourceComponent: Static {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            high: motif.high
+            seed: motif.seed
+            tick: motif.tick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            lineNo: motif.lineNo
+            nextWord: motif.nextWord
+            fontFamily: motif.fontFamily
             running: motif.spinning
         }
     }

@@ -131,8 +131,6 @@ Item {
         farewell = 0;
         fade = 1;
         timedOut = false;
-        secsLeft = -1;
-        tenths = 0;
         drift = 0;
         kickLive = false;
         lastKickAt = 0;
@@ -140,6 +138,12 @@ Item {
         // el hueco es lo que falta AHORA: en un instrumental largo el aro
         // aparece recién cuando quedan 8 s, y esos 8 s son su arco entero
         span = Math.max(dueAt - startedAt, 400);
+        // el número ya nace en su valor. Dejándolo en -1, el primer cuadro lo
+        // subía de golpe y el segundo entero caía unas decenas de ms después:
+        // dos snaps adentro de 120 ms, que es justo el tartamudeo que la
+        // referencia de fluidez prohíbe en una entrada.
+        secsLeft = Math.max(Math.floor(span / 1000), 0);
+        tenths = Math.max(Math.floor(span / 100), 0);
         const a = [];
         for (let i = 0; i < strandN; i++)
             a.push(0);

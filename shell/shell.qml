@@ -106,7 +106,50 @@ ShellRoot {
     // (ver updateInfection más abajo)
     property real crtInfectLead: 0.35
     // probabilidad de que un verso entre como un cambio de canal (T3.1)
-    property real crtChannelSwitch: 0.25
+    property real crtChannelSwitch: 0.08
+
+    // ---- T4.3: el PRESUPUESTO de eventos (perilla `pace`)
+    //
+    // Ferox, con el tubo andando: "todo muy rápido, muy saturado, lleno de
+    // efectos; las animaciones cambian y no llegás a entender qué ves". Medido
+    // con `pace-count.py` (90 s, tres pantallas, un verso cada 3 s): 89 cambios
+    // de dibujo — o sea UNO POR VERSO Y POR PANTALLA —, 55 roturas y 6 cambios
+    // de canal. El video de referencia hace lo contrario: el 80 % de los
+    // cuadros son holds y entre evento y evento pasan 1.5–3 s.
+    //
+    // Así que no es una perilla de velocidad: nada se mueve más despacio. Es
+    // cuántas cosas tienen permiso de pasar por minuto. Va en UNA tabla y no
+    // en veinte ternarios repartidos por los archivos, porque si no `wild` —
+    // que tiene que devolver EXACTAMENTE lo de antes — no se puede verificar.
+    property string crtPace: "normal"
+    readonly property var crtPaceTable: ({
+        calm: {
+            motifHoldMs: 20000, chanGapMs: 30000, hitGapMs: 6000,
+            interfMinMs: 30000, interfSpanMs: 30000,
+            camBeat: 0.010, camGrid: 0.006,
+            motifScale: 0.012, motifOpaMin: 0.86, motifOpaSpan: 0.10,
+            driveMin: 0.80, driveMax: 1.60, driveDrop: 2.20, surgeK: 0.35,
+        },
+        normal: {
+            motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
+            interfMinMs: 20000, interfSpanMs: 20000,
+            camBeat: 0.015, camGrid: 0.008,
+            motifScale: 0.020, motifOpaMin: 0.80, motifOpaSpan: 0.15,
+            driveMin: 0.70, driveMax: 2.00, driveDrop: 3.00, surgeK: 0.50,
+        },
+        // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
+        // rotura por golpe y el latido al 3.5 % de la pantalla
+        wild: {
+            motifHoldMs: 0, chanGapMs: 0, hitGapMs: 1200,
+            interfMinMs: 7000, interfSpanMs: 11000,
+            camBeat: 0.035, camGrid: 0.020,
+            motifScale: 0.050, motifOpaMin: 0.62, motifOpaSpan: 0.30,
+            driveMin: 0.0, driveMax: 99, driveDrop: 99, surgeK: 1.60,
+        },
+    })
+    readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
+    // cuánto queda quemado el verso viejo detrás del nuevo (perilla `ghost_ms`)
+    property int crtGhostMs: 550
     // T3.2: la palabra gigante que cruza la pared en el drop
     property bool crtIown: true
     // T2.1: la pantalla a la que va a saltar la frase lo delata antes de que
@@ -1777,6 +1820,7 @@ ShellRoot {
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
         crt_hop: "crtHopMode",
+        crt_pace: "crtPace", crt_ghost_ms: "crtGhostMs",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera",
         crt_section_zoom: "crtSectionZoom", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",

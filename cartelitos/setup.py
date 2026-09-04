@@ -273,6 +273,14 @@ SETTINGS = [
      lambda c: _ask_num("How often a line lands like a channel being changed: "
                         "static, a red frame, then the words (the first line of "
                         "a track always does)", c, 0.0, 1.0)),
+    ("pace", "crt", "How much may happen at once", lambda c: _pick(
+        "How much the tube is allowed to happen at once", [
+            ("calm: a drawing every 20 s, breaks are rare", "calm"),
+            ("normal: a drawing every 12 s, a break every 4 s at most", "normal"),
+            ("wild: a drawing per line, a break per beat (the old tube)", "wild")], c)),
+    ("ghost_ms", "crt", "Milliseconds the old line stays burnt",
+     lambda c: _ask_int("Milliseconds the previous line stays burnt behind the "
+                        "new one (0 = no ghost)", c, 0, 3000)),
     ("flicker", "crt", "Beating on the peaks (0 = none)",
      lambda c: _ask_num("How hard the picture beats on the peaks of the song "
                         "(0 = nothing moves with the volume)", c, 0.0, 1.0)),

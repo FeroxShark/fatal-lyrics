@@ -2680,6 +2680,42 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertEqual(picked, {"corridor", "interference", "both", "off"})
         self.assertIn(c.DEFAULTS["crt"]["hop"], picked)
 
+    def test_pace_offers_every_budget_the_overlay_knows(self):
+        # `pace` es un enum como `hop`: el menú es el único lugar donde alguien
+        # descubre que existe `calm` o `wild`. Si el menú ofrece menos modos de
+        # los que el overlay entiende, esos modos no los va a escribir nadie.
+        editor = next(fn for key, section, _, fn in setup.SETTINGS
+                      if key == "pace" and section == "crt")
+        picked = set()
+        for n in range(1, 4):
+            _FakeInput(self, str(n))
+            picked.add(editor("normal"))
+        self.assertEqual(picked, {"calm", "normal", "wild"})
+        self.assertIn(c.DEFAULTS["crt"]["pace"], picked)
+        # y los mismos tres tienen que estar en la tabla del overlay: un modo
+        # que el menú ofrece y `crtPaceTable` no conoce cae en `normal` sin
+        # avisar, así que la perilla mentiría
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        block = re.search(r"crtPaceTable:\s*\(\{(.*?)\n    \}\)", qml, re.S)
+        self.assertIsNotNone(block, "no se encontró crtPaceTable en shell.qml")
+        modes = set(re.findall(r"^\s{8}([a-z]+):\s*\{", block.group(1), re.M))
+        self.assertEqual(modes, picked,
+                         "el menú y crtPaceTable no ofrecen los mismos modos")
+
+    def test_a_channel_change_is_rare_by_default(self):
+        # T4.3: 0.25 era un cambio de canal cada cuatro versos — con doce
+        # versos por minuto, uno cada quince segundos. El presupuesto lo baja
+        # a 0.08 y el overlay además no deja que caigan dos en menos de 20 s.
+        self.assertLessEqual(c.DEFAULTS["crt"]["channel_switch"], 0.1)
+
+    def test_the_burnt_verse_does_not_outlive_the_new_one(self):
+        # el quemado del verso viejo tiene que terminar dentro del asentamiento
+        # de la entrada del nuevo, o los dos compiten (referencia de fluidez,
+        # punto 6): el piso es la entrada, el techo lo puso Ferox ("un poquito
+        # menos" que los 900 ms de la tanda 3)
+        self.assertLess(c.DEFAULTS["crt"]["ghost_ms"], 900)
+
     def test_the_overlay_reads_exactly_the_keys_the_daemon_sends(self):
         # `_configEventMap` en shell.qml es el otro extremo de CONFIG_EVENT_MAP:
         # una clave de más ahí es una property que nunca se escribe, una de

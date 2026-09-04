@@ -127,8 +127,20 @@ _CONFIG_COMMENTS = {
                             "rolls against this on a peak, higher = rarer. 1.0 = never",
         "channel_switch": "chance that a line lands like a channel being changed:\n"
                           "static, one red frame, and the words settling out of\n"
-                          "it. The first line of every track always does it.\n"
-                          "0 = never",
+                          "it. The first line of every track always does it, and\n"
+                          "so does a change of section; two of them never land\n"
+                          "less than 20 s apart. 0 = never",
+        "pace": "how much the tube is allowed to happen at once:\n"
+                "  calm   = a drawing stays 20 s, breaks are rare, the beat\n"
+                "           barely moves anything\n"
+                "  normal = a drawing stays 12 s, one break every 4 s at most\n"
+                "  wild   = what it did before the pace budget existed:\n"
+                "           a drawing per line, a break per beat\n"
+                "It is a budget, not a speed: nothing gets slower, things just\n"
+                "stop happening on top of each other",
+        "ghost_ms": "milliseconds the previous line stays burnt on the screen\n"
+                    "behind the new one. It drops fast and finishes soft, so the\n"
+                    "old verse stops competing halfway through. 0 = no ghost",
         "iown": "on a drop, a one-word line crosses the whole wall as a single\n"
                 "giant word travelling right to left — it leaves one screen\n"
                 "exactly where it enters the next. Needs `order` to be right",
@@ -291,7 +303,8 @@ DEFAULTS = {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
-        "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.25,
+        "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
+        "pace": "normal", "ghost_ms": 550,
         "iown": True, "foreshadow": True, "ring": True, "hop": "both",
         "motifs": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "section_zoom": True,

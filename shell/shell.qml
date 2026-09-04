@@ -999,6 +999,9 @@ ShellRoot {
     // primera, que es justo lo que rompe la ilusión de que es una sola.
     // 0 = no hay salto en curso (también es la forma de cancelarlo).
     property double crtHopStart: 0
+    // cuántas pantallas separan el origen del destino (0 = no hay salto)
+    readonly property int crtHopDist: (crtHop.from < 0 || crtHop.to < 0)
+        ? 0 : Math.abs(crtHop.to - crtHop.from)
     // 180 ms alcanzaban para una franja pareja; para un rayo que sale de la
     // letra, cruza por el borde y converge en el destino son pocos: no se
     // llegaba a leer para dónde iba (T3.B4).
@@ -1008,7 +1011,21 @@ ShellRoot {
     // llegando 40 ms después de que la palabra terminó de asentarse, la
     // convergencia y la frase se leen como UNA cosa. Lo dice el log:
     // `crt: hop land` es la diferencia medida contra el arranque.
-    readonly property int crtHopMs: Motion.enterMs + 40
+    // T4.2b: el salto a la pantalla de al lado recorre la mitad del camino, así
+    // que dura la mitad — la VELOCIDAD del rayo es la misma en los dos, que es
+    // lo que hace que se lean como el mismo objeto. Ahí la cabeza aterriza a
+    // los ~200 ms, con la palabra todavía asentándose: a esa altura la `OutExpo`
+    // de la entrada ya recorrió el 99 %, así que sigue cayendo sobre la frase
+    // puesta y no sobre una que se está moviendo.
+    readonly property int crtHopMs: crtHopDist >= 2
+        ? Motion.enterMs + 40 : Math.round(Motion.enterMs / 2) + 40
+    // Cómo se reparte el reloj del salto entre las pantallas: el origen se
+    // lleva hasta `crtHopSplit0`, las del medio de ahí a `crtHopSplit1` y el
+    // destino el resto. Sin pantallas en el medio (salto de a una) los dos
+    // números son el mismo: el tramo del medio vale cero y el rayo pasa del
+    // origen al destino sin un hueco en el que no lo dibuja nadie.
+    readonly property real crtHopSplit0: crtHopDist >= 2 ? 0.22 : 0.45
+    readonly property real crtHopSplit1: crtHopDist >= 2 ? 0.78 : 0.45
     // por qué borde cruza las pantallas del medio: arriba o abajo, alternando
     // salto a salto. Es UN rayo atravesando la pared, así que el borde lo
     // decide el root una vez y todos los monitores lo leen.
@@ -1100,15 +1117,19 @@ ShellRoot {
         crtHopStart = 0;
     }
 
-    // Se ve el viaje sólo cuando hay algo que cruzar: entre pantallas pegadas
-    // la frase ya aparece al lado y no hay nada en el medio. El IOWN no
-    // dispara (cruza la pared él solo) ni `all` (la línea está en todas).
+    // El rayo sale en CUALQUIER salto de la frase, también a la pantalla de al
+    // lado (T4.2b). Era sólo para saltos de dos o más: entre pantallas pegadas
+    // "no había nada que cruzar". Pero el rayo no es el relleno del camino, es
+    // la flecha — textual de Ferox: "me gusta la línea glitchada que indica
+    // 'tu ojo va a ir para acá', esa antes que un timer" —, y esa flecha hace
+    // falta igual (o más) cuando la letra se corre una sola pantalla. El IOWN
+    // no dispara (cruza la pared él solo) ni `all` (la línea está en todas).
     function crtHopFire(shot) {
         crtHopStart = 0;
         if (crtHopMode !== "corridor" && crtHopMode !== "interference"
             && crtHopMode !== "both")
             return;
-        if (crtHop.from < 0 || Math.abs(crtHop.to - crtHop.from) < 2)
+        if (crtHop.from < 0 || crtHopDist < 1)
             return;
         if (shot.mode === "iown" || shot.mode === "all")
             return;

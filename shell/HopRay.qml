@@ -1,10 +1,15 @@
 // fatal-lyrics — el rayo del salto.
 //
-// Cuando la frase salta a una pantalla que no es la de al lado, esto es el
-// viaje. La primera versión era una franja pareja de scanlines cruzando por el
-// medio de cada pantalla intermedia, dibujada en `crt.frag`: Ferox la vio poco
-// y le pareció una distracción, porque cruzaba justo por encima del motivo de
-// la pantalla del medio y no decía hacia dónde iba.
+// Cuando la frase salta de pantalla, esto es el viaje. La primera versión era
+// una franja pareja de scanlines cruzando por el medio de cada pantalla
+// intermedia, dibujada en `crt.frag`: Ferox la vio poco y le pareció una
+// distracción, porque cruzaba justo por encima del motivo de la pantalla del
+// medio y no decía hacia dónde iba.
+//
+// Desde T4.2b sale también en el salto a la pantalla de al lado (mismo dibujo,
+// la mitad de reloj porque es la mitad de camino): el rayo ES la flecha que
+// dice dónde va a caer la letra. Antes eso lo insinuaba el aro, y el aro pasó
+// a ser sólo el aviso de que el tema se fue a instrumental.
 //
 // El recorrido de ahora (lo describió Ferox, T3.B4):
 //   · de la LETRA de la pantalla de origen se estiran unas hebras, que salen

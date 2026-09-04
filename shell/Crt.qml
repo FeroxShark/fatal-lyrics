@@ -232,21 +232,23 @@ PanelWindow {
     readonly property bool ringShows: ctl.crtRingLive === idx
 
     // ------------------------------------------------ el salto de pantalla (T2.3)
-    // La frase saltó a una pantalla que NO es la de al lado. Lo que se ve es el
-    // viaje: una franja de scanlines cruza cada pantalla del medio en su tramo
-    // del reloj, la del medio glitchea justo cuando le pasa por encima, y la de
-    // origen pega un tirón hacia donde se fue. El texto del medio no se toca:
-    // la franja pasa por arriba, no lo reemplaza.
+    // La frase saltó a otra pantalla. Lo que se ve es el viaje: el rayo sale de
+    // las letras que se van, cruza por el BORDE cada pantalla del medio (sin
+    // tocar su motivo, T4.3) y converge en el centro de la de destino, encima
+    // de la línea que entra; la de origen pega un tirón hacia donde se fue.
+    // T4.2b: también en el salto a la de al lado, que es el caso sin medio.
     //
     // El reloj (0→1 en `crtHopMs`, más la cola) sale de `ctl.crtHopStart`, que
     // es del root: acá se LEE por cuadro. Cada pantalla anotándose su propio
     // arranque hacía que la cabeza entrara en la segunda antes de salir de la
     // primera.
     //
-    // El reparto del reloj: la pantalla de origen se lleva el 22 % (las hebras
-    // saliendo de la letra), las del medio el 56 % entre todas, y el destino el
-    // 22 % final. Después de eso quedan 150 ms de cola apagándose ENCIMA de la
-    // línea que ya entró, que es lo que ata el viaje con la frase.
+    // El reparto del reloj lo publica el root (`crtHopSplit0` / `crtHopSplit1`):
+    // con pantallas en el medio, 22 % el origen (las hebras saliendo de la
+    // letra), 56 % las del medio entre todas y 22 % el destino; en un salto a
+    // la de al lado no hay medio y son 45 / 55. Después de eso quedan 150 ms de
+    // cola apagándose ENCIMA de la línea que ya entró, que es lo que ata el
+    // viaje con la frase.
     readonly property real hopTailFrac: 150 / Math.max(ctl.crtHopMs, 1)
     property real hopClock: 2
     readonly property bool hopLive: ctl.crtHopStart > 0 && ctl.crtHop.from >= 0
@@ -274,13 +276,16 @@ PanelWindow {
     readonly property real hopRayP: {
         if (!hopLive || !hopCorridor)
             return 0;
+        const s0 = ctl.crtHopSplit0, s1 = ctl.crtHopSplit1;
         if (hopFrom)
-            return Math.min(Math.max(hopClock / 0.22, 0), 1.45);
+            return Math.min(Math.max(hopClock / Math.max(s0, 0.001), 0), 1.45);
         if (hopMid)
             return Math.min(Math.max(
-                (hopClock - 0.22) / 0.56 * hopMids - hopPos, 0), 1.45);
+                (hopClock - s0) / Math.max(s1 - s0, 0.001) * hopMids - hopPos,
+                0), 1.45);
         if (hopTo)
-            return Math.min(Math.max((hopClock - 0.78) / 0.22, 0), 1);
+            return Math.min(Math.max(
+                (hopClock - s1) / Math.max(1 - s1, 0.001), 0), 1);
         return 0;
     }
     readonly property real hopRayFade: hopTo
@@ -288,9 +293,13 @@ PanelWindow {
     // el tramo del degradado que le toca a esta pantalla: el color va del de la
     // letra que se va al de la que llega a lo largo de TODO el viaje
     readonly property real hopRayG0: hopFrom ? 0
-        : (hopMid ? 0.22 + 0.56 * hopPos / hopMids : 0.78)
-    readonly property real hopRayG1: hopFrom ? 0.22
-        : (hopMid ? 0.22 + 0.56 * (hopPos + 1) / hopMids : 1)
+        : (hopMid ? ctl.crtHopSplit0 + (ctl.crtHopSplit1 - ctl.crtHopSplit0)
+                    * hopPos / hopMids
+                  : ctl.crtHopSplit1)
+    readonly property real hopRayG1: hopFrom ? ctl.crtHopSplit0
+        : (hopMid ? ctl.crtHopSplit0 + (ctl.crtHopSplit1 - ctl.crtHopSplit0)
+                    * (hopPos + 1) / hopMids
+                  : 1)
 
     // ---- de dónde nacen las hebras del rayo (T4.3)
     // Salían del ALTO del bloque de texto: tres hebras repartidas sobre una

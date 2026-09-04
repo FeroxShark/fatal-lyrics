@@ -2728,6 +2728,22 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn("crtRingGap", tick.group(1),
                       "el aro no mira `ring_gap`: vuelve a aparecer entre verso y verso")
 
+    def test_the_ray_also_fires_to_the_screen_next_door(self):
+        # T4.2b. La flecha es el rayo, y hace falta también cuando la letra se
+        # corre UNA pantalla: hasta la tanda 3 el salto corto no dibujaba nada
+        # (`< 2`) porque "no había nada que cruzar". Y dura menos, porque el
+        # camino es más corto: con la misma duración el rayo corto iría a la
+        # mitad de velocidad y no se leería como el mismo objeto.
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        fire = re.search(r"function crtHopFire\(shot\)\s*\{(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(fire, "no se encontró crtHopFire en shell.qml")
+        self.assertIn("crtHopDist < 1", fire.group(1),
+                      "el rayo sigue pidiendo dos pantallas de distancia")
+        dist = re.search(r"crtHopMs:\s*crtHopDist >= 2\s*\n?\s*\?([^\n]*)\n?\s*:([^\n]*)",
+                         qml)
+        self.assertIsNotNone(dist, "crtHopMs ya no depende de la distancia del salto")
+
     def test_the_burnt_verse_does_not_outlive_the_new_one(self):
         # el quemado del verso viejo tiene que terminar dentro del asentamiento
         # de la entrada del nuevo, o los dos compiten (referencia de fluidez,

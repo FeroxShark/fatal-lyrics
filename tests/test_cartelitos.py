@@ -147,6 +147,116 @@ class TestShowWords(unittest.TestCase):
         self.assertNotIn("words", out[0])
 
 
+class TestNextLine(unittest.TestCase):
+    """El daemon manda una línea por vez: `next` es lo único que el overlay
+    sabe de la que viene, y sobre eso anticipa dónde va a caer."""
+
+    LINES = [(0.0, "one"), (4.0, "take take take"), (9.0, "three")]
+
+    def test_the_next_line_travels_with_its_window(self):
+        self.assertEqual(c.next_line(self.LINES, 0),
+                          {"text": "take take take", "t0": 4.0, "t1": 9.0,
+                           "segs": ["take", "take", "take"]})
+
+    def test_the_last_line_has_no_next(self):
+        self.assertIsNone(c.next_line(self.LINES, 2))
+
+    def test_the_one_before_the_last_closes_five_seconds_later(self):
+        # mismo criterio que la línea actual: sin una línea después, se queda 5 s
+        self.assertEqual(c.next_line(self.LINES, 1),
+                          {"text": "three", "t0": 9.0, "t1": 14.0})
+
+    def test_segs_only_when_the_line_repeats(self):
+        self.assertNotIn("segs", c.next_line(self.LINES, 1))
+
+    def test_no_lyrics_at_all(self):
+        self.assertIsNone(c.next_line(None, 0))
+        self.assertIsNone(c.next_line([], 0))
+
+    def test_before_the_first_line(self):
+        # idx = -1 es "todavía no arrancó la letra": no se adelanta nada
+        self.assertIsNone(c.next_line(self.LINES, -1))
+
+
+class TestShowNext(unittest.TestCase):
+    """El campo `next` viaja SIEMPRE (null incluido): el overlay tiene que
+    poder distinguir "no hay próxima línea" de "este daemon no lo manda"."""
+
+    def sent(self):
+        out = []
+        old = ipc.send
+        ipc.send = lambda ev: out.append(ev)
+        self.addCleanup(lambda: setattr(ipc, "send", old))
+        return out
+
+    def test_the_next_line_is_in_the_event(self):
+        out = self.sent()
+        c.show("hola", "t", 1.0, 2.0, nxt={"text": "chau", "t0": 2.0, "t1": 4.0})
+        self.assertEqual(out[0]["next"], {"text": "chau", "t0": 2.0, "t1": 4.0})
+
+    def test_without_a_next_line_the_field_is_null(self):
+        out = self.sent()
+        c.show("hola", "t", 1.0, 2.0)
+        self.assertIsNone(out[0]["next"])
+
+    def test_the_hang_dialog_carries_no_next(self):
+        # no es un verso: no tiene línea siguiente ni toca el tubo
+        out = self.sent()
+        c.hang()
+        self.assertNotIn("next", out[0])
+
+    def test_the_event_is_json(self):
+        out = self.sent()
+        c.show("hola", "t", 1.0, 2.0, nxt=c.next_line([(1.0, "hola"), (2.0, "chau")], 0))
+        json.dumps(out[0])
+
+
+class TestLyricsEvent(unittest.TestCase):
+    """La letra entera, una vez por tema."""
+
+    LINES = [(0.0, "one"), (4.0, "two"), (9.0, "three")]
+
+    def sent(self):
+        out = []
+        old = ipc.send
+        ipc.send = lambda ev: out.append(ev)
+        self.addCleanup(lambda: setattr(ipc, "send", old))
+        self.addCleanup(lambda: setattr(ipc, "_last_lyrics", None))
+        return out
+
+    def test_every_line_with_its_window(self):
+        out = self.sent()
+        c.lyrics_list(self.LINES)
+        self.assertEqual(out[0], {"cmd": "lyrics", "lines": [
+            {"t0": 0.0, "t1": 4.0, "text": "one"},
+            {"t0": 4.0, "t1": 9.0, "text": "two"},
+            {"t0": 9.0, "t1": 14.0, "text": "three"}]})
+
+    def test_the_event_is_json(self):
+        out = self.sent()
+        c.lyrics_list(self.LINES)
+        json.dumps(out[0])
+
+    def test_it_is_kept_to_be_resent_on_reconnect(self):
+        # el overlay muerto con el daemon vivo es un estado frecuente: sin esto
+        # el tema entero se queda sin letra hasta el siguiente
+        self.sent()
+        c.lyrics_list(self.LINES)
+        self.assertEqual(ipc._last_lyrics["lines"][0]["text"], "one")
+
+    def test_clear_forgets_it(self):
+        self.sent()
+        c.lyrics_list(self.LINES)
+        c.clear()
+        self.assertIsNone(ipc._last_lyrics)
+
+    def test_word_times_do_not_break_it(self):
+        # las líneas del LRC "enhanced" traen un tercer campo
+        out = self.sent()
+        c.lyrics_list([(0.0, "one", [(0.0, "one")]), (4.0, "two", None)])
+        self.assertEqual([ln["text"] for ln in out[0]["lines"]], ["one", "two"])
+
+
 class TestCurrentLineIndex(unittest.TestCase):
     def setUp(self):
         self.lyrics = [(0.0, "a"), (10.0, "b"), (20.0, "c")]

@@ -252,7 +252,8 @@ class TestSeekBack(unittest.TestCase):
 
         loop._ipc.clear.assert_called_once()
         loop._log.assert_any_call("seek back: reset")
-        loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0, None)
+        loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0, None,
+                                          nxt=loop._ipc.next_line.return_value)
 
     def test_small_backward_jitter_does_not_reset(self):
         loop = make_loop()
@@ -296,7 +297,8 @@ class TestWordTimes(unittest.TestCase):
         loop.handle_track(track(id="t1", pos=1.0), now=0.0)
 
         loop._ipc.show.assert_called_with("one two", "Song", 0.0, 10.0,
-                                          [(0.0, "one"), (0.5, "two")])
+                                          [(0.0, "one"), (0.5, "two")],
+                                          nxt=loop._ipc.next_line.return_value)
 
     def test_a_two_field_line_still_works(self):
         loop = make_loop()
@@ -306,7 +308,57 @@ class TestWordTimes(unittest.TestCase):
 
         loop.handle_track(track(id="t1", pos=1.0), now=0.0)
 
-        loop._ipc.show.assert_called_with("a", "Song", 0.0, 5.0, None)
+        loop._ipc.show.assert_called_with("a", "Song", 0.0, 5.0, None,
+                                          nxt=loop._ipc.next_line.return_value)
+
+
+class TestNextLineIsWired(unittest.TestCase):
+    """El overlay anticipa dónde cae la línea que viene, así que el `show`
+    tiene que llevar la SIGUIENTE a la que se está mostrando — con la letra
+    entera y el índice de la actual, no con otra cosa."""
+
+    def test_the_show_carries_the_line_after_the_current_one(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 1
+        loop.lyrics = [(0.0, "a"), (10.0, "b"), (20.0, "c")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=11.0), now=0.0)
+
+        loop._ipc.next_line.assert_called_once_with(loop.lyrics, 1)
+
+
+class TestLyricsListIsSent(unittest.TestCase):
+    """La letra entera sale UNA vez, cuando la búsqueda vuelve con ella."""
+
+    def _loop_with_fetch(self, lyrics, status):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop._lyr._fetch = {"id": "t1", "lyrics": lyrics, "done": True,
+                            "status": status}
+        loop._lyr.current_line_index.return_value = -1
+        return loop
+
+    def test_it_goes_out_when_the_lyric_arrives(self):
+        loop = self._loop_with_fetch([(0.0, "a"), (10.0, "b")], "ok")
+        loop.handle_track(track(id="t1"), now=0.0)
+        loop._ipc.lyrics_list.assert_called_once_with([(0.0, "a"), (10.0, "b")])
+
+    def test_only_once_per_track(self):
+        loop = self._loop_with_fetch([(0.0, "a")], "ok")
+        loop.handle_track(track(id="t1"), now=0.0)
+        loop.handle_track(track(id="t1", pos=2.0), now=1.0)
+        loop._ipc.lyrics_list.assert_called_once()
+
+    def test_unsynced_lyrics_have_no_times_to_send(self):
+        loop = self._loop_with_fetch([(0.0, "todo el texto junto")], "plain")
+        loop.handle_track(track(id="t1"), now=0.0)
+        loop._ipc.lyrics_list.assert_not_called()
+
+    def test_a_track_without_lyrics_sends_nothing(self):
+        loop = self._loop_with_fetch(None, "none")
+        loop.handle_track(track(id="t1"), now=0.0)
+        loop._ipc.lyrics_list.assert_not_called()
 
 
 class TestPauseNearEnd(unittest.TestCase):

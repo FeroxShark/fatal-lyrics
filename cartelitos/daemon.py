@@ -277,6 +277,11 @@ class DaemonLoop:
         if self.lyrics is None and self._lyr._fetch["done"] and self._lyr._fetch["id"] == self.track_id:
             self.lyrics = self._lyr._fetch["lyrics"]
             self.lyrics_kind = self._lyr._fetch.get("status")
+            # la letra entera, una sola vez: el `show` manda una línea por vez y
+            # el overlay no ve el resto. Sin sincronizar no hay tiempos que
+            # mandar (el "plain" es un bloque de texto suelto), así que ahí no va.
+            if self.lyrics and self.lyrics_kind != "plain":
+                self._ipc.lyrics_list(self.lyrics)
             # el reloj del "no responde" arranca cuando HAY letra: la búsqueda
             # va en otro hilo y puede tardar, y esa espera no es un silencio
             self.last_show_at = now
@@ -315,7 +320,8 @@ class DaemonLoop:
                         # letra que venga de dos campos sigue andando igual
                         self.last_show_at = now
                         self._ipc.show(line[1], t["title"], line[0], t1,
-                                       line[2] if len(line) > 2 else None)
+                                       line[2] if len(line) > 2 else None,
+                                       nxt=self._ipc.next_line(self.lyrics, i))
 
             # silencio largo con la letra cargada: el programa se cuelga solo.
             # Con la letra sin sincronizar no aplica: ahí no viene ninguna línea

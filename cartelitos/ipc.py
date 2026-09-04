@@ -25,6 +25,8 @@ def parse_sync(raw):
 
 _sock = None
 _last_np = None
+# la letra entera del tema (evento `lyrics`), para reenviarla al reconectar
+_last_lyrics = None
 # posición de la canción, para que el hilo de audio sepa en qué minuto está
 _song_where = {"pos": 0.0, "at": 0.0, "playing": False}
 
@@ -115,6 +117,8 @@ def send(event):
                 s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
                 if _last_np is not None and _last_np is not event:
                     s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
+                if _last_lyrics is not None and _last_lyrics is not event:
+                    s.sendall((json.dumps(_last_lyrics, ensure_ascii=False) + "\n").encode())
                 _sock = s
             _sock.sendall(data)
             _fail_count = 0
@@ -153,7 +157,48 @@ def hang():
     show(HANG_TEXT, HANG_TITLE, kind="hang")
 
 
-def show(text, title, t0=0.0, t1=0.0, words=None, kind=None):
+def next_line(lines, i):
+    """El campo `next` del evento `show`: la línea i+1 con su ventana, o None.
+
+    El daemon manda UNA línea por vez, así que el overlay no sabe nada de la
+    que viene — y sin eso no puede anticipar en qué pantalla va a caer (el aro
+    y el motif que huye de la tanda 2). `segs` viaja también acá por la misma
+    razón que en la línea actual: el corte de las repeticiones se hace en el
+    daemon, y el overlay calcula el reparto de la línea siguiente ANTES de que
+    llegue. Sin los pedazos, lo que anticipó y lo que después se ve no serían
+    la misma cosa."""
+    if not lines or i < 0 or i + 1 >= len(lines):
+        return None
+    nxt = lines[i + 1]
+    # mismo criterio que la línea actual: termina donde arranca la siguiente,
+    # y la última se queda 5 s
+    end = lines[i + 2][0] if i + 2 < len(lines) else nxt[0] + 5
+    out = {"text": nxt[1], "t0": round(nxt[0], 2), "t1": round(end, 2)}
+    segs = lyrics.split_repeats(nxt[1])
+    if len(segs) > 1:
+        out["segs"] = segs
+    return out
+
+
+def lyrics_list(lines):
+    """La letra entera del tema, una sola vez por tema.
+
+    El `show` manda una línea por vez: el overlay nunca ve el resto. Los
+    motivos que dibujan la letra y cualquier cosa que necesite mirar más allá
+    del verso que suena salen de acá. Se guarda para reenviarla cuando el
+    overlay reconecta (el overlay muerto con el daemon vivo es un estado
+    frecuente): si no, el tema entero se queda sin letra hasta el siguiente."""
+    global _last_lyrics
+    ev = {"cmd": "lyrics", "lines": [
+        {"t0": round(ln[0], 2),
+         "t1": round(lines[k + 1][0] if k + 1 < len(lines) else ln[0] + 5, 2),
+         "text": ln[1]}
+        for k, ln in enumerate(lines)]}
+    _last_lyrics = ev
+    send(ev)
+
+
+def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None):
     # t0/t1: comienzo y fin estimado de la línea, para el karaoke del overlay
     ev = {"cmd": "show", "text": text, "title": title,
           "t0": round(t0, 2), "t1": round(t1, 2)}
@@ -172,10 +217,15 @@ def show(text, title, t0=0.0, t1=0.0, words=None, kind=None):
     segs = lyrics.split_repeats(text)
     if len(segs) > 1:
         ev["segs"] = segs      # golpes repetidos: cada uno a una pantalla
+    # explícito, incluso vacío: `null` significa "no hay próxima línea", y el
+    # overlay tiene que poder distinguirlo de "el daemon es viejo y no lo manda"
+    ev["next"] = nxt
     send(ev)
 
 
 def clear():
+    global _last_lyrics
+    _last_lyrics = None        # otro tema, otra letra
     send({"cmd": "clear"})
 
 

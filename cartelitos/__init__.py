@@ -51,8 +51,8 @@ from .system import (
 
 from .ipc import (
     DEMO_LINES, HANG_TEXT, HANG_TITLE, SOCK_PATH, SYNC_PATH, clear, demo, hang,
-    parse_sync, send, send_soft, show, _config_event, _demo_burst, _send_lock,
-    _song_pos, _song_where,
+    lyrics_list, next_line, parse_sync, send, send_soft, show,
+    _config_event, _demo_burst, _send_lock, _song_pos, _song_where,
 )
 
 from .audio import (

@@ -249,23 +249,37 @@ PanelWindow {
     readonly property real hopRayG1: hopFrom ? 0.22
         : (hopMid ? 0.22 + 0.56 * (hopPos + 1) / hopMids : 1)
 
-    // la crominancia por cuatro mientras la franja está encima: tres cuadros,
-    // contados en cuadros y no en reloj, que es como dura un glitch de verdad
+    // La crominancia por cuatro mientras el rayo pasa por encima. Duraba TRES
+    // CUADROS, contados en cuadros: a 60 Hz son 50 ms y a 200 Hz son 15, y en
+    // los dos casos pasa sin que nadie lo registre (T3.B6). Ahora dura por
+    // reloj, mínimo 120 ms, y termina con UN cuadro al doble: el ojo necesita
+    // un final para saber que hubo algo, si no lee un parpadeo del monitor.
+    readonly property int glitchMinMs: 120
     property real hopChroma: 1
-    property int hopChromaFrames: 0
+    property double hopChromaUntil: 0
+    property bool hopChromaPunch: false
     FrameAnimation {
         // corre sólo durante el salto (y los tres cuadros del glitch): el resto
         // del tiempo la pantalla del medio sigue a sus 20 fps de siempre
         running: crt.visible
-            && (crt.hopClock < 1 + crt.hopTailFrac || crt.hopChromaFrames > 0)
+            && (crt.hopClock < 1 + crt.hopTailFrac || crt.hopChromaUntil > 0)
         onTriggered: {
+            const now = Date.now();
             const end = 1 + crt.hopTailFrac;
             crt.hopClock = crt.ctl.crtHopStart > 0
-                ? Math.min((Date.now() - crt.ctl.crtHopStart) / crt.ctl.crtHopMs,
-                           end)
+                ? Math.min((now - crt.ctl.crtHopStart) / crt.ctl.crtHopMs, end)
                 : end;
-            if (crt.hopChromaFrames > 0 && --crt.hopChromaFrames === 0)
-                crt.hopChroma = 1;
+            if (crt.hopChromaUntil > 0 && now >= crt.hopChromaUntil) {
+                if (!crt.hopChromaPunch) {
+                    // el cuadro de más, al doble: el remate del glitch
+                    crt.hopChromaPunch = true;
+                    crt.hopChroma = 8;
+                } else {
+                    crt.hopChromaPunch = false;
+                    crt.hopChromaUntil = 0;
+                    crt.hopChroma = 1;
+                }
+            }
         }
     }
     Timer {
@@ -274,7 +288,8 @@ PanelWindow {
         id: hopGlitch
         onTriggered: {
             crt.hopChroma = 4;
-            crt.hopChromaFrames = 3;
+            crt.hopChromaPunch = false;
+            crt.hopChromaUntil = Date.now() + crt.glitchMinMs;
             // por el portero de siempre: si esta pantalla acaba de romperse,
             // que se descarte es lo correcto
             crt.hit(0.25);
@@ -304,7 +319,8 @@ PanelWindow {
                 hopGlitch.stop();
                 crt.hopClock = 1 + crt.hopTailFrac;
                 crt.hopChroma = 1;
-                crt.hopChromaFrames = 0;
+                crt.hopChromaUntil = 0;
+                crt.hopChromaPunch = false;
                 return;
             }
             crt.hopClock = 0;
@@ -590,7 +606,9 @@ PanelWindow {
     SequentialAnimation {
         id: chanAnim
         PropertyAction { target: crt; property: "chanNoise"; value: 1 }
-        PauseAnimation { duration: 60 }
+        // 60 ms de ruido no se leen como un cambio de canal: se leen como que
+        // el monitor parpadeó (T3.B6, el mínimo de 120 ms)
+        PauseAnimation { duration: 130 }
         PropertyAction { target: crt; property: "chanFlash"; value: true }
         PauseAnimation { duration: 16 }
         PropertyAction { target: crt; property: "chanFlash"; value: false }

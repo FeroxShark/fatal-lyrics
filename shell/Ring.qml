@@ -163,13 +163,19 @@ Item {
         ghost = 1;
         ghostDecay.start();
     }
-    NumberAnimation {
+    // El doble aro se quedaba 140 ms desvaneciéndose desde el primer cuadro, y
+    // un efecto que empieza a irse en cuanto aparece no se llega a ver. Se
+    // queda quieto 120 ms — el mínimo de T3.B6 — y recién ahí se apaga.
+    SequentialAnimation {
         id: ghostDecay
-        target: ring
-        property: "ghost"
-        to: 0
-        duration: 140
-        easing.type: Easing.OutQuad
+        PauseAnimation { duration: 120 }
+        NumberAnimation {
+            target: ring
+            property: "ghost"
+            to: 0
+            duration: 140
+            easing.type: Easing.OutQuad
+        }
     }
 
     // El final: punto → raya. Es el apagado de tubo al revés, y es a propósito:

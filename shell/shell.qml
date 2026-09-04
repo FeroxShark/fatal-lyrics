@@ -128,6 +128,10 @@ ShellRoot {
 
     // ---- lo que está sonando de verdad (eventos "aud" del daemon)
     property real audLevel: 0
+    // el mismo nivel, promediado ~2 s (los eventos llegan a 10 Hz). Un golpe no
+    // dice si el tema está fuerte: lo dice el rato. Es lo que pesa el director
+    // de entradas (crtEntryTable).
+    property real audLevel2s: 0.35
     property real audLo: 0
     property real audMid: 0
     property real audHi: 0
@@ -897,19 +901,116 @@ ShellRoot {
         return out;
     }
 
-    // Cómo entra la palabra en esta línea. Que sea siempre igual cansa: a veces
-    // aparece seca, a veces entra de golpe grande, a veces baja rodando como un
-    // tubo que recién agarra la sincronía.
-    function crtEntryStyle() {
-        const r = crtHash((crtLine.serial || 0) * 23 + 11);
-        if (r < 0.18)
-            return "slam";
-        if (r < 0.34)
-            return "roll";
-        // T3.5: la escribe un teletipo, letra por letra, con el cursor atrás
-        if (r < 0.50)
-            return "type";
-        return "snap";
+    // ---------------------------------------------- cómo entra la palabra (T3.3)
+    // Que la palabra entre siempre igual cansa. Hasta acá los cuatro estilos
+    // salían por sorteo parejo, así que el teletipo aparecía tanto en el
+    // silencio como en el estribillo — y un teletipo en el estribillo llega
+    // tarde. Ahora los pesa el contexto: cuánto está sonando (RMS de los
+    // últimos ~2 s) y en qué parte del tema está la línea.
+    //
+    // Cómo tunear: cada fila es un contexto y cada número el peso RELATIVO
+    // dentro de esa fila — no hace falta que sumen 1. Un 0 saca el estilo de
+    // ese contexto. Lo que se reparte es lo que quede después de dos filtros:
+    // `overburn` tiene su propio portero (compás confiable + drop) y el estilo
+    // de la línea anterior EN ESA PANTALLA se descarta, salvo que sea el único
+    // que quedó con peso.
+    readonly property var crtEntryTable: ({
+        calm:   { type: 0.35, tubeon: 0.30, snap: 0.15, interlace: 0.10,
+                  slam: 0.05, roll: 0.05, overburn: 0.00 },
+        strong: { interlace: 0.35, snap: 0.25, overburn: 0.25, tubeon: 0.10,
+                  type: 0.05, slam: 0.00, roll: 0.00 },
+    })
+    // Arriba de esto la fila es "fuerte". `audLevel` no son decibeles: es el rms
+    // dividido por el pico del propio tema, así que 0.55 quiere decir "más de la
+    // mitad de lo más fuerte que sonó", y eso viaja igual en un tema bajito.
+    readonly property real crtEntryLoud: 0.55
+
+    // Sorteo con pesos, puro: no mira nada del root, todo entra por argumento.
+    // `r` es 0..1.
+    function crtPickEntry(ctx, burnOk, last, r) {
+        const w = crtEntryTable[ctx] || crtEntryTable.calm;
+        let keys = [];
+        let total = 0;
+        for (const k in w) {
+            const v = (k === "overburn" && !burnOk) ? 0 : w[k];
+            if (v <= 0)
+                continue;
+            keys.push({ k: k, v: v });
+            total += v;
+        }
+        const kept = keys.filter(e => e.k !== last);
+        if (kept.length > 0) {
+            keys = kept;
+            total = 0;
+            for (let i = 0; i < keys.length; i++)
+                total += keys[i].v;
+        }
+        if (keys.length === 0)
+            return "snap";
+        const x = r * total;
+        let acc = 0;
+        for (let i = 0; i < keys.length; i++) {
+            acc += keys[i].v;
+            if (x <= acc)
+                return keys[i].k;
+        }
+        return keys[keys.length - 1].k;
+    }
+
+    // El estilo de entrada de cada pantalla en la línea que está llegando. Se
+    // calcula UNA vez, al consumir (acá sí se lee el estado vivo: esto es la
+    // línea que llega, no la que se anticipa — dentro de crtShotFor no podría).
+    // `ringScreen` es la pantalla donde estaba el aro: ahí la entrada es
+    // `tubeon` sí o sí, porque el aro colapsa en un punto y el punto tiene que
+    // abrirse en la imagen. Sería el aro entregando la línea a otra animación.
+    property var crtEntryStyles: ({})
+    // el último estilo POR PANTALLA, y sólo de las pantallas que mostraron la
+    // línea: anotando también las que se quedaron vacías, "el anterior" deja de
+    // ser el que se vio y la regla de no repetir no dice nada
+    property var crtLastEntry: ({})
+
+    function crtEntriesFor(shot, ringScreen) {
+        const out = {};
+        const n = activeCrtScreens.length;
+        const strong = audSection === "drop" || audLevel2s >= crtEntryLoud;
+        // overburn: sólo con el compás medido (cada palabra se quema en un
+        // tiempo) y en un drop. Fuera de eso no sale nunca.
+        const burnOk = bpmLive && (crtLine.section || "verse") === "drop";
+        const seed = crtSeed(crtLine.serial || 0);
+        for (let i = 0; i < n; i++) {
+            if (shot.mode !== "all") {
+                let mine = false;
+                for (let k = 0; k < shot.chunks.length; k++)
+                    if (shot.chunks[k].screen === i)
+                        mine = true;
+                if (!mine)
+                    continue;
+            }
+            out[i] = (i === ringScreen && i === shot.focus)
+                ? "tubeon"
+                : crtPickEntry(strong ? "strong" : "calm", burnOk,
+                               crtLastEntry[i], crtHash(seed * 97 + i * 7 + 5));
+        }
+        return out;
+    }
+
+    // Dónde estaba el aro cuando llegó esta línea, mirando la línea VIEJA (por
+    // eso se llama antes de pisar crtLine). Son las condiciones de `ringShows`
+    // en Crt.qml: la pantalla que iba a recibir la próxima, sin nada de la que
+    // sonaba encima. -1 = no había aro.
+    function crtRingScreen() {
+        const t = crtNextFocus;
+        const sh = crtShot;
+        if (!crtRing || t < 0 || (crtLine.text || "") === "")
+            return -1;
+        if (sh.mode === "all" || sh.mode === "iown" || t === sh.focus)
+            return -1;
+        if (crtNextIn <= 1500)
+            return -1;
+        for (let k = 0; k < sh.chunks.length; k++)
+            if (sh.chunks[k].screen === t)
+                return -1;
+        return t;
     }
 
     // Animación de la pantalla sin letra. Alguna palabra la elige a propósito
@@ -1274,6 +1375,9 @@ ShellRoot {
         // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
         crtTrackStart = (crtLine.text || "") === "";
         const serial = crtSerial + 1;
+        // dónde estaba el aro: se mira ANTES de pisar la línea vieja, porque
+        // sale de lo que se estaba mostrando hasta recién
+        const ringScreen = crtRingScreen();
         // Se CONSUME el reparto que se calculó al llegar la línea anterior. No
         // se vuelve a sortear: volver a sortear sería admitir que lo que se
         // anticipó (el aro, el motif que huye) puede no cumplirse.
@@ -1305,6 +1409,18 @@ ShellRoot {
         // el salto arranca ACÁ, antes del serial: cuando Crt.qml reciba la
         // línea nueva el reloj de la franja ya tiene que estar corriendo
         crtHopFire(shot);
+        // y el estilo de entrada de cada pantalla, también antes del serial:
+        // Crt.qml lo lee al recibir la línea, así que para entonces ya tiene
+        // que estar puesto
+        crtEntryStyles = crtEntriesFor(shot, ringScreen);
+        // el registro del "anterior" se acumula: una pantalla que esta vez no
+        // mostró nada conserva el estilo con el que entró la última vez que sí
+        const seen = {};
+        for (const k in crtLastEntry)
+            seen[k] = crtLastEntry[k];
+        for (const k in crtEntryStyles)
+            seen[k] = crtEntryStyles[k];
+        crtLastEntry = seen;
         // último: Crt.qml cuelga de esta señal, y para cuando la reciba tiene
         // que ver la línea, el reparto y el salto ya puestos
         crtSerial++;
@@ -1453,6 +1569,7 @@ ShellRoot {
                             root.artColors = ev.colors || [];
                         } else if (ev.cmd === "aud") {
                             root.audLevel = ev.l;
+                            root.audLevel2s = root.audLevel2s * 0.95 + ev.l * 0.05;
                             root.audLo = ev.lo;
                             root.audMid = ev.mid;
                             root.audHi = ev.hi;

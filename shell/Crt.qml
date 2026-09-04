@@ -366,7 +366,9 @@ PanelWindow {
     // (o con `audio = false`) esto queda en un valor tranquilo y no se nota.
     readonly property bool live: ctl.audLive
     readonly property real rest: ctl.crtIntensity
-    readonly property string entryStyle: ctl.crtEntryStyle()
+    // el estilo de entrada lo reparte el root al llegar la línea (un estilo por
+    // pantalla, pesado por lo que está sonando): acá sólo se lee el que tocó
+    readonly property string entryStyle: ctl.crtEntryStyles[idx] || "snap"
     property real pump: 0.35
     Behavior on pump { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
     Timer {

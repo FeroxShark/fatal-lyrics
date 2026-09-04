@@ -776,7 +776,12 @@ PanelWindow {
         target: crt.ctl
         function onCrtSerialChanged() {
             crt.ghostText = crt.myText;
-            crt.ghostFade = crt.showsText ? 0.55 : 0;
+            // T4.3: 0.45 y no 0.55. Ferox pidió el quemado "un poquito menos";
+            // el punto 6 de la referencia de fluidez es más duro que eso — lo
+            // viejo no puede seguir compitiendo pasado el asentamiento del
+            // nuevo, y con 900 ms de InQuad (que ARRANCA despacio) el verso
+            // anterior seguía casi entero cuando el nuevo ya estaba quieto.
+            crt.ghostFade = crt.showsText ? 0.45 : 0;
             ghostAnim.restart();
             // ÚNICA patada de señal fija: cuando cambia el verso, y SÓLO en la
             // pantalla donde cae la frase. Pateando las tres, con doce versos por
@@ -823,8 +828,10 @@ PanelWindow {
         target: crt
         property: "ghostFade"
         to: 0
-        duration: 900
-        easing.type: Easing.InQuad
+        // la perilla `ghost_ms` (550 de fábrica): cae rápido y termina suave,
+        // así el verso viejo deja de competir en ~250 ms pero no se corta seco
+        duration: crt.ctl.crtGhostMs
+        easing.type: Easing.OutQuad
     }
 
     // El cambio de canal lo dispara el ROOT (T4.3): la pared entera cambia de

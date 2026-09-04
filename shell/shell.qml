@@ -323,6 +323,89 @@ ShellRoot {
     // falta recalcularlo por fuera).
     property double crtNextAt: 0
     property real crtNextIn: -1
+    // Cuándo se DEJA DE CANTAR la línea que suena, en reloj local (0 = no se
+    // sabe: un daemon viejo, o cualquiera de los drivers de `docs/plans/`).
+    // El `t1` de una línea es el `t0` de la siguiente, así que no dice nada del
+    // silencio; esto lo estima el daemon (`lyrics.voice_end`) y es lo que hace
+    // que el aro NO aparezca a mitad de verso, encima de la voz.
+    property double crtVEndAt: 0
+    // Sube sólo cuando la línea que viene es OTRA. El reenvío de la misma
+    // línea (el ajuste de sync resetea el índice del daemon a propósito) trae
+    // un `due` corregido para el MISMO aro: corrige el reloj sin borrar lo que
+    // el aro ya contó.
+    property int crtNextGen: 0
+    property string crtNextKey: ""
+
+    // El reloj con el que se mira si el aro tiene que estar: un binding que
+    // llama a una función no se re-evalúa solo, y el `crtNextIn` congelado del
+    // `show` es justamente lo que hacía aparecer el aro encima de la letra.
+    // 10 Hz alcanza — lo que decide es aparecer o no, no cómo se dibuja.
+    // (`crtClock` ya es la hora que dibuja la carta de ajuste: otro nombre.)
+    property double crtNow: 0
+    Timer {
+        interval: 100
+        repeat: true
+        running: root.crtOn && root.crtNextAt > 0
+        onTriggered: root.crtNow = Date.now()
+    }
+
+    // ---- el aro: en qué pantalla está, ahora mismo (-1 = en ninguna)
+    //
+    // El enganche vive ACÁ y no en Crt.qml por dos razones. Una: `show()` le
+    // pregunta a `crtRingScreen()` dónde estaba el aro para elegir la entrada
+    // de esa pantalla, y en ese instante falta ~0 ms para la línea — cualquier
+    // condición sin memoria contestaría "en ninguna" siempre. Dos: prendido y
+    // apagado tienen umbrales distintos (aparece con más de 1.4 s por delante,
+    // se queda hasta 0.5 s DESPUÉS de la hora), y eso es estado, no un binding.
+    property int crtRingLive: -1
+    // dónde puede ir el aro según el reparto: la pantalla que va a recibir la
+    // próxima línea, sin nada de la que suena encima (el pedazo quemado cuenta
+    // como tener algo). -1 = no hay lugar.
+    function crtRingPlace() {
+        const t = crtNextFocus;
+        const sh = crtShot;
+        if (!crtRing || t < 0 || (crtLine.text || "") === "")
+            return -1;
+        if (sh.mode === "all" || sh.mode === "iown" || t === sh.focus)
+            return -1;
+        for (let k = 0; k < sh.chunks.length; k++)
+            if (sh.chunks[k].screen === t)
+                return -1;
+        return t;
+    }
+    // el hueco que el aro llega a contar: 8 s como máximo. En un instrumental
+    // largo (o en la intro) la pantalla es del motif hasta que faltan 8 s; un
+    // cronómetro de cuarenta segundos no es una espera, es un reloj de pared.
+    readonly property int crtRingMaxMs: 8000
+    function crtRingTick() {
+        const place = crtRingPlace();
+        const left = crtNextAt > 0 ? crtNextAt - Date.now() : -1;
+        if (crtRingLive >= 0) {
+            // Se queda quieto en "0.0" medio segundo después de la hora: el
+            // `show` cae 0–300 ms tarde (el poll del daemon) y cortarlo en la
+            // hora sería apagar el aro justo antes de que llegue lo que estaba
+            // contando. Los 900 ms son ese medio segundo más el apagado del
+            // propio aro, que si no se corta a la mitad.
+            if (place !== crtRingLive || left < -900)
+                crtRingLive = -1;
+            return;
+        }
+        if (place < 0 || left <= 0)
+            return;
+        // la voz de la línea que suena todavía no terminó: el aro encima de
+        // ella es lo que Ferox vio como "aparece en medio de la letra"
+        if (crtVEndAt > 0 && Date.now() < crtVEndAt)
+            return;
+        // 1400 y no 1500: el daemon ya recortó `v_end` para dejar 1.7 s, y
+        // este tick llega hasta 100 ms tarde. Con el umbral clavado en 1500 el
+        // aro no aparecía nunca justo cuando el recorte era el que mandaba.
+        if (left <= 1400 || left > crtRingMaxMs)
+            return;
+        crtRingLive = place;
+        console.log("crt: ring armed screen=" + place
+            + " in=" + Math.round(left) + " at=" + Date.now());
+    }
+    onCrtNowChanged: crtRingTick()
 
     // Ruido determinístico: todas las pantallas tienen que elegir el MISMO
     // layout para la misma línea, y sin hablar entre ellas.
@@ -827,10 +910,12 @@ ShellRoot {
     function crtPredict() {
         crtPendingShot = null;
         crtNextAt = 0;
-        crtNextIn = -1;
         const nx = crtNext;
-        if (!nx || !nx.text || activeCrtScreens.length === 0)
+        if (!nx || !nx.text || activeCrtScreens.length === 0) {
+            crtNextIn = -1;
+            crtNextKey = "";
             return;
+        }
         // el `section` de la línea que viene no se puede saber (los eventos
         // `sec` llegan cuando quieren): se predice con la parte de ahora y, si
         // al llegar resultó ser un drop, el consumo la vuelve IOWN — que cruza
@@ -840,8 +925,23 @@ ShellRoot {
                                       segs: nx.segs || [], words: [],
                                       section: audSection, trackStart: false });
         crtPendingShot.serial = (crtLine.serial || 0) + 1;
-        crtNextAt = Date.now() + Math.max((nx.t0 || 0) - songPos(), 0) * 1000;
-        crtNextIn = crtNextAt - Date.now();
+        // `due` es el instante en que el daemon va a mandar el `show`, ya con
+        // su offset descontado; el `t0` pelado es el fallback para un daemon
+        // viejo y para los drivers de `docs/plans/`, y llega tarde por el
+        // offset (0.15 s de fábrica, más lo que haya ajustado el sync).
+        const due = nx.due !== undefined ? nx.due : (nx.t0 || 0);
+        crtNextAt = Date.now() + Math.max(due - songPos(), 0) * 1000;
+        // El hueco del aro es el de la línea NUEVA. Un reenvío de la misma
+        // línea (el sync resetea el índice del daemon) vuelve a pasar por acá
+        // con lo que falta, no con el hueco entero: sin esto un hueco de 12 s
+        // se reclasificaba como corto en cada golpe de sync y el arco pegaba
+        // un salto a lleno.
+        const key = (nx.text || "") + "@" + (nx.t0 || 0);
+        if (key !== crtNextKey) {
+            crtNextKey = key;
+            crtNextGen++;
+            crtNextIn = crtNextAt - Date.now();
+        }
     }
 
     // En qué verso va el tema: el índice de la línea que suena adentro de la
@@ -884,6 +984,9 @@ ShellRoot {
         crtShotOverride = null;
         crtNextAt = 0;
         crtNextIn = -1;
+        crtNextKey = "";
+        crtVEndAt = 0;
+        crtRingLive = -1;
         crtHop = { from: -1, to: -1, dir: 0 };
         // un salto a mitad de camino con otras pantallas (o con otra config)
         // es una franja cruzando una pared que ya no es ésa: se corta
@@ -1073,23 +1176,12 @@ ShellRoot {
         return out;
     }
 
-    // Dónde estaba el aro cuando llegó esta línea, mirando la línea VIEJA (por
-    // eso se llama antes de pisar crtLine). Son las condiciones de `ringShows`
-    // en Crt.qml: la pantalla que iba a recibir la próxima, sin nada de la que
-    // sonaba encima. -1 = no había aro.
+    // Dónde estaba el aro cuando llegó esta línea. Ya no se recalcula: el aro
+    // se prende y se apaga en `crtRingTick`, con memoria, y acá se lee. Volver
+    // a evaluar las condiciones en este instante daría -1 siempre — falta ~0 ms
+    // para la línea, y el umbral de aparición son 1.4 s.
     function crtRingScreen() {
-        const t = crtNextFocus;
-        const sh = crtShot;
-        if (!crtRing || t < 0 || (crtLine.text || "") === "")
-            return -1;
-        if (sh.mode === "all" || sh.mode === "iown" || t === sh.focus)
-            return -1;
-        if (crtNextIn <= 1500)
-            return -1;
-        for (let k = 0; k < sh.chunks.length; k++)
-            if (sh.chunks[k].screen === t)
-                return -1;
-        return t;
+        return crtRingLive;
     }
 
     // Animación de la pantalla sin letra. Alguna palabra la elige a propósito
@@ -1479,7 +1571,7 @@ ShellRoot {
         }
     }
 
-    function show(text, title, icon, t0, t1, segs, words, kind, nxt) {
+    function show(text, title, icon, t0, t1, segs, words, kind, nxt, vEnd) {
         // T4.5: "fatal-lyrics no responde". No es un verso: no toca el tubo, no
         // envejece a nadie y no pasa a ser la línea actual. Muere solo cuando
         // llegue la próxima línea de verdad (ver shouldDie).
@@ -1566,7 +1658,20 @@ ShellRoot {
         // último: Crt.qml cuelga de esta señal, y para cuando la reciba tiene
         // que ver la línea, el reparto y el salto ya puestos
         crtSerial++;
+        // La línea llegó: el aro que la estaba contando se va con su raya,
+        // encima de la entrada. Se baja ACÁ y no en el tick de después porque
+        // `crtPredict` sube `crtNextGen`, y un aro todavía prendido leería eso
+        // como "otra línea" y se reiniciaría a lleno un cuadro antes de morir.
+        // El reenvío de la misma línea no lo toca: ese aro cuenta la SIGUIENTE,
+        // y sigue contándola.
+        if (!again)
+            crtRingLive = -1;
         crtNext = nxt || null;
+        // cuándo se deja de cantar ESTA línea, pasado al reloj local. Sin el
+        // campo (daemon viejo, o los drivers de `docs/plans/`) queda en 0 y el
+        // aro se comporta como antes de la tanda 4: aparece apenas hay lugar.
+        crtVEndAt = vEnd !== undefined && vEnd !== null
+            ? Date.now() + (vEnd - songPos()) * 1000 : 0;
         crtPredict();
         if (crtOn)
             console.log("crt: next focus=" + crtNextFocus
@@ -1701,7 +1806,7 @@ ShellRoot {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
                             root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs,
-                                      ev.words, ev.kind, ev.next);
+                                      ev.words, ev.kind, ev.next, ev.v_end);
                         else if (ev.cmd === "lyrics") {
                             root.crtLines = ev.lines || [];
                             root.crtLinesSynced = ev.synced !== false;
@@ -1775,6 +1880,14 @@ ShellRoot {
                             // Windows de siempre, con el mismo texto que
                             // mandaba el daemon hasta la tanda 2.
                             root.syncDelta = ev.d || 0;
+                            // El reloj del aro NO se corrige acá. `sync()`
+                            // resetea el índice del daemon a propósito, así que
+                            // la misma línea vuelve ~0.3 s después con el `due`
+                            // y el `v_end` ya recalculados: eso es exacto y no
+                            // se puede aplicar dos veces. Restar el delta acá
+                            // encima sería contarlo de nuevo — y `ev.offset` es
+                            // el acumulado del TEMA, que después de un cambio
+                            // de tema no se sabe contra qué restarlo.
                             root.syncOffset = ev.offset || 0;
                             root.syncArtist = ev.artist || "";
                             root.syncGen++;

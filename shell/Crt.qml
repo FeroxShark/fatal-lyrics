@@ -167,20 +167,15 @@ PanelWindow {
     // ------------------------------------------------- el aro que cuenta (T2.2)
     // Va en la pantalla DONDE VA A CAER la próxima línea, y sólo si esa
     // pantalla no tiene nada de la que suena: encima del texto sería un
-    // adorno, no un aviso. `shot.past` cuenta como tener algo — el pedazo
-    // quemado sigue siendo esta línea.
-    readonly property bool ringFree: {
-        const sh = ctl.crtShot;
-        for (let k = 0; k < sh.chunks.length; k++)
-            if (sh.chunks[k].screen === idx)
-                return false;
-        return true;
-    }
-    readonly property bool ringShows: ctl.crtRing && !noLyric && !allMode && !iownMode
-        && ctl.crtNextFocus === idx && ctl.crtNextFocus !== ctl.crtShot.focus
-        && !showsText && ringFree
-        // con la línea siguiente encima no hay nada que contar
-        && ctl.crtNextIn > 1500
+    // adorno, no un aviso.
+    //
+    // TANDA 4: la decisión NO se toma acá. Prenderlo y apagarlo tiene memoria
+    // (aparece con más de 1.4 s por delante y con la voz de la línea que suena
+    // ya terminada, y se queda hasta después de la hora), y eso es estado del
+    // root, no un binding por pantalla — `show()` además le pregunta al root
+    // dónde ESTABA el aro para elegir la entrada de esta pantalla. Acá sólo se
+    // lee en qué pantalla está.
+    readonly property bool ringShows: ctl.crtRingLive === idx
 
     // ------------------------------------------------ el salto de pantalla (T2.3)
     // La frase saltó a una pantalla que NO es la de al lado. Lo que se ve es el
@@ -1465,28 +1460,30 @@ PanelWindow {
             // ---- el aro de la línea que viene, encima del motif
             Ring {
                 anchors.fill: parent
-                visible: crt.ringShows
+                // `armed` y no `visible`: el aro se va con la raya encima de la
+                // letra que entra, así que decide él cuándo deja de dibujarse
+                armed: crt.ringShows
+                gen: crt.ctl.crtNextGen
                 colour: crt.pal.ink
                 hot: crt.pal.hot
+                fontFamily: crt.fontFamily
                 level: crt.pump
                 dueAt: crt.ctl.crtNextAt
-                total: crt.ctl.crtNextIn
-                // sin compás confiable baja con el reloj: el paso se pierde,
-                // la respiración no
+                // el ritmo ya no decide cuánto se comió (eso lo dice el reloj):
+                // decide dónde cae el mordisco. Con compás, en el tiempo.
                 stepped: crt.ctl.bpmLive
                 beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
                 beat: crt.ctl.beatTick
-                // sin compás el aro come POR GOLPE: el mismo que acompaña a los
-                // motivos. Y respira con los graves, no con el nivel general.
-                // el golpe CRUDO (`audBeat`), no el pico del tubo: el pico va
-                // uno cada cuatro segundos y el aro tiene que comer varias
-                // veces por verso para que se vea que come
+                // sin compás, en el grave: el golpe CRUDO (`audBeat`), no el
+                // pico del tubo, que va uno cada cuatro segundos
                 kick: crt.ctl.audBeat
                 low: crt.live ? crt.ctl.audLo : 0.4
                 screen: crt.idx
                 cue: crt.ctl.cueGen
-                // el aro entrega la línea: el colapso pasa por el mismo portero
-                // que todo lo demás, no por una rotura inventada acá
+                // el aro entrega la línea: la rotura sale con la RAYA, que es
+                // cuando la frase llega de verdad — no cuando vence el reloj.
+                // El `show` cae 0–300 ms después (el poll del daemon) y una
+                // rotura en la hora se gastaba el portero justo antes.
                 onCollapsed: crt.hit(0.5)
             }
 

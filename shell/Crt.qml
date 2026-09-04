@@ -1106,12 +1106,18 @@ PanelWindow {
                 Scale {
                     origin.x: camera.width / 2
                     origin.y: camera.height / 2
+                    // T4.3: el latido de la cámara es CHICO sobre una deriva
+                    // uniforme (1.5 % en el pico, 0.2 % en el tiempo; eran
+                    // 3.5 % y 2 %). El punto 3 de la referencia de fluidez: lo
+                    // que hace que se sienta líquido es movimiento de velocidad
+                    // uniforme, no acelerones. La amplitud sale de `pace`, así
+                    // que `wild` devuelve los números de la tanda 3.
                     xScale: crt.camZoom * crt.cueZoom * crt.sectionZoom
-                        * (1 + 0.035 * crt.beatPulse
-                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
+                        * (1 + crt.ctl.pace.camBeat * crt.beatPulse
+                           + crt.ctl.pace.camGrid * crt.gridPulse * crt.ctl.crtFlicker)
                     yScale: crt.camZoom * crt.cueZoom * crt.sectionZoom
-                        * (1 + 0.035 * crt.beatPulse
-                           + 0.02 * crt.gridPulse * crt.ctl.crtFlicker)
+                        * (1 + crt.ctl.pace.camBeat * crt.beatPulse
+                           + crt.ctl.pace.camGrid * crt.gridPulse * crt.ctl.crtFlicker)
                 },
                 // el colapso del apagado: va aparte del encuadre para no pisarle
                 // el binding a la cámara mientras el tubo se muere
@@ -1523,6 +1529,15 @@ PanelWindow {
                     // quedaba encima del dibujo y sin contraste contra él.
                     dim: (crt.ringShows || syncHint.opacity > 0.01) ? 0
                         : (crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1)
+                    // T4.3: la amplitud del latido, de la tabla de `pace`
+                    opaMin: crt.ctl.pace.motifOpaMin
+                    opaSpan: crt.ctl.pace.motifOpaSpan
+                    scaleAmt: crt.ctl.pace.motifScale
+                    surgeK: crt.ctl.pace.surgeK
+                    driveMin: crt.ctl.pace.driveMin
+                    driveMax: crt.ctl.pace.driveMax
+                    driveDrop: crt.ctl.pace.driveDrop
+                    swap: crt.motifSwap
                     waterAmp: crt.ctl.crtWaterAmp
                     // la semilla de esta aparición: el reloj de los motivos cruzado
                     // con el número de pantalla, así dos pantallas con el mismo

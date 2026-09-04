@@ -2014,11 +2014,17 @@ ShellRoot {
                             root.motifGen++;
                             // T4.3: el drop es un cambio de escena y reparte
                             // todo junto; el resto de las partes sólo le da su
-                            // oportunidad a la pantalla que venció el hold
+                            // oportunidad a la pantalla que venció el hold.
+                            // Y el reparto forzado pide `secMoved`: el daemon
+                            // sólo manda `sec` cuando la parte CAMBIA
+                            // (`audio.py`, `if changed`), pero los drivers de
+                            // `docs/plans/` la repiten, y un drop repetido cada
+                            // pocos segundos daría vuelta la pared entera con
+                            // puente y todo.
                             if (root.motifPreCued)
                                 root.motifPreCued = false;
                             else
-                                root.crtMotifRefresh(ev.kind === "drop");
+                                root.crtMotifRefresh(ev.kind === "drop" && secMoved);
                         } else if (ev.cmd === "bpm") {
                             root.bpm = ev.v;
                             root.bpmConf = ev.conf;

@@ -427,6 +427,11 @@ no-op → boot roto. No reintroducir un segundo.)
   tiene que dar lo mismo cuando llega). El "no dos veces en menos de 20 s" lo pone `show()`
   (`crtChanFire`), que es lo único que sabe cuánto hace. El cambio de PARTE también lo dispara:
   ahí el glitch es el puente.
+- **Donde estaba el aro, el verso NO rompe.** El aro pega su `hit(0.5)` con la raya ~100 ms
+  después de la hora, y la patada del cambio de verso caería justo encima: dos roturas en la
+  misma pantalla con 100 ms de diferencia no se leen como un golpe, se leen como una falla. El
+  root anota en `crtRingWas` dónde estaba el aro ANTES de pisar la línea vieja (el mismo dato
+  que ya usaba `crtEntriesFor`) y la pantalla que era el aro se saltea su `hit`.
 - **`resetFaces()` en el pico tiene que mirar `color_hold`.** El comentario decía "un par de
   veces por canción" desde la tanda 2, pero el pico no tenía portero ninguno: con un pico cada
   12 s la pared se daba vuelta entera cinco veces por minuto.

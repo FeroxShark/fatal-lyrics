@@ -272,8 +272,33 @@ ShellRoot {
     // true mientras la línea que suena es la primera del tema (ver show())
     property bool crtTrackStart: false
 
+    // ---- la línea que VIENE (T2.0)
+    // El daemon manda una línea por vez: hasta acá el tubo no sabía nada de la
+    // próxima, y sin eso no hay forma de avisar a dónde va a saltar la frase.
+    // `crtNext` es lo que mandó el daemon con el `show` ({text, t0, t1, segs});
+    // null cuando la letra se terminó. NO se infiere de crtLines: en un
+    // rebobinado el daemon vuelve a mandar el `show` con el `next` correcto y
+    // acá sólo se consume.
+    property var crtNext: null
+    // la letra entera del tema (evento `lyrics`), para lo que necesita mirar
+    // más allá del verso que suena
+    property var crtLines: []
+    // Cuándo arranca la próxima línea, en reloj local, y cuánto faltaba cuando
+    // llegó la actual. Se fija al llegar la línea (un `show` nuevo es también
+    // lo que llega después de un ajuste de sync o de un salto, así que no hace
+    // falta recalcularlo por fuera).
+    property double crtNextAt: 0
+    property real crtNextIn: -1
+
     // Ruido determinístico: todas las pantallas tienen que elegir el MISMO
     // layout para la misma línea, y sin hablar entre ellas.
+    // Semilla de una línea: el tema y el número de línea, NADA vivo. Es lo que
+    // hace que el reparto de la línea k+1 se pueda calcular mientras suena la
+    // k y dé exactamente lo mismo cuando llegue de verdad.
+    function crtSeed(serial) {
+        return crtTrackSeed * 1009 + (serial || 0);
+    }
+
     function crtHash(n) {
         let x = Math.imul(n ^ 0x9e3779b9, 2654435761);
         x ^= x >>> 15;
@@ -489,7 +514,11 @@ ShellRoot {
     // al cambiar de tema: un par de veces por canción, que es cuando significa
     // algo.
     onCrtTrackSeedChanged: resetFaces()
-    onActiveCrtScreensChanged: resetFaces()
+    onActiveCrtScreensChanged: {
+        resetFaces();
+        // el reparto guardado habla de pantallas que ya no son las mismas
+        crtForget();
+    }
 
     function updateInfection() {
         const sh = crtShot;
@@ -616,13 +645,22 @@ ShellRoot {
         const words = text.split(/\s+/).filter(w => w.length > 0);
         const n = activeCrtScreens.length;
         const serial = line.serial || 0;
-        const focus = n > 0 ? (serial + Math.floor(crtHash(serial * 17 + 3) * n)) % n : 0;
+        // Todo el sorteo cuelga de la semilla de la línea, y la semilla no mira
+        // nada vivo: por eso esta función se puede evaluar para la línea que
+        // TODAVÍA no llegó y da el mismo resultado cuando llega. Lo único que
+        // sigue saliendo del `serial` pelado es la rotación del foco, que es
+        // lo que hace que dos líneas seguidas no caigan en la misma pantalla.
+        const seed = crtSeed(serial);
+        const focus = n > 0 ? (serial + Math.floor(crtHash(seed * 17 + 3) * n)) % n : 0;
         // T3.1: el verso llega como un cambio de canal (estática, un cuadro
         // rojo, y ahí el texto). El sorteo es determinístico a propósito:
         // crtShot es un binding y se recalcula por cosas que no son la línea
         // (config, monitores), así que con Math.random() el mismo verso
         // cambiaría de canal a mitad de camino.
-        const chan = crtTrackStart || crtHash(serial * 41 + 9) < crtChannelSwitch;
+        // `trackStart` viaja en la LÍNEA y no se lee del root: preguntándoselo
+        // al vivo, la predicción de la línea siguiente hecha durante la primera
+        // del tema le daría el cambio de canal a la que viene, que no lo tiene.
+        const chan = (line.trackStart === true) || crtHash(seed * 41 + 9) < crtChannelSwitch;
         if (!crtDirector || crtFocusMode === "all" || n <= 1 || words.length === 0)
             return { mode: "all", focus: focus, chunks: [], chan: chan };
 
@@ -634,8 +672,8 @@ ShellRoot {
         const words_n = words.length;
         const span = Math.max((line.t1 || 0) - t0, 0.8) * 0.92;
         const dur = Math.min(span, 1.2 + words_n * 0.55);
-        const h = crtHash(serial * 31 + words.length);
-        const dir = crtHash(serial * 11 + 7) < 0.5 ? 1 : -1;
+        const h = crtHash(seed * 31 + words.length);
+        const dir = crtHash(seed * 11 + 7) < 0.5 ? 1 : -1;
 
         // T3.2 — IOWN: la línea corta no se reparte, se vuelve UNA palabra del
         // tamaño de la pantalla que cruza la pared entera de derecha a
@@ -644,7 +682,7 @@ ShellRoot {
         // sorteo. La parte del tema sale de la línea, congelada al mostrarla.
         if (crtIown && words.length <= 3
                 && ((line.section || "verse") === "drop"
-                    || crtHash(serial * 53 + 17) < 0.10)) {
+                    || crtHash(seed * 53 + 17) < 0.10)) {
             // La ventana del pedazo es la LÍNEA ENTERA, no el `dur` de los
             // otros modos: la palabra viaja con crtProgress(), que se reparte
             // sobre toda la línea. Con `dur` (dos segundos) la palabra se
@@ -717,7 +755,60 @@ ShellRoot {
         return { mode: "single", focus: focus, chan: chan,
                  chunks: [{ text: text, screen: focus, from: t0, to: t0 + dur }] };
     }
-    readonly property var crtShot: crtShotFor(crtLine)
+    // El reparto de la línea que SUENA. Normalmente sale de crtShotFor, pero si
+    // al llegar había una predicción para este serial se usa ESA: la predicción
+    // es la fuente de verdad, no un pronóstico que después se comprueba. Si el
+    // aro apuntó a la pantalla 2, la frase cae en la pantalla 2.
+    property var crtShotOverride: null
+    readonly property var crtShot: (crtShotOverride
+        && crtShotOverride.serial === (crtLine.serial || 0))
+        ? crtShotOverride : crtShotFor(crtLine)
+
+    // ---------------------------------------------- anticipar la línea que viene
+    // El reparto de la línea k+1, calculado UNA vez al llegar la k y consumido
+    // cuando la k+1 llega de verdad. No se recalcula: recalcularlo sería volver
+    // a sortear, y entonces el aviso y el destino podrían no coincidir.
+    property var crtPendingShot: null
+    // pantalla (índice en `order`) donde va a caer la próxima línea; -1 = no se sabe
+    readonly property int crtNextFocus: crtPendingShot ? crtPendingShot.focus : -1
+    // el salto de esta línea: de qué pantalla viene la frase y a cuál fue
+    property var crtHop: ({ from: -1, to: -1, dir: 0 })
+
+    function crtPredict() {
+        crtPendingShot = null;
+        crtNextAt = 0;
+        crtNextIn = -1;
+        const nx = crtNext;
+        if (!nx || !nx.text || activeCrtScreens.length === 0)
+            return;
+        // el `section` de la línea que viene no se puede saber (los eventos
+        // `sec` llegan cuando quieren): se predice con la parte de ahora y, si
+        // al llegar resultó ser un drop, el consumo la vuelve IOWN — que cruza
+        // la pared entera, así que el foco que se anticipó sigue valiendo
+        crtPendingShot = crtShotFor({ text: nx.text, t0: nx.t0 || 0, t1: nx.t1 || 0,
+                                      serial: (crtLine.serial || 0) + 1,
+                                      segs: nx.segs || [], words: [],
+                                      section: audSection, trackStart: false });
+        crtPendingShot.serial = (crtLine.serial || 0) + 1;
+        crtNextAt = Date.now() + Math.max((nx.t0 || 0) - songPos(), 0) * 1000;
+        crtNextIn = crtNextAt - Date.now();
+    }
+
+    // ms que faltan para la próxima línea, ahora mismo (-1 si no se sabe)
+    function crtNextLeft() {
+        return crtNextAt > 0 ? crtNextAt - Date.now() : -1;
+    }
+
+    // Toda predicción se tira cuando el mundo cambió abajo: otro tema, otras
+    // pantallas, otra config. Un shot guardado contra un mundo que ya no existe
+    // manda la frase a una pantalla que puede no estar.
+    function crtForget() {
+        crtPendingShot = null;
+        crtShotOverride = null;
+        crtNextAt = 0;
+        crtNextIn = -1;
+        crtHop = { from: -1, to: -1, dir: 0 };
+    }
 
     // Dónde cae la palabra del IOWN en la pantalla i, medido sobre la PARED y
     // no sobre el monitor: el pedazo que sale por el borde de uno tiene que
@@ -1122,7 +1213,7 @@ ShellRoot {
         }
     }
 
-    function show(text, title, icon, t0, t1, segs, words, kind) {
+    function show(text, title, icon, t0, t1, segs, words, kind, nxt) {
         // T4.5: "fatal-lyrics no responde". No es un verso: no toca el tubo, no
         // envejece a nadie y no pasa a ser la línea actual. Muere solo cuando
         // llegue la próxima línea de verdad (ver shouldDie).
@@ -1141,12 +1232,44 @@ ShellRoot {
         // primer verso después de un clear = tema nuevo: ahí el cambio de canal
         // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
         crtTrackStart = (crtLine.text || "") === "";
+        const serial = crtSerial + 1;
+        // Se CONSUME el reparto que se calculó al llegar la línea anterior. No
+        // se vuelve a sortear: volver a sortear sería admitir que lo que se
+        // anticipó (el aro, el motif que huye) puede no cumplirse.
+        let taken = (crtPendingShot && crtPendingShot.serial === serial)
+            ? crtPendingShot : null;
+        crtPendingShot = null;
+        const prevFocus = (crtLine.text || "") !== "" ? crtShot.focus : -1;
         // `section`: la parte del tema QUEDA CONGELADA en la línea. Leerla del
         // vivo desde crtShotFor haría que el modo cambie a mitad de verso (los
         // eventos `sec` llegan cuando quieren) y la palabra saltaría de lugar.
-        crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: crtSerial + 1,
-                    segs: segs || [], words: words || [], section: audSection };
+        crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: serial,
+                    segs: segs || [], words: words || [], section: audSection,
+                    trackStart: crtTrackStart };
+        // Lo ÚNICO que la predicción no podía saber es en qué parte del tema
+        // iba a caer la línea. Si cayó en un drop y eso la vuelve IOWN, se
+        // rehace encima: el foco no cambia (sale de la semilla y de cuántas
+        // pantallas hay) y el IOWN cruza la pared entera igual, así que lo que
+        // se anticipó sigue siendo cierto.
+        const fresh = crtShotFor(crtLine);
+        if (taken && fresh.mode === "iown" && taken.mode !== "iown") {
+            fresh.serial = serial;
+            taken = fresh;
+        }
+        crtShotOverride = taken;
+        const shot = taken || fresh;
+        crtHop = (prevFocus >= 0 && prevFocus !== shot.focus)
+            ? { from: prevFocus, to: shot.focus, dir: shot.focus > prevFocus ? 1 : -1 }
+            : { from: -1, to: -1, dir: 0 };
+        // último: Crt.qml cuelga de esta señal, y para cuando la reciba tiene
+        // que ver la línea, el reparto y el salto ya puestos
         crtSerial++;
+        crtNext = nxt || null;
+        crtPredict();
+        if (crtOn)
+            console.log("crt: next focus=" + crtNextFocus
+                + " in=" + Math.round(crtNextIn)
+                + " hop=" + crtHop.from + "->" + crtHop.to);
         updatePitchPalette();
         if (crtOn)
             return;
@@ -1220,6 +1343,10 @@ ShellRoot {
             const prop = map[key];
             root[prop] = ev[key] ?? root[prop];
         }
+        // la config decide cómo se reparte una línea (director, focus, split,
+        // iown): lo que se anticipó con la config vieja ya no es lo que va a
+        // pasar. Se tira y la línea que suena se vuelve a repartir sola.
+        crtForget();
     }
 
     // El daemon manda eventos JSON por línea: config / show / np / clear
@@ -1233,7 +1360,9 @@ ShellRoot {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
                             root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs,
-                                      ev.words, ev.kind);
+                                      ev.words, ev.kind, ev.next);
+                        else if (ev.cmd === "lyrics")
+                            root.crtLines = ev.lines || [];
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
                         else if (ev.cmd === "pos") {
@@ -1308,6 +1437,12 @@ ShellRoot {
                             // el tubo se queda sin señal y rota el fósforo
                             root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [], words: [] };
                             root.crtTrackSeed++;
+                            // otro tema: la letra y todo lo anticipado sobre la
+                            // anterior no valen nada. Sin esto los pedazos del
+                            // reparto viejo sobreviven al cambio de tema.
+                            root.crtNext = null;
+                            root.crtLines = [];
+                            root.crtForget();
                             // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
                             if (root.cascadeDeath && root.dialogList.length > 0) {
                                 root.cascadeMode = root.cascadeStyle === "random"

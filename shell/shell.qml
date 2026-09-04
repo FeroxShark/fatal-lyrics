@@ -704,11 +704,13 @@ ShellRoot {
         if (crtIown && words.length <= 3
                 && ((line.section || "verse") === "drop"
                     || crtHash(seed * 53 + 17) < 0.10)) {
-            // La ventana del pedazo es la LÍNEA ENTERA, no el `dur` de los
-            // otros modos: la palabra viaja con crtProgress(), que se reparte
-            // sobre toda la línea. Con `dur` (dos segundos) la palabra se
-            // apagaba a un tercio de camino y la pared quedaba vacía.
-            const iownTo = Math.max(t0 + dur, line.t1 || 0);
+            // La ventana del pedazo es la LÍNEA ENTERA (que con lrclib llega
+            // hasta el arranque de la siguiente, o sea que incluye el hueco),
+            // nunca menos de 2.5 s: son TRES golpes, uno por pantalla, y con
+            // menos de eso ninguno se llega a leer. Con el `dur` de los otros
+            // modos (dos segundos) la palabra se apagaba a un tercio de camino
+            // y la pared quedaba vacía.
+            const iownTo = Math.max(t0 + 2.5, t0 + dur, line.t1 || 0);
             let chunks = [];
             for (let i = 0; i < n; i++)
                 chunks.push({ text: text, screen: i, from: t0, to: iownTo });
@@ -901,17 +903,32 @@ ShellRoot {
     // entrar por el del otro, así que el offset descuenta el ancho de todas las
     // pantallas anteriores. Respeta `crt.order` porque activeCrtScreens ya
     // viene ordenado de izquierda a derecha.
-    function crtIownX(i) {
-        const scrs = activeCrtScreens;
-        let total = 0;
-        let before = 0;
-        for (let k = 0; k < scrs.length; k++) {
-            const w = (scrs[k] && scrs[k].width) || 1920;
-            if (k < i)
-                before += w;
-            total += w;
-        }
-        return (1 - crtProgress()) * total - before;
+    // T3.B5. El IOWN era una palabra deslizándose por la pared: "va muy rápido,
+    // no se entiende, no me gusta el estilo". Ahora se ANCLA: aparece en una
+    // pantalla, se queda, se apaga, y aparece en la siguiente. Tres golpes en
+    // vez de un desplazamiento — y un golpe se lee, un barrido no.
+    //
+    // El avance se mide contra la ventana del pedazo (la línea más el hueco
+    // hasta la siguiente) y no contra la línea: `crtProgress()` llega a 1 en
+    // `t1` y la palabra se apagaría antes de llegar a la última pantalla.
+    function crtIownProgress() {
+        const sh = crtShot;
+        if (sh.mode !== "iown" || sh.chunks.length === 0)
+            return 1;
+        const a = sh.chunks[0].from || 0;
+        const b = sh.chunks[0].to || 0;
+        if (b <= a)
+            return 1;
+        return Math.max(0, Math.min((songPos() - a) / (b - a), 1));
+    }
+    // En qué pantalla está la palabra AHORA. De derecha a izquierda, que es la
+    // dirección que tenía el barrido.
+    function crtIownScreen() {
+        if (crtShot.mode !== "iown")
+            return -1;
+        const n = Math.max(activeCrtScreens.length, 1);
+        const k = Math.min(Math.floor(crtIownProgress() * n), n - 1);
+        return n - 1 - k;
     }
 
     // Qué le toca a la pantalla i AHORA: su pedazo encendido, el que ya pasó

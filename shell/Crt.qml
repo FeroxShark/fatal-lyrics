@@ -764,9 +764,40 @@ PanelWindow {
     // que es ruido — plata tirada. Va a 60, que ya no se distingue, y la pantalla
     // sin letra a 20. Ahí está la mayor parte del ahorro de tener tres tubos.
     property real tubeTime: 0
-    // posición de la palabra del IOWN en ESTA pantalla, refrescada por cuadro
-    property real iownX: 0
-    property real iownProg: 0
+    // ---- IOWN (T3.B5): la palabra se ancla, no se desliza
+    // En qué pantalla está la palabra ahora mismo, refrescado por cuadro; y el
+    // "punto → raya → palabra" con el que entra en cada una, que es el mismo
+    // encendido de tubo de la entrada `tubeon`.
+    property int iownAt: -1
+    readonly property bool iownHere: iownMode && showsText && iownAt === idx
+    property real iownOpen: 0
+    property real iownBeam: 0
+    onIownHereChanged: {
+        iownOut.stop();
+        iownIn.stop();
+        if (iownHere)
+            iownIn.restart();
+        else if (iownOpen > 0.01)
+            iownOut.restart();
+    }
+    SequentialAnimation {
+        id: iownIn
+        PropertyAction { target: crt; property: "iownOpen"; value: 0 }
+        NumberAnimation { target: crt; property: "iownBeam"; from: 0; to: 1;
+                          duration: 90; easing.type: Easing.OutQuad }
+        NumberAnimation { target: crt; property: "iownOpen"; from: 0; to: 1;
+                          duration: 160; easing.type: Easing.OutCubic }
+        NumberAnimation { target: crt; property: "iownBeam"; to: 0;
+                          duration: 130; easing.type: Easing.OutQuad }
+    }
+    SequentialAnimation {
+        id: iownOut
+        // el apagado del tubo, al revés que la entrada: la palabra se cierra a
+        // una raya y la raya se va
+        NumberAnimation { target: crt; property: "iownOpen"; to: 0.02;
+                          duration: 120; easing.type: Easing.InQuad }
+        PropertyAction { target: crt; property: "iownOpen"; value: 0 }
+    }
     // T0.12: modo degradado por GPU. Promedio móvil del frame time; tres
     // segundos seguidos por encima de 28ms (bajo 36fps) y se baja quality a
     // 0.75 una sola vez — no vuelve a subir sola, eso lo hace el hot-reload
@@ -781,10 +812,8 @@ PanelWindow {
             // del contenido, una palabra cruzando tres pantallas va a saltos.
             // songPos() extrapola con el reloj local, así que preguntarle cada
             // cuadro sale gratis y da una traslación continua.
-            if (crt.iownMode) {
-                crt.iownProg = crt.ctl.crtProgress();
-                crt.iownX = crt.ctl.crtIownX(crt.idx);
-            }
+            if (crt.iownMode)
+                crt.iownAt = crt.ctl.crtIownScreen();
             crt.frameAvgMs = crt.frameAvgMs * 0.9 + frameTime * 1000 * 0.1;
             if (crt.frameAvgMs <= 28) {
                 crt.slowSince = -1;
@@ -1039,23 +1068,52 @@ PanelWindow {
             // pega un tirón de señal y se asienta en el color. Nada de tener la
             // frase entera puesta y ir iluminándola — eso se lee como un karaoke,
             // y lo que se busca es que algo la escriba en la pantalla al momento.
-            // ---- IOWN: una palabra sola, del alto de la pantalla, cruzando la
-            // pared de derecha a izquierda mientras dura la línea. No se corta
-            // ni se reparte: sale por el borde de un monitor y entra por el del
-            // siguiente, así que la pared se lee como una pantalla sola.
-            Text {
-                id: iownWord
-                visible: crt.iownMode && crt.showsText
-                // el ancho propio entra en la cuenta para que la palabra salga
-                // ENTERA por la izquierda al terminar la línea
-                x: crt.iownX - crt.iownProg * implicitWidth
-                anchors.verticalCenter: parent.verticalCenter
-                text: crt.myText.toUpperCase()
-                color: crt.pal.ink
-                font.family: crt.fontFamily
-                font.bold: true
-                font.letterSpacing: 6
-                font.pixelSize: Math.round(crt.shortSide * 0.7)
+            // ---- IOWN: una palabra sola, del alto de la pantalla, que golpea
+            // una pantalla por vez de derecha a izquierda. Entra con el
+            // encendido del tubo (punto → raya → palabra), se queda, y se
+            // cierra a una raya al pasar a la siguiente: tres golpes, no un
+            // deslizamiento (T3.B5).
+            Item {
+                anchors.fill: parent
+                visible: crt.iownMode && crt.showsText && crt.iownOpen > 0.005
+
+                Text {
+                    id: iownWord
+                    anchors.centerIn: parent
+                    // La palabra entra ENTERA aunque la cámara esté encima. El
+                    // IOWN cae en el drop, que es justo el plano más cerca
+                    // (1.6): midiendo contra la pantalla pelada, la palabra
+                    // salía cortada por los dos lados y una palabra cortada no
+                    // se lee, que era la mitad de la queja.
+                    width: (parent.width - crt.pad * 2)
+                        / Math.max(crt.sectionZoom * crt.camZoom * crt.cueZoom, 1)
+                    horizontalAlignment: Text.AlignHCenter
+                    text: crt.myText.toUpperCase()
+                    color: crt.pal.ink
+                    font.family: crt.fontFamily
+                    font.bold: true
+                    font.letterSpacing: 6
+                    font.pixelSize: Math.round(crt.shortSide * 0.7)
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: 10
+                    transform: Scale {
+                        origin.x: iownWord.width / 2
+                        origin.y: iownWord.height / 2
+                        yScale: crt.iownOpen
+                    }
+                }
+
+                // la raya del haz: lo único que hay antes de que la palabra se
+                // abra, y lo último que queda cuando se cierra
+                Rectangle {
+                    anchors.centerIn: parent
+                    visible: crt.iownBeam > 0.01
+                    width: Math.max(parent.width * (0.15 + 0.75 * crt.iownBeam), 3)
+                    height: 3
+                    radius: 1.5
+                    color: crt.pal.hot
+                    opacity: crt.iownBeam
+                }
             }
 
             Item {

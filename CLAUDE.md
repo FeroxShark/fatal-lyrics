@@ -294,9 +294,11 @@ no-op → boot roto. No reintroducir un segundo.)
   muestra de audio reiniciaba el tween, así que al recibir la línea la pantalla tardaba ~300 ms
   en llegar a su plano y la frase se veía nacer chica. Ahora son dos sumandos, `camFocus`
   (instantáneo, la línea nace con su tamaño) y `camBreath` (`pump` ya viene suavizado a 90 ms).
-  El plano de la sección va por un `NumberAnimation` propio y no por `Behavior`, y se rearma
-  cuando se va la estática del cambio de canal: si no, los 350 ms corren tapados y lo que
-  aparece es el estado final — el salto seco.
+  (El latido conserva un tween corto propio, 260 ms: reiniciarlo con cada muestra está bien
+  para una señal chica, era el PLANO el que se quedaba a mitad de camino.) El plano de la
+  sección va por un `NumberAnimation` propio y no por `Behavior`, y se rearma cuando se va la
+  estática del cambio de canal — eso último es **por las dudas**: la causa medida del salto
+  seco es la de arriba, y el salto de la sección no se pudo reproducir sin ver la pantalla.
 - **Una deriva fija en el espacio con aspecto NO es una fracción fija del cuadro.** El centro
   del túnel derivaba 0.08 en un espacio donde la x va multiplicada por `ar`: en la pantalla
   vertical (`ar` ≈ 0.56) medio ancho vale 0.28 y esos 0.08 eran casi un tercio, así que la boca
@@ -345,7 +347,12 @@ no-op → boot roto. No reintroducir un segundo.)
 
 ## Números medidos
 
-- CRT prendido: ~19% de un core. Apagado: 1.7% (sin captura, sin texturas).
+- CRT prendido: **20-37% de un core** (media 29 sobre ocho muestras de 8 s, tres monitores,
+  motivos de shader en las laterales). Era ~19% antes del overscan de la tanda 3: la cámara
+  aleja el cuadro hasta 0.82 y esos píxeles ANTES no se dibujaban — que es exactamente lo que
+  se veía como un marco de color plano. El área de más es 1/0.82² ≈ 1.5×, así que el número
+  sube por construcción, no por un desperdicio que se pueda sacar. Apagado: 1.7% (sin captura,
+  sin texturas).
 - El análisis de audio es Python puro sobre `pw-record` (sin cava, sin numpy): 0.79% de CPU.
   Arma el mapa del tema por percentil de energía dentro de la propia canción
   (quiet/verse/build/drop) y lo cachea: la segunda vez que suena, anticipa los golpes.

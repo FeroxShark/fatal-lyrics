@@ -796,9 +796,14 @@ PanelWindow {
     // de recibir la línea tardaba como un tercio de segundo en llegar a su
     // encuadre y la frase se veía NACER CHICA y crecer.
     readonly property real camFocus: 1 + cam * (focused ? 0.030 : 0.004)
-    // el latido no necesita Behavior propio: `pump` ya viene suavizado (90 ms)
-    readonly property real camBreath: focused
-        ? cam * 0.022 * pump * ctl.crtFlicker : 0
+    // El latido SÍ lleva su propio filtro, sólo que corto: `pump` ya viene
+    // suavizado a 90 ms, pero el tween que se reinicia con cada muestra es el
+    // que hacía que el acercamiento se leyera continuo y no como que sigue la
+    // onda. Reiniciar un tween con cada valor está bien para una señal chica
+    // como ésta — lo que estaba mal era hacerlo con el PLANO, que es un salto
+    // grande y se quedaba a mitad de camino.
+    property real camBreath: focused ? cam * 0.022 * pump * ctl.crtFlicker : 0
+    Behavior on camBreath { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
     readonly property real camZoom: camFocus + camBreath
 
     // T3.4: y la cámara sigue la PARTE del tema. En la estrofa se va atrás — la

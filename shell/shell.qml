@@ -1029,6 +1029,14 @@ ShellRoot {
 
     function crtEntriesFor(shot, ringScreen) {
         const out = {};
+        // El IOWN trae su propia entrada: la palabra se enciende como un tubo
+        // en CADA pantalla donde se ancla (T3.B5). Un estilo del director
+        // encima le pone la pantalla a parpadear (`interlace` es un uniform del
+        // shader: strobea el monitor entero, tenga o no la palabra) o le dibuja
+        // la raya del haz en una pantalla vacía — dos animaciones a la vez, que
+        // es justo lo que A5 prohíbe.
+        if (shot.mode === "iown")
+            return out;
         const n = activeCrtScreens.length;
         const strong = audSection === "drop" || audLevel2s >= crtEntryLoud;
         // overburn: sólo con el compás medido (cada palabra se quema en un

@@ -47,6 +47,20 @@ Item {
     property real dotAmt: 0
     property real lineAmt: 0
 
+    // ---- la espiral (T3.B1): el aro no se enrosca, se DESARMA.
+    // El tramo ya consumido se suelta en 3-5 hebras que giran cada una a su
+    // velocidad (angular por compás, radial por volumen) y se recogen al centro
+    // sobre los últimos 3 s. Una línea enroscada era un dibujo; esto es el aro
+    // deshaciéndose, que es lo que el aro significa.
+    //
+    // Los ángulos se ACUMULAN cuadro a cuadro (`ang += vel * dt`). Con
+    // `ángulo = reloj × velocidad` cualquier cambio de tempo multiplica un
+    // reloj de miles de segundos y las hebras se teletransportan: es la misma
+    // trampa del túnel y del hiperespacio.
+    property var strandAng: []
+    property double strandLast: 0
+    readonly property int strandN: 3 + (Math.abs(Math.round(dueAt / 97)) % 3)
+
     readonly property real step: total > 0 ? Math.min(beatMs / total, 1) : 0
 
     function reset() {
@@ -59,6 +73,11 @@ Item {
         eaten = 0;
         trailFrom = 0;
         trailAt = 0;
+        const a = [];
+        for (let i = 0; i < strandN; i++)
+            a.push(0);
+        strandAng = a;
+        strandLast = 0;
     }
     // otra línea, otro aro: el `dueAt` es lo que cambia en cada verso
     onDueAtChanged: reset()
@@ -108,7 +127,27 @@ Item {
         running: ring.visible
         triggeredOnStart: true
         onTriggered: {
-            const left = Math.max(ring.dueAt - Date.now(), 0);
+            const now = Date.now();
+            const left = Math.max(ring.dueAt - now, 0);
+            // las hebras giran: cada una acumula SU ángulo con el dt real, así
+            // un cambio de compás las acelera desde donde estaban
+            if (ring.strandAng.length > 0) {
+                const dt = ring.strandLast > 0
+                    ? Math.min(now - ring.strandLast, 120) : 0;
+                ring.strandLast = now;
+                if (dt > 0) {
+                    const bm = Math.max(ring.beatMs, 220);
+                    const a = ring.strandAng;
+                    for (let i = 0; i < a.length; i++) {
+                        // media vuelta a vuelta y media por compás, y el
+                        // volumen la empuja: una hebra se separa de la otra
+                        const v = (0.5 + 0.35 * i) * (1 + 0.5 * ring.level)
+                            * Math.PI * 2 / bm;
+                        a[i] += v * dt * (i % 2 === 0 ? 1 : -0.75);
+                    }
+                    ring.strandAng = a;
+                }
+            }
             // sin compás confiable el aro baja con el reloj, pero sigue
             // respirando: lo que se pierde es el paso, no la vida
             if (!ring.stepped && !ring.collapsing && ring.total > 0) {
@@ -132,32 +171,66 @@ Item {
         anchors.fill: parent
         renderStrategy: Canvas.Cooperative
 
-        function traceRing(c, cx, cy, r, from, to, turns, inner) {
-            // un arco, y si `turns` > 0 la punta sigue enroscándose hacia
-            // adentro: el extremo consumido se mete en el centro en vez de
-            // quedar cortado en el aire
-            const steps = 90;
+        // Un arco entre dos radios: con r0 === r1 es un pedazo de aro, y con
+        // r1 < r0 es una hebra que se va metiendo hacia adentro. Los pasos se
+        // piden según lo que mide el arco — una hebra corta con 90 puntos es
+        // gastar tres veces más de lo que se ve.
+        function traceArc(c, cx, cy, r0, r1, from, to, steps) {
             c.beginPath();
             for (let i = 0; i <= steps; i++) {
-                const a = from + (to - from) * i / steps;
-                const x = cx + Math.cos(a) * r;
-                const y = cy + Math.sin(a) * r;
+                const f = i / steps;
+                const a = from + (to - from) * f;
+                const rr = r0 + (r1 - r0) * f;
+                const x = cx + Math.cos(a) * rr;
+                const y = cy + Math.sin(a) * rr;
                 if (i === 0)
                     c.moveTo(x, y);
                 else
                     c.lineTo(x, y);
             }
-            if (turns > 0.01) {
-                const spin = turns * Math.PI * 2;
-                const coil = 70;
-                for (let i = 1; i <= coil; i++) {
-                    const f = i / coil;
-                    const a = to + spin * f;
-                    const rr = r * (1 - f * (1 - inner));
-                    c.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
-                }
-            }
             c.stroke();
+        }
+
+        // Las hebras: el tramo YA COMIDO se suelta. Cada una es un pedazo del
+        // arco consumido, girado por su propio ángulo acumulado y metido hacia
+        // adentro; sobre los últimos 3 s se recogen al centro, que es de donde
+        // después sale la línea.
+        function traceStrands(c, cx, cy, r, aEnd, lw, spiral, gather) {
+            const n = ring.strandAng.length;
+            if (n === 0)
+                return;
+            const span = Math.max(0, ring.eaten) * Math.PI * 2;
+            if (span < 0.15)
+                return;
+            const seg = span / n;
+            const off = lw * 0.22 + 2;
+            for (let i = 0; i < n; i++) {
+                const turn = ring.strandAng[i] * spiral;
+                const from = aEnd + i * seg + turn;
+                const to = from + seg * (0.72 + 0.28 * spiral);
+                // radio: cada hebra en su plano, empujada por el volumen, y
+                // todas recogidas al centro en el tramo final
+                const depth = (0.10 + 0.30 * (i + 1) / n) * spiral
+                    * (0.6 + 0.9 * Math.min(ring.level, 1));
+                const r0 = r * (1 - depth) * (1 - 0.92 * gather);
+                const r1 = r0 * (1 - 0.22 * spiral);
+                const steps = Math.max(8, Math.min(30, Math.round(seg * 14)));
+                // el corrimiento de crominancia: la hebra deja estela porque el
+                // fósforo no se apaga a la vez en los tres canales
+                c.globalAlpha = 0.20 * spiral * (1 - gather * 0.5);
+                c.strokeStyle = "#ff3b30";
+                c.save(); c.translate(-off, 0);
+                traceArc(c, cx, cy, r0, r1, from, to, steps);
+                c.restore();
+                c.strokeStyle = "#3b6bff";
+                c.save(); c.translate(off, 0);
+                traceArc(c, cx, cy, r0, r1, from, to, steps);
+                c.restore();
+                c.globalAlpha = (0.55 + 0.35 * spiral) * (1 - gather * 0.35);
+                c.strokeStyle = ring.colour;
+                traceArc(c, cx, cy, r0, r1, from, to, steps);
+            }
+            c.globalAlpha = 1;
         }
 
         onPaint: {
@@ -192,11 +265,13 @@ Item {
             // ±4% con el volumen: entre golpe y golpe el aro sigue vivo
             const breath = 1 + 0.04 * (2 * Math.min(ring.level, 1) - 1);
             // último tramo: se achica hacia el centro, de donde va a salir la línea
-            const shrink = left < 3000 ? 0.45 + 0.55 * (left / 3000) : 1;
+            const gather = left < 3000 ? 1 - left / 3000 : 0;
+            const shrink = 1 - 0.55 * gather;
             const r = side * 0.28 * breath * shrink;
-            // entre 8 s y 3 s el aro se abre en espiral, cada vez más enroscado
-            const turns = left > 8000 ? 0
-                : 1.5 * Math.max(0, Math.min((8000 - left) / 5000, 1));
+            // entre 8 s y 3 s el aro se va DESARMANDO: lo comido se suelta en
+            // hebras, cada vez más separadas
+            const spiral = left > 8000 ? 0
+                : Math.max(0, Math.min((8000 - left) / 5000, 1));
 
             const a0 = -Math.PI / 2;
             const rem = Math.max(0, 1 - ring.eaten);
@@ -214,24 +289,30 @@ Item {
                 // tres canales, y eso es lo que hace que la estela se lea como
                 // algo que estuvo prendido y no como una línea más floja.
                 const off = lw * 0.22 + 2;
+                const st = Math.max(8, Math.min(40, Math.round((tTo - tFrom) * 14)));
                 c.globalAlpha = 0.18 * t;
                 c.strokeStyle = "#ff3b30";
                 c.save(); c.translate(-off, 0);
-                traceRing(c, cx, cy, r, tFrom, tTo, 0, 1);
+                traceArc(c, cx, cy, r, r, tFrom, tTo, st);
                 c.restore();
                 c.strokeStyle = "#3b6bff";
                 c.save(); c.translate(off, 0);
-                traceRing(c, cx, cy, r, tFrom, tTo, 0, 1);
+                traceArc(c, cx, cy, r, r, tFrom, tTo, st);
                 c.restore();
                 c.globalAlpha = 0.25 * t;
                 c.strokeStyle = ring.colour;
-                traceRing(c, cx, cy, r, tFrom, tTo, 0, 1);
+                traceArc(c, cx, cy, r, r, tFrom, tTo, st);
             }
+
+            // ---- las hebras de lo ya comido, si el aro ya se está desarmando
+            if (spiral > 0.01)
+                traceStrands(c, cx, cy, r, aEnd, lw, spiral, gather);
 
             // ---- lo que queda del aro
             c.strokeStyle = ring.colour;
             c.globalAlpha = 1;
-            traceRing(c, cx, cy, r, a0, aEnd, turns, 0.15);
+            traceArc(c, cx, cy, r, r, a0, aEnd,
+                     Math.max(10, Math.min(90, Math.round((aEnd - a0) * 14))));
 
             // ---- el doble aro del aviso de drop
             if (ring.ghost > 0.01) {
@@ -239,7 +320,8 @@ Item {
                 c.globalAlpha = 0.55 * ring.ghost;
                 c.strokeStyle = ring.hot;
                 c.save(); c.translate(dx, -dx * 0.4);
-                traceRing(c, cx, cy, r, a0, aEnd, turns, 0.15);
+                traceArc(c, cx, cy, r, r, a0, aEnd,
+                         Math.max(10, Math.min(90, Math.round((aEnd - a0) * 14))));
                 c.restore();
             }
         }

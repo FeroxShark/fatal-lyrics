@@ -23,6 +23,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   preguntas seguidas, equivocarse obligaba a empezar de cero.
 - **El interruptor del CRT es un ARCHIVO**, no el socket: `$XDG_RUNTIME_DIR/cartelitos-crt`, que
   el QML vigila. Así apaga aunque el daemon esté colgado.
+- **El tubo sabe dónde va a caer la línea SIGUIENTE.** El daemon manda una línea por vez, así que
+  el `show` viaja con `next` (`{text, t0, t1, segs}`, o `null`) y hay un evento `lyrics` con la
+  letra entera del tema. Con eso el overlay calcula el reparto de la línea k+1 mientras suena la k
+  y lo **consume** cuando llega: la anticipación es la verdad, no un pronóstico. De ahí salen el
+  motif que huye (`foreshadow`) y el aro que cuenta (`ring`, `shell/Ring.qml`).
 - **En el CRT la letra no se clona.** Hay una pantalla enfocada, la frase sigue en la de al lado y
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
   (`split_repeats`) y cada golpe cae en otra pantalla. `focus = "all"` vuelve al comportamiento
@@ -41,13 +46,14 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — seis animaciones para las pantallas sin letra.
+- `shell/Ring.qml` — el aro que se consume contando la línea que viene.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
   `config.py` porque la escribe el propio daemon, no Ferox a mano.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 353 tests, stdlib puro.
+- `tests/` — 432 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -179,6 +185,27 @@ no-op → boot roto. No reintroducir un segundo.)
 - **Oscurecer el tubo con `stage.opacity` funciona porque `crt.frag` ya multiplica por
   `qt_Opacity`.** Si alguna vez el shader deja de hacerlo, el modo karaoke se queda sin su
   apagado y hay que poner un rectángulo negro encima en su lugar.
+- **`crtShotFor()` no puede leer NADA vivo del root.** Es la función que se evalúa sobre una línea
+  que todavía no llegó: cualquier cosa que mire el estado del momento (así estaba `crtTrackStart`)
+  hace que la predicción y lo que después se ve no sean la misma cosa. Todo entra por el objeto de
+  la línea. Lo único que la predicción no puede saber es la parte del tema — por eso una línea que
+  cae en un drop se rehace como IOWN encima, y sólo eso.
+- **El `next` lleva también los `segs`.** El corte de las repeticiones ("take, take, take") se hace
+  en el daemon: sin mandarlo, la predicción reparte la línea de una forma y la línea de verdad
+  llega con otra.
+- **El shot guardado se tira en el `clear`, en el hotplug y en la config** (`crtForget()`). Sin lo
+  del `clear`, los pedazos del reparto del tema anterior sobreviven al cambio de tema y
+  `crtChunkState` los sigue devolviendo.
+- **Un `Motif` no se apaga pisándole `opacity` desde afuera:** eso se lleva puesto el
+  acompañamiento del golpe (`surge`), que es lo que hace que la pared entera pegue junta. Va por la
+  property `dim`, que es un factor aparte.
+- **El log del overlay tiene códigos de color EN EL MEDIO del prefijo:** `grep "qml:"` no matchea
+  nunca (entre `qml` y los dos puntos hay un escape ANSI). Se grepea el texto propio:
+  `grep -a "crt:" $XDG_RUNTIME_DIR/cartelitos/qs.log`.
+- **`fatal demo` no sirve para probar nada de la anticipación:** los carteles de demo van sin letra
+  de verdad, así que `next` viaja en `null` y `t0`/`t1` en 0. Hace falta música con letra
+  sincronizada. Para probar sin depender de qué suena, se le puede hablar al overlay directo por
+  `$XDG_RUNTIME_DIR/cartelitos.sock` (el socket es del overlay, el daemon es el cliente).
 - **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
   test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
 
@@ -208,6 +235,10 @@ no-op → boot roto. No reintroducir un segundo.)
 - README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
   (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
   en qué orden se prueban.
+- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas la FASE 0 y la FASE 1** (perillas `foreshadow` y
+  `ring`). Faltan las fases 2 a 5: saltos entre pantallas no adyacentes, entradas nuevas y director
+  por energía, ocho motifs nuevos, y el cierre de docs. Lo que hay que mirar a ojo está en
+  `docs/plans/CHECKS-VISUALES.md`.
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
   del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral

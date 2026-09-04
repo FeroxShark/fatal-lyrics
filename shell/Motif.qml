@@ -18,7 +18,7 @@ Item {
     id: motif
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
-    // | static | textsea | eyes | ekg | rorschach | plasma | none
+    // | static | textsea | eyes | ekg | rorschach | plasma | tunnel | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -575,6 +575,26 @@ Item {
             energy: motif.energy
             seed: motif.seed
             quality: motif.quality
+            running: motif.spinning
+        }
+    }
+
+    // ----------------------------------------------------------------- túnel
+    // Anillos que vienen de frente (`tunnel.frag`). La distancia viajada se
+    // acumula adentro de `Tunnel.qml`: multiplicar el reloj por la velocidad
+    // haría saltar todos los anillos en cada cambio de volumen.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "tunnel"
+        visible: active
+
+        sourceComponent: Tunnel {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            pitch: motif.pitch
+            energy: motif.energy
+            seed: motif.seed
             running: motif.spinning
         }
     }

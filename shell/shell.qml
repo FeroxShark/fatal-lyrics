@@ -1079,6 +1079,11 @@ ShellRoot {
         { re: /\b(heart|heartbeat|beat|beating|blood|pulse)\b/i, kind: "ekg" },
         { re: /\b(coraz[oó]n|late|latido|latir|sangre|pulso)\b/i, kind: "ekg" },
         { re: /\b(fire|burn|fuego|arde)\b/i, kind: "radar" },
+        // el túnel y el hiperespacio: agujeros y cielo
+        { re: /\b(tunnel|hole|void|falling)\b/i, kind: "tunnel" },
+        { re: /\b(t[uú]nel|agujero|pozo|vac[ií]o)\b/i, kind: "tunnel" },
+        { re: /\b(stars|star|sky|space|light\s?years)\b/i, kind: "stars" },
+        { re: /\b(estrella|estrellas|cielo|espacio)\b/i, kind: "stars" },
         { re: /\b(run|road|drive|fall|corr[eo]|camino|caigo)\b/i, kind: "stars" },
     ]
     // Cada cuánto se cambia de animación. Antes se sorteaba por LÍNEA: las
@@ -1095,7 +1100,7 @@ ShellRoot {
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
                                        "rain", "ocean", "pond", "dunes", "static",
                                        "textsea", "eyes", "ekg",
-                                       "rorschach", "plasma"]
+                                       "rorschach", "plasma", "tunnel"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca

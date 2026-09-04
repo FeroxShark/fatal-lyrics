@@ -245,7 +245,8 @@ no-op → boot roto. No reintroducir un segundo.)
   `overburn` sin `words` arranca en 0 y no en 1: con 1, la palabra 0 nace ya encendida y no se
   quema nunca. Y lleva paracaídas (`reveal >= 1`): si el compás se pierde a mitad de línea
   (`bpmLive` vence a los 15 s) los tiempos dejan de llegar y las palabras que faltan no aparecerían
-  más.
+  más. El contador se resetea también al cambiar `myText`, no sólo con el serial: en un relay el
+  pedazo de la segunda pantalla arranca tiempos después de la línea.
 - **En el QML la perilla `section_zoom` se llama `crtSectionZoom`** y multiplica al `camZoom` y al
   `cueZoom` en el mismo `Scale`: es otro plano de la misma cámara, no una cámara nueva. Achicar por
   debajo de 1 no deja agujeros negros porque el fondo de `stage` está FUERA del item `camera`.

@@ -633,6 +633,11 @@ PanelWindow {
     // quemaría — el primer beat es el que la trae.
     property int burnStep: 0
     property int burnStride: 1
+    // y se pone en cero cuando aparece EL TEXTO DE ESTA PANTALLA, no sólo con
+    // el verso: en un relay el segundo pedazo arranca tiempos después de la
+    // línea, y con el contador ya corriendo sus primeras palabras nacen puestas
+    // (sin onLandedChanged, o sea sin quemadura)
+    onMyTextChanged: burnStep = 0
     readonly property bool burnMode: entryStyle === "overburn" && !lineWords
     Connections {
         target: crt.ctl

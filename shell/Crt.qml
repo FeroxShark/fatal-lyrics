@@ -95,7 +95,11 @@ PanelWindow {
     }
     // el interruptor puede estar prendido ANTES de que exista esta ventana (el
     // FileView carga primero): sin esto no hay cambio del que enterarse
-    Component.onCompleted: tubeOn = ctl.crtOn
+    Component.onCompleted: {
+        tubeOn = ctl.crtOn;
+        // el dibujo de arranque no pasa por el puente: no hay de qué venir
+        motifShown = motifKind;
+    }
 
     // ------------------------------------------------------------- fósforos
     // Ya no elige la pantalla: el root sirve DOS caras que combinan (una
@@ -142,6 +146,34 @@ PanelWindow {
     onMotifKindChanged: {
         if (ctl.crtOn)
             console.log("crt: motif s" + idx + " " + motifKind);
+        // T4.3: el cambio lleva PUENTE. Hasta acá el Loader cortaba seco y un
+        // dibujo se convertía en otro en un cuadro, que es lo que hace que la
+        // pared se lea como ruido aunque cada dibujo esté bien. Se va rápido
+        // (`exitMs`, InQuad), se cambia con la pantalla apagada y entra con
+        // snap (`enterMs`, OutExpo) — el corte del video de referencia.
+        //
+        // El puente NO va por `dim`: esa property tiene un Behavior de 220 ms,
+        // así que el ScriptAction del cambio caería con el dibujo viejo todavía
+        // a media luz. `swap` no tiene Behavior: lo que se ve es exactamente
+        // la curva de acá.
+        if (motifShown === "")
+            motifShown = motifKind;      // el primero no tiene de qué venir
+        else
+            motifBridge.restart();
+    }
+    property string motifShown: ""
+    property real motifSwap: 1
+    SequentialAnimation {
+        id: motifBridge
+        NumberAnimation {
+            target: crt; property: "motifSwap"; to: 0
+            duration: Motion.exitMs; easing.type: Easing.InQuad
+        }
+        ScriptAction { script: crt.motifShown = crt.motifKind; }
+        NumberAnimation {
+            target: crt; property: "motifSwap"; to: 1
+            duration: Motion.enterMs; easing.type: Easing.OutExpo
+        }
     }
 
     // ------------------------------------------------ el aviso del salto (T2.1)
@@ -575,7 +607,7 @@ PanelWindow {
         id: glitchDecay
         running: false
         to: 0
-        duration: 420
+        duration: Motion.levelMs
         easing.type: Easing.OutQuad
     }
     // Un solo portero para TODOS los glitches. Había cinco cosas distintas
@@ -1410,7 +1442,9 @@ PanelWindow {
 
                 Motif {
                     anchors.fill: parent
-                    kind: crt.motifKind
+                    // lo que se ve es el dibujo YA cambiado, que va un puente
+                    // atrás de lo que el root asignó (ver motifBridge)
+                    kind: crt.motifShown
                     // el destino acelera (×1.6 al final de la línea), las otras
                     // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
                     energy: crt.ctl.sectionEnergy
@@ -1430,7 +1464,11 @@ PanelWindow {
                     // la semilla de esta aparición: el reloj de los motivos cruzado
                     // con el número de pantalla, así dos pantallas con el mismo
                     // dibujo no arman el mismo paisaje
-                    seed: crt.ctl.crtHash(crt.ctl.motifGen * 31 + crt.idx * 7 + 13)
+                    // la semilla de esta aparición. Se siembra al ASIGNAR el
+                    // dibujo y no con el reloj de los motivos: con el hold
+                    // puesto, ese reloj sigue corriendo debajo de un dibujo que
+                    // se queda, y el paisaje se re-sembraba solo cada 25 s
+                    seed: crt.ctl.crtMotifSeeds[crt.idx] || 0
                     quality: crt.ctl.crtQuality
                     // el compás y el verso: la estática forma algo una vez por
                     // compás, y lo que forma sale de la línea que viene

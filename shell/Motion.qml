@@ -36,6 +36,14 @@ Singleton {
     // ---- apagar/prender un dibujo entero (el `dim` del motif)
     readonly property int dimMs: 220
 
+    // ---- el filtro del VOLUMEN. No es una entrada ni una salida: es cuánto
+    // tarda un dibujo en enterarse de que el tema subió. El nivel llega a 14 Hz
+    // y atado directo al brillo se lee como que titila, no como que respira.
+    // Vive acá porque estaba copiado en DIEZ archivos (los nueve motivos con
+    // física propia y el decaimiento del glitch): una constante repetida diez
+    // veces no es una constante, es diez números que se van a separar solos.
+    readonly property int levelMs: 420          // Easing.OutQuad
+
     // ---- el hold: mínimo que algo se queda quieto antes de que pase la cosa
     // siguiente. No es una duración de animación: es el presupuesto.
     readonly property int holdMs: 1500

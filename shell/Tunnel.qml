@@ -20,7 +20,7 @@ Item {
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     property real level: 0.35
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real pitch: 0.5          // el registro: la torsión
     Behavior on pitch { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
     property real energy: 1.0

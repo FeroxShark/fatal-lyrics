@@ -13,7 +13,7 @@ Item {
     property color colour: "#4fe8ff"
     property color crest: "#e2fdff"
     property real level: 0.35
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4
     property real high: 0.3
     // el registro de lo que suena (0 grave .. 1 agudo): ESTO es la frecuencia

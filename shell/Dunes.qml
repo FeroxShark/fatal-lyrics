@@ -20,7 +20,7 @@ Item {
     property real level: 0.35            // volumen 0..1
     // Igual que en el mar: el nivel llega a 14 Hz y atado directo a algo que se
     // ve es titileo, no respiración.
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real high: 0.3              // agudos → cuánto vibra la arena suspendida
     property int beat: 0                 // contador de golpes
     property real beatAmt: 1             // lo gradúa `flicker`: 0 = nadie pisa

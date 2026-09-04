@@ -12,7 +12,7 @@ Item {
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     property real level: 0.35
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real pitch: 0.5          // el registro: cuánto se retuerce
     property real seed: 0             // 0..1: otra lámina en cada aparición
     property real energy: 1.0         // la parte del tema: la deriva del ruido

@@ -21,7 +21,7 @@ Item {
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     property real level: 0.35
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real high: 0.3
     property real seed: 0
     property real dim: 1.0

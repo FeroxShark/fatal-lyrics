@@ -678,6 +678,12 @@ ShellRoot {
         resetFaces();
         // el reparto guardado habla de pantallas que ya no son las mismas
         crtForget();
+        // y los dibujos también: el hold de una pantalla que ya no existe no
+        // significa nada, y el índice de las que quedan se corrió
+        crtMotifKinds = [];
+        crtMotifSince = [];
+        crtMotifSeeds = [];
+        crtMotifRefresh(true);
     }
 
     function updateInfection() {
@@ -1265,15 +1271,15 @@ ShellRoot {
         { re: /\b(estrella|estrellas|cielo|espacio)\b/i, kind: "stars" },
         { re: /\b(run|road|drive|fall|corr[eo]|camino|caigo)\b/i, kind: "stars" },
     ]
-    // Cada cuánto se cambia de animación. Antes se sorteaba por LÍNEA: las
-    // pantallas laterales cambiaban de dibujo cada dos segundos y parecían un
-    // salvapantallas nervioso. Ahora dura una sección entera (o ~25 s).
+    // Cada cuánto se PUEDE cambiar de animación. El reloj sigue existiendo,
+    // pero ya no es el que manda: lo que manda es el hold de cada pantalla
+    // (`crtMotifRefresh`). Acá sólo se le da una oportunidad a la que venció.
     property int motifGen: 0
     Timer {
-        interval: 25000
+        interval: 1000
         repeat: true
         running: root.crtOn
-        onTriggered: root.motifGen++
+        onTriggered: root.crtMotifRefresh(false)
     }
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
@@ -1314,32 +1320,102 @@ ShellRoot {
         return out.length > 0 ? out : ["eye"];
     }
 
+    // ---- T4.3: el dibujo de cada pantalla DURA
+    //
+    // Hasta acá esto era una función pura que se re-evaluaba sola: el reloj de
+    // 25 s, cada evento `sec` (que el daemon manda cada 4 s), cada `cue`, la
+    // palabra clave de CADA línea y cualquier cambio de la lista de candidatos
+    // movían `pick % pool.length` en las tres pantallas a la vez. Medido: 89
+    // cambios de dibujo en 90 s, uno por verso y por pantalla. Eso es lo que
+    // Ferox describió como "las animaciones cambian y no llegás a entender qué
+    // ves".
+    //
+    // Ahora la asignación es ESTADO: cada pantalla tiene su dibujo, desde
+    // cuándo lo tiene y con qué semilla lo sembró, y no lo suelta hasta que
+    // vence su hold (`pace.motifHoldMs`). Lo único que lo interrumpe es un
+    // tema nuevo o el drop, que son cambios de escena de verdad.
+    property var crtMotifKinds: []
+    property var crtMotifSince: []
+    // La semilla ya NO sale de `motifGen`: con el hold puesto, el reloj sigue
+    // corriendo debajo de un dibujo que se queda, y `dunes` re-sembraba su
+    // cámara sola cada 25 s — o sea justo "cambia sin razón". Se siembra UNA
+    // vez, al asignar.
+    property var crtMotifSeeds: []
+    property int crtMotifRoll: 0
+
     function crtMotifFor(i) {
         if (!crtMotifs)
             return "none";
-        const n = Math.max(activeCrtScreens.length, 1);
-        // la palabra clave se lleva UNA sola pantalla, no todas: si el ojo
-        // aparece en las tres a la vez deja de ser un guiño y es un cartel
-        const chosen = (crtLine.serial || 0) % n;
-        if (i === chosen) {
-            const text = crtLine.text || "";
-            for (let k = 0; k < motifWords.length; k++)
-                if (motifWords[k].re.test(text)) {
-                    const kind = motifWords[k].kind;
-                    if ((crtWater || (kind !== "ocean" && kind !== "pond"))
-                            && motifAllowed(kind))
-                        return kind;
-                }
-        }
-        // dos pantallas apagadas nunca muestran el mismo dibujo
-        // en el silencio el ojo, la carta de ajuste o el mar quieto; en el pico,
-        // lo que se mueve
-        const calm = audSection === "quiet";
-        const pool = motifPool(calm ? ["eye", "testcard", "scope", "pond"] : motifKinds);
-        const pick = Math.floor(crtHash(motifGen * 17 + crtTrackSeed * 3) * pool.length);
-        const offset = Math.floor(crtHash(motifGen * 29 + i * 11) * (pool.length - 1)) + 1;
-        return pool[(pick + (i === chosen ? 0 : offset)) % pool.length];
+        return crtMotifKinds[i] || "eye";
     }
+
+    // El sorteo de UNA pantalla, excluyendo lo que están mostrando las otras
+    // (la invariante de siempre: dos pantallas apagadas nunca muestran el
+    // mismo dibujo) y lo que mostraba ella misma.
+    function crtMotifDraw(i, taken) {
+        const calm = audSection === "quiet";
+        const base = motifPool(calm ? ["eye", "testcard", "scope", "pond"] : motifKinds);
+        const free = base.filter(k => taken.indexOf(k) < 0);
+        const pool = free.length > 0 ? free : base;
+        crtMotifRoll++;
+        return pool[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * pool.length)];
+    }
+
+    // Repartir de nuevo lo que VENCIÓ, y nada más. `force` es el cambio de
+    // escena (tema nuevo, drop): ahí se reparte todo junto, que es lo que hace
+    // que el corte se lea como un corte y no como tres pantallas sueltas.
+    function crtMotifRefresh(force) {
+        const n = activeCrtScreens.length;
+        if (n <= 0)
+            return;
+        let kinds = crtMotifKinds.slice(0, n);
+        let since = crtMotifSince.slice(0, n);
+        let seeds = crtMotifSeeds.slice(0, n);
+        while (kinds.length < n) { kinds.push(""); since.push(0); seeds.push(0); }
+        const now = Date.now();
+        const hold = pace.motifHoldMs;
+        // la palabra clave se lleva UNA sola pantalla, no todas — y sólo si esa
+        // pantalla ya cumplió su hold: si no, cualquier letra que hable de ojos
+        // vuelve a ser un cambio de dibujo por verso
+        const chosen = n > 0 ? (crtLine.serial || 0) % n : 0;
+        let wanted = "";
+        const text = crtLine.text || "";
+        for (let k = 0; k < motifWords.length && wanted === ""; k++)
+            if (motifWords[k].re.test(text)) {
+                const kind = motifWords[k].kind;
+                if ((crtWater || (kind !== "ocean" && kind !== "pond"))
+                        && motifAllowed(kind))
+                    wanted = kind;
+            }
+        let changed = false;
+        for (let i = 0; i < n; i++) {
+            // el filtro de validez SÍ es inmediato: un dibujo que ya no tiene
+            // con qué dibujarse (los ojos sin letra, la marea sin lyrics, el
+            // agua apagada) se cambia en esa pantalla y no toca a las otras
+            const valid = kinds[i] !== "" && motifAllowed(kinds[i])
+                && (crtWater || (kinds[i] !== "ocean" && kinds[i] !== "pond"));
+            const expired = force || !valid || now - since[i] >= hold;
+            if (!expired)
+                continue;
+            // las que no se tocan también reservan su dibujo
+            const taken = kinds.filter((k, j) => j !== i && k !== "");
+            let pick = (i === chosen && wanted !== "" && taken.indexOf(wanted) < 0)
+                ? wanted : crtMotifDraw(i, taken.concat(kinds[i] ? [kinds[i]] : []));
+            if (pick === kinds[i] && !force)
+                continue;              // salió el mismo: se queda, y sin puente
+            kinds[i] = pick;
+            since[i] = now;
+            seeds[i] = crtHash(crtMotifRoll * 31 + i * 7 + 13);
+            changed = true;
+        }
+        // arrays nuevos, no mutados: si no, el binding de Crt.qml no se entera
+        if (changed || crtMotifKinds.length !== n) {
+            crtMotifKinds = kinds;
+            crtMotifSince = since;
+            crtMotifSeeds = seeds;
+        }
+    }
+    onCrtMotifsChanged: if (crtMotifs) crtMotifRefresh(true)
 
     // El latido del tubo: lo decide el root UNA vez para toda la pared, no cada
     // pantalla por su cuenta. Antes el fogonazo lo disparaba la pantalla enfocada
@@ -1431,6 +1507,8 @@ ShellRoot {
         if (crtOn) {
             dialogList = [];
             currentLyricSerial = -1;
+            // y la pared arranca con un dibujo por pantalla ya repartido
+            crtMotifRefresh(true);
         }
     }
 
@@ -1716,6 +1794,11 @@ ShellRoot {
         crtVEndAt = vEnd !== undefined && vEnd !== null
             ? Date.now() + (vEnd - songPos()) * 1000 : 0;
         crtPredict();
+        // el dibujo de las pantallas apagadas: un tema nuevo reparte todo
+        // junto (es un cambio de escena), un verso más sólo le da su
+        // oportunidad a la pantalla que ya cumplió el hold
+        if (crtOn)
+            crtMotifRefresh(crtTrackStart);
         if (crtOn)
             console.log("crt: next focus=" + crtNextFocus
                 + " in=" + Math.round(crtNextIn)
@@ -1871,10 +1954,14 @@ ShellRoot {
                             // el aviso (T4.2) ya cambió el dibujo hace dos
                             // segundos: cambiarlo otra vez ahora sería un
                             // parpadeo, no una anticipación
+                            root.motifGen++;
+                            // T4.3: el drop es un cambio de escena y reparte
+                            // todo junto; el resto de las partes sólo le da su
+                            // oportunidad a la pantalla que venció el hold
                             if (root.motifPreCued)
                                 root.motifPreCued = false;
                             else
-                                root.motifGen++;
+                                root.crtMotifRefresh(ev.kind === "drop");
                         } else if (ev.cmd === "bpm") {
                             root.bpm = ev.v;
                             root.bpmConf = ev.conf;
@@ -1892,6 +1979,7 @@ ShellRoot {
                             // de dibujo y la cámara empieza a acercarse ANTES.
                             if (ev.kind === "drop") {
                                 root.motifGen++;
+                                root.crtMotifRefresh(true);
                                 root.motifPreCued = true;
                                 root.cueGen++;
                             }

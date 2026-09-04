@@ -16,7 +16,7 @@ Item {
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     property real level: 0.35
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4            // los graves: empujan las bolas para arriba
     Behavior on low { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
     property real surge: 0            // el golpe del tubo: la superficie tiembla

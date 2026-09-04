@@ -22,7 +22,7 @@ Item {
     // Igual que en Motif: el nivel llega a 14 Hz. Atado directo a nada que se
     // vea, eso es titileo; suavizado, es el mar que se levanta cuando el tema
     // sube.
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4               // graves → el oleaje largo
     property real high: 0.3              // agudos → el picadito de la superficie
     property int beat: 0                 // contador de golpes

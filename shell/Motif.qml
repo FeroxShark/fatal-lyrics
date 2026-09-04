@@ -22,11 +22,23 @@ Item {
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
+    // ---- T4.3: la amplitud del latido, que la gradúa `pace` desde el root.
+    // Los números viven en UNA tabla (`crtPaceTable`, shell.qml) y llegan acá
+    // como properties: repartidos por los archivos, `wild` — que tiene que
+    // devolver exactamente lo de antes — no se podría verificar.
+    property real opaMin: 0.62     // opacidad en reposo
+    property real opaSpan: 0.30    // cuánto sube en el golpe
+    property real scaleAmt: 0.05   // el tirón de tamaño del golpe
+    property real surgeK: 1.6      // cuánto acelera el golpe
+    property real driveMin: 0.0    // y el piso y el techo de esa aceleración
+    property real driveMax: 99
+    property real driveDrop: 99
+
     property real level: 0.35      // 0..1 volumen
     // El volumen llega a 14 Hz: atado directo al brillo o al tamaño, eso no se
     // ve como "respira", se ve como que titila. Acá se suaviza a la velocidad a
     // la que uno percibe que un tema sube, no a la que se mueve la onda.
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4         // energía de graves
     property real high: 0.3        // energía de agudos
     property int beat: 0           // contador de golpes
@@ -109,9 +121,15 @@ Item {
     // Los 220 ms son los del apagado del aro: más largo y el aro cuenta un
     // tiempo entero con el motivo todavía visible debajo.
     property real dim: 1
-    Behavior on dim { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
+    Behavior on dim { NumberAnimation { duration: Motion.dimMs; easing.type: Easing.OutQuad } }
 
-    opacity: Math.min(0.62 + 0.30 * surge, 1) * dim
+    // El PUENTE entre un dibujo y el siguiente (T4.3). Va aparte de `dim` a
+    // propósito: `dim` tiene Behavior, así que el cambio de `kind` caería con
+    // el dibujo viejo todavía a media luz. Acá no hay Behavior — la curva es
+    // la que manda Crt.qml y nada más.
+    property real swap: 1
+
+    opacity: Math.min(opaMin + opaSpan * surge, 1) * dim * swap
 
     // pulso del golpe: sube de un saque y baja solo
     property real punch: 0
@@ -135,15 +153,20 @@ Item {
     // que mide la pantalla, así que es una división menos — hasta la tanda 3
     // esto descontaba el overscan de la cámara, que ya no existe.
     readonly property real span: Math.min(width, height)
-    // velocidad efectiva: la parte del tema, más el empujón del golpe
-    readonly property real drive: energy * (1 + 1.6 * surge)
+    // Velocidad efectiva: la parte del tema, más el empujón del golpe, ACOTADA.
+    // Sin el piso y el techo iba de 0.45× a 6.7× dentro de un mismo tema: eso
+    // no se lee como "la animación acompaña", se lee como que la animación es
+    // otra. La referencia de fluidez pide deriva de velocidad UNIFORME con un
+    // latido chico encima; el drop es lo único que puede empujar de verdad.
+    readonly property real drive: Math.max(driveMin, Math.min(
+        energy * (1 + surgeK * surge), drop ? driveDrop : driveMax))
 
     // y un tirón de tamaño, corto, para que el golpe se vea y no sólo se acelere
     transform: Scale {
         origin.x: motif.width / 2
         origin.y: motif.height / 2
-        xScale: 1 + 0.05 * motif.surge
-        yScale: 1 + 0.05 * motif.surge
+        xScale: 1 + motif.scaleAmt * motif.surge
+        yScale: 1 + motif.scaleAmt * motif.surge
     }
 
     // T3.A2: UN solo dibujo por pantalla, garantizado por construcción.

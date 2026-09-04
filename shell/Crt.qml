@@ -95,13 +95,7 @@ PanelWindow {
     }
     // el interruptor puede estar prendido ANTES de que exista esta ventana (el
     // FileView carga primero): sin esto no hay cambio del que enterarse
-    Component.onCompleted: {
-        tubeOn = ctl.crtOn;
-        // el plano de la sección se anima siempre, así que arranca puesto a
-        // mano: si no, un monitor que se enchufa a mitad de tema entraría con
-        // el encuadre de 1 y recién se acomodaría en el próximo cambio de parte
-        crt.sectionZoom = crt.sectionZoomTarget;
-    }
+    Component.onCompleted: tubeOn = ctl.crtOn
 
     // ------------------------------------------------------------- fósforos
     // Ya no elige la pantalla: el root sirve DOS caras que combinan (una
@@ -541,10 +535,13 @@ PanelWindow {
             cueAnim.restart();
         }
         function onSectionGenChanged() {
-            // el drop se abre con un golpe, haya habido aviso o no: el plano
-            // nuevo entra en 350 ms y sin la patada se lee como un tween
-            if (crt.sectionZoomOn && crt.ctl.audSection === "drop")
+            // T4.1: el ÚNICO cambio de parte que mueve la cámara es el drop, y
+            // la mueve un momento. El resto de las secciones no tienen plano
+            // propio: el tubo se queda donde estaba.
+            if (crt.sectionZoomOn && crt.ctl.audSection === "drop") {
+                sectionKick.restart();
                 crt.hit(1);
+            }
             // llegó el golpe: se suelta el acercamiento y se rompe la pantalla
             if (crt.cueZoom <= 1.001)
                 return;
@@ -884,63 +881,54 @@ PanelWindow {
     Behavior on camBreath { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
     readonly property real camZoom: camFocus + camBreath
 
-    // T3.4: y la cámara sigue la PARTE del tema. En la estrofa se va atrás — la
-    // línea queda al 85 % y sobra tubo alrededor, que es el aire que después se
-    // cobra el drop, donde entra al 130 %. Es el mismo encuadre de arriba, otro
-    // plano: por eso multiplica a `cam` en vez de tener perilla de cantidad.
-    // El aviso del golpe (cueZoom) ya es la anticipación; acá no hay una
-    // segunda rampa, sólo el plano sostenido de la sección.
-    readonly property bool sectionZoomOn: ctl.crtSectionZoom && cam > 0.01
-    readonly property real sectionZoomTarget: !sectionZoomOn ? 1
-        : ctl.audSection === "drop" ? 1 + 0.30 * cam
-        : ctl.audSection === "build" ? 1 + 0.06 * cam
-        : ctl.audSection === "quiet" ? 1 - 0.18 * cam
-        : 1 - 0.15 * cam
-    // T3.A3: el plano de la sección SIEMPRE se ve viajar sus 350 ms.
+    // T4.1: el plano de la LETRA, y sólo de la letra.
     //
-    // El tween es un objeto propio y no un `Behavior` por una razón: cuando el
-    // cambio de parte cae junto con una línea nueva, la línea trae el cambio de
-    // canal, que llena la pantalla de estática. Con un `Behavior`, el tramo que
-    // corre debajo de la estática se pierde y lo que aparece cuando la estática
-    // se va es el estado final — el salto seco. Acá, si el cambio llega tapado,
-    // el tween se rearma cuando la pantalla vuelve, y los 350 ms se ven.
-    property real sectionZoom: 1
-    NumberAnimation {
-        id: sectionZoomAnim
-        target: crt
-        property: "sectionZoom"
-        duration: 350
-        easing.type: Easing.OutCubic
-    }
-    function retuneSection() {
-        sectionZoomAnim.stop();
-        sectionZoomAnim.from = crt.sectionZoom;
-        sectionZoomAnim.to = crt.sectionZoomTarget;
-        sectionZoomAnim.start();
-    }
-    onSectionZoomTargetChanged: crt.retuneSection()
-    onChanNoiseChanged: {
-        if (crt.chanNoise === 0
-                && Math.abs(crt.sectionZoom - crt.sectionZoomTarget) > 0.002)
-            crt.retuneSection();
-    }
+    // Hasta la tanda 3 el tamaño del verso salía del plano de la sección: en la
+    // estrofa la cámara se iba a 0.85 y la frase con ella. Sacar ese plano
+    // (ahora la cámara descansa en 1) dejaría la letra un 18 % más grande que
+    // en `a85fefc`, que es justo lo contrario de lo que pidió Ferox. Así que el
+    // 0.85 de la estrofa se le queda a la letra, como una constante: el verso
+    // mide exactamente lo que medía antes, y la cámara no tiene que alejarse
+    // para conseguirlo — que es lo que dejaba el marco alrededor del motivo.
+    readonly property real textPlane: sectionZoomOn
+        ? Math.max(1 - 0.15 * cam, 0.5) : 1
 
-    // T3.A1: el zoom MÁS CHICO que la cámara puede tomar. De los cuatro
-    // factores del Scale, tres nunca bajan de 1 (`camZoom`, `cueZoom` y el
-    // tirón del latido): el único que aleja es el plano de la sección, que en
-    // el silencio se va a 1 - 0.18·cam. Todo lo que va a sangre — los motivos,
-    // las barras del standby — se dibuja agrandado por 1/zoomMin y centrado,
-    // así el borde del dibujo queda SIEMPRE fuera del tubo. Sin esto la
-    // estrofa deja un marco de fondo plano alrededor de la animación y se lee
-    // como una imagen pegada encima de un color, no como el tubo.
-    readonly property real camZoomMin: sectionZoomOn
-        ? Math.max(1 - 0.18 * cam, 0.2) : 1
-    // el 1.02 es el margen del redondeo a píxeles enteros; el techo de 3 es
-    // para que una perilla `camera` disparatada no pida una textura enorme
-    // el `> 0` no es paranoia: el valor viaja a un `font.pixelSize`, que es un
-    // int, y un NaN o un infinito ahí es un warning por pantalla al arrancar
-    readonly property real overscan: camZoomMin > 0
-        ? Math.min(1.02 / camZoomMin, 3) : 1
+    // T4.1: la cámara sigue la PARTE del tema, pero como un GOLPE y no como un
+    // estado. Hasta la tanda 3 cada sección tenía su plano sostenido (estrofa
+    // 0.85, drop 1.30): el tubo pasaba la canción entera con un zoom puesto y
+    // eso es lo que Ferox leyó como "está todo agrandado por default". Ahora el
+    // plano DESCANSA en 1 y sólo el drop pega un empujón que se va solo.
+    //
+    // Que nunca baje de 1 no es un detalle estético: los otros tres factores
+    // del Scale (`camZoom`, `cueZoom`, el tirón del latido) tampoco bajan, así
+    // que el encuadre es SIEMPRE >= 1 y ningún dibujo a sangre puede dejar un
+    // marco de fondo plano alrededor. Ésa era toda la razón del overscan de la
+    // tanda 3 (`motifFrame` agrandado por 1/zoomMin), que ya no existe. Si
+    // algún día un plano vuelve a bajar de 1, vuelve el marco.
+    readonly property bool sectionZoomOn: ctl.crtSectionZoom && cam > 0.01
+    // El empujón del drop. Entra en 350 ms, se sostiene medio segundo y afloja
+    // en 1.4 s: se ve el cambio de parte, no queda un zoom puesto.
+    property real sectionZoom: 1
+    SequentialAnimation {
+        id: sectionKick
+        NumberAnimation {
+            target: crt; property: "sectionZoom"
+            to: 1 + 0.12 * crt.cam; duration: 350; easing.type: Easing.OutCubic
+        }
+        PauseAnimation { duration: 500 }
+        NumberAnimation {
+            target: crt; property: "sectionZoom"
+            to: 1; duration: 1400; easing.type: Easing.InOutQuad
+        }
+    }
+    // la perilla apagada (o un hotplug a mitad de golpe) tiene que dejar el
+    // plano donde descansa, no donde lo agarró la animación
+    onSectionZoomOnChanged: {
+        if (!sectionZoomOn) {
+            sectionKick.stop();
+            sectionZoom = 1;
+        }
+    }
 
     Item {
         id: stage
@@ -1061,10 +1049,21 @@ PanelWindow {
 
             // ---- verso anterior, quemado en el fósforo mientras se apaga
             Text {
+                id: ghost
                 anchors { fill: parent; margins: crt.pad }
                 // el tirón del salto: en la pantalla de origen esto es lo único
                 // que queda de la frase, así que es lo que se tiene que ir
-                transform: Translate { x: crt.hopShift }
+                transform: [
+                    // el plano de la letra (T4.1): el quemado tiene que medir
+                    // lo mismo que el verso del que salió
+                    Scale {
+                        origin.x: ghost.width / 2
+                        origin.y: ghost.height / 2
+                        xScale: crt.textPlane
+                        yScale: crt.textPlane
+                    },
+                    Translate { x: crt.hopShift }
+                ]
                 visible: crt.ghostFade > 0.01 && crt.showsText
                 opacity: crt.ghostFade
                 text: crt.ghostText.toUpperCase()
@@ -1138,6 +1137,18 @@ PanelWindow {
                 id: lyric
                 anchors { fill: parent; margins: crt.pad }
                 transform: [
+                    // el plano de la letra (T4.1). Es un Scale y no un factor
+                    // sobre `font.pixelSize` porque el tamaño del verso lo
+                    // deciden DOS cosas — el tope en píxeles y la caja del
+                    // `Text.Fit` —, y con el plano de la cámara las dos se
+                    // achicaban juntas. Tocando sólo el tope, una línea larga
+                    // (limitada por la caja) no cambiaría de tamaño.
+                    Scale {
+                        origin.x: lyric.width / 2
+                        origin.y: lyric.height / 2
+                        xScale: crt.textPlane
+                        yScale: crt.textPlane
+                    },
                     // el tubo prendiéndose: la imagen se abre en vertical desde
                     // la raya del haz (tubeon). El resto del tiempo vale 1.
                     Scale {
@@ -1371,18 +1382,17 @@ PanelWindow {
 
             // ---- pantalla sin letra: la animación que la mantiene viva
             //
-            // El marco es la regla del overscan (T3.A1/B7): el motivo se dibuja
-            // a pantalla completa MÁS el margen del zoom más lejano y la cámara
-            // escala por encima. `clip` acá adentro es lo que garantiza que
-            // ningún motivo pinte fuera de su caja, y `overscan` viaja al
-            // motivo para que las figuras centradas (el ojo, el osciloscopio,
-            // la carta de ajuste) midan exactamente lo mismo que antes: lo
-            // único que se estira es lo que va a sangre.
+            // T4.1: el motivo se dibuja al TAMAÑO DE LA PANTALLA, y nada más.
+            // El marco venía agrandado por el overscan de la tanda 3, que era
+            // el parche para el marco de fondo que dejaba el plano de la
+            // estrofa (0.85). Ese plano ya no existe — la cámara nunca baja de
+            // 1 —, así que agrandar sólo servía para que cada dibujo saliera un
+            // 22 % más grande y recortado, que es exactamente lo que Ferox vio.
+            // El `clip` se queda: es lo que garantiza que ningún motivo pinte
+            // fuera de su caja.
             Item {
                 id: motifFrame
-                anchors.centerIn: parent
-                width: Math.ceil(parent.width * crt.overscan)
-                height: Math.ceil(parent.height * crt.overscan)
+                anchors.fill: parent
                 clip: true
                 // en el instrumental corren TODAS: es la pared entera moviéndose
                 // con el tema, que es justo lo que "NO SIGNAL" mataba
@@ -1390,7 +1400,6 @@ PanelWindow {
 
                 Motif {
                     anchors.fill: parent
-                    overscan: crt.overscan
                     kind: crt.ctl.crtMotifFor(crt.idx)
                     // el destino acelera (×1.6 al final de la línea), las otras
                     // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
@@ -1505,15 +1514,12 @@ PanelWindow {
             }
 
             // ---- sin señal: barras de ajuste y estática
-            // Misma regla que el motivo: las barras van a sangre, así que se
-            // dibujan con el overscan. Sin eso, el plano de la sección (que
-            // sigue puesto cuando el tema para) deja las ocho barras con un
-            // marco de fondo alrededor.
+            // Misma regla que el motivo (T4.1): a tamaño de pantalla. Las ocho
+            // barras van a sangre y no dejan marco porque la cámara nunca se
+            // aleja por debajo de 1.
             Item {
                 id: standbyLayer
-                anchors.centerIn: parent
-                width: Math.ceil(parent.width * crt.overscan)
-                height: Math.ceil(parent.height * crt.overscan)
+                anchors.fill: parent
                 clip: true
                 visible: crt.standby
 

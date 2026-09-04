@@ -164,11 +164,11 @@ _CONFIG_COMMENTS = {
                  "turn like every other animation; false = leave them out",
         "water_amp": "how much the water moves (0 = a flat field of points)",
         "camera": "how much the framing moves (letterbox, zoom); 0 = still",
-        "section_zoom": "the camera also follows the PART of the song: it stands\n"
-                        "back in a verse (the line reads smaller, more empty\n"
-                        "tube around it) and pushes in on a drop, where the\n"
-                        "line fills the screen. It rides on `camera`, so with\n"
-                        "camera = 0 nothing moves here either",
+        "section_zoom": "the camera answers the PART of the song. The lyric sits\n"
+                        "a little back, with tube around it, and a drop pushes\n"
+                        "the whole picture in for a moment and lets go — the\n"
+                        "zoom is a hit, never a state. It rides on `camera`, so\n"
+                        "with camera = 0 nothing moves here either",
         "quality": "resolution the tube is drawn at, before the CRT pass (1.0 =\n"
                    "native). Lower it on a weaker GPU: the glass, the bloom and\n"
                    "the phosphor grid hide most of the difference",

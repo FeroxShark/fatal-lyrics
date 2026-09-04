@@ -28,6 +28,15 @@ Item {
     Behavior on gaze { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
     // contador: cuando sube, este ojo parpadea YA (el golpe los junta a todos)
     property int blinkNow: 0
+    // cuánto se entrecierra el párpado sin llegar a parpadear: 1 abierto del
+    // todo, 0.45 en calma. Multiplica al parpadeo en vez de pisarlo, así el
+    // ojo sigue parpadeando entrecerrado.
+    property real lid: 1
+    Behavior on lid { NumberAnimation { duration: 520; easing.type: Easing.InOutQuad } }
+    // la pupila se ESTIRA hacia donde mira: un óvalo tirado hacia el costado
+    // lee la dirección mucho antes que un punto corrido
+    property real pupilStretch: 0
+    Behavior on pupilStretch { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
 
     property real open: 0
     onVisibleChanged: {
@@ -67,7 +76,7 @@ Item {
     transform: Scale {
         origin.x: eye.width / 2
         origin.y: eye.height / 2
-        yScale: eye.open
+        yScale: eye.open * eye.lid
     }
 
     // Lente, malla e iris van TODOS en el mismo canvas: dibujados por separado,
@@ -142,10 +151,16 @@ Item {
     // mirando a un costado — ahí se corre hasta un cuarto del ancho, que es lo
     // que aguanta la lente sin que la pupila se salga del dibujo.
     Rectangle {
-        width: eye.height * (0.10 + 0.05 * eye.level + 0.05 * eye.punch + 0.06 * eye.surge)
-        height: width
-        radius: width / 2
+        id: pupil
+        readonly property real base: eye.height
+            * (0.10 + 0.05 * eye.level + 0.05 * eye.punch + 0.06 * eye.surge)
+        width: base * (1 + eye.pupilStretch)
+        height: base
+        radius: height / 2
+        // el estirón sale del lado hacia el que mira, así que el óvalo crece
+        // hacia allá y no en las dos direcciones
         x: (eye.width - width) / 2 + eye.gaze * eye.width * 0.25
+            + Math.sign(eye.gaze) * (width - base) / 2
         y: (eye.height - height) / 2
         color: eye.hot
         opacity: 0.92

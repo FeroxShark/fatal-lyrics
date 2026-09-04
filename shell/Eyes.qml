@@ -1,14 +1,21 @@
 // fatal-lyrics — los ojos.
 //
-// Una grilla de ojos chicos (el mismo dibujo de `Eye.qml`) mirando todos hacia
-// la pantalla donde está la frase. En una pared de tres monitores eso se lee
-// solo: la pantalla apagada no está haciendo un dibujo, está MIRANDO a la que
-// tiene la letra. Y cuando el aviso del salto dice que la frase se va a otra,
-// los ojos se dan vuelta antes de que llegue.
+// UN ojo grande que mira a la pantalla donde está la frase, y dos o tres ojos
+// chicos en los bordes que aparecen y desaparecen. La grilla de ojos copiados
+// que había antes no gustaba (T3.B3) y en la pantalla vertical era peor: quince
+// lentes idénticas a la misma escala, con la cámara al tope, quedaban cortadas
+// contra el borde.
 //
-// Parpadean fuera de fase entre sí — todos juntos serían un solo bicho con
-// muchos ojos, y lo que se busca es un público. En el golpe del tubo sí
-// parpadean todos a la vez.
+// Lo que se lee acá es UNA mirada: el ojo grande sigue el foco con la pupila
+// estirada hacia allá y el párpado entrecerrado en calma, abierto en el drop.
+// Los chicos son el público, no una textura: van y vienen, cada uno con su
+// propio reloj, y nunca están los tres a la vez por casualidad más de un rato.
+//
+// El reparto de los chicos depende de la FORMA de la pantalla, no de un número
+// fijo: en horizontal van a izquierda y derecha (que es donde están las otras
+// pantallas de la pared), en vertical arriba y abajo. Una de las pantallas de
+// Ferox es vertical: cualquier dibujo nuevo se prueba con el ancho y el alto
+// dados vuelta.
 import QtQuick
 
 Item {
@@ -23,48 +30,90 @@ Item {
     property real gaze: 0
     property int kick: 0
     property real seed: 0
+    property bool drop: false
     property bool running: true
+    // el lado corto SIN el overscan: el ojo grande tiene que medir lo mismo que
+    // medía antes de que el motivo se dibujara para el zoom más lejano
+    property real span: Math.min(width, height)
 
-    // La grilla se sortea con la semilla de esta aparición: 3×2 a 5×3. Sin eso
-    // la pared de ojos sería siempre la misma foto.
-    readonly property int cols: 3 + Math.floor(Math.min(seed, 0.999) * 3)
-    readonly property int rows: 2 + Math.floor(Math.min((seed * 7) % 1, 0.999) * 2)
+    readonly property bool tall: height > width
 
     // el golpe los junta: un contador que cada ojo mira para parpadear YA
     property int blinkAll: 0
     onKickChanged: if (running) blinkAll++
 
-    Grid {
+    // ---- el ojo grande
+    Eye {
+        id: big
         anchors.centerIn: parent
-        columns: wall.cols
-        rows: wall.rows
-        spacing: 0
+        // En horizontal el lado corto es el ALTO, así que medir el ojo contra
+        // `span` lo deja chico: con 1.15 ocupa medio ancho y sigue entrando de
+        // sobra en el alto (la lente mide 0.52 de su ancho).
+        width: wall.span * (wall.tall ? 0.92 : 1.15)
+        height: width * 0.52
+        colour: wall.colour
+        hot: wall.hot
+        level: wall.level
+        punch: wall.punch
+        surge: wall.surge
+        gaze: wall.gaze
+        blinking: wall.running
+        blinkNow: wall.blinkAll
+        // en calma el ojo está entrecerrado y en el drop se abre entero: es lo
+        // que hace que la pantalla apagada tenga estado sin cambiar de dibujo
+        lid: Math.min(0.45 + 0.35 * wall.level + (wall.drop ? 0.20 : 0), 1)
+        pupilStretch: 0.9 * Math.abs(wall.gaze)
+    }
 
-        Repeater {
-            model: wall.cols * wall.rows
+    // ---- los chicos, en los bordes
+    // Tres lugares fijos por forma de pantalla. Cada uno aparece y desaparece
+    // con su propio reloj, y los relojes son primos entre sí: con el mismo
+    // intervalo los tres pestañearían juntos y volvería a leerse como grilla.
+    Repeater {
+        model: 3
 
-            Item {
-                id: cell
-                required property int index
-                width: wall.width / wall.cols
-                height: wall.height / wall.rows
+        Item {
+            id: slot
+            required property int index
 
-                Eye {
-                    anchors.centerIn: parent
-                    width: cell.width * 0.78
-                    height: Math.min(width * 0.52, cell.height * 0.8)
-                    colour: wall.colour
-                    hot: wall.hot
-                    level: wall.level
-                    punch: wall.punch
-                    surge: wall.surge
-                    gaze: wall.gaze
-                    blinking: wall.running
-                    blinkNow: wall.blinkAll
-                    // el desfasaje sale del lugar en la grilla y de la semilla:
-                    // determinístico, pero distinto en cada aparición
-                    phase: Math.round(((cell.index * 37 + wall.seed * 991) % 23) * 190)
-                }
+            readonly property var spot: wall.tall
+                ? [[0.30, 0.11], [0.70, 0.89], [0.16, 0.63]][index]
+                : [[0.09, 0.28], [0.91, 0.72], [0.50, 0.11]][index]
+            readonly property int period: [2300, 3100, 4300][index]
+
+            x: wall.width * spot[0] - width / 2
+            y: wall.height * spot[1] - height / 2
+            width: wall.span * 0.24
+            height: width * 0.52
+
+            // arranca prendido el primero: una pantalla que aparece con los tres
+            // apagados tarda dos segundos en ser el motivo de los ojos
+            property bool on: index === 0
+            Timer {
+                interval: slot.period
+                repeat: true
+                running: wall.running && wall.visible
+                onTriggered: slot.on = !slot.on
+            }
+
+            opacity: on ? 1 : 0
+            visible: opacity > 0.01
+            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.InOutQuad } }
+
+            Eye {
+                anchors.fill: parent
+                colour: wall.colour
+                hot: wall.hot
+                level: wall.level
+                punch: wall.punch
+                surge: wall.surge
+                gaze: wall.gaze
+                blinking: wall.running
+                blinkNow: wall.blinkAll
+                pupilStretch: 0.7 * Math.abs(wall.gaze)
+                // el desfasaje sale del lugar y de la semilla: determinístico,
+                // pero distinto en cada aparición
+                phase: Math.round(((slot.index * 37 + wall.seed * 991) % 23) * 190)
             }
         }
     }

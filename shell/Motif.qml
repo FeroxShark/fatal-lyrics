@@ -206,13 +206,14 @@ Item {
     }
 
     // ------------------------------------------------------------------ ojos
-    // La misma lente, chiquita y repetida: una grilla de ojos que miran todos
-    // hacia la pantalla donde está la frase (y se dan vuelta cuando la frase
-    // avisa que se va a otra).
+    // La misma lente: uno grande que mira a la pantalla donde está la frase (y
+    // se da vuelta cuando la frase avisa que se va a otra) más dos o tres
+    // chicos en los bordes, que van y vienen. La grilla de quince copias se
+    // sacó en la tanda 3 (B3).
     //
-    // La grilla son hasta quince ojos y cada ojo es un Canvas: existe sólo
-    // mientras el Loader la tiene puesta, que es lo que hace que quince Canvas
-    // no pesen el 90 % del tiempo en que la pantalla muestra otra cosa.
+    // Son cuatro Canvas como mucho y existen sólo mientras el Loader tiene
+    // puesta la grilla, que es lo que hace que no pesen el 90 % del tiempo en
+    // que la pantalla muestra otra cosa.
     Component {
         id: eyesC
 
@@ -225,6 +226,11 @@ Item {
             gaze: motif.gaze
             kick: motif.kick
             seed: motif.seed
+            drop: motif.drop
+            // la misma regla que el ojo solo y el osciloscopio: lo que va
+            // CENTRADO se mide contra la pantalla, no contra la caja del
+            // overscan, o sale un 22 % más grande que antes
+            span: motif.span
             running: motif.spinning
         }
     }

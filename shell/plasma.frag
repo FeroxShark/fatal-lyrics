@@ -52,6 +52,16 @@ void main() {
     float ar = res.x / max(res.y, 1.0);
     vec2 p = vec2((uv.x - 0.5) * ar, uv.y - 0.5);
 
+    // SAFE AREA (T4.1). The glass is the frame minus 4 % of air, and every
+    // distance inside is measured against IT. Before, the lamp was a circle of
+    // fixed radius (0.78) in aspect-corrected space: on 16:9 it reached 0.74 of
+    // a HALF screen in y, so the wax poured out through the top and the bottom,
+    // and on the portrait screen it went out through the sides. The blobs stay
+    // ROUND — only the tube is the shape of the screen, which is what a tube
+    // built into a monitor would be.
+    vec2 glass = vec2(0.46 * ar, 0.46);
+    float rmin = min(glass.x, glass.y);
+
     float field = 0.0;
     // Constant bound: GLSL ES 100 will not take a variable one. The blobs past
     // `count` are still walked, they just weigh nothing.
@@ -61,23 +71,27 @@ void main() {
         float s1 = hash11(seed * 57.0 + fi * 13.0);
         float s2 = hash11(seed * 91.0 + fi * 29.0 + 3.0);
 
-        // slow drift on periods that do not divide each other
-        vec2 c = vec2(
+        // slow drift on periods that do not divide each other, as a FRACTION
+        // of the glass: 0.40 of a half-axis at the very most, so a blob plus its
+        // radius can never reach the wall — on any aspect ratio
+        vec2 c = glass * vec2(
             (0.30 + 0.10 * s1) * sin(t * (0.17 + 0.043 * fi) + s1 * 6.283),
             (0.26 + 0.12 * s2) * cos(t * (0.11 + 0.037 * fi) + s2 * 6.283)
         );
         // the bass lifts the whole lamp, and the kick shivers each blob apart
-        c.y -= low * 0.16;
-        c += agit * 0.020 * vec2(sin(t * 13.0 + fi * 2.1), cos(t * 11.0 + fi * 1.7));
+        c.y -= low * 0.10 * glass.y;
+        c += agit * 0.04 * rmin * vec2(sin(t * 13.0 + fi * 2.1),
+                                       cos(t * 11.0 + fi * 1.7));
 
-        float rad = (0.16 + 0.05 * s1) * (1.0 + 0.15 * agit);
+        float rad = (0.30 + 0.10 * s1) * rmin * (1.0 + 0.15 * agit);
         vec2 d = p - c;
         // 1/r² blows up at the centre of a blob: never divide by nothing
         field += w * rad * rad / max(dot(d, d), 0.0004);
     }
 
-    // the glass is round: the wax cannot reach the corners
-    field *= smoothstep(0.78, 0.30, length(p * vec2(1.0, 1.05)));
+    // the glass: an ellipse inscribed in the safe area, so the wax cannot reach
+    // the corners AND cannot leave through an edge
+    field *= smoothstep(1.0, 0.42, length(p / glass));
 
     float e = 0.09;
     float body = smoothstep(1.0 - e, 1.0 + e, field);

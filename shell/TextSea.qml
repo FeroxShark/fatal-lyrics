@@ -35,14 +35,10 @@ Item {
     // lo que tarda en subir UNA línea
     readonly property real stepMs: bpmLive && beatMs > 0 ? beatMs : 800
 
-    // T3.A1: el item se dibuja con el overscan de la cámara (más grande que
-    // la pantalla, para no dejar borde al alejarse). El tamaño de la letra se
-    // mide contra la PANTALLA, no contra la caja: si no, la marea de texto
-    // sale un 22 % más grande que el resto de la pared.
-    property real overscan: 1
-    readonly property real _os: overscan > 0 ? overscan : 1
-    readonly property real lineH: Math.max(2, Math.round(height * 0.032 / _os))
-    readonly property real fontPx: Math.max(1, Math.round(height * 0.020 / _os))
+    // T4.1: la caja mide lo que mide la pantalla, así que el renglón se mide
+    // contra ella directo (antes descontaba el overscan de la cámara).
+    readonly property real lineH: Math.max(2, Math.round(height * 0.032))
+    readonly property real fontPx: Math.max(1, Math.round(height * 0.020))
 
     // Tope: una letra de doscientas líneas son doscientos bindings por cuadro y
     // nadie ve más allá de la pantalla. Se recorta alrededor del verso que

@@ -130,14 +130,11 @@ Item {
         punchDecay.start();
     }
 
-    // T3.A1: cuánto más grande que la pantalla es este item. El motivo se
-    // dibuja siempre para el zoom más lejano de la cámara (`Crt.overscan`), y
-    // eso es lo que hace que lo que va a sangre no deje borde. Pero las
-    // figuras centradas se miden contra la PANTALLA y no contra la caja: si
-    // `span` creciera con el overscan, el ojo y la carta de ajuste saldrían un
-    // 22 % más grandes y en el drop quedarían recortados.
-    property real overscan: 1
-    readonly property real span: Math.min(width, height) / overscan
+    // El lado corto de la pantalla: la medida de toda figura centrada (el ojo,
+    // el osciloscopio, la carta de ajuste). T4.1: el item mide exactamente lo
+    // que mide la pantalla, así que es una división menos — hasta la tanda 3
+    // esto descontaba el overscan de la cámara, que ya no existe.
+    readonly property real span: Math.min(width, height)
     // velocidad efectiva: la parte del tema, más el empujón del golpe
     readonly property real drive: energy * (1 + 1.6 * surge)
 
@@ -228,8 +225,7 @@ Item {
             seed: motif.seed
             drop: motif.drop
             // la misma regla que el ojo solo y el osciloscopio: lo que va
-            // CENTRADO se mide contra la pantalla, no contra la caja del
-            // overscan, o sale un 22 % más grande que antes
+            // CENTRADO se mide contra el lado corto de la pantalla
             span: motif.span
             running: motif.spinning
         }
@@ -741,7 +737,6 @@ Item {
         id: staticC
 
         Static {
-            overscan: motif.overscan
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -764,7 +759,6 @@ Item {
         id: textseaC
 
         TextSea {
-            overscan: motif.overscan
             colour: motif.colour
             hot: motif.hot
             level: motif.level

@@ -76,6 +76,14 @@ _CONFIG_COMMENTS = {
         "terminals": "terminal emulators to try, in order, when opening the full menu —\n"
                      "checked after $TERMINAL, which always wins if it's set",
     },
+    "keys": {
+        "sync_forward": "keys that nudge the lyric forward 0.1 s (Hyprland syntax:\n"
+                        '"MODS, KEY", e.g. "Super+Alt, Right"). fatal-lyrics only\n'
+                        "touches Hyprland if you change these — the default pair is\n"
+                        "what the shipped keybinds already use, so leaving them alone\n"
+                        "never fights your own config. \"\" = no key, use fatal sync +",
+        "sync_back": "...and the ones that push it back 0.1 s",
+    },
     "crt": {
         "enabled": "true = start with the tube on",
         "screens": 'which screens the tube takes: "all" | "DP-1" | ["DP-1","DP-2"]\n'
@@ -203,6 +211,10 @@ _CONFIG_COMMENTS = {
 _CONFIG_HEADER = ("# fatal-lyrics — configuration\n"
                    "# Saving this file applies the changes right away. Menu: fatal config")
 _SECTION_INTRO = {
+    "keys": "# The only keys fatal-lyrics binds by itself, and only when you change them\n"
+            "# from what is written here: the default pair is what the shipped Hyprland\n"
+            "# keybinds already run, so the out-of-the-box case touches nothing.\n"
+            "# Hyprland only. Anywhere else, use: fatal sync + | -",
     "crt": "# CRT mode: every screen becomes one big cathode ray tube showing the lyric.\n"
            "# It covers the whole desktop, so it is opt-in and toggled by hand:\n"
            "#   fatal crt on | off | toggle     (works even if the daemon is dead)",
@@ -271,6 +283,9 @@ DEFAULTS = {
                        "haruna", "totem", "spotify", "netflix", "youtube"],
         "terminals": ["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole",
                       "gnome-terminal", "xterm"],
+    },
+    "keys": {
+        "sync_forward": "Super+Alt, Right", "sync_back": "Super+Alt, Left",
     },
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
@@ -365,6 +380,7 @@ def apply_config():
     """Relee el archivo y aplica: overlay + etiquetas de la bandeja. Único camino,
     lo llaman tanto el watcher como la bandeja (que además no quiere esperar el poll)."""
     was_crt = CFG["crt"]["enabled"]
+    was_keys = dict(CFG["keys"])
     if not reload_config():
         return False
     log("config reloaded")
@@ -373,8 +389,13 @@ def apply_config():
     if CFG["crt"]["enabled"] != was_crt:
         set_crt(CFG["crt"]["enabled"])
     # tarde a propósito: ipc lee la config, así que importarlo arriba sería un
-    # círculo. Acá ya está todo cargado y sale gratis.
+    # círculo. Acá ya está todo cargado y sale gratis. Lo mismo system.
     from . import ipc
+    from . import system
+    # las teclas del sync no viajan al overlay: las aplica Hyprland. Se pasa el
+    # valor anterior porque cambiar un bind es unbind del viejo + bind del nuevo
+    if CFG["keys"] != was_keys:
+        system.apply_key_binds(was_keys, CFG["keys"])
     ipc.send(ipc._config_event())
     if _tray_refresh is not None:
         _tray_refresh()

@@ -231,10 +231,15 @@ demo() {
 # T0.13: el daemon vivo lee esto con DaemonLoop._watch_sync (mismo mecanismo
 # de archivo que crt/tune) y ajusta el offset del tema que está sonando ya.
 sync_lyrics() {
+    # `show` y `reset` NO necesitan el daemon: lo aprendido vive en
+    # offsets.toml, así que se mira y se borra con todo apagado. Sólo el
+    # ajuste en vivo (+/-) tiene que llegarle a un daemon que esté corriendo.
     case "${1:-}" in
+        show)  python3 "$DAEMON" --sync-show; return $? ;;
+        reset) python3 "$DAEMON" --sync-reset "${2:-}"; return $? ;;
         -) d=-0.1 ;;
         +) d=0.1 ;;
-        *) echo "usage: fatal sync [+|-]" >&2; exit 1 ;;
+        *) echo "usage: fatal sync [+|-|show|reset [<artist>|all]]" >&2; exit 1 ;;
     esac
     if ! running "$D_PID" "$DAEMON"; then
         echo "fatal-lyrics isn't running — start it with: fatal on" >&2
@@ -255,8 +260,8 @@ case "${1:-toggle}" in
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
     crt)       crt "$2" "$3" ;;
-    sync)      sync_lyrics "$2" ;;
+    sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|sync +|-|sing on|off|toggle]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
 esac

@@ -45,6 +45,12 @@ def make_lyr():
 def make_offsets():
     offsets_mock = mock.MagicMock()
     offsets_mock.get.return_value = 0.0
+    offsets_mock.track_get.return_value = 0.0
+    # devuelven float y no un MagicMock: el daemon los usa como número
+    # (`session_offset`) y un mock ahí revienta el `round()` recién dos
+    # llamadas después, lejos de donde estaba el problema
+    offsets_mock.effective.return_value = 0.0
+    offsets_mock.record.return_value = 0.0
     return offsets_mock
 
 
@@ -495,51 +501,86 @@ class TestHangDialog(unittest.TestCase):
 
 
 class TestSync(unittest.TestCase):
-    def test_adjusts_the_session_offset_and_shows_feedback(self):
+    """El gesto de ajuste fino. La cuenta la lleva offsets.record(): el daemon
+    aplica lo que ese le devuelve y no acumula nada por su lado, porque
+    persistir para el artista REBAJA lo que el tema pide (ver offsets.py) y
+    sumar el delta encima lo contaría dos veces."""
+
+    def test_applies_what_offsets_says_the_track_needs(self):
         loop = make_loop()
         loop.current_artist = "Artist"
+        loop.track_id = "t1"
         loop.session_offset = 0.15
+        loop._offsets.record.return_value = 0.25
 
         loop.sync(0.1)
 
         self.assertAlmostEqual(loop.session_offset, 0.25)
-        loop._ipc.show.assert_called_once_with("sync +0.1 s", "fatal-lyrics")
         self.assertEqual(loop.idx, -1)
+
+    def test_the_hint_travels_as_its_own_event_not_as_a_dialog(self):
+        # un `show` con el tubo prendido PASA A SER la línea de la letra: el
+        # aviso borraba el verso que se estaba tratando de sincronizar
+        loop = make_loop()
+        loop.current_artist = "Artist"
+        loop.track_id = "t1"
+        loop._offsets.record.return_value = 0.25
+
+        loop.sync(0.1)
+
+        loop._ipc.show.assert_not_called()
+        loop._ipc.sync_hint.assert_called_once_with(0.1, 0.25, "Artist")
 
     def test_a_negative_delta(self):
         loop = make_loop()
         loop.current_artist = "Artist"
+        loop.track_id = "t1"
+        loop._offsets.record.return_value = -0.1
 
         loop.sync(-0.1)
 
         self.assertAlmostEqual(loop.session_offset, -0.1)
-        loop._ipc.show.assert_called_once_with("sync -0.1 s", "fatal-lyrics")
+        loop._ipc.sync_hint.assert_called_once_with(-0.1, -0.1, "Artist")
 
-    def test_records_the_correction_for_the_current_artist(self):
+    def test_records_the_correction_for_the_current_artist_and_track(self):
         loop = make_loop()
         loop.current_artist = "Artist"
+        loop.track_id = "t1"
 
         loop.sync(0.1)
 
-        loop._offsets.record.assert_called_once_with("Artist", 0.1)
+        loop._offsets.record.assert_called_once_with("Artist", 0.1, "t1")
 
     def test_without_a_known_artist_does_not_touch_offsets(self):
         loop = make_loop()
         loop.current_artist = None
+        loop.track_id = "t1"
 
         loop.sync(0.1)
 
         loop._offsets.record.assert_not_called()
+        self.assertAlmostEqual(loop.session_offset, 0.1)
 
-    def test_a_new_track_seeds_the_session_offset_from_the_artist(self):
+    def test_without_a_track_id_does_not_touch_offsets(self):
+        # no hay a qué tema anotárselo: se aplica a la sesión y nada más
+        loop = make_loop()
+        loop.current_artist = "Artist"
+        loop.track_id = None
+
+        loop.sync(0.1)
+
+        loop._offsets.record.assert_not_called()
+        self.assertAlmostEqual(loop.session_offset, 0.1)
+
+    def test_a_new_track_seeds_the_session_offset_from_artist_plus_track(self):
         loop = make_loop(offsets=make_offsets())
-        loop._offsets.get.return_value = 0.3
+        loop._offsets.effective.return_value = 0.3
 
         loop.handle_track(track(id="new", artist="Artist"), now=0.0)
 
         self.assertEqual(loop.current_artist, "Artist")
         self.assertEqual(loop.session_offset, 0.3)
-        loop._offsets.get.assert_called_once_with("Artist")
+        loop._offsets.effective.assert_called_once_with("Artist", "new")
 
 
 class TestLongPauseClear(unittest.TestCase):

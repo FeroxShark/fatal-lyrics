@@ -123,6 +123,28 @@ def _ask_crt_order(current):
     # las que no nombró van al final solas: nadie se queda sin tubo
     return names
 
+def _ask_key(title, current):
+    """Un atajo en la sintaxis de Hyprland ("Super+Alt, Right").
+
+    Se tipea, no se captura: `fatal config` corre en una terminal y ahí no hay
+    forma de leer la tecla que se apretó sin agarrarle el teclado al
+    compositor. Vacío = dejarlo como está; "-" = sin tecla (queda `fatal sync`)."""
+    print(f"\n{title}   (now: \"{current}\", enter = keep, - = no key)")
+    print('  Hyprland syntax: MODS, KEY  —  e.g. "Super+Alt, Right"')
+    raw = input("> ").strip()
+    if not raw:
+        return None
+    if raw == "-":
+        return ""
+    # sin la coma Hyprland lo lee como un bind sin modificadores y el atajo
+    # queda mudo sin decir nada: se avisa acá, que es donde se puede corregir
+    if "," not in raw:
+        print("  it needs a comma between the mods and the key (Super+Alt, Right)")
+        input("  enter to go back ")
+        return None
+    return raw
+
+
 YESNO = [("yes", True), ("no", False)]
 
 # (clave, sección, etiqueta, editor). El editor recibe el valor actual y
@@ -279,6 +301,12 @@ SETTINGS = [
     ("sing", "behavior", "Karaoke mode (listens to the mic)",
      lambda c: _pick("Karaoke mode: the mic is listened to and everything only "
                      "lights up while you sing (fatal sing on|off)", YESNO, c)),
+
+    ("— keys (Hyprland) —", None, None, None),
+    ("sync_forward", "keys", "Nudge the lyric forward 0.1 s",
+     lambda c: _ask_key("Keys that nudge the lyric forward 0.1 s", c)),
+    ("sync_back", "keys", "Push the lyric back 0.1 s",
+     lambda c: _ask_key("Keys that push the lyric back 0.1 s", c)),
 ]
 
 DIM, BOLD, YEL, OFF = "\033[2m", "\033[1m", "\033[33m", "\033[0m"

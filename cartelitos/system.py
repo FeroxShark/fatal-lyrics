@@ -249,3 +249,69 @@ def _terminal():
             if found:
                 return found
     return None
+
+
+# ------------------------------------------------------ los binds del sync
+# `fatal sync +/-` corregido a ojo, con teclas propias (tanda 3, C). Los binds
+# viven en la config de Hyprland del usuario, así que fatal-lyrics NO los
+# escribe por default: mientras la perilla valga lo mismo que DEFAULTS, el bind
+# que ya está ahí es el correcto y tocarlo sería tener el mismo atajo dos veces.
+# Recién cuando alguien la cambia hay que intervenir, y ahí siempre igual:
+# UNBIND del anterior, BIND del nuevo. Volver al valor de fábrica también pasa
+# por acá — si sólo se actuara "cuando difiere del default", volver dejaría la
+# tecla muerta hasta el próximo reload de Hyprland, porque el unbind ya se hizo.
+SYNC_KEYS = (("sync_forward", "+"), ("sync_back", "-"))
+# de fábrica; se lee de config para que haya UN solo lugar con el valor
+DEFAULTS_KEYS = config.DEFAULTS["keys"]
+
+
+def _fatal_bin():
+    """Ruta ABSOLUTA a bin/fatal. El `exec` de Hyprland no tiene ~/.local/bin en
+    el PATH: un `fatal sync +` pelado no corre nunca y el bind queda mudo."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "bin", "fatal")
+
+
+def key_bind_commands(old, new):
+    """Los `hyprctl` que hay que correr para pasar de `old` a `new`.
+
+    Devolver la lista en vez de correrla es lo que hace testeable el orden
+    (unbind antes que bind, siempre) sin shellear en los tests. `old`/`new` son
+    los dicts de la sección [keys]; `old` en None es el arranque, donde lo que
+    ya vale el default no se toca."""
+    out = []
+    first = old is None
+    for key, arg in SYNC_KEYS:
+        want = (new.get(key) or "").strip()
+        was = None if first else (old.get(key) or "").strip()
+        if first:
+            if want == DEFAULTS_KEYS.get(key):
+                continue        # el bind del usuario ya hace esto
+        elif want == was:
+            continue            # no cambió: nada que rebindear
+        # el anterior sale SIEMPRE, incluso el del default: si no, el atajo
+        # viejo sigue vivo y dos binds mandan el mismo gesto dos veces
+        gone = DEFAULTS_KEYS.get(key) if first else was
+        if gone:
+            out.append(["hyprctl", "keyword", "unbind", gone])
+        if want:
+            out.append(["hyprctl", "keyword", "bind",
+                        f"{want}, exec, {_fatal_bin()} sync {arg}"])
+    return out
+
+
+def apply_key_binds(old, new, run=None):
+    """Aplica los binds de [keys]. Devuelve los comandos que corrió."""
+    cmds = key_bind_commands(old, new)
+    if not cmds or not _hyprland():
+        return []
+    runner = run or (lambda argv: subprocess.run(
+        argv, capture_output=True, timeout=2, check=False))
+    for argv in cmds:
+        try:
+            runner(argv)
+        except (OSError, subprocess.SubprocessError) as e:
+            log(f"couldn't apply the sync keybind ({e})")
+            continue
+        log("keys: " + " ".join(argv[2:]))
+    return cmds

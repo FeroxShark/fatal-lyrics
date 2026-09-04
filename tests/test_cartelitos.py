@@ -32,6 +32,7 @@ import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
 from cartelitos import audio, config, ipc, lyrics, offsets, setup, system, tray, util  # noqa: E402
+from cartelitos import __main__ as main  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -209,6 +210,22 @@ class TestShowNext(unittest.TestCase):
         out = self.sent()
         c.show("hola", "t", 1.0, 2.0, nxt=c.next_line([(1.0, "hola"), (2.0, "chau")], 0))
         json.dumps(out[0])
+
+    def test_the_sync_hint_is_its_own_event(self):
+        # tanda 3 (C): un `show` con el tubo prendido PASA A SER la línea de la
+        # letra, así que avisar del ajuste borraba el verso que se estaba
+        # tratando de sincronizar
+        out = self.sent()
+        c.sync_hint(0.1, 0.30000000000000004, "Frank Sinatra")
+        self.assertEqual(out[0], {"cmd": "sync", "d": 0.1, "offset": 0.3,
+                                  "artist": "Frank Sinatra"})
+        json.dumps(out[0])
+
+    def test_the_sync_hint_without_an_artist_carries_an_empty_string(self):
+        # el overlay concatena: un `null` ahí se dibujaría como la palabra
+        out = self.sent()
+        c.sync_hint(-0.1, -0.1, None)
+        self.assertEqual(out[0]["artist"], "")
 
 
 class TestLyricsEvent(unittest.TestCase):
@@ -880,8 +897,9 @@ class TestPurgeCache(unittest.TestCase):
 
 
 class TestOffsets(unittest.TestCase):
-    """T0.13: dos correcciones seguidas en el mismo sentido persisten; una
-    sola, o dos que se cancelan, no."""
+    """Tanda 3 (C): el offset se le guarda al ARTISTA recién cuando dos TEMAS
+    distintos suyos pidieron lo mismo. Antes de eso vale sólo para el tema —
+    un tema mal masterizado no puede desfasar al artista entero."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -890,7 +908,7 @@ class TestOffsets(unittest.TestCase):
         self._old_path = offsets.OFFSETS_PATH
         offsets.OFFSETS_DIR = self.dir.name
         offsets.OFFSETS_PATH = os.path.join(self.dir.name, "offsets.toml")
-        self._old_pending = dict(offsets._pending)
+        self._old_pending = {a: dict(t) for a, t in offsets._pending.items()}
         offsets._pending.clear()
 
         def restore():
@@ -903,35 +921,143 @@ class TestOffsets(unittest.TestCase):
     def test_unknown_artist_defaults_to_zero(self):
         self.assertEqual(offsets.get("Nobody"), 0.0)
 
-    def test_two_corrections_the_same_way_persist_their_sum(self):
-        offsets.record("Artist", 0.1)
-        self.assertEqual(offsets.get("Artist"), 0.0)   # todavía no, es la primera
-        offsets.record("Artist", 0.1)
-        self.assertEqual(offsets.get("Artist"), 0.2)
-
-    def test_a_single_correction_does_not_persist(self):
-        offsets.record("Artist", 0.1)
+    # ---- un tema solo: vale para el tema, no para el artista
+    def test_one_track_does_not_teach_the_artist_anything(self):
+        offsets.record("Artist", 0.1, "track-1")
+        offsets.record("Artist", 0.1, "track-1")
+        offsets.record("Artist", 0.1, "track-1")
         self.assertEqual(offsets.get("Artist"), 0.0)
 
-    def test_opposite_corrections_cancel_the_streak_without_persisting(self):
-        offsets.record("Artist", 0.1)
-        offsets.record("Artist", -0.1)
+    def test_what_one_track_asked_for_still_applies_to_that_track(self):
+        # el "TrackProfile": mientras no se haya ganado el artista, el tema que
+        # se corrigió igual suena corregido
+        offsets.record("Artist", 0.1, "track-1")
+        offsets.record("Artist", 0.1, "track-1")
+        self.assertAlmostEqual(offsets.effective("Artist", "track-1"), 0.2)
+        # ...y no arrastra a ningún otro tema del mismo artista
+        self.assertEqual(offsets.effective("Artist", "track-2"), 0.0)
+
+    def test_the_correction_of_a_track_survives_going_back_to_it(self):
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.record("Artist", -0.1, "track-2")   # otro tema, otra dirección
+        self.assertAlmostEqual(offsets.track_get("Artist", "track-1"), 0.2)
+
+    # ---- dos temas, misma dirección: se guarda
+    def test_two_tracks_the_same_way_teach_the_artist(self):
+        offsets.record("Artist", 0.2, "track-1")
+        self.assertEqual(offsets.get("Artist"), 0.0)   # todavía es un tema solo
+        offsets.record("Artist", 0.2, "track-2")
+        self.assertAlmostEqual(offsets.get("Artist"), 0.2)
+
+    def test_what_is_learned_is_the_average_and_not_the_sum(self):
+        # dos temas que necesitan +0.2 dicen que el artista necesita +0.2
+        offsets.record("Artist", 0.3, "track-1")
+        offsets.record("Artist", 0.1, "track-2")
+        self.assertAlmostEqual(offsets.get("Artist"), 0.2)
+
+    def test_the_playing_track_does_not_jump_when_the_artist_is_learned(self):
+        # el golpe que persiste no puede correr el tema que suena: lo guardado
+        # se le descuenta a los temas que votaron (el rebase)
+        offsets.record("Artist", 0.3, "track-1")
+        before = offsets.effective("Artist", "track-1")
+        after = offsets.record("Artist", 0.1, "track-2")
+        self.assertAlmostEqual(before, 0.3)
+        self.assertAlmostEqual(after, 0.1)             # lo que pidió track-2
+        self.assertAlmostEqual(offsets.effective("Artist", "track-1"), 0.3)
+
+    def test_a_third_track_the_same_way_keeps_teaching(self):
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.record("Artist", 0.2, "track-2")
+        self.assertAlmostEqual(offsets.get("Artist"), 0.2)
+        offsets.record("Artist", 0.2, "track-3")
+        offsets.record("Artist", 0.2, "track-4")
+        self.assertAlmostEqual(offsets.get("Artist"), 0.4)
+
+    # ---- dos temas en direcciones opuestas: no se guarda nada
+    def test_two_tracks_pulling_the_opposite_way_teach_nothing(self):
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.record("Artist", -0.2, "track-2")
         self.assertEqual(offsets.get("Artist"), 0.0)
 
-    def test_a_later_streak_adds_on_top_of_what_was_already_saved(self):
-        offsets.record("Artist", 0.1)
-        offsets.record("Artist", 0.1)
-        self.assertEqual(offsets.get("Artist"), 0.2)
-        offsets.record("Artist", 0.1)
-        offsets.record("Artist", 0.1)
-        self.assertEqual(offsets.get("Artist"), 0.4)
+    def test_the_direction_of_a_track_is_its_net_not_each_tap(self):
+        # +,+,- en un tema es un tema que pide +0.1, no tres votos
+        offsets.record("Artist", 0.1, "track-1")
+        offsets.record("Artist", 0.1, "track-1")
+        offsets.record("Artist", -0.1, "track-1")
+        self.assertEqual(offsets.get("Artist"), 0.0)
+        offsets.record("Artist", 0.1, "track-2")
+        self.assertAlmostEqual(offsets.get("Artist"), 0.1)
 
-    def test_different_artists_do_not_share_a_streak(self):
-        offsets.record("A", 0.1)
-        offsets.record("B", 0.1)
-        offsets.record("B", 0.1)
+    def test_a_track_nudged_back_to_zero_does_not_vote(self):
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.record("Artist", -0.2, "track-1")      # se arrepintió
+        offsets.record("Artist", 0.2, "track-2")
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_different_artists_do_not_share_a_vote(self):
+        offsets.record("A", 0.1, "a-1")
+        offsets.record("B", 0.1, "b-1")
+        offsets.record("B", 0.1, "b-2")
         self.assertEqual(offsets.get("A"), 0.0)
-        self.assertEqual(offsets.get("B"), 0.2)
+        self.assertAlmostEqual(offsets.get("B"), 0.1)
+
+    def test_the_same_track_id_under_two_artists_is_two_votes_apart(self):
+        offsets.record("A", 0.1, "same-id")
+        offsets.record("B", 0.1, "same-id")
+        self.assertEqual(offsets.get("A"), 0.0)
+        self.assertEqual(offsets.get("B"), 0.0)
+
+    def test_no_artist_or_no_track_records_nothing(self):
+        self.assertEqual(offsets.record("", 0.1, "t"), 0.0)
+        self.assertEqual(offsets.record("Artist", 0.1, ""), 0.0)
+        self.assertEqual(offsets._pending, {})
+
+    # ---- reset
+    def test_reset_forgets_what_was_saved(self):
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.record("Artist", 0.2, "track-2")
+        self.assertTrue(offsets.reset("Artist"))
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_reset_also_clears_the_votes_in_flight(self):
+        # si sólo se borrara el archivo, el voto que ya estaba adentro haría
+        # que el próximo golpe persistiera algo que se acaba de mandar a borrar
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.reset("Artist")
+        offsets.record("Artist", 0.2, "track-2")
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_reset_of_an_unknown_artist_says_there_was_nothing(self):
+        self.assertFalse(offsets.reset("Nobody"))
+
+    def test_reset_all_forgets_every_artist(self):
+        offsets.record("A", 0.2, "a-1")
+        offsets.record("A", 0.2, "a-2")
+        offsets.record("B", -0.2, "b-1")
+        offsets.record("B", -0.2, "b-2")
+        self.assertEqual(offsets.reset_all(), 2)
+        self.assertEqual(offsets.all_offsets(), {})
+
+    def test_all_offsets_comes_back_sorted(self):
+        offsets.record("Zed", 0.2, "z-1")
+        offsets.record("Zed", 0.2, "z-2")
+        offsets.record("Abe", -0.1, "a-1")
+        offsets.record("Abe", -0.1, "a-2")
+        self.assertEqual(list(offsets.all_offsets()), ["Abe", "Zed"])
+
+    def test_show_lines_say_where_the_file_is_even_when_it_is_empty(self):
+        lines = offsets.show_lines()
+        self.assertTrue(any(offsets.OFFSETS_PATH in ln for ln in lines))
+        offsets.record("Artist", 0.2, "track-1")
+        offsets.record("Artist", 0.2, "track-2")
+        self.assertTrue(any("Artist" in ln and "+0.20" in ln
+                            for ln in offsets.show_lines()))
+
+    def test_an_artist_with_a_quote_in_the_name_survives_the_round_trip(self):
+        name = 'Say "Hi"'
+        offsets.record(name, 0.2, "t-1")
+        offsets.record(name, 0.2, "t-2")
+        self.assertAlmostEqual(offsets.get(name), 0.2)
 
 
 class TestFetchAsync(unittest.TestCase):
@@ -2175,6 +2301,100 @@ class TestCompositorDetection(unittest.TestCase):
         self.assertIn("hyprctl", self.logged[0])
 
 
+class TestSyncKeyBinds(unittest.TestCase):
+    """Tanda 3 (C): las teclas del sync. El bind por default ya vive en la
+    config de Hyprland del usuario, así que fatal-lyrics no lo escribe — sólo
+    interviene cuando la perilla cambia, y ahí siempre unbind antes que bind."""
+
+    D = c.DEFAULTS["keys"]
+
+    def test_the_default_pair_at_startup_touches_nothing(self):
+        # escribirlo de nuevo sería tener el mismo atajo dos veces
+        self.assertEqual(system.key_bind_commands(None, dict(self.D)), [])
+
+    def test_a_custom_pair_at_startup_replaces_the_default_bind(self):
+        cmds = system.key_bind_commands(
+            None, {"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]})
+        self.assertEqual([cmd[2] for cmd in cmds], ["unbind", "bind"])
+        self.assertEqual(cmds[0][3], self.D["sync_forward"])
+        self.assertTrue(cmds[1][3].startswith("Super, F5, exec, "))
+        self.assertTrue(cmds[1][3].endswith(" sync +"))
+
+    def test_changing_one_key_unbinds_the_old_one_first(self):
+        old = {"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]}
+        new = {"sync_forward": "Super, F6", "sync_back": self.D["sync_back"]}
+        cmds = system.key_bind_commands(old, new)
+        self.assertEqual([cmd[2] for cmd in cmds], ["unbind", "bind"])
+        self.assertEqual(cmds[0][3], "Super, F5")
+        self.assertTrue(cmds[1][3].startswith("Super, F6, "))
+
+    def test_going_back_to_the_default_rebinds_it(self):
+        # la trampa: el unbind de antes se llevó puesto el bind de la config de
+        # Hyprland. Si "sólo se actúa cuando difiere del default", volver al
+        # default deja la tecla muerta hasta el próximo reload del compositor.
+        old = {"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]}
+        cmds = system.key_bind_commands(old, dict(self.D))
+        self.assertEqual([cmd[2] for cmd in cmds], ["unbind", "bind"])
+        self.assertEqual(cmds[0][3], "Super, F5")
+        self.assertTrue(cmds[1][3].startswith(self.D["sync_forward"] + ", exec, "))
+
+    def test_an_empty_value_unbinds_and_binds_nothing(self):
+        old = {"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]}
+        cmds = system.key_bind_commands(old, {"sync_forward": "", "sync_back": self.D["sync_back"]})
+        self.assertEqual(cmds, [["hyprctl", "keyword", "unbind", "Super, F5"]])
+
+    def test_an_unchanged_key_is_left_alone(self):
+        same = {"sync_forward": "Super, F5", "sync_back": "Super, F6"}
+        self.assertEqual(system.key_bind_commands(same, dict(same)), [])
+
+    def test_both_keys_change_at_once(self):
+        old = dict(self.D)
+        new = {"sync_forward": "Super, F5", "sync_back": "Super, F6"}
+        cmds = system.key_bind_commands(old, new)
+        self.assertEqual([cmd[2] for cmd in cmds],
+                         ["unbind", "bind", "unbind", "bind"])
+
+    def test_the_exec_path_is_absolute(self):
+        # el `exec` de Hyprland no tiene ~/.local/bin en el PATH: un `fatal`
+        # pelado no corre nunca y el bind queda mudo sin decir nada
+        cmds = system.key_bind_commands(
+            None, {"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]})
+        exec_part = cmds[1][3].split(", exec, ", 1)[1]
+        self.assertTrue(exec_part.startswith("/"), exec_part)
+        self.assertTrue(exec_part.endswith("/bin/fatal sync +"), exec_part)
+
+    def test_outside_hyprland_nothing_is_run(self):
+        real = system._hyprland
+        system._hyprland = lambda: False
+        self.addCleanup(lambda: setattr(system, "_hyprland", real))
+        ran = []
+        got = system.apply_key_binds(None, {"sync_forward": "Super, F5",
+                                            "sync_back": self.D["sync_back"]},
+                                     run=ran.append)
+        self.assertEqual(ran, [])
+        self.assertEqual(got, [])
+
+    def test_under_hyprland_the_commands_run_in_order(self):
+        real = system._hyprland
+        system._hyprland = lambda: True
+        self.addCleanup(lambda: setattr(system, "_hyprland", real))
+        ran = []
+        system.apply_key_binds({"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]},
+                               {"sync_forward": "Super, F6", "sync_back": self.D["sync_back"]},
+                               run=ran.append)
+        self.assertEqual([cmd[2] for cmd in ran], ["unbind", "bind"])
+
+    def test_a_failing_hyprctl_does_not_take_the_daemon_down(self):
+        real = system._hyprland
+        system._hyprland = lambda: True
+        self.addCleanup(lambda: setattr(system, "_hyprland", real))
+
+        def boom(argv):
+            raise OSError("no hyprctl here")
+        system.apply_key_binds(None, {"sync_forward": "Super, F5",
+                                      "sync_back": self.D["sync_back"]}, run=boom)
+
+
 class TestSplitRepeats(unittest.TestCase):
     """Una línea de letra no siempre es una frase: muchas veces son golpes
     repetidos, y cada golpe va a una pantalla distinta. Esto tiene que aguantar
@@ -2328,6 +2548,25 @@ class TestKnobsAreReachable(unittest.TestCase):
             self.assertIn(key, config._CONFIG_COMMENTS["system"],
                           f"system.{key} no tiene comentario en _CONFIG_COMMENTS")
 
+    def test_every_keys_key_has_a_comment(self):
+        for key in c.DEFAULTS["keys"]:
+            self.assertIn(key, config._CONFIG_COMMENTS["keys"],
+                          f"keys.{key} no tiene comentario en _CONFIG_COMMENTS")
+
+    def test_every_keys_knob_is_in_the_menu(self):
+        # [keys] no viaja al overlay (lo aplica Hyprland), así que el menú es
+        # el ÚNICO lugar donde alguien la descubre sin abrir el TOML
+        menu = {key for key, section, _, _ in setup.SETTINGS if section == "keys"}
+        for key in c.DEFAULTS["keys"]:
+            self.assertIn(key, menu, f"keys.{key} no está en `fatal config`")
+
+    def test_the_key_binds_do_not_travel_to_the_overlay(self):
+        # a propósito: los binds los aplica Hyprland desde el daemon. Una clave
+        # de [keys] en CONFIG_EVENT_MAP sería una property muerta en shell.qml
+        sent = {cfg_key for _, section, cfg_key in ipc.CONFIG_EVENT_MAP
+                if section == "keys"}
+        self.assertEqual(sent, set())
+
     # Las perillas de [crt] que NO están en el menú de `fatal config`, a
     # propósito. Cualquier otra que falte es la falla que este test busca: la
     # perilla existe, viaja al overlay, y nadie que no lea el TOML se entera.
@@ -2471,6 +2710,101 @@ class _FakeInput:
         self._old = builtins.input
         case.addCleanup(lambda: setattr(builtins, "input", self._old))
         builtins.input = lambda *a, **k: next(self._it, "")
+
+
+class TestAskKey(unittest.TestCase):
+    """El editor de las teclas del sync. Se TIPEA el atajo: `fatal config`
+    corre en una terminal y ahí no hay forma de capturar la tecla apretada sin
+    agarrarle el teclado al compositor."""
+
+    def test_a_shortcut_is_taken_as_typed(self):
+        _FakeInput(self, "Super+Ctrl, F5")
+        self.assertEqual(c._ask_key("t", "Super+Alt, Right"), "Super+Ctrl, F5")
+
+    def test_enter_keeps_the_current_one(self):
+        _FakeInput(self, "")
+        self.assertIsNone(c._ask_key("t", "Super+Alt, Right"))
+
+    def test_a_dash_means_no_key_at_all(self):
+        _FakeInput(self, "-")
+        self.assertEqual(c._ask_key("t", "Super+Alt, Right"), "")
+
+    def test_without_a_comma_it_refuses_instead_of_binding_something_mute(self):
+        # Hyprland lo leería como un bind sin modificadores y el atajo queda
+        # mudo sin decir nada: se avisa acá, que es donde se puede corregir
+        _FakeInput(self, "Super+Alt Right", "")
+        self.assertIsNone(c._ask_key("t", "Super+Alt, Right"))
+
+
+class TestSyncCli(unittest.TestCase):
+    """`fatal sync show|reset`. Corren en un proceso corto y NO necesitan el
+    daemon: lo aprendido vive en offsets.toml y ahí el archivo ES el estado."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self._old_path = offsets.OFFSETS_PATH
+        self._old_dir = offsets.OFFSETS_DIR
+        offsets.OFFSETS_DIR = self.dir.name
+        offsets.OFFSETS_PATH = os.path.join(self.dir.name, "offsets.toml")
+        self._old_pending = {a: dict(t) for a, t in offsets._pending.items()}
+        offsets._pending.clear()
+
+        def restore():
+            offsets.OFFSETS_DIR = self._old_dir
+            offsets.OFFSETS_PATH = self._old_path
+            offsets._pending.clear()
+            offsets._pending.update(self._old_pending)
+        self.addCleanup(restore)
+        # lo que imprime es para la terminal del usuario, no para la corrida
+        self.out = io.StringIO()
+        patcher = mock.patch("sys.stdout", self.out)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def learn(self, artist, value):
+        offsets.record(artist, value, artist + "-1")
+        offsets.record(artist, value, artist + "-2")
+
+    def test_reset_by_name(self):
+        self.learn("Artist", 0.2)
+        self.assertEqual(main._sync_reset("Artist"), 0)
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_reset_of_someone_never_corrected_says_so(self):
+        self.assertEqual(main._sync_reset("Nobody"), 1)
+
+    def test_without_a_name_it_takes_the_artist_that_is_playing(self):
+        self.learn("Artist", 0.2)
+        real = main.system.playerctl_state
+        main.system.playerctl_state = lambda: {"artist": "Artist"}
+        self.addCleanup(lambda: setattr(main.system, "playerctl_state", real))
+        self.assertEqual(main._sync_reset(""), 0)
+        self.assertEqual(offsets.get("Artist"), 0.0)
+
+    def test_without_a_name_and_nothing_playing_it_asks_for_one(self):
+        real = main.system.playerctl_state
+        main.system.playerctl_state = lambda: None
+        self.addCleanup(lambda: setattr(main.system, "playerctl_state", real))
+        self.assertEqual(main._sync_reset(""), 1)
+
+    def test_reset_all_needs_a_yes(self):
+        self.learn("A", 0.2)
+        self.learn("B", -0.2)
+        _FakeInput(self, "")            # enter = no
+        self.assertEqual(main._sync_reset("all"), 1)
+        self.assertEqual(len(offsets.all_offsets()), 2)
+
+    def test_reset_all_with_a_yes_forgets_everything(self):
+        self.learn("A", 0.2)
+        self.learn("B", -0.2)
+        _FakeInput(self, "y")
+        self.assertEqual(main._sync_reset("all"), 0)
+        self.assertEqual(offsets.all_offsets(), {})
+
+    def test_reset_all_with_nothing_saved_does_not_even_ask(self):
+        # sin la guarda, pediría confirmación para borrar cero cosas
+        self.assertEqual(main._sync_reset("all"), 0)
 
 
 class TestPick(unittest.TestCase):

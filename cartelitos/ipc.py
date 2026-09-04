@@ -159,6 +159,19 @@ def hang():
     show(HANG_TEXT, HANG_TITLE, kind="hang")
 
 
+def sync_hint(delta, offset, artist):
+    """Aviso de que se tocó el sync (tanda 3, C).
+
+    Evento propio y no un `show`: un `show` con el tubo prendido PASA A SER la
+    línea de la letra, así que avisar del ajuste borraba el verso que se estaba
+    sincronizando. Quién lo dibuja lo decide el overlay (rótulo chico en la
+    pantalla enfocada con el tubo arriba, cartel de Windows sin él): es el que
+    sabe si el CRT está prendido, y el que ya tiene la regla de una animación
+    por pantalla."""
+    send({"cmd": "sync", "d": round(delta, 3), "offset": round(offset, 3),
+          "artist": artist or ""})
+
+
 def next_line(lines, i):
     """El campo `next` del evento `show`: la línea i+1 con su ventana, o None.
 

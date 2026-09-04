@@ -52,6 +52,7 @@ from .system import (
 from .ipc import (
     DEMO_LINES, HANG_TEXT, HANG_TITLE, SOCK_PATH, SYNC_PATH, clear, demo, hang,
     lyrics_list, lyrics_plain, next_line, parse_sync, send, send_soft, show,
+    sync_hint,
     _config_event, _demo_burst, _send_lock, _song_pos, _song_where,
 )
 
@@ -68,13 +69,17 @@ from .audio import (
     _sink_node_id, _source_node_id, _voice_capture, _voice_command,
 )
 
-from .offsets import OFFSETS_DIR, OFFSETS_PATH, get as offset_get, record as offset_record
+from .offsets import (
+    OFFSETS_DIR, OFFSETS_PATH, all_offsets, effective as offset_effective,
+    get as offset_get, record as offset_record, reset as offset_reset,
+    reset_all as offset_reset_all, track_get as offset_track_get,
+)
 
 from .tray import SCALE_STEP, TRAY_CHOICES, TRAY_TOGGLES, start_tray
 
 from .setup import (
     BOLD, DIM, OFF, SETTINGS, YEL, YESNO, _ask_crt_order, _ask_int, _ask_num,
-    _ask_player, _ask_screens, _ask_text, _demo, _fmt, _menu, _pick,
+    _ask_key, _ask_player, _ask_screens, _ask_text, _demo, _fmt, _menu, _pick,
 )
 # el menú en sí es `cartelitos.setup.setup()`: acá `setup` es el módulo
 

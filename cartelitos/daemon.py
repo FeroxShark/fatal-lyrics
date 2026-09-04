@@ -117,9 +117,10 @@ class DaemonLoop:
 
     def __init__(self, *, gaming=None, playerctl_state=None, ipc=ipc, config=config,
                  audio=audio, art=art, lyr=lyr, offsets=offsets, tray=tray, log=log,
-                 sleep=time.sleep, monotonic=time.monotonic):
+                 sleep=time.sleep, monotonic=time.monotonic, system=system):
         self._gaming = gaming or system.gaming
         self._playerctl_state = playerctl_state or system.playerctl_state
+        self._system = system
         self._ipc = ipc
         self._config = config
         self._audio = audio
@@ -251,10 +252,11 @@ class DaemonLoop:
         if t["id"] != self.track_id:
             self.track_id = t["id"]
             self.current_artist = t["artist"]
-            # arranca en lo que ya se sabe de este artista (T0.13); un ajuste
-            # nuevo en esta sesión se suma encima, y recién si se repite dos
-            # veces seguidas offsets.record() lo deja guardado para la próxima
-            self.session_offset = self._offsets.get(t["artist"])
+            # arranca en lo que ya se sabe de este artista (T0.13) más lo que
+            # ESTE tema pidió en esta sesión y todavía no se ganó el derecho a
+            # guardarse (tanda 3, C: hacen falta dos temas del mismo artista
+            # pidiendo lo mismo). Volver a un tema ya corregido lo recupera.
+            self.session_offset = self._offsets.effective(t["artist"], t["id"])
             self._audio.set_profile(self._audio.profile_for(t))
             self.idx = -1
             self._ipc.clear()
@@ -347,16 +349,27 @@ class DaemonLoop:
 
     def sync(self, delta):
         """Gesto de ajuste fino (T0.13): keybind, menú de bandeja o el
-        watcher del archivo de sync (otro proceso) llaman acá. Aplica ya
-        mismo al tema que está sonando y, si el mismo artista se corrige dos
-        veces seguidas en el mismo sentido, offsets.record() lo deja
-        guardado para la próxima vez que suene."""
-        self.session_offset = round(self.session_offset + delta, 3)
-        if self.current_artist:
-            self._offsets.record(self.current_artist, delta)
+        watcher del archivo de sync (otro proceso) llaman acá.
+
+        La cuenta la lleva offsets.record(), no este método: se aplica al tema
+        que suena de una, y se guarda para el artista recién cuando DOS temas
+        distintos suyos pidieron lo mismo (tanda 3, C). Lo que devuelve YA es
+        el offset efectivo del tema, con el rebase de lo que se persistió
+        adentro — sumarle el delta encima lo contaría dos veces.
+
+        El aviso sale por un evento propio (`sync`) y no por un cartel: con el
+        tubo prendido un `show` se vuelve LA LÍNEA de la letra, así que el
+        ajuste tapaba justo el verso que se estaba tratando de sincronizar. El
+        overlay decide qué dibujar — el cartel de Windows o el rótulo chico en
+        la pantalla enfocada —, porque es el que sabe si el tubo está arriba."""
+        if self.current_artist and self.track_id:
+            self.session_offset = self._offsets.record(
+                self.current_artist, delta, self.track_id)
+        else:
+            self.session_offset = round(self.session_offset + delta, 3)
         sign = "+" if delta >= 0 else "-"
         self._log(f"sync {sign}{abs(delta):.1f}s (session offset now {self.session_offset:+.2f}s)")
-        self._ipc.show(f"sync {sign}{abs(delta):.1f} s", "fatal-lyrics")
+        self._ipc.sync_hint(delta, self.session_offset, self.current_artist)
         self.idx = -1   # re-muestra la línea actual, ya con el offset nuevo
 
     def _watch_sync(self):
@@ -436,6 +449,10 @@ class DaemonLoop:
         # el modo CRT arranca como diga la config: un `fatal crt on` de la sesión
         # anterior no se hereda (tapa las tres pantallas, mejor que sea deliberado)
         self._config.set_crt(self._config.CFG["crt"]["enabled"])
+        # las teclas del sync (tanda 3, C). `None` = arranque: lo que valga el
+        # default no se toca, porque ese bind ya vive en la config de Hyprland
+        # y escribirlo de nuevo sería tener el mismo atajo dos veces.
+        self._system.apply_key_binds(None, self._config.CFG["keys"])
         self._tray.start_tray(sync=self.sync)
         self._ipc.send(self._ipc._config_event())
         threading.Thread(target=self._config.watch_config, daemon=True, name="config").start()

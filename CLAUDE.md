@@ -60,6 +60,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   apagado al revés) y `overburn` (cada palabra quemada en blanco, sólo en un drop con compás
   confiable). La cámara además sigue la sección (`section_zoom`): lejos en la estrofa, encima en el
   drop.
+- **El sync a ojo aprende por TEMA antes que por artista.** `fatal sync +/-` corrige el
+  tema que suena de una; el offset se le guarda al ARTISTA recién cuando dos temas distintos
+  suyos pidieron lo mismo (`offsets.record(artist, delta, track_id)`). Lo que se guarda es el
+  PROMEDIO de los que votaron, no la suma, y a los que votaron se les descuenta (rebase), así
+  el tema que suena no pega un salto en el mismo golpe que persistió. Se mira y se borra con
+  `fatal sync show` / `fatal sync reset [<artista>|all]`, que no necesitan el daemon.
 - **En el CRT la letra no se clona.** Hay una pantalla enfocada, la frase sigue en la de al lado y
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
   (`split_repeats`) y cada golpe cae en otra pantalla. `focus = "all"` vuelve al comportamiento
@@ -74,7 +80,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 
 ## Mapa
 
-- `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sync +|-|sing on|off`.
+- `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sing on|off` y
+  `sync +|-|show|reset [<artista>|all]` (los dos últimos NO necesitan el daemon).
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
@@ -94,10 +101,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
-  `config.py` porque la escribe el propio daemon, no Ferox a mano.
+  `config.py` porque la escribe el propio daemon, no Ferox a mano. Adentro vive también el
+  perfil por tema (`_pending`, en memoria): lo que todavía no se ganó el derecho a durar.
+- `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
+  teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 436 tests, stdlib puro.
+- `tests/` — 480 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -221,6 +231,23 @@ no-op → boot roto. No reintroducir un segundo.)
 - **Los dos multiplicadores de la histéresis del karaoke son > 1.** El umbral ES el nivel del
   cuarto: con el de apagado por debajo de 1, un ruido de fondo parejo (un ventilador) queda para
   siempre encima de su propio umbral y el modo no se apaga nunca más.
+- **El bind por default NO se escribe.** Las teclas del sync viven en la config de Hyprland
+  de Ferox (`~/.config/hypr/custom/keybinds.conf`, con `unbind` antes de cada `bind`).
+  Mientras `[keys]` valga lo mismo que `DEFAULTS`, el daemon no corre ni un `hyprctl`: el
+  atajo ya está y escribirlo otra vez sería tenerlo dos veces. Cuando cambia, es SIEMPRE
+  `unbind` del anterior y después `bind` del nuevo — **volver al valor de fábrica también
+  rebindea**, porque el unbind de antes se llevó puesto el bind del archivo de Hyprland y sin
+  eso la tecla queda muerta hasta el próximo reload del compositor.
+- **El aviso del sync NO puede ser un `show`.** Con el tubo prendido un `show` PASA A SER la
+  línea de la letra: avisar del ajuste borraba justo el verso que se estaba tratando de
+  sincronizar. Va por un evento propio (`sync`) y el overlay decide qué dibujar — el rótulo
+  chico en la pantalla enfocada o el cartel de Windows —, porque es el que sabe si el tubo
+  está arriba.
+- **El rótulo del sync apaga el motivo de su pantalla** (`dim` a 0, igual que el aro). Con
+  letra la pantalla enfocada no dibuja ningún motivo, pero en un instrumental sí: ahí el
+  número caía encima del dibujo y sin contraste contra él.
+- **El rótulo del sync se rearma con `syncGen`, no con el número.** Dos ajustes opuestos
+  dejan el mismo offset acumulado y el segundo no se vería nunca.
 - **`cartelitos-sing` es un TIMBRE, no el estado** (al revés que `cartelitos-crt`): el estado es
   la perilla `[behavior] sing` del TOML, que es la que viaja al overlay y sobrevive al reinicio.
   `fatal sing` sólo deja el pedido escrito y el daemon lo pasa a la config (igual que `fatal tune`).
@@ -430,14 +457,15 @@ no-op → boot roto. No reintroducir un segundo.)
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
-- **Tanda 3, corridas 1 y 2 hechas** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): la 1 fue
-  A1 (el overscan de los motivos), A2 (un `Loader` solo), A3 (el encuadre y el plano de la
+- **La tanda 3 quedó COMPLETA** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): la corrida 1
+  fue A1 (el overscan de los motivos), A2 (un `Loader` solo), A3 (el encuadre y el plano de la
   sección), A4 (la boca del túnel) y B7; la 2 fue A5 (una animación por pantalla), B1 (el aro que
   se desarma), B10 (el aro que come al ritmo), B2 (las familias de la mancha), B3 (los ojos),
   B4 (el rayo del salto), B8 (el contraste del túnel), B9 (el piso del cardiograma), B5 (el IOWN
-  anclado) y B6 (el piso de 120 ms). Falta **sólo C** (el sync a ojo, corrida 3). Lo que se miró
-  con capturas y lo que todavía necesita un ojo está en `docs/plans/CHECKS-VISUALES.md`,
-  secciones "TANDA 3 corrida 1" y "corrida 2".
+  anclado) y B6 (el piso de 120 ms); la 3 fue C (el sync a ojo: la regla por temas, el rótulo
+  del tubo, `fatal sync show|reset` y las perillas `[keys]`). Lo que se miró con capturas y lo
+  que todavía necesita un ojo está en `docs/plans/CHECKS-VISUALES.md`, secciones "TANDA 3
+  corrida 1", "corrida 2" y "corrida 3".
 - **El plan `docs/plans/2026-09-03-crt-tanda2.md` quedó COMPLETO** (FASE 0 a FASE 5): foco
   anticipado, aviso de destino (`foreshadow`/`ring`), saltos entre pantallas (`hop`), entradas
   nuevas + director por energía, y ocho motifs nuevos. Estado y mapa actualizado en

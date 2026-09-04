@@ -340,6 +340,9 @@ fatal demo       # throws a few fake dialogs, to try settings without music
 fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
 fatal crt setup           # a number on each screen, to write down [crt] order
 fatal tune       # sliders for the CRT settings you want to move while it plays
+fatal sync + | -          # nudge the lyric 0.1 s forward/back, live
+fatal sync show           # the artist offsets it has learned so far
+fatal sync reset [<artist>|all]   # forget one (default: the artist playing) or all
 ```
 
 ## Configuration
@@ -368,6 +371,38 @@ music plays — how hard it beats, how restless the tube is, the glow, the
 scanlines — `fatal tune` (or **Sliders…** in the tray) opens a small panel of
 sliders. Each one writes straight into the config, so the tube follows along and
 the value is still there next time.
+
+### Syncing by eye
+
+Lyrics files are not always in time with the master you happen to be playing.
+`fatal sync +` and `fatal sync -` shift the lyric by 0.1 s while the song
+plays — bound to <kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>→</kbd> /
+<kbd>←</kbd> by default, and also in the tray menu. With the tube up, the
+focused screen types the accumulated offset small for a second and a half
+(`+0.3 s · Frank Sinatra`); without it, you get a dialog.
+
+**It learns, but slowly.** A nudge applies to the track that is playing right
+away. It is only saved for the *artist* once two **different** tracks of theirs
+were nudged the same way — one badly mastered track, or one lyrics file that
+starts late, should not drag the whole artist off. What gets saved is the
+average of the tracks that agreed, not their sum, and it lives in
+`~/.config/cartelitos/offsets.toml`:
+
+```bash
+fatal sync show                 # what it has learned
+fatal sync reset                # forget the artist that is playing
+fatal sync reset "Frank Sinatra"
+fatal sync reset all            # forget everything (asks first)
+```
+
+Both of those work with the daemon stopped: what was learned is a file.
+
+The two keys are settings, `[keys] sync_forward` and `sync_back`, in Hyprland's
+own syntax (`"Super+Alt, Right"`). They default to the pair the shipped
+keybinds already run, so out of the box fatal-lyrics binds nothing and no
+shortcut ends up defined twice. Change one and the daemon rebinds it for you —
+unbinding the old one first. Hyprland only; anywhere else, `fatal sync + | -`
+still works.
 
 ### From the tray
 
@@ -480,6 +515,8 @@ because there is nothing to install.
 | `crt`      | `noise`              | Static                                                              | `0.22`      |
 | `crt`      | `roll`               | Brightness bar rolling down the tube                                | `0.5`       |
 | `crt`      | `vignette`           | Darkening towards the corners                                       | `0.9`       |
+| `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |
+| `keys`     | `sync_back`          | ...and the ones that push it back 0.1 s                             | `"Super+Alt, Left"` |
 
 This table is kept in sync with `cartelitos/config.py`'s `DEFAULTS`, which is
 also what generates the sample `config.toml` (`_render_default_config`) —

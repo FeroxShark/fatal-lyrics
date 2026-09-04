@@ -729,6 +729,7 @@ Item {
             pitch: motif.pitch
             energy: motif.energy
             seed: motif.seed
+            kick: motif.kick
             running: motif.spinning
         }
     }

@@ -23,6 +23,17 @@
 // tunnel turns more than the mouth — and the centre drifts on its own slow
 // clock, which is what keeps it from looking like a target painted on glass.
 //
+// CONTRAST (T3.B8). The first version had a wide soft plateau per ring, and at
+// any distance that reads as one gradient: Ferox saw "casi no hay contraste
+// entre los anillos". Now a ring is a THIN hot edge over a near-black floor,
+// there is a vignette so the mouth falls off at the corners as well as at the
+// far end, and every kick plants a lit ring that flies out with the others.
+//
+// The pulse costs nothing to move: a constant value of `depth` travels outwards
+// by itself, because `depth = 0.42/r + t` and `t` grows — so a ring planted at
+// a depth stays at that depth and its radius opens up. The beat only has to say
+// WHERE to plant it.
+//
 // Build:  qsb --glsl "100 es,120,150" -o tunnel.frag.qsb tunnel.frag
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -36,6 +47,8 @@ layout(std140, binding = 0) uniform buf {
     float twist;    // -0.5..0.5, from pitch: the wring
     float seed;     // 0..1, re-rolled every appearance
     float level;    // overall volume: how hot the walls burn
+    float pulseDepth; // where the lit ring was planted, in depth
+    float pulseAmt;   // 1 on a kick, decaying
     float dim;
     vec2 res;
     vec3 ink;
@@ -64,27 +77,45 @@ void main() {
     float r = max(length(p), 0.0015);
     float ang = atan(p.y, p.x) / 6.283185;
 
-    float depth = 0.42 / r + t;
+    // The 2.0 sets how many rings fit on screen: with the old 0.42 there were
+    // barely two and a half between the mouth and the far end, which with a
+    // thin edge profile leaves a black field with a couple of hoops in it.
+    float depth = 2.0 / r + t;
     // the wring grows with depth: the far end turns more than the mouth
     float a = ang + twist * depth * 0.11;
 
-    // the rings, and the staves running along the walls
-    float ring = fract(depth);
-    float ringEdge = smoothstep(0.0, 0.10, ring) * (1.0 - smoothstep(0.62, 0.96, ring));
+    // A ring is an EDGE, not a plateau: `d0` is 0 in the middle of a ring and 1
+    // on its boundary, and only the last fifth of that lights up. Between two
+    // rings the wall stays near black, which is the whole difference between a
+    // tunnel and a lamp shade.
+    float d0 = abs(fract(depth) - 0.5) * 2.0;
+    float edge = smoothstep(0.72, 1.0, d0);
     float stave = fract(a * 10.0);
-    float staveEdge = smoothstep(0.0, 0.12, stave) * (1.0 - smoothstep(0.70, 1.0, stave));
+    float staveEdge = smoothstep(0.0, 0.10, stave) * (1.0 - smoothstep(0.72, 1.0, stave));
 
     // brick parity: alternate the tone ring by ring, so the walls have a grain
     float parity = mod(floor(depth) + floor(a * 10.0), 2.0);
 
-    float wall = clamp(ringEdge * (0.45 + 0.55 * staveEdge), 0.0, 1.0);
+    // the floor is not black-black — a tunnel with nothing between the rings is
+    // a set of hoops floating in the dark — but it is far below the edge
+    float floorLum = 0.11 + 0.10 * staveEdge + 0.05 * parity;
+    float wall = floorLum + edge * (0.60 + 0.40 * staveEdge);
 
     // the far end goes dark: without this the middle is a white pinprick and
     // the whole thing reads as a lamp, not as a hole
     float far = smoothstep(0.02, 0.26, r);
-    float lum = wall * far * (0.45 + 0.60 * level);
+    // and the mouth falls off at the corners, so the walls do not end in a flat
+    // wash against the edge of the tube
+    float vig = 1.0 - 0.22 * smoothstep(0.50, 0.95, r);
 
-    vec3 col = mix(ink, hot, parity * 0.55 + 0.20 * staveEdge) * lum;
+    // the ring the beat lit up, on its way out
+    float pd = depth - pulseDepth;
+    float pulse = pulseAmt * exp(-pd * pd * 2.0);
+
+    float lum = wall * far * vig * (0.42 + 0.62 * level) + pulse * far * 0.85;
+
+    vec3 col = mix(ink, hot,
+                   clamp(edge * 0.70 + parity * 0.12 + pulse, 0.0, 1.0)) * lum;
     float alpha = clamp(lum * 0.95 * dim, 0.0, 1.0);
     col = clamp(col * dim, 0.0, 1.6);
     fragColor = vec4(col * alpha, alpha) * qt_Opacity;   // premultiplied

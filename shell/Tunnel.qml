@@ -27,6 +27,28 @@ Item {
     property real seed: 0
     property real dim: 1.0
     property bool running: true
+    property int kick: 0
+
+    // El anillo que enciende el golpe. No hace falta moverlo: un valor fijo de
+    // `depth` se abre solo mientras `travel` crece, así que el golpe sólo dice
+    // A QUÉ PROFUNDIDAD plantarlo. Siete anillos adentro es como una vuelta y
+    // media de tubo: se lo ve venir.
+    property real pulseDepth: 0
+    property real pulseAmt: 0
+    onKickChanged: {
+        if (!running)
+            return;
+        pulseDepth = travel + 7;
+        pulseFade.restart();
+    }
+    NumberAnimation {
+        id: pulseFade
+        target: tube
+        property: "pulseAmt"
+        from: 1; to: 0
+        duration: 900
+        easing.type: Easing.OutQuad
+    }
 
     // distancia viajada (anillos), y los segundos pelados para la deriva
     property real travel: 0
@@ -53,6 +75,8 @@ Item {
         property real twist: tube.pitch - 0.5
         property real seed: tube.seed
         property real level: tube.level
+        property real pulseDepth: tube.pulseDepth
+        property real pulseAmt: tube.pulseAmt
         property real dim: tube.dim
         property variant res: Qt.vector2d(Math.max(width, 1), Math.max(height, 1))
         property variant ink: Qt.vector3d(tube.colour.r, tube.colour.g, tube.colour.b)

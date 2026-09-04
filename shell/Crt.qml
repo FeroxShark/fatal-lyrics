@@ -95,7 +95,13 @@ PanelWindow {
     }
     // el interruptor puede estar prendido ANTES de que exista esta ventana (el
     // FileView carga primero): sin esto no hay cambio del que enterarse
-    Component.onCompleted: tubeOn = ctl.crtOn
+    Component.onCompleted: {
+        tubeOn = ctl.crtOn;
+        // el plano de la sección se anima siempre, así que arranca puesto a
+        // mano: si no, un monitor que se enchufa a mitad de tema entraría con
+        // el encuadre de 1 y recién se acomodaría en el próximo cambio de parte
+        crt.sectionZoom = crt.sectionZoomTarget;
+    }
 
     // ------------------------------------------------------------- fósforos
     // Ya no elige la pantalla: el root sirve DOS caras que combinan (una
@@ -780,9 +786,20 @@ PanelWindow {
     // el acercamiento fijo es de la cámara; el que sigue al volumen es latido, y
     // el latido lo gradúa `flicker`: con la perilla en cero la cámara no respira
     // con la música, se queda quieta donde la puso el encuadre
-    property real camZoom: 1 + cam * (focused
-        ? 0.030 + 0.022 * pump * ctl.crtFlicker : 0.004)
-    Behavior on camZoom { NumberAnimation { duration: 520; easing.type: Easing.OutCubic } }
+    //
+    // T3.A3: son DOS sumandos y no un número solo, porque tienen tiempos
+    // distintos. El plano (cerca si esta pantalla tiene la frase, lejos si no)
+    // cambia de una: la línea nueva nace ya con su tamaño, y el corte lo tapa
+    // la patada de señal que llega con ella. El latido es el sumando de abajo.
+    // Viajando los dos juntos por un Behavior de 520 ms, cada muestra de audio
+    // (una cada 70 ms) reiniciaba el tween del plano: la pantalla que acababa
+    // de recibir la línea tardaba como un tercio de segundo en llegar a su
+    // encuadre y la frase se veía NACER CHICA y crecer.
+    readonly property real camFocus: 1 + cam * (focused ? 0.030 : 0.004)
+    // el latido no necesita Behavior propio: `pump` ya viene suavizado (90 ms)
+    readonly property real camBreath: focused
+        ? cam * 0.022 * pump * ctl.crtFlicker : 0
+    readonly property real camZoom: camFocus + camBreath
 
     // T3.4: y la cámara sigue la PARTE del tema. En la estrofa se va atrás — la
     // línea queda al 85 % y sobra tubo alrededor, que es el aire que después se
@@ -791,12 +808,39 @@ PanelWindow {
     // El aviso del golpe (cueZoom) ya es la anticipación; acá no hay una
     // segunda rampa, sólo el plano sostenido de la sección.
     readonly property bool sectionZoomOn: ctl.crtSectionZoom && cam > 0.01
-    property real sectionZoom: !sectionZoomOn ? 1
+    readonly property real sectionZoomTarget: !sectionZoomOn ? 1
         : ctl.audSection === "drop" ? 1 + 0.30 * cam
         : ctl.audSection === "build" ? 1 + 0.06 * cam
         : ctl.audSection === "quiet" ? 1 - 0.18 * cam
         : 1 - 0.15 * cam
-    Behavior on sectionZoom { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+    // T3.A3: el plano de la sección SIEMPRE se ve viajar sus 350 ms.
+    //
+    // El tween es un objeto propio y no un `Behavior` por una razón: cuando el
+    // cambio de parte cae junto con una línea nueva, la línea trae el cambio de
+    // canal, que llena la pantalla de estática. Con un `Behavior`, el tramo que
+    // corre debajo de la estática se pierde y lo que aparece cuando la estática
+    // se va es el estado final — el salto seco. Acá, si el cambio llega tapado,
+    // el tween se rearma cuando la pantalla vuelve, y los 350 ms se ven.
+    property real sectionZoom: 1
+    NumberAnimation {
+        id: sectionZoomAnim
+        target: crt
+        property: "sectionZoom"
+        duration: 350
+        easing.type: Easing.OutCubic
+    }
+    function retuneSection() {
+        sectionZoomAnim.stop();
+        sectionZoomAnim.from = crt.sectionZoom;
+        sectionZoomAnim.to = crt.sectionZoomTarget;
+        sectionZoomAnim.start();
+    }
+    onSectionZoomTargetChanged: crt.retuneSection()
+    onChanNoiseChanged: {
+        if (crt.chanNoise === 0
+                && Math.abs(crt.sectionZoom - crt.sectionZoomTarget) > 0.002)
+            crt.retuneSection();
+    }
 
     // T3.A1: el zoom MÁS CHICO que la cámara puede tomar. De los cuatro
     // factores del Scale, tres nunca bajan de 1 (`camZoom`, `cueZoom` y el

@@ -33,6 +33,11 @@ Item {
     property real beatMs: 500
     property int beat: 0              // contador de beats del compás
     property int cue: 0               // aviso de drop: doble aro un cuadro
+    // el golpe de graves que ya le llega al motivo: es lo que come el aro
+    // cuando no hay compás confiable (T3.B10)
+    property int kick: 0
+    property real low: 0.4            // graves 0..1: con esto respira
+    property int screen: -1           // sólo para el log
 
     // el último golpe: el aro colapsa a un punto y entrega la línea
     signal collapsed()
@@ -63,6 +68,53 @@ Item {
 
     readonly property real step: total > 0 ? Math.min(beatMs / total, 1) : 0
 
+    // ------------------------------------------------- comer sin compás (B10)
+    // El `bpm conf > 0.6` casi nunca se cumple, y con el reloj puro el aro no
+    // reaccionaba a nada: bajaba parejo y parecía un cronómetro. Sin compás el
+    // arco avanza POR GOLPE, con el escalón que corresponda al tiempo que
+    // falta: si viene comiendo de más el escalón se achica solo, si viene de
+    // menos se agranda, así llega a cero justo cuando cae la línea. Y si el
+    // tema tampoco tiene golpes (ni compás), recién ahí el reloj — pero
+    // deslizándose, no clavado.
+    property real kickEma: 600         // cada cuánto viene pegando el grave
+    property double lastKickAt: 0
+    property bool kickLive: false
+    readonly property string ringMode: stepped ? "beat"
+                                               : (kickLive ? "kick" : "lineal")
+    property real lwBoost: 0           // el trazo engorda en cada escalón
+    NumberAnimation on lwBoost {
+        id: lwDecay
+        running: false
+        from: 1; to: 0; duration: 260; easing.type: Easing.OutQuad
+    }
+
+    function bite(now, amount) {
+        trailFrom = eaten;
+        trailAt = now;
+        eaten = Math.min(eaten + amount, 1);
+        lwDecay.restart();
+    }
+
+    onKickChanged: {
+        if (!visible || stepped || collapsing || total <= 0)
+            return;
+        const now = Date.now();
+        if (lastKickAt > 0) {
+            const gap = Math.max(250, Math.min(now - lastKickAt, 1500));
+            kickEma = kickEma * 0.7 + gap * 0.3;
+        }
+        lastKickAt = now;
+        kickLive = true;
+        const left = Math.max(dueAt - now, 0);
+        // cuántos golpes quedan hasta que caiga la línea: el escalón es lo que
+        // falta repartido entre ellos
+        const rest = Math.max(1, left / Math.max(kickEma, 120));
+        bite(now, Math.min((1 - eaten) / rest, 0.5));
+    }
+
+    onRingModeChanged: if (visible)
+        console.log("crt: ring mode=" + ringMode + " screen=" + screen);
+
     function reset() {
         collapseAnim.stop();
         ghostDecay.stop();
@@ -78,10 +130,20 @@ Item {
             a.push(0);
         strandAng = a;
         strandLast = 0;
+        lwDecay.stop();
+        lwBoost = 0;
+        lastKickAt = 0;
+        kickLive = false;
     }
     // otra línea, otro aro: el `dueAt` es lo que cambia en cada verso
     onDueAtChanged: reset()
-    onVisibleChanged: if (visible) reset()
+    onVisibleChanged: {
+        if (!visible)
+            return;
+        reset();
+        console.log("crt: ring mode=" + ringMode + " screen=" + screen
+            + " in=" + Math.round(total));
+    }
 
     // Un escalón por beat, sin suavizar: el aro tiene que contar en tiempos,
     // y un tiempo se ve como un salto. Lo que suaviza es la estela, no el paso.
@@ -148,12 +210,18 @@ Item {
                     ring.strandAng = a;
                 }
             }
-            // sin compás confiable el aro baja con el reloj, pero sigue
-            // respirando: lo que se pierde es el paso, no la vida
+            // ni compás ni graves: el reloj, pero deslizándose hacia él en vez
+            // de quedar clavado, así el aro sigue pareciendo algo que come.
+            // Un tema con golpes no entra nunca acá: `kickLive` lo tapa.
             if (!ring.stepped && !ring.collapsing && ring.total > 0) {
-                ring.trailFrom = ring.eaten;
-                ring.trailAt = Date.now();
-                ring.eaten = Math.max(0, Math.min(1 - left / ring.total, 1));
+                if (ring.lastKickAt > 0
+                        && now - ring.lastKickAt > 2 * ring.kickEma)
+                    ring.kickLive = false;
+                if (!ring.kickLive) {
+                    const goal = Math.max(0, Math.min(1 - left / ring.total, 1));
+                    if (goal > ring.eaten)
+                        ring.eaten = ring.eaten + (goal - ring.eaten) * 0.18;
+                }
             }
             // el último tiempo: colapsa. Con un compás lento el punto tiene que
             // salir antes, o la línea llega con el aro todavía entero.
@@ -239,7 +307,7 @@ Item {
             const w = width, h = height;
             const cx = w / 2, cy = h / 2;
             const side = Math.min(w, h);
-            const lw = Math.max(3, side * 0.016);
+            const lw = Math.max(3, side * 0.016) * (1 + 0.6 * ring.lwBoost);
             c.lineWidth = lw;
             c.lineCap = "round";
 
@@ -262,8 +330,9 @@ Item {
             }
 
             const left = Math.max(ring.dueAt - Date.now(), 0);
-            // ±4% con el volumen: entre golpe y golpe el aro sigue vivo
-            const breath = 1 + 0.04 * (2 * Math.min(ring.level, 1) - 1);
+            // ±10% con los GRAVES: entre golpe y golpe el aro sigue vivo, y
+            // con el ±4% del nivel general no se veía nada
+            const breath = 1 + 0.10 * (2 * Math.min(ring.low, 1) - 1);
             // último tramo: se achica hacia el centro, de donde va a salir la línea
             const gather = left < 3000 ? 1 - left / 3000 : 0;
             const shrink = 1 - 0.55 * gather;
@@ -278,7 +347,7 @@ Item {
             const aEnd = a0 + rem * Math.PI * 2;
 
             // ---- la estela: el tramo recién comido no desaparece, se apaga
-            const fade = Math.max(ring.beatMs, 200);
+            const fade = Math.max(ring.stepped ? ring.beatMs : ring.kickEma, 200);
             const age = ring.trailAt > 0 ? Date.now() - ring.trailAt : fade;
             if (age < fade && ring.eaten > ring.trailFrom) {
                 const t = 1 - age / fade;

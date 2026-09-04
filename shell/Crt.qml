@@ -1362,6 +1362,14 @@ PanelWindow {
                 stepped: crt.ctl.bpmLive
                 beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
                 beat: crt.ctl.beatTick
+                // sin compás el aro come POR GOLPE: el mismo que acompaña a los
+                // motivos. Y respira con los graves, no con el nivel general.
+                // el golpe CRUDO (`audBeat`), no el pico del tubo: el pico va
+                // uno cada cuatro segundos y el aro tiene que comer varias
+                // veces por verso para que se vea que come
+                kick: crt.ctl.audBeat
+                low: crt.live ? crt.ctl.audLo : 0.4
+                screen: crt.idx
                 cue: crt.ctl.cueGen
                 // el aro entrega la línea: el colapso pasa por el mismo portero
                 // que todo lo demás, no por una rotura inventada acá

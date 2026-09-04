@@ -145,20 +145,60 @@ Item {
         yScale: 1 + 0.05 * motif.surge
     }
 
+    // T3.A2: UN solo dibujo por pantalla, garantizado por construcción.
+    //
+    // Hasta acá cada motivo era un item con su propio `visible` (los seis
+    // viejos) o su propio `active` (los diez por Loader), y alcanzaba que uno
+    // se quedara prendido para que se vieran dos encima — el agua sin recortar
+    // sobre otra animación. Ahora el que elige es UN Loader: `sourceComponent`
+    // es una property sola, así que dos componentes no pueden estar vivos a la
+    // vez ni por un cuadro. El `clip` es la otra mitad de la garantía: nada
+    // pinta fuera de la caja del motivo.
+    //
+    // De paso deja de existir lo que no se ve: el ojo, el osciloscopio, el
+    // radar, la lluvia, el hiperespacio y la carta de ajuste estaban SIEMPRE
+    // instanciados, seis dibujos por pantalla con cinco invisibles.
+    Loader {
+        anchors.fill: parent
+        clip: true
+        sourceComponent: motif.kind === "eye" ? eyeC
+            : motif.kind === "eyes" ? eyesC
+            : motif.kind === "scope" ? scopeC
+            : motif.kind === "radar" ? radarC
+            : motif.kind === "rain" ? rainC
+            : motif.kind === "stars" ? starsC
+            : motif.kind === "testcard" ? testcardC
+            : motif.kind === "ocean" ? oceanC
+            : motif.kind === "pond" ? pondC
+            : motif.kind === "dunes" ? dunesC
+            : motif.kind === "ekg" ? ekgC
+            : motif.kind === "rorschach" ? rorschachC
+            : motif.kind === "plasma" ? plasmaC
+            : motif.kind === "tunnel" ? tunnelC
+            : motif.kind === "static" ? staticC
+            : motif.kind === "textsea" ? textseaC
+            : null
+    }
+
     // ------------------------------------------------------------------- ojo
     // El dibujo vive en `Eye.qml`: es el mismo ojo que usa la grilla del motivo
     // `eyes`, sólo que acá va uno solo y del tamaño de la pantalla.
-    Eye {
-        anchors.centerIn: parent
-        width: motif.span * 0.78
-        height: width * 0.52
-        visible: motif.kind === "eye"
-        colour: motif.colour
-        hot: motif.hot
-        level: motif.level
-        punch: motif.punch
-        surge: motif.surge
-        blinking: motif.spinning
+    Component {
+        id: eyeC
+
+        Item {
+            Eye {
+                anchors.centerIn: parent
+                width: motif.span * 0.78
+                height: width * 0.52
+                colour: motif.colour
+                hot: motif.hot
+                level: motif.level
+                punch: motif.punch
+                surge: motif.surge
+                blinking: motif.spinning
+            }
+        }
     }
 
     // ------------------------------------------------------------------ ojos
@@ -166,16 +206,13 @@ Item {
     // hacia la pantalla donde está la frase (y se dan vuelta cuando la frase
     // avisa que se va a otra).
     //
-    // Por Loader y no siempre viva: la grilla son hasta quince ojos y cada ojo
-    // es un Canvas. Quince Canvas invisibles pesan lo mismo que quince Canvas
-    // visibles a la hora de existir, y la pantalla muestra otra cosa el 90 % del
-    // tiempo.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "eyes"
-        visible: active
+    // La grilla son hasta quince ojos y cada ojo es un Canvas: existe sólo
+    // mientras el Loader la tiene puesta, que es lo que hace que quince Canvas
+    // no pesen el 90 % del tiempo en que la pantalla muestra otra cosa.
+    Component {
+        id: eyesC
 
-        sourceComponent: Eyes {
+        Eyes {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -203,161 +240,171 @@ Item {
     // La fase y la deriva se ACUMULAN, no salen de multiplicar el reloj: el
     // reloj vale miles de segundos y cualquier cambio de tempo pegaría un salto
     // de la figura entera (la misma trampa del hiperespacio y del túnel).
-    Canvas {
-        id: scope
-        anchors.centerIn: parent
-        width: motif.span * 0.7
-        height: width
-        visible: motif.kind === "scope"
-        renderStrategy: Canvas.Cooperative
+    Component {
+        id: scopeC
 
-        // la relación entre los ejes, por parte del tema; el tween es lo que
-        // hace que la figura se transforme en vez de cambiar de golpe
-        readonly property real target: motif.section === "quiet" ? 1
-            : motif.section === "build" ? (4 / 3)
-            : motif.section === "drop" ? 2 : 1.5
-        property real ratio: target
-        Behavior on ratio { NumberAnimation { duration: 600; easing.type: Easing.InOutCubic } }
+        Item {
+            Canvas {
+                id: scope
+                anchors.centerIn: parent
+                width: motif.span * 0.7
+                height: width
+                renderStrategy: Canvas.Cooperative
 
-        // cuántas vueltas hay que dibujar para que cierre: el denominador de la
-        // relación (3/2 cierra en dos, 4/3 en tres)
-        readonly property int turns: !motif.bpmLive ? 3
-            : (Math.abs(ratio - 1.5) < 0.02 ? 2 : (Math.abs(ratio - 4 / 3) < 0.02 ? 3 : 1))
+                // la relación entre los ejes, por parte del tema; el tween es lo que
+                // hace que la figura se transforme en vez de cambiar de golpe
+                readonly property real target: motif.section === "quiet" ? 1
+                    : motif.section === "build" ? (4 / 3)
+                    : motif.section === "drop" ? 2 : 1.5
+                property real ratio: target
+                Behavior on ratio { NumberAnimation { duration: 600; easing.type: Easing.InOutCubic } }
 
-        property real phase: 0        // el giro de la figura: una vuelta por compás
-        property real wobble: 0       // la deriva de la relación cuando no hay tempo
+                // cuántas vueltas hay que dibujar para que cierre: el denominador de la
+                // relación (3/2 cierra en dos, 4/3 en tres)
+                readonly property int turns: !motif.bpmLive ? 3
+                    : (Math.abs(ratio - 1.5) < 0.02 ? 2 : (Math.abs(ratio - 4 / 3) < 0.02 ? 3 : 1))
 
-        Timer {
-            interval: 33          // 30 Hz: una traza no necesita más
-            repeat: true
-            running: scope.visible && motif.spinning
-            onTriggered: {
-                const dt = 0.033;
-                const bar = Math.max(motif.beatMs, 120) * 4 / 1000;
-                scope.phase = (scope.phase + dt / bar * Math.PI * 2) % (Math.PI * 2);
-                scope.wobble += dt;
-                scope.requestPaint();
+                property real phase: 0        // el giro de la figura: una vuelta por compás
+                property real wobble: 0       // la deriva de la relación cuando no hay tempo
+
+                Timer {
+                    interval: 33          // 30 Hz: una traza no necesita más
+                    repeat: true
+                    running: scope.visible && motif.spinning
+                    onTriggered: {
+                        const dt = 0.033;
+                        const bar = Math.max(motif.beatMs, 120) * 4 / 1000;
+                        scope.phase = (scope.phase + dt / bar * Math.PI * 2) % (Math.PI * 2);
+                        scope.wobble += dt;
+                        scope.requestPaint();
+                    }
+                }
+
+                onVisibleChanged: if (visible) requestPaint()
+                Component.onCompleted: requestPaint()
+
+                onPaint: {
+                    const c = getContext("2d");
+                    c.reset();
+                    const w = width, h = height;
+                    if (w <= 0 || h <= 0)
+                        return;
+                    const cx = w / 2, cy = h / 2;
+                    const rx = w * 0.42, ry = h * 0.42;
+                    const amp = 0.55 + 0.40 * motif.level;
+                    // sin tempo la relación se va sola: la figura no cierra
+                    const b = ratio + (motif.bpmLive ? 0 : 0.06 * Math.sin(wobble * 0.8));
+                    const steps = Math.max(140, Math.round(240 * turns * Math.max(motif.quality, 0.5)));
+
+                    c.strokeStyle = motif.colour;
+                    c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
+                    c.lineJoin = "round";
+                    c.beginPath();
+                    for (let i = 0; i <= steps; i++) {
+                        const t = i / steps * Math.PI * 2 * turns;
+                        const x = cx + Math.sin(t + phase) * rx * amp;
+                        const y = cy + Math.sin(b * t) * ry * amp;
+                        if (i === 0)
+                            c.moveTo(x, y);
+                        else
+                            c.lineTo(x, y);
+                    }
+                    c.stroke();
+
+                    // el punto del haz, corriendo por la traza
+                    const t2 = (wobble * 1.1 % 1) * Math.PI * 2 * turns;
+                    const px = cx + Math.sin(t2 + phase) * rx * amp;
+                    const py = cy + Math.sin(b * t2) * ry * amp;
+                    c.fillStyle = motif.hot;
+                    c.beginPath();
+                    c.ellipse(px - w * 0.012, py - w * 0.012, w * 0.024, w * 0.024);
+                    c.fill();
+                }
             }
-        }
-
-        onVisibleChanged: if (visible) requestPaint()
-        Component.onCompleted: requestPaint()
-
-        onPaint: {
-            const c = getContext("2d");
-            c.reset();
-            const w = width, h = height;
-            if (w <= 0 || h <= 0)
-                return;
-            const cx = w / 2, cy = h / 2;
-            const rx = w * 0.42, ry = h * 0.42;
-            const amp = 0.55 + 0.40 * motif.level;
-            // sin tempo la relación se va sola: la figura no cierra
-            const b = ratio + (motif.bpmLive ? 0 : 0.06 * Math.sin(wobble * 0.8));
-            const steps = Math.max(140, Math.round(240 * turns * Math.max(motif.quality, 0.5)));
-
-            c.strokeStyle = motif.colour;
-            c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
-            c.lineJoin = "round";
-            c.beginPath();
-            for (let i = 0; i <= steps; i++) {
-                const t = i / steps * Math.PI * 2 * turns;
-                const x = cx + Math.sin(t + phase) * rx * amp;
-                const y = cy + Math.sin(b * t) * ry * amp;
-                if (i === 0)
-                    c.moveTo(x, y);
-                else
-                    c.lineTo(x, y);
-            }
-            c.stroke();
-
-            // el punto del haz, corriendo por la traza
-            const t2 = (wobble * 1.1 % 1) * Math.PI * 2 * turns;
-            const px = cx + Math.sin(t2 + phase) * rx * amp;
-            const py = cy + Math.sin(b * t2) * ry * amp;
-            c.fillStyle = motif.hot;
-            c.beginPath();
-            c.ellipse(px - w * 0.012, py - w * 0.012, w * 0.024, w * 0.024);
-            c.fill();
         }
     }
 
     // ------------------------------------------------------------------ radar
     // Barrido de sonar: la aguja gira (puro transform, suavísimo) y los ecos se
     // encienden con los golpes.
-    Item {
-        id: radar
-        anchors.centerIn: parent
-        width: motif.span * 0.72
-        height: width
-        visible: motif.kind === "radar"
+    Component {
+        id: radarC
 
-        Repeater {
-            model: radar.visible ? 4 : 0
-
-            Rectangle {
-                required property int index
-                anchors.centerIn: parent
-                width: radar.width * (0.25 + index * 0.25)
-                height: width
-                radius: width / 2
-                color: "transparent"
-                border.width: Math.max(1, radar.width * 0.004)
-                border.color: motif.colour
-                opacity: 0.45
-            }
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: radar.width
-            height: Math.max(1, radar.width * 0.003)
-            color: motif.colour
-            opacity: 0.35
-        }
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.max(1, radar.width * 0.003)
-            height: radar.height
-            color: motif.colour
-            opacity: 0.35
-        }
-
-        // la aguja
         Item {
-            anchors.centerIn: parent
-            width: radar.width
-            height: radar.height
-            rotation: motif.clock * (38 + 22 * motif.level) * motif.drive
-
-            Rectangle {
-                x: parent.width / 2
-                y: parent.height / 2 - height / 2
-                width: parent.width / 2
-                height: Math.max(2, radar.width * 0.006)
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: motif.hot }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-        }
-
-        // ecos que aparecen con el golpe
-        Repeater {
-            model: radar.visible ? 5 : 0
-
-            Rectangle {
-                required property int index
-                readonly property real ang: index * 2.31
-                readonly property real rad: radar.width * (0.16 + (index % 3) * 0.14)
-                x: radar.width / 2 + Math.cos(ang) * rad - width / 2
-                y: radar.height / 2 + Math.sin(ang) * rad - height / 2
-                width: radar.width * (0.02 + 0.02 * motif.punch)
+            Item {
+                id: radar
+                anchors.centerIn: parent
+                width: motif.span * 0.72
                 height: width
-                radius: width / 2
-                color: motif.hot
-                opacity: 0.25 + 0.7 * motif.punch
+
+                Repeater {
+                    model: radar.visible ? 4 : 0
+
+                    Rectangle {
+                        required property int index
+                        anchors.centerIn: parent
+                        width: radar.width * (0.25 + index * 0.25)
+                        height: width
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: Math.max(1, radar.width * 0.004)
+                        border.color: motif.colour
+                        opacity: 0.45
+                    }
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: radar.width
+                    height: Math.max(1, radar.width * 0.003)
+                    color: motif.colour
+                    opacity: 0.35
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Math.max(1, radar.width * 0.003)
+                    height: radar.height
+                    color: motif.colour
+                    opacity: 0.35
+                }
+
+                // la aguja
+                Item {
+                    anchors.centerIn: parent
+                    width: radar.width
+                    height: radar.height
+                    rotation: motif.clock * (38 + 22 * motif.level) * motif.drive
+
+                    Rectangle {
+                        x: parent.width / 2
+                        y: parent.height / 2 - height / 2
+                        width: parent.width / 2
+                        height: Math.max(2, radar.width * 0.006)
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: motif.hot }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+                }
+
+                // ecos que aparecen con el golpe
+                Repeater {
+                    model: radar.visible ? 5 : 0
+
+                    Rectangle {
+                        required property int index
+                        readonly property real ang: index * 2.31
+                        readonly property real rad: radar.width * (0.16 + (index % 3) * 0.14)
+                        x: radar.width / 2 + Math.cos(ang) * rad - width / 2
+                        y: radar.height / 2 + Math.sin(ang) * rad - height / 2
+                        width: radar.width * (0.02 + 0.02 * motif.punch)
+                        height: width
+                        radius: width / 2
+                        color: motif.hot
+                        opacity: 0.25 + 0.7 * motif.punch
+                    }
+                }
             }
         }
     }
@@ -365,37 +412,40 @@ Item {
     // ----------------------------------------------------------------- lluvia
     // Columnas de caracteres cayendo, como un volcado de datos. Cada columna es
     // un Text largo que baja: se mueve por binding, no se redibuja el texto.
-    Item {
-        id: rain
-        anchors.fill: parent
-        visible: motif.kind === "rain"
-        clip: true
+    Component {
+        id: rainC
 
-        readonly property int columns: Math.max(6, Math.round(width / (motif.span * 0.09)))
+        Item {
+            id: rain
+            anchors.fill: parent
+            clip: true
 
-        Repeater {
-            model: rain.visible ? rain.columns : 0
+            readonly property int columns: Math.max(6, Math.round(width / (motif.span * 0.09)))
 
-            Text {
-                id: drop
-                required property int index
-                readonly property real speed: (0.35 + (index % 5) * 0.12 + motif.level * 0.5) * motif.drive
-                x: index * rain.width / rain.columns
-                width: rain.width / rain.columns
-                text: {
-                    const chars = "01∎▓░╳ΔΣ¥§#*+=<>";
-                    let out = "";
-                    for (let i = 0; i < 22; i++)
-                        out += chars[(index * 7 + i * 13) % chars.length] + "\n";
-                    return out;
+            Repeater {
+                model: rain.visible ? rain.columns : 0
+
+                Text {
+                    id: drop
+                    required property int index
+                    readonly property real speed: (0.35 + (index % 5) * 0.12 + motif.level * 0.5) * motif.drive
+                    x: index * rain.width / rain.columns
+                    width: rain.width / rain.columns
+                    text: {
+                        const chars = "01∎▓░╳ΔΣ¥§#*+=<>";
+                        let out = "";
+                        for (let i = 0; i < 22; i++)
+                            out += chars[(index * 7 + i * 13) % chars.length] + "\n";
+                        return out;
+                    }
+                    color: index % 4 === 0 ? motif.hot : motif.colour
+                    opacity: 0.35 + 0.4 * motif.level
+                    font.pixelSize: Math.round(motif.span * 0.055)
+                    font.family: "monospace"
+                    horizontalAlignment: Text.AlignHCenter
+                    lineHeight: 0.95
+                    y: ((motif.clock * speed * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
                 }
-                color: index % 4 === 0 ? motif.hot : motif.colour
-                opacity: 0.35 + 0.4 * motif.level
-                font.pixelSize: Math.round(motif.span * 0.055)
-                font.family: "monospace"
-                horizontalAlignment: Text.AlignHCenter
-                lineHeight: 0.95
-                y: ((motif.clock * speed * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
             }
         }
     }
@@ -409,44 +459,47 @@ Item {
     // por la velocidad: el reloj vale miles de segundos, así que cualquier
     // cambio de velocidad (y el drop es el más grande de todos) saltaría
     // multiplicado y las estrellas se teletransportarían enteras.
-    Item {
-        id: stars
-        anchors.fill: parent
-        visible: motif.kind === "stars"
+    Component {
+        id: starsC
 
-        // el salto al hiperespacio: entra y sale con rampa, nunca de golpe
-        property real warp: motif.drop ? 1 : 0
-        Behavior on warp { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
-        // en la calma casi se paran: un cielo que se arrastra es lo que hace
-        // que después el drop se sienta
-        readonly property real speed: (motif.level < 0.12 && !motif.drop
-            ? 0.04 : 0.22 + 0.5 * motif.level) * motif.drive * (1 + 3 * stars.warp)
+        Item {
+            id: stars
+            anchors.fill: parent
 
-        property real travel: 0
-        FrameAnimation {
-            running: stars.visible && motif.spinning
-            onTriggered: stars.travel += frameTime * stars.speed
-        }
+            // el salto al hiperespacio: entra y sale con rampa, nunca de golpe
+            property real warp: motif.drop ? 1 : 0
+            Behavior on warp { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+            // en la calma casi se paran: un cielo que se arrastra es lo que hace
+            // que después el drop se sienta
+            readonly property real speed: (motif.level < 0.12 && !motif.drop
+                ? 0.04 : 0.22 + 0.5 * motif.level) * motif.drive * (1 + 3 * stars.warp)
 
-        Repeater {
-            model: stars.visible ? 46 : 0
+            property real travel: 0
+            FrameAnimation {
+                running: stars.visible && motif.spinning
+                onTriggered: stars.travel += frameTime * stars.speed
+            }
 
-            Rectangle {
-                required property int index
-                readonly property real ang: index * 2.399963      // ángulo áureo: reparte parejo
-                readonly property real phase: (stars.travel + index / 46) % 1
-                readonly property real dist: phase * motif.span * 0.75
-                x: stars.width / 2 + Math.cos(ang) * dist - width / 2
-                y: stars.height / 2 + Math.sin(ang) * dist - height / 2
-                // la estela: en el hiperespacio el punto deja de ser un punto
-                width: Math.max(2, motif.span * 0.006 + dist * 0.03 * (1 + 4 * stars.warp))
-                height: Math.max(2, motif.span * 0.005)
-                radius: height / 2
-                rotation: ang * 180 / Math.PI
-                color: index % 7 === 0 ? motif.hot
-                    : Qt.tint(motif.colour, Qt.rgba(motif.hot.r, motif.hot.g,
-                                                    motif.hot.b, 0.75 * stars.warp))
-                opacity: phase * (0.8 - 0.4 * phase)
+            Repeater {
+                model: stars.visible ? 46 : 0
+
+                Rectangle {
+                    required property int index
+                    readonly property real ang: index * 2.399963      // ángulo áureo: reparte parejo
+                    readonly property real phase: (stars.travel + index / 46) % 1
+                    readonly property real dist: phase * motif.span * 0.75
+                    x: stars.width / 2 + Math.cos(ang) * dist - width / 2
+                    y: stars.height / 2 + Math.sin(ang) * dist - height / 2
+                    // la estela: en el hiperespacio el punto deja de ser un punto
+                    width: Math.max(2, motif.span * 0.006 + dist * 0.03 * (1 + 4 * stars.warp))
+                    height: Math.max(2, motif.span * 0.005)
+                    radius: height / 2
+                    rotation: ang * 180 / Math.PI
+                    color: index % 7 === 0 ? motif.hot
+                        : Qt.tint(motif.colour, Qt.rgba(motif.hot.r, motif.hot.g,
+                                                        motif.hot.b, 0.75 * stars.warp))
+                    opacity: phase * (0.8 - 0.4 * phase)
+                }
             }
         }
     }
@@ -454,87 +507,92 @@ Item {
     // -------------------------------------------------------- carta de ajuste
     // El patrón de prueba que quedaba en el aire cuando terminaba la
     // programación: círculo, rejilla y escalera de grises, con la aguja girando.
-    Item {
-        id: card
-        anchors.centerIn: parent
-        width: motif.span * 0.8
-        height: width * 0.75
-        visible: motif.kind === "testcard"
+    Component {
+        id: testcardC
 
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
-            border.width: Math.max(2, card.width * 0.005)
-            border.color: motif.colour
-            opacity: 0.6
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: parent.height * 0.86
-            height: width
-            radius: width / 2
-            color: "transparent"
-            border.width: Math.max(2, card.width * 0.006)
-            border.color: motif.colour
-            opacity: 0.75
-        }
-
-        Repeater {
-            model: card.visible ? 6 : 0
-            Rectangle {
-                required property int index
-                x: card.width * (index + 1) / 7
-                width: Math.max(1, card.width * 0.002)
-                height: card.height
-                color: motif.colour
-                opacity: 0.25
-            }
-        }
-        Repeater {
-            model: card.visible ? 4 : 0
-            Rectangle {
-                required property int index
-                y: card.height * (index + 1) / 5
-                width: card.width
-                height: Math.max(1, card.width * 0.002)
-                color: motif.colour
-                opacity: 0.25
-            }
-        }
-
-        // escalera de grises que late con los graves
-        Row {
-            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: card.height * 0.08 }
-            height: card.height * 0.1
-            spacing: 0
-
-            Repeater {
-                model: card.visible ? 8 : 0
-                Rectangle {
-                    required property int index
-                    width: card.width * 0.6 / 8
-                    height: card.height * 0.1
-                    color: motif.colour
-                    opacity: (index + 1) / 9 * (0.5 + 0.5 * motif.low)
-                }
-            }
-        }
-
-        // la aguja: gira siempre, es lo que evita que la carta parezca una foto
         Item {
-            anchors.centerIn: parent
-            width: card.height * 0.86
-            height: width
-            rotation: motif.clock * 24 * motif.drive
+            Item {
+                id: card
+                anchors.centerIn: parent
+                width: motif.span * 0.8
+                height: width * 0.75
 
-            Rectangle {
-                x: parent.width / 2
-                y: parent.height / 2 - height / 2
-                width: parent.width / 2
-                height: Math.max(2, card.width * 0.008)
-                color: motif.hot
-                opacity: 0.85
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    border.width: Math.max(2, card.width * 0.005)
+                    border.color: motif.colour
+                    opacity: 0.6
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.height * 0.86
+                    height: width
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: Math.max(2, card.width * 0.006)
+                    border.color: motif.colour
+                    opacity: 0.75
+                }
+
+                Repeater {
+                    model: card.visible ? 6 : 0
+                    Rectangle {
+                        required property int index
+                        x: card.width * (index + 1) / 7
+                        width: Math.max(1, card.width * 0.002)
+                        height: card.height
+                        color: motif.colour
+                        opacity: 0.25
+                    }
+                }
+                Repeater {
+                    model: card.visible ? 4 : 0
+                    Rectangle {
+                        required property int index
+                        y: card.height * (index + 1) / 5
+                        width: card.width
+                        height: Math.max(1, card.width * 0.002)
+                        color: motif.colour
+                        opacity: 0.25
+                    }
+                }
+
+                // escalera de grises que late con los graves
+                Row {
+                    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: card.height * 0.08 }
+                    height: card.height * 0.1
+                    spacing: 0
+
+                    Repeater {
+                        model: card.visible ? 8 : 0
+                        Rectangle {
+                            required property int index
+                            width: card.width * 0.6 / 8
+                            height: card.height * 0.1
+                            color: motif.colour
+                            opacity: (index + 1) / 9 * (0.5 + 0.5 * motif.low)
+                        }
+                    }
+                }
+
+                // la aguja: gira siempre, es lo que evita que la carta parezca una foto
+                Item {
+                    anchors.centerIn: parent
+                    width: card.height * 0.86
+                    height: width
+                    rotation: motif.clock * 24 * motif.drive
+
+                    Rectangle {
+                        x: parent.width / 2
+                        y: parent.height / 2 - height / 2
+                        width: parent.width / 2
+                        height: Math.max(2, card.width * 0.008)
+                        color: motif.hot
+                        opacity: 0.85
+                    }
+                }
             }
         }
     }
@@ -542,17 +600,14 @@ Item {
     // ------------------------------------------------------------------- agua
     // Los dos motivos de agua son los únicos que no están hechos de items: son
     // miles de puntos con física propia y eso sólo cierra en la GPU (ver
-    // `ocean.frag` y `pond.frag`). Por Loader, para que el shader ni exista
-    // mientras la pantalla muestra otra cosa.
+    // `ocean.frag` y `pond.frag`).
     //
     //   ocean = un mar en perspectiva, olas que vienen de lejos
     //   pond  = un plato de agua que TIEMBLA a la frecuencia de lo que suena
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "ocean"
-        visible: active
+    Component {
+        id: oceanC
 
-        sourceComponent: Ocean {
+        Ocean {
             colour: motif.colour
             crest: motif.hot
             level: motif.level
@@ -571,12 +626,10 @@ Item {
     // perspectiva (`dunes.frag`), pero el paisaje está quieto y lo que se
     // mueve es la cámara. Cada golpe es un pisotón que levanta la arena; en el
     // drop la arena se queda flotando.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "dunes"
-        visible: active
+    Component {
+        id: dunesC
 
-        sourceComponent: Dunes {
+        Dunes {
             colour: motif.colour
             crest: motif.hot
             level: motif.level
@@ -593,15 +646,12 @@ Item {
 
     // ----------------------------------------------------------- cardiograma
     // El monitor de hospital: la traza se ESCRIBE de izquierda a derecha y el
-    // cursor borra la vuelta anterior. Va por Loader como los demás: son 240
-    // muestras y un Canvas, y no tiene por qué existir mientras la pantalla
-    // muestra otra cosa.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "ekg"
-        visible: active
+    // cursor borra la vuelta anterior. Son 240 muestras y un Canvas: no tiene
+    // por qué existir mientras la pantalla muestra otra cosa.
+    Component {
+        id: ekgC
 
-        sourceComponent: Ekg {
+        Ekg {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -619,12 +669,10 @@ Item {
     // La lámina de Rorschach: ruido umbralizado y simétrico (`rorschach.frag`).
     // El umbral baja con el volumen, así que la mancha CRECE con la canción en
     // vez de sólo aclararse.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "rorschach"
-        visible: active
+    Component {
+        id: rorschachC
 
-        sourceComponent: Rorschach {
+        Rorschach {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -640,12 +688,10 @@ Item {
     // La lámpara de lava: bolas de campo que se funden entre sí
     // (`plasma.frag`). Los graves las empujan para arriba y el golpe del tubo
     // les hace temblar la superficie.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "plasma"
-        visible: active
+    Component {
+        id: plasmaC
 
-        sourceComponent: Plasma {
+        Plasma {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -662,12 +708,10 @@ Item {
     // Anillos que vienen de frente (`tunnel.frag`). La distancia viajada se
     // acumula adentro de `Tunnel.qml`: multiplicar el reloj por la velocidad
     // haría saltar todos los anillos en cada cambio de volumen.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "tunnel"
-        visible: active
+    Component {
+        id: tunnelC
 
-        sourceComponent: Tunnel {
+        Tunnel {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -681,12 +725,10 @@ Item {
     // -------------------------------------------------------------- estática
     // La pantalla sin señal que una vez por compás casi engancha algo. El ruido
     // y la máscara viven en `static.frag`.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "static"
-        visible: active
+    Component {
+        id: staticC
 
-        sourceComponent: Static {
+        Static {
             overscan: motif.overscan
             colour: motif.colour
             hot: motif.hot
@@ -706,12 +748,10 @@ Item {
     // ------------------------------------------------------- marea de texto
     // La letra entera subiendo como los créditos del final, con el verso que
     // suena encendido al pasar.
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "textsea"
-        visible: active
+    Component {
+        id: textseaC
 
-        sourceComponent: TextSea {
+        TextSea {
             overscan: motif.overscan
             colour: motif.colour
             hot: motif.hot
@@ -727,12 +767,10 @@ Item {
         }
     }
 
-    Loader {
-        anchors.fill: parent
-        active: motif.kind === "pond"
-        visible: active
+    Component {
+        id: pondC
 
-        sourceComponent: Pond {
+        Pond {
             colour: motif.colour
             crest: motif.hot
             level: motif.level

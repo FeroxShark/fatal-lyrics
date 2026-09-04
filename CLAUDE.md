@@ -68,12 +68,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
-  elige cuál dibuja. Las que tienen física propia viven al lado, un archivo cada una y por
-  `Loader` — `Ocean.qml`, `Pond.qml`, `Dunes.qml`, `Static.qml`, `Rorschach.qml`, `Plasma.qml`
-  y `Tunnel.qml` (con su `.frag` + `.qsb`), más `Ekg.qml` (Canvas), `TextSea.qml`, `Eyes.qml` y
-  `Eye.qml` (el dibujo del ojo, que usan el motivo `eye` y la grilla `eyes`). Lo que se dibuja
-  con items sueltos (el radar, la lluvia, el hiperespacio, la carta de ajuste, el
-  osciloscopio) sigue adentro de `Motif.qml`.
+  elige cuál dibuja. Las dieciséis son un `Component` cada una y las pone **UN solo `Loader`**
+  (`sourceComponent` según `kind`): dos motivos no pueden estar vivos a la vez. Las que tienen
+  física propia viven al lado, un archivo cada una — `Ocean.qml`, `Pond.qml`, `Dunes.qml`,
+  `Static.qml`, `Rorschach.qml`, `Plasma.qml` y `Tunnel.qml` (con su `.frag` + `.qsb`), más
+  `Ekg.qml` (Canvas), `TextSea.qml`, `Eyes.qml` y `Eye.qml` (el dibujo del ojo, que usan el
+  motivo `eye` y la grilla `eyes`). Lo que se dibuja con items sueltos (el radar, la lluvia, el
+  hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
 - `shell/Ring.qml` — el aro que se consume contando la línea que viene.

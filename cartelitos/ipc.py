@@ -74,6 +74,7 @@ CONFIG_EVENT_MAP = (
     ("crt_infect_lead", "crt", "infect_lead"), ("crt_alarm_threshold", "crt", "alarm_threshold"),
     ("crt_channel_switch", "crt", "channel_switch"), ("crt_iown", "crt", "iown"),
     ("crt_foreshadow", "crt", "foreshadow"), ("crt_ring", "crt", "ring"),
+    ("crt_hop", "crt", "hop"),
     ("crt_motifs", "crt", "motifs"),
     ("crt_water", "crt", "water"), ("crt_water_amp", "crt", "water_amp"),
     ("crt_camera", "crt", "camera"), ("crt_quality", "crt", "quality"),

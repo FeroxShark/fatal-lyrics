@@ -2343,6 +2343,19 @@ class TestKnobsAreReachable(unittest.TestCase):
         for key in self.MENU_EXEMPT:
             self.assertIn(key, c.DEFAULTS["crt"], f"{key} ya no es una perilla de [crt]")
 
+    def test_hop_offers_every_mode_the_overlay_knows(self):
+        # el menú es el único lugar donde alguien descubre los modos de una
+        # perilla que no es sí/no: si falta uno, el overlay lo entiende pero
+        # nadie lo va a escribir nunca
+        editor = next(fn for key, section, _, fn in setup.SETTINGS
+                      if key == "hop" and section == "crt")
+        picked = set()
+        for n in range(1, 5):
+            _FakeInput(self, str(n))
+            picked.add(editor("both"))
+        self.assertEqual(picked, {"corridor", "interference", "both", "off"})
+        self.assertIn(c.DEFAULTS["crt"]["hop"], picked)
+
     def test_the_overlay_reads_exactly_the_keys_the_daemon_sends(self):
         # `_configEventMap` en shell.qml es el otro extremo de CONFIG_EVENT_MAP:
         # una clave de más ahí es una property que nunca se escribe, una de

@@ -137,6 +137,13 @@ _CONFIG_COMMENTS = {
                 "dot exactly where the line then appears. Only on a screen with\n"
                 "nothing of the current line on it: over the text it would be an\n"
                 "ornament, not a warning",
+        "hop": "when the phrase jumps to a screen that is NOT the one next\n"
+               "door, the wall shows the trip instead of teleporting it:\n"
+               "`corridor` sends a band of bright scanlines across every\n"
+               "screen in between, `interference` glitches each one as the\n"
+               "band goes over it, `both` does the two, `off` nothing.\n"
+               "Screens side by side never do it \u2014 there is nothing in\n"
+               "between to cross",
         "motifs": "animations on the quiet screens (an eye, a scope, a radar,\n"
                   "falling data, hyperspace, a test card, the sea)",
         "water": "the two water animations: a sea of loose points seen in\n"
@@ -261,7 +268,8 @@ DEFAULTS = {
         "split": "mixed", "director": True, "focus": "roam", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.25,
-        "iown": True, "foreshadow": True, "ring": True, "motifs": True,
+        "iown": True, "foreshadow": True, "ring": True, "hop": "both",
+        "motifs": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,

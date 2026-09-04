@@ -101,6 +101,10 @@ ShellRoot {
     property bool crtForeshadow: true
     // T2.2: el aro que se consume en la pantalla destino (ver Ring.qml)
     property bool crtRing: true
+    // T2.3: cómo se muestra un salto a una pantalla que NO es la de al lado:
+    // "corridor" (la franja que cruza las del medio), "interference" (el
+    // glitch al pasar), "both", "off". Cualquier otra cosa se lee como "off".
+    property string crtHopMode: "both"
     // qué tan seguido una línea sale "critical" (pantalla roja): umbral del
     // sorteo determinístico en crtPlanFor, más alto = más raro
     property real crtAlarmThreshold: 0.87
@@ -1338,6 +1342,7 @@ ShellRoot {
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
+        crt_hop: "crtHopMode",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",

@@ -215,6 +215,14 @@ SETTINGS = [
     ("ring", "crt", "Ring counting the next line down",
      lambda c: _pick("A ring on the screen where the next line lands, eaten away "
                      "beat by beat until the line arrives", YESNO, c)),
+    ("hop", "crt", "How a jump over a screen is shown",
+     lambda c: _pick("When the phrase jumps to a screen that is not next door, "
+                     "what the screens in between do", [
+        ("both: a band of scanlines crosses them and they glitch as it passes",
+         "both"),
+        ("corridor: only the band crossing them", "corridor"),
+        ("interference: only the glitch as the phrase goes by", "interference"),
+        ("off: the phrase just appears on the other screen", "off")], c)),
     ("motifs", "crt", "Animations on the quiet screens",
      lambda c: _pick("Animations on the screens without lyric", YESNO, c)),
     ("water", "crt", "Water animations (sea, shivering pond)",

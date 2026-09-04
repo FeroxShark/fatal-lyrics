@@ -18,7 +18,7 @@ Item {
     id: motif
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
-    // | static | textsea | eyes | ekg | none
+    // | static | textsea | eyes | ekg | rorschach | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -532,6 +532,27 @@ Item {
             bpmLive: motif.bpmLive
             quality: motif.quality
             seed: motif.seed
+            running: motif.spinning
+        }
+    }
+
+    // ---------------------------------------------------------------- mancha
+    // La lámina de Rorschach: ruido umbralizado y simétrico (`rorschach.frag`).
+    // El umbral baja con el volumen, así que la mancha CRECE con la canción en
+    // vez de sólo aclararse.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "rorschach"
+        visible: active
+
+        sourceComponent: Rorschach {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            pitch: motif.pitch
+            seed: motif.seed
+            energy: motif.energy
+            kick: motif.kick
             running: motif.spinning
         }
     }

@@ -1051,6 +1051,9 @@ ShellRoot {
     // Animación de la pantalla sin letra. Alguna palabra la elige a propósito
     // (el ojo cuando la letra habla de mirar o de silencio), el resto es sorteo.
     readonly property var motifWords: [
+        // en plural son varios: la grilla de ojos mirando a la frase
+        { re: /\b(eyes|watching|crowd|everyone|they)\b/i, kind: "eyes" },
+        { re: /\b(ojos|miran|mirando|gente|todos)\b/i, kind: "eyes" },
         { re: /\b(eye|eyes|see|seen|look|watch|silence|silent|quiet|blind)\b/i, kind: "eye" },
         { re: /\b(ojo|ojos|mir[ao]|mirar|ver|silencio|callar|ciego)\b/i, kind: "eye" },
         // el mar: agua grande, hundirse, la marea
@@ -1084,7 +1087,7 @@ ShellRoot {
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
                                        "rain", "ocean", "pond", "dunes", "static",
-                                       "textsea"]
+                                       "textsea", "eyes"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca
@@ -1093,6 +1096,13 @@ ShellRoot {
     function motifAllowed(kind) {
         if (kind === "textsea")
             return crtLines.length > 0;
+        // Los ojos miran a la pantalla que tiene la frase: sin frase (o con una
+        // sola pantalla) no hay a dónde mirar y quedan mirando al frente, que
+        // es un dibujo cualquiera. Se pide una pared y una letra, no que ESTA
+        // pantalla no sea la enfocada: la enfocada muestra texto y no dibuja
+        // ningún motivo, y una lista distinta por pantalla rompería el reparto.
+        if (kind === "eyes")
+            return activeCrtScreens.length > 1 && (crtLine.text || "") !== "";
         return true;
     }
 

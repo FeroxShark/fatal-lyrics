@@ -156,6 +156,14 @@ PanelWindow {
         ? ctl.crtFace(ctl.crtShot.focus, false).ink : pal.ink
     Behavior on motifColour { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
 
+    // A dónde mira la pared: a la pantalla enfocada, y durante el aviso del
+    // salto (el último 40% del verso) a la que va a recibir la frase. -1 en
+    // cualquiera de las dos puntas es mirar al frente.
+    readonly property int gazeAt: (foreOn && foreRamp > 0.15) ? ctl.crtNextFocus
+                                                              : ctl.crtShot.focus
+    readonly property real motifGaze: gazeAt < 0 || gazeAt === idx
+        ? 0 : (gazeAt > idx ? 1 : -1)
+
     // ------------------------------------------------- el aro que cuenta (T2.2)
     // Va en la pantalla DONDE VA A CAER la próxima línea, y sólo si esa
     // pantalla no tiene nada de la que suena: encima del texto sería un
@@ -1223,6 +1231,9 @@ PanelWindow {
                 lines: crt.ctl.crtLines
                 linesSynced: crt.ctl.crtLinesSynced
                 fontFamily: crt.fontFamily
+                // hacia dónde miran los ojos: a la pantalla que tiene la frase,
+                // y en el último tramo del verso, a la que la va a recibir
+                gaze: crt.motifGaze
                 // el drop viaja como booleano: los motivos no pueden sacarlo de
                 // `energy`, que acá arriba ya viene multiplicada por el aviso
                 drop: crt.ctl.audSection === "drop"

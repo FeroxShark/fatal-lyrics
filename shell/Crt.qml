@@ -351,7 +351,7 @@ PanelWindow {
         }
         NumberAnimation {
             target: crt; property: "hopShift"; to: 0
-            duration: 140; easing.type: Easing.OutQuad
+            duration: Motion.exitMs; easing.type: Easing.OutExpo
         }
     }
     Connections {
@@ -717,17 +717,17 @@ PanelWindow {
         // el punto se estira hasta ser una raya de lado a lado
         NumberAnimation {
             target: crt; property: "beamW"; from: 0.015; to: 1
-            duration: 90; easing.type: Easing.OutQuad
+            duration: Motion.enterFastMs; easing.type: Easing.OutExpo
         }
         // y la raya se abre en la imagen mientras se apaga
         ParallelAnimation {
             NumberAnimation {
                 target: crt; property: "tubeOnY"; to: 1
-                duration: 130; easing.type: Easing.OutQuad
+                duration: Motion.enterMs; easing.type: Easing.OutExpo
             }
             NumberAnimation {
                 target: crt; property: "beamFade"; to: 0
-                duration: 130; easing.type: Easing.InQuad
+                duration: Motion.exitMs; easing.type: Easing.InQuad
             }
         }
     }
@@ -882,9 +882,9 @@ PanelWindow {
         id: iownIn
         PropertyAction { target: crt; property: "iownOpen"; value: 0 }
         NumberAnimation { target: crt; property: "iownBeam"; from: 0; to: 1;
-                          duration: 90; easing.type: Easing.OutQuad }
+                          duration: Motion.enterFastMs; easing.type: Easing.OutExpo }
         NumberAnimation { target: crt; property: "iownOpen"; from: 0; to: 1;
-                          duration: 160; easing.type: Easing.OutCubic }
+                          duration: Motion.enterMs; easing.type: Easing.OutExpo }
         NumberAnimation { target: crt; property: "iownBeam"; to: 0;
                           duration: 130; easing.type: Easing.OutQuad }
     }
@@ -961,7 +961,7 @@ PanelWindow {
     // como ésta — lo que estaba mal era hacerlo con el PLANO, que es un salto
     // grande y se quedaba a mitad de camino.
     property real camBreath: focused ? cam * 0.022 * pump * ctl.crtFlicker : 0
-    Behavior on camBreath { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
+    Behavior on camBreath { NumberAnimation { duration: Math.round(Motion.cameraMs / 2); easing.type: Easing.OutQuad } }
     readonly property real camZoom: camFocus + camBreath
 
     // T4.1: el plano de la LETRA, y sólo de la letra.
@@ -996,12 +996,12 @@ PanelWindow {
         id: sectionKick
         NumberAnimation {
             target: crt; property: "sectionZoom"
-            to: 1 + 0.12 * crt.cam; duration: 350; easing.type: Easing.OutCubic
+            to: 1 + 0.12 * crt.cam; duration: Motion.enterMs; easing.type: Easing.OutExpo
         }
         PauseAnimation { duration: 500 }
         NumberAnimation {
             target: crt; property: "sectionZoom"
-            to: 1; duration: 1400; easing.type: Easing.InOutQuad
+            to: 1; duration: 1400; easing.type: Easing.OutQuad
         }
     }
     // la perilla apagada (o un hotplug a mitad de golpe) tiene que dejar el
@@ -1424,18 +1424,33 @@ PanelWindow {
                                 PropertyAction { target: sc; property: "yScale"; value: 1 + (crt.entryStyle === "slam" ? 0.35 : -0.18) * crt.ctl.crtWordFlash }
                                 PropertyAction { target: tr; property: "y"; value: crt.entryStyle === "roll" ? -measure.fontInfo.pixelSize * 0.55 * crt.ctl.crtWordFlash : 0 }
                                 PauseAnimation { duration: 28 }
+                                // T4.3: TODAS las palabras entran con la misma
+                                // gramática — snap `OutExpo` y asentamiento
+                                // visible (`Motion.enterMs`). Antes eran 90 ms
+                                // de OutQuad con la `y` en OutBack y el estilo
+                                // `slam` en 150: tres curvas distintas para el
+                                // mismo gesto, y a 90 ms el asentamiento no
+                                // existe — la palabra aparece y ya está, que es
+                                // justo lo contrario del video de referencia
+                                // (el primer cuadro recorre la mitad del camino
+                                // y los últimos tres son imperceptibles).
+                                // `slam` y `roll` conservan su AMPLITUD, que es
+                                // lo que los hace distintos; la curva es una.
                                 ParallelAnimation {
-                                    // el blanco del overburn baja despacio (200 ms):
-                                    // es una quemadura del fósforo, no un destello
-                                    ColorAnimation { target: label; property: "color"; to: crt.pal.ink; duration: crt.entryStyle === "overburn" ? 200 : 70; easing.type: Easing.OutQuad }
-                                    NumberAnimation { target: sc; property: "xScale"; to: 1; duration: crt.entryStyle === "slam" ? 150 : 90; easing.type: Easing.OutQuad }
-                                    NumberAnimation { target: sc; property: "yScale"; to: 1; duration: crt.entryStyle === "slam" ? 150 : 90; easing.type: Easing.OutBack }
-                                    NumberAnimation { target: tr; property: "y"; to: 0; duration: 140; easing.type: Easing.OutCubic }
-                                    NumberAnimation { target: slot; property: "ghostOff"; to: 0; duration: 110; easing.type: Easing.OutCubic }
-                                    NumberAnimation { target: slot; property: "ghostFade"; to: 0; duration: 120; easing.type: Easing.InQuad }
+                                    // el blanco del overburn baja despacio: es
+                                    // una quemadura del fósforo, no un destello
+                                    ColorAnimation { target: label; property: "color"; to: crt.pal.ink; duration: crt.entryStyle === "overburn" ? 200 : Motion.enterFastMs; easing.type: Easing.OutQuad }
+                                    NumberAnimation { target: sc; property: "xScale"; to: 1; duration: Motion.enterMs; easing.type: Easing.OutExpo }
+                                    NumberAnimation { target: sc; property: "yScale"; to: 1; duration: Motion.enterMs; easing.type: Easing.OutExpo }
+                                    NumberAnimation { target: tr; property: "y"; to: 0; duration: Motion.enterMs; easing.type: Easing.OutExpo }
+                                    // los fantasmas de canal son la SALIDA del
+                                    // gesto: se van rápido para no competir con
+                                    // el asentamiento de la palabra
+                                    NumberAnimation { target: slot; property: "ghostOff"; to: 0; duration: Motion.exitMs; easing.type: Easing.OutExpo }
+                                    NumberAnimation { target: slot; property: "ghostFade"; to: 0; duration: Motion.exitMs; easing.type: Easing.InQuad }
                                     SequentialAnimation {
                                         NumberAnimation { target: tr; property: "x"; from: -measure.fontInfo.pixelSize * 0.07 * crt.ctl.crtWordFlash; to: measure.fontInfo.pixelSize * 0.03 * crt.ctl.crtWordFlash; duration: 34 }
-                                        NumberAnimation { target: tr; property: "x"; to: 0; duration: 60; easing.type: Easing.OutQuad }
+                                        NumberAnimation { target: tr; property: "x"; to: 0; duration: Motion.enterFastMs; easing.type: Easing.OutExpo }
                                     }
                                 }
                                 // la animación de color rompe el binding; hay que

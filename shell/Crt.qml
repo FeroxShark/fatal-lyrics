@@ -1401,7 +1401,11 @@ PanelWindow {
                     // apaga entero. Dos animaciones a la vez en la misma
                     // pantalla no se leen como una cosa esperando la frase:
                     // se leen como ruido encima de un dibujo.
-                    dim: crt.ringShows ? 0
+                    // Y lo mismo con el rótulo del sync (tanda 3, C): cae en
+                    // la pantalla enfocada, que con letra no dibuja ningún
+                    // motivo — pero en un instrumental sí, y ahí el número
+                    // quedaba encima del dibujo y sin contraste contra él.
+                    dim: (crt.ringShows || syncHint.opacity > 0.01) ? 0
                         : (crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1)
                     waterAmp: crt.ctl.crtWaterAmp
                     // la semilla de esta aparición: el reloj de los motivos cruzado

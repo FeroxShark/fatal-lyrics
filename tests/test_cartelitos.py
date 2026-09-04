@@ -227,7 +227,7 @@ class TestLyricsEvent(unittest.TestCase):
     def test_every_line_with_its_window(self):
         out = self.sent()
         c.lyrics_list(self.LINES)
-        self.assertEqual(out[0], {"cmd": "lyrics", "lines": [
+        self.assertEqual(out[0], {"cmd": "lyrics", "synced": True, "lines": [
             {"t0": 0.0, "t1": 4.0, "text": "one"},
             {"t0": 4.0, "t1": 9.0, "text": "two"},
             {"t0": 9.0, "t1": 14.0, "text": "three"}]})
@@ -249,6 +249,21 @@ class TestLyricsEvent(unittest.TestCase):
         c.lyrics_list(self.LINES)
         c.clear()
         self.assertIsNone(ipc._last_lyrics)
+
+    def test_the_plain_lyric_travels_without_times(self):
+        # sin sincronizar no hay tiempos, pero el texto sirve igual: lo hace
+        # correr la marea de texto, sin resaltar ninguna línea
+        out = self.sent()
+        c.lyrics_plain("one\n\n  two  \nthree\n")
+        self.assertEqual(out[0], {"cmd": "lyrics", "synced": False, "lines": [
+            {"t0": 0.0, "t1": 0.0, "text": "one"},
+            {"t0": 0.0, "t1": 0.0, "text": "two"},
+            {"t0": 0.0, "t1": 0.0, "text": "three"}]})
+
+    def test_the_plain_lyric_is_also_kept_for_the_reconnect(self):
+        self.sent()
+        c.lyrics_plain("one\ntwo")
+        self.assertEqual(ipc._last_lyrics["synced"], False)
 
     def test_word_times_do_not_break_it(self):
         # las líneas del LRC "enhanced" traen un tercer campo

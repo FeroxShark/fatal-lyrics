@@ -279,8 +279,12 @@ class DaemonLoop:
             self.lyrics_kind = self._lyr._fetch.get("status")
             # la letra entera, una sola vez: el `show` manda una línea por vez y
             # el overlay no ve el resto. Sin sincronizar no hay tiempos que
-            # mandar (el "plain" es un bloque de texto suelto), así que ahí no va.
-            if self.lyrics and self.lyrics_kind != "plain":
+            # mandar (el "plain" es un bloque de texto suelto), pero el texto
+            # igual viaja: la marea de texto del tubo lo hace correr, sin
+            # resaltar nada.
+            if self.lyrics and self.lyrics_kind == "plain":
+                self._ipc.lyrics_plain(self.lyrics[0][1])
+            elif self.lyrics:
                 self._ipc.lyrics_list(self.lyrics)
             # el reloj del "no responde" arranca cuando HAY letra: la búsqueda
             # va en otro hilo y puede tardar, y esa espera no es un silencio

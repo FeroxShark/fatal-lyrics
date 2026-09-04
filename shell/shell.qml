@@ -300,6 +300,10 @@ ShellRoot {
     // la letra entera del tema (evento `lyrics`), para lo que necesita mirar
     // más allá del verso que suena
     property var crtLines: []
+    // ...y si esa letra tiene tiempos. Sin sincronizar viaja igual (el bloque
+    // de texto suelto), pero entonces no hay ninguna línea "actual": lo que la
+    // mire tiene que correr sin resaltar nada.
+    property bool crtLinesSynced: true
     // Cuándo arranca la próxima línea, en reloj local, y cuánto faltaba cuando
     // llegó la actual. Se fija al llegar la línea (un `show` nuevo es también
     // lo que llega después de un ajuste de sync o de un salto, así que no hace
@@ -829,7 +833,9 @@ ShellRoot {
     readonly property int crtLineNo: {
         const ls = crtLines;
         const t0 = crtLine.t0 || 0;
-        if (!ls || ls.length === 0 || (crtLine.text || "") === "")
+        // sin tiempos no hay línea "actual": todas arrancan en cero y la
+        // primera matchearía siempre
+        if (!ls || ls.length === 0 || !crtLinesSynced || (crtLine.text || "") === "")
             return -1;
         for (let i = 0; i < ls.length; i++)
             if (Math.abs((ls[i].t0 || 0) - t0) < 0.05)
@@ -1561,8 +1567,10 @@ ShellRoot {
                         if (ev.cmd === "show")
                             root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs,
                                       ev.words, ev.kind, ev.next);
-                        else if (ev.cmd === "lyrics")
+                        else if (ev.cmd === "lyrics") {
                             root.crtLines = ev.lines || [];
+                            root.crtLinesSynced = ev.synced !== false;
+                        }
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);
                         else if (ev.cmd === "pos") {
@@ -1643,6 +1651,7 @@ ShellRoot {
                             // reparto viejo sobreviven al cambio de tema.
                             root.crtNext = null;
                             root.crtLines = [];
+                            root.crtLinesSynced = true;
                             root.crtForget();
                             // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
                             if (root.cascadeDeath && root.dialogList.length > 0) {

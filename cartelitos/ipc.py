@@ -191,11 +191,27 @@ def lyrics_list(lines):
     overlay reconecta (el overlay muerto con el daemon vivo es un estado
     frecuente): si no, el tema entero se queda sin letra hasta el siguiente."""
     global _last_lyrics
-    ev = {"cmd": "lyrics", "lines": [
+    ev = {"cmd": "lyrics", "synced": True, "lines": [
         {"t0": round(ln[0], 2),
          "t1": round(lines[k + 1][0] if k + 1 < len(lines) else ln[0] + 5, 2),
          "text": ln[1]}
         for k, ln in enumerate(lines)]}
+    _last_lyrics = ev
+    send(ev)
+
+
+def lyrics_plain(text):
+    """La letra sin sincronizar, que es un bloque de texto suelto.
+
+    No hay tiempos que mandar, pero el texto igual sirve: la marea de texto lo
+    hace correr en las pantallas apagadas, sólo que sin resaltar ninguna línea
+    (no hay forma de saber cuál se está cantando). `synced` es lo que se lo
+    dice al overlay — con las líneas en `t0: 0` no se distingue de una letra
+    sincronizada que arranca en cero."""
+    global _last_lyrics
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    ev = {"cmd": "lyrics", "synced": False,
+          "lines": [{"t0": 0.0, "t1": 0.0, "text": ln} for ln in lines if ln]}
     _last_lyrics = ev
     send(ev)
 

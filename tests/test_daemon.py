@@ -350,10 +350,16 @@ class TestLyricsListIsSent(unittest.TestCase):
         loop.handle_track(track(id="t1", pos=2.0), now=1.0)
         loop._ipc.lyrics_list.assert_called_once()
 
-    def test_unsynced_lyrics_have_no_times_to_send(self):
+    def test_unsynced_lyrics_go_out_without_times(self):
         loop = self._loop_with_fetch([(0.0, "todo el texto junto")], "plain")
         loop.handle_track(track(id="t1"), now=0.0)
         loop._ipc.lyrics_list.assert_not_called()
+        loop._ipc.lyrics_plain.assert_called_once_with("todo el texto junto")
+
+    def test_a_track_without_lyrics_sends_no_plain_either(self):
+        loop = self._loop_with_fetch(None, "none")
+        loop.handle_track(track(id="t1"), now=0.0)
+        loop._ipc.lyrics_plain.assert_not_called()
 
     def test_a_track_without_lyrics_sends_nothing(self):
         loop = self._loop_with_fetch(None, "none")

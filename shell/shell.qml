@@ -1433,7 +1433,9 @@ ShellRoot {
         if (crtOn)
             console.log("crt: next focus=" + crtNextFocus
                 + " in=" + Math.round(crtNextIn)
-                + " hop=" + crtHop.from + "->" + crtHop.to);
+                + " hop=" + crtHop.from + "->" + crtHop.to
+                + " ring=" + ringScreen
+                + " entry=" + JSON.stringify(crtEntryStyles));
         updatePitchPalette();
         if (crtOn)
             return;

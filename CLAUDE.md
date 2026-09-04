@@ -29,15 +29,25 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   y lo **consume** cuando llega: la anticipación es la verdad, no un pronóstico. De ahí salen el
   motif que huye (`foreshadow`) y el aro que cuenta (`ring`, `shell/Ring.qml`).
 - **Un salto largo se ve viajar.** Si la frase cae en una pantalla que no es la de al lado, la
-  perilla `hop` (`corridor|interference|both|off`) manda una franja de scanlines cruzando cada
-  pantalla del medio y la glitchea al pasar. El reloj del viaje (180 ms) lo publica `shell.qml`
-  UNA vez (`crtHopStart`) y cada monitor lo lee: es una sola franja atravesando la pared.
+  perilla `hop` (`corridor|interference|both|off`) manda un rayo: nace como hebras estiradas de
+  la letra que se va, cruza cada pantalla del medio POR EL BORDE (arriba o abajo, alternando) y
+  converge al centro de la de destino, encima de la línea que llega. Cabeza brillante y cola, y
+  el color va del de la letra de origen al de la de destino a lo largo de todo el viaje. El reloj
+  (360 ms + 150 de cola) lo publica `shell.qml` UNA vez (`crtHopStart`) y cada monitor lo lee: es
+  un solo rayo atravesando la pared.
+- **REGLA: una animación por pantalla.** Textual de Ferox: "no quiero que ninguna animación se
+  superponga con ninguna". En cada pantalla hay UNA cosa a la vez — o el motivo, o el aro, o la
+  letra con su entrada, o el instrumental. Por eso el aro apaga el motivo de su pantalla (`dim` a
+  0 en 220 ms) en vez de contar encima de él. La única excepción es el rayo del salto, y sólo
+  porque va por el BORDE de la pantalla del medio: no pasa por encima de nada.
 - **Una pantalla sin letra no dibuja cualquier cosa: dibuja algo del tema.** Los motivos de la
   tanda 2 leen lo que el tubo ya sabe — `dunes` es el único paisaje (el paisaje está quieto y lo
   que se mueve es la cámara, re-sembrada en cada aparición), `static` forma una vez por compás la
   primera palabra de la línea que VIENE, `textsea` hace correr la letra entera con el verso que
-  suena encendido, y `eyes` es una grilla de ojos mirando a la pantalla que tiene la frase (y
-  girando hacia el destino durante el aviso del salto). Los cuatro de la segunda mitad leen el
+  suena encendido, y `eyes` es UN ojo grande mirando a la pantalla que tiene la frase — pupila
+  estirada hacia allá, párpado entrecerrado en calma — con dos o tres ojos chicos yendo y
+  viniendo por los bordes (a los costados si la pantalla es apaisada, arriba y abajo si es
+  vertical), y gira hacia el destino durante el aviso del salto. Los cuatro de la segunda mitad leen el
   ritmo: `ekg` escribe un QRS por tiempo (del `tick` cuantizado, no del bombo crudo),
   `rorschach` abre la mancha bajando el umbral con el volumen, `plasma` deja que los graves
   empujen las bolas para arriba y `tunnel` viaja más rápido cuanto más fuerte suena. Y `scope`
@@ -77,7 +87,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
-- `shell/Ring.qml` — el aro que se consume contando la línea que viene.
+- `shell/Ring.qml` — el aro que se consume contando la línea que viene: por tiempo si hay compás,
+  si no por golpe de graves, y desarmándose en hebras sobre el final.
+- `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
@@ -227,12 +239,53 @@ no-op → boot roto. No reintroducir un segundo.)
   monitor la franja entra en la segunda pantalla antes de salir de la primera y deja de leerse como
   una sola. Cancelar es asignarle 0 — lo hace `crtForget()`, así que el hotplug, la config y el
   cambio de tema cortan el salto sin plumbing propio.
+- **El reparto del reloj del salto es 22 % origen / 56 % las del medio / 22 % destino**, y después
+  quedan 150 ms de cola apagándose encima de la línea que ya entró. Por eso `hopClock` llega a
+  `1 + hopTailFrac` y no a 1.
+- **El rayo del salto vive en `stage`, NO adentro de `camera`.** Su recorrido se mide contra los
+  bordes del tubo: con el plano de la sección encima agarraría por un borde que no es el borde.
+  Igual pasa por el vidrio, que es lo que importa.
 - **La pantalla del medio corre a 20 fps** (el `Timer` del instrumental; el `FrameAnimation` de
-  `Crt.qml` sólo corre con texto o en standby). Un salto de 180 ms leído desde ahí serían cuatro
-  posiciones: el salto tiene su propio `FrameAnimation`, prendido sólo mientras dura.
-- **Los tres cuadros del glitch del salto se cuentan en CUADROS**, con un contador que baja en el
-  mismo `FrameAnimation`. Un `Timer` de 50 ms es otra cosa: en una pantalla que va lenta el color
-  separado queda puesto más de lo que dura el paso de la franja.
+  `Crt.qml` sólo corre con texto o en standby). Un salto leído desde ahí serían siete posiciones:
+  el salto tiene su propio `FrameAnimation`, prendido sólo mientras dura (y mientras dura la cola).
+- **Ningún glitch visible dura menos de 120 ms, y se miden por RELOJ, no por cuadros.** (Al revés
+  de lo que decía esta nota hasta la tanda 3: tres cuadros son 50 ms a 60 Hz y 15 a 200 Hz — uno
+  de los monitores de prueba va a 200 —, así que contar cuadros garantizaba que en la máquina que
+  podía pagarlo el efecto no se viera.) El corrimiento de canales del rayo, el doble aro del `cue`
+  y el ruido del cambio de canal tienen ese piso; el del rayo además termina con UN cuadro al
+  doble, porque un efecto que simplemente para no deja nada.
+- **El borde por el que cruza el rayo lo decide el ROOT y alterna, no se sortea** (`crtHopEdge`,
+  antes `crtHopY`, que era una altura al azar). Dos saltos seguidos por el mismo borde se leen
+  como una decoración fija, y sorteando salen repetidos igual. El log dice `edge=top|bottom`.
+- **El aro come por GOLPE cuando no hay compás confiable**, no por reloj. `bpm conf > 0.6` casi
+  nunca se cumple, y un reloj se lee como un cronómetro, no como algo que come. El golpe es el
+  onset crudo (`audBeat`), NO el pico del tubo (`surgeGen`/`flickerGen`): el pico va uno cada
+  cuatro segundos y comería el aro dos veces por verso. El escalón se calcula contra lo que falta
+  (`(1-eaten) / (left/espaciado)`), así que se corrige solo y llega a cero a tiempo. El log dice
+  `crt: ring mode=beat|kick|lineal`.
+- **Las hebras del aro acumulan SU ángulo, cuadro a cuadro.** Misma trampa que el túnel y el
+  hiperespacio: con `ángulo = reloj × velocidad` cualquier cambio de tempo multiplica un reloj de
+  miles de segundos y las hebras se teletransportan.
+- **Las familias de la mancha son PARÁMETROS, no cinco ramas** (`famSpike`, `famLobe`, `famHole`,
+  `famSx`, `famSy`, `famSpat`). Así cruzar de una a otra es interpolar seis números con un
+  `Behavior` en QML y el shader sigue siendo UNA evaluación: mezclar dos evaluaciones serían
+  dieciséis octavas de fbm por píxel para cambiar una silueta.
+- **Todo dibujo nuevo se prueba con el ancho y el alto dados vuelta.** `DP-4` es vertical y el
+  compositor ya se la entrega al overlay como 1080×1920, así que un `grim -o DP-4` ES la prueba.
+  Los ojos reparten los chicos según la forma (a los costados si `w > h`, arriba y abajo si no).
+- **La palabra del IOWN se mide contra la CÁMARA, no contra la pantalla.** El IOWN cae en el drop,
+  que es el plano más cerca (1.6): midiendo contra el ancho pelado la palabra sale cortada por los
+  dos lados. Va dividida por `sectionZoom * camZoom * cueZoom`.
+- **El IOWN se ancla, no se desliza** (tanda 3): tres golpes de derecha a izquierda, uno por
+  pantalla, con la ventana de la línea MÁS el hueco hasta la siguiente y nunca menos de 2.5 s.
+  El avance sale de `crtIownProgress()` (contra la ventana del pedazo), no de `crtProgress()`,
+  que llega a 1 en `t1` y apagaría la palabra antes de la última pantalla.
+- **Un anillo del túnel es un BORDE fino, no una meseta**, y la densidad va con él: con el perfil
+  fino y los 2.5 anillos de antes (`0.42/r`) queda un campo negro con dos aros. Van `2.0/r` y
+  fondo casi negro entre anillos. El anillo que enciende el golpe no se mueve a mano: un valor
+  fijo de `depth` se abre solo mientras `t` crece.
+- **El QRS del `ekg` tiene PISO** (45 % de la escala). Con la altura saliendo sólo del parpadeo
+  del tubo, un tema bajo dibujaba latidos de dos píxeles.
 - **En el QML la perilla `hop` se llama `crtHopMode`:** `crtHop` ya era el descriptor del salto de
   la FASE 0 (`{from, to, dir}`). El mapeo es `crt_hop → crtHopMode`.
 - **`qsb` no está en el PATH** (vive en `/usr/lib/qt6/bin/qsb`). Después de recompilar, verificar
@@ -347,6 +400,10 @@ no-op → boot roto. No reintroducir un segundo.)
 
 ## Números medidos
 
+- La corrida 2 de la tanda 3 NO subió el costo: con un aparejo fijo (motivos forzados por la
+  letra, un verso cada 2 s, ocho muestras de 8 s) el overlay pasó de **41 %** de un core a
+  **35 %**. Baja sobre todo porque la grilla de ojos eran quince Canvas y ahora son cuatro; lo
+  que se agregó (las hebras del aro, el rayo del salto) dura menos de medio segundo por verso.
 - CRT prendido: **20-37% de un core** (media 29 sobre ocho muestras de 8 s, tres monitores,
   motivos de shader en las laterales). Era ~19% antes del overscan de la tanda 3: la cámara
   aleja el cuadro hasta 0.82 y esos píxeles ANTES no se dibujaban — que es exactamente lo que
@@ -373,10 +430,14 @@ no-op → boot roto. No reintroducir un segundo.)
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
-- **Tanda 3, corrida 1 hecha** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): A1 (el overscan
-  de los motivos), A2 (un `Loader` solo), A3 (el encuadre y el plano de la sección), A4 (la boca
-  del túnel) y B7. Falta **B1-B6, B8, B9 y C**. Lo que se miró con capturas y lo que todavía
-  necesita un ojo está en `docs/plans/CHECKS-VISUALES.md`, sección "TANDA 3 corrida 1".
+- **Tanda 3, corridas 1 y 2 hechas** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): la 1 fue
+  A1 (el overscan de los motivos), A2 (un `Loader` solo), A3 (el encuadre y el plano de la
+  sección), A4 (la boca del túnel) y B7; la 2 fue A5 (una animación por pantalla), B1 (el aro que
+  se desarma), B10 (el aro que come al ritmo), B2 (las familias de la mancha), B3 (los ojos),
+  B4 (el rayo del salto), B8 (el contraste del túnel), B9 (el piso del cardiograma), B5 (el IOWN
+  anclado) y B6 (el piso de 120 ms). Falta **sólo C** (el sync a ojo, corrida 3). Lo que se miró
+  con capturas y lo que todavía necesita un ojo está en `docs/plans/CHECKS-VISUALES.md`,
+  secciones "TANDA 3 corrida 1" y "corrida 2".
 - **El plan `docs/plans/2026-09-03-crt-tanda2.md` quedó COMPLETO** (FASE 0 a FASE 5): foco
   anticipado, aviso de destino (`foreshadow`/`ring`), saltos entre pantallas (`hop`), entradas
   nuevas + director por energía, y ocho motifs nuevos. Estado y mapa actualizado en

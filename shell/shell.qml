@@ -140,7 +140,10 @@ ShellRoot {
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
         wild: {
-            motifHoldMs: 0, chanGapMs: 0, hitGapMs: 1200,
+            // 3 s y no 0: con el hold en cero, el reloj de un segundo de
+            // `crtMotifRefresh` cambiaría el dibujo CADA SEGUNDO, que es peor
+            // que lo de la tanda 3 — ahí cambiaba una vez por verso
+            motifHoldMs: 3000, chanGapMs: 0, hitGapMs: 2670,
             interfMinMs: 7000, interfSpanMs: 11000,
             camBeat: 0.035, camGrid: 0.020,
             motifScale: 0.050, motifOpaMin: 0.62, motifOpaSpan: 0.30,

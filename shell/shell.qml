@@ -150,6 +150,24 @@ ShellRoot {
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
     // cuánto queda quemado el verso viejo detrás del nuevo (perilla `ghost_ms`)
     property int crtGhostMs: 550
+
+    // ---- el cambio de canal, con portero
+    // Ferox: "el glitch de cambio de pantalla me encanta pero tan seguido
+    // molesta". El sorteo sigue viviendo en `crtShotFor` (que no puede leer
+    // nada vivo: la predicción de la línea siguiente tiene que dar lo mismo
+    // cuando la línea llega). El PORTERO va acá, en el consumo: es lo único
+    // que sabe cuánto hace que la pared no cambia de canal.
+    property double crtLastChanAt: 0
+    property int crtChanGen: 0
+    function crtChanFire(force) {
+        if (!force && Date.now() - crtLastChanAt < pace.chanGapMs)
+            return;
+        crtLastChanAt = Date.now();
+        crtChanGen++;
+    }
+    // dónde estaba el aro cuando llegó la última línea: la pantalla que ya se
+    // rompe con la raya del aro no se rompe otra vez con el verso
+    property int crtRingWas: -1
     // T3.2: la palabra gigante que cruza la pared en el drop
     property bool crtIown: true
     // T2.1: la pantalla a la que va a saltar la frase lo delata antes de que
@@ -663,8 +681,20 @@ ShellRoot {
     // el texto. La letra no cambia de pantalla, infecta la siguiente.
     property var faceIdx: []
 
+    property double lastFacesAt: 0
     function resetFaces() {
         faceIdx = crtFacePattern();
+        lastFacesAt = Date.now();
+    }
+    // El reparto en un PICO, con el piso de `color_hold`. El comentario de acá
+    // abajo decía "un par de veces por canción" desde la tanda 2, pero el pico
+    // no tenía portero ninguno: con un pico cada 12 s la pared se daba vuelta
+    // entera cinco veces por minuto. `color_hold` (10 s de fábrica) ya existía
+    // y sólo lo miraba el color por registro.
+    function resetFacesOnPeak() {
+        if (Date.now() - lastFacesAt < crtColorHold * 1000)
+            return;
+        resetFaces();
     }
     // Repartir de nuevo las caras da vuelta pantallas ENTERAS: la que estaba
     // clara se va a negra y al revés. Eso no es un cambio de color, es un
@@ -1448,7 +1478,7 @@ ShellRoot {
     onAudPeakChanged: {
         tubeBeat();
         if (crtOn)
-            resetFaces();
+            resetFacesOnPeak();
     }
 
     // Interferencia espontánea: la programa el root y le toca a UNA pantalla por
@@ -1463,7 +1493,9 @@ ShellRoot {
         running: root.crtOn && root.crtIntensity > 0
         onTriggered: {
             const calm = 1 / Math.max(sectionEnergy, 0.35);
-            interval = (7000 + Math.random() * 11000 * calm)
+            // T4.3: la ventana sale de la tabla de `pace` (20–40 s en normal,
+            // 7–18 s en `wild`, que es lo que hacía hasta la tanda 3)
+            interval = (pace.interfMinMs + Math.random() * pace.interfSpanMs * calm)
                 / Math.max(crtIntensity + 0.55, 0.3);
             interfScreen = Math.floor(Math.random() * Math.max(activeCrtScreens.length, 1));
             interfGen++;
@@ -1768,6 +1800,14 @@ ShellRoot {
         // Crt.qml lo lee al recibir la línea, así que para entonces ya tiene
         // que estar puesto
         crtEntryStyles = crtEntriesFor(shot, ringScreen);
+        // T4.3: el cambio de canal lo dispara el ROOT y no el serial de la
+        // línea. El sorteo sigue siendo el de `crtShotFor` (determinístico,
+        // porque se evalúa sobre una línea que todavía no llegó); acá se le
+        // pone el portero, que es lo único que sabe cuánto hace que la pared
+        // no cambia de canal. El tema nuevo pasa siempre.
+        crtRingWas = ringScreen;
+        if (shot.chan)
+            crtChanFire(crtTrackStart);
         // el registro del "anterior" se acumula: una pantalla que esta vez no
         // mostró nada conserva el estilo con el que entró la última vez que sí
         const seen = {};
@@ -1946,7 +1986,15 @@ ShellRoot {
                             root.posLen = ev.l;
                             root.posAt = Date.now();
                         } else if (ev.cmd === "sec") {
+                            // T4.3: el cambio de PARTE es un cambio de escena,
+                            // y ahí el cambio de canal es el puente (el
+                            // interstitial del video de referencia). Pasa por
+                            // el mismo portero: si la pared acaba de cambiar de
+                            // canal, no lo hace otra vez.
+                            const secMoved = root.audSection !== ev.kind;
                             root.audSection = ev.kind;
+                            if (root.crtOn && secMoved)
+                                root.crtChanFire(false);
                             root.audPct = ev.p;
                             // cambiar de parte cambia el dibujo y el reparto de
                             // colores: es el momento en el que el tema respira

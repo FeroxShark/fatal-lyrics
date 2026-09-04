@@ -617,9 +617,14 @@ PanelWindow {
     // que venga mucho más fuerte que el que está sonando.
     property double lastHitAt: 0
     // con el compás medido la espera se redondea a un número entero de tiempos:
-    // el glitch entra en el pulso del tema, no en el medio
+    // el glitch entra en el pulso del tema, no en el medio.
+    //
+    // T4.3: el número sale de la tabla de `pace` y está escrito en SEGUNDOS DE
+    // VERDAD — el 0.45 es el `intensity` de fábrica, así que con la perilla
+    // como viene, `normal` son exactamente los 4 s del presupuesto. Sin ese
+    // factor la tabla diría 4000 y la pared esperaría 8.9 s.
     readonly property int hitGap: Math.round(
-        ctl.quantize(1200 / Math.max(ctl.crtIntensity, 0.25)))
+        ctl.quantize(ctl.pace.hitGapMs * 0.45 / Math.max(ctl.crtIntensity, 0.25)))
     function hit(amount) {
         const now = Date.now();
         if (now - lastHitAt < hitGap && amount < glitchAmt * 1.5)
@@ -767,7 +772,18 @@ PanelWindow {
             const mine = sh.mode === "all" || (sh.chunks.length > 0
                 && sh.chunks[0].screen === crt.idx);
             if (mine) {
-                crt.hit(0.35 + Math.random() * 0.3);
+                // T4.3: la patada de señal del verso sólo cuando el foco se
+                // MUDÓ de pantalla y pasó el hold. Un verso más en la misma
+                // pantalla no es un cambio de escena: romper ahí es lo que
+                // hacía que la pared pegara un golpe cada tres segundos.
+                // Y si el aro estaba contando ACÁ, el que rompe es el aro
+                // (`onCollapsed`, ~100 ms después): dos roturas en la misma
+                // pantalla con 100 ms de diferencia se leen como una falla.
+                const moved = crt.ctl.crtHop.from >= 0;
+                const wasRing = crt.ctl.crtRingWas === crt.idx;
+                const held = Date.now() - crt.lastHitAt >= Motion.holdMs;
+                if (moved && held && !wasRing)
+                    crt.hit(0.35 + Math.random() * 0.3);
                 // las entradas que son de la PANTALLA (no de cada palabra)
                 // arrancan acá, con la línea ya puesta
                 if (crt.entryStyle === "interlace")
@@ -784,8 +800,7 @@ PanelWindow {
                 ? ((crt.ctl.crtLine.t1 || 0) - (crt.ctl.crtLine.t0 || 0)) * 1000 / crt.ctl.beatMs
                 : 0;
             crt.burnStride = (beats > 0 && crt.myWords.length > beats) ? 2 : 1;
-            if (sh.chan)
-                chanAnim.restart();
+
         }
     }
     NumberAnimation {
@@ -795,6 +810,17 @@ PanelWindow {
         to: 0
         duration: 900
         easing.type: Easing.InQuad
+    }
+
+    // El cambio de canal lo dispara el ROOT (T4.3): la pared entera cambia de
+    // canal junta — que es lo que hace un televisor — y el portero de cuántas
+    // veces por minuto vive en un solo lugar. Hasta la tanda 3 colgaba del
+    // serial de la línea, y entonces cada pantalla decidía por su cuenta con
+    // un dato (`shot.chan`) que ya venía sorteado.
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible
+        function onCrtChanGenChanged() { chanAnim.restart(); }
     }
 
     // interferencia espontánea: la programa el root, y sólo para una pantalla

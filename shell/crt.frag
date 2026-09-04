@@ -5,9 +5,11 @@
 // cathode ray tube: barrel glass, phosphor bloom, aperture grille, scanlines
 // with a rolling bar, RGB misalignment, torn signal bands and static.
 //
-// Build:  qsb --glsl 100es,120,150 --hlsl 50 --msl 12 -o crt.frag.qsb crt.frag
-// (there is a prebuilt crt.frag.qsb next to this file; rebuilding is only
-// needed if you edit the shader)
+// Build:  /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' -o crt.frag.qsb crt.frag
+// qsb is not on PATH; those are the three targets the committed crt.frag.qsb
+// carries, next to the SPIR-V qsb always emits. Rebuilding is only needed if
+// you edit this file — and it IS needed: a uniform that is not in the .qsb
+// leaves the ShaderEffect property bound to nothing, without a warning.
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -33,6 +35,8 @@ layout(std140, binding = 0) uniform buf {
     float hopX0;      // left edge of the band, in uv.x
     float hopX1;      // right edge
     float hopGain;    // 0 = no band on this screen
+    // the interlaced entrance: the line shows up on half the scanlines first
+    float interlacePhase;  // 0 = off, 1 = even rows only, 2 = odd rows only
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
 };
@@ -127,6 +131,16 @@ void main() {
     if (tri > 1.0 && tri <= 2.0) mask = vec3(0.86, 1.16, 0.86);
     else if (tri > 2.0) mask = vec3(0.86, 0.86, 1.16);
     col *= mix(vec3(1.0), mask, 0.55);
+
+    // The interlaced entrance (T3.1): a tube fed a half frame draws every
+    // other scanline and leaves the rest dark, and the picture only settles
+    // once both fields land. It rides on top of the grille, over the whole
+    // image and not just the glyph: what is half-drawn is the SIGNAL.
+    if (interlacePhase > 0.5) {
+        float odd = mod(floor(fc.y), 2.0);
+        float keep = interlacePhase < 1.5 ? 1.0 - odd : odd;
+        col *= mix(0.10, 1.0, keep);
+    }
 
     // The corridor of a jump (T2.3). It rides the comb instead of being drawn
     // on top: what crosses the screen is the signal passing through on its way

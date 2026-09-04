@@ -546,6 +546,93 @@ PanelWindow {
         ScriptAction { script: crt.hit(1.0) }
     }
 
+    // -------------------------------------------- entradas del verso (T3.1)
+    // Tres formas nuevas de que la línea aparezca, elegidas por el director del
+    // root (ctl.crtEntryStyles). Las animaciones se declaran ACÁ ARRIBA, antes
+    // del handler que las dispara: no por gusto — el `id` de una animación
+    // declarada más abajo no resuelve desde el cuerpo de un handler.
+    //
+    // interlace: el tubo recibe medio cuadro. Aparecen las scanlines pares,
+    // un cuadro después las impares, parpadea dos veces entre los dos campos
+    // y recién ahí se asienta. Es un uniform del shader (interlacePhase), no
+    // dos capas de texto: la mitad que falta es de la SEÑAL, no de la letra.
+    property real interlacePhase: 0
+    SequentialAnimation {
+        id: interlaceAnim
+        PropertyAction { target: crt; property: "interlacePhase"; value: 1 }
+        PauseAnimation { duration: 40 }
+        PropertyAction { target: crt; property: "interlacePhase"; value: 2 }
+        PauseAnimation { duration: 40 }
+        PropertyAction { target: crt; property: "interlacePhase"; value: 1 }
+        PauseAnimation { duration: 40 }
+        PropertyAction { target: crt; property: "interlacePhase"; value: 2 }
+        PauseAnimation { duration: 40 }
+        PropertyAction { target: crt; property: "interlacePhase"; value: 0 }
+    }
+
+    // tubeon: el apagado de tubo al revés — punto, raya, imagen, 220 ms. El
+    // punto y la raya son el haz (beam, más abajo); la imagen es el texto
+    // abriéndose en vertical desde la raya. Es la entrada obligatoria cuando la
+    // línea cae donde estaba el aro: el aro colapsa en un punto, y ese punto es
+    // éste abriéndose.
+    property real tubeOnY: 1
+    property real beamW: 0
+    property real beamFade: 0
+    SequentialAnimation {
+        id: tubeOnAnim
+        ScriptAction { script: crt.hit(0.35) }
+        PropertyAction { target: crt; property: "tubeOnY"; value: 0.02 }
+        PropertyAction { target: crt; property: "beamFade"; value: 1 }
+        // el punto se estira hasta ser una raya de lado a lado
+        NumberAnimation {
+            target: crt; property: "beamW"; from: 0.015; to: 1
+            duration: 90; easing.type: Easing.OutQuad
+        }
+        // y la raya se abre en la imagen mientras se apaga
+        ParallelAnimation {
+            NumberAnimation {
+                target: crt; property: "tubeOnY"; to: 1
+                duration: 130; easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: crt; property: "beamFade"; to: 0
+                duration: 130; easing.type: Easing.InQuad
+            }
+        }
+    }
+
+    // overburn: cada palabra entra sobrequemada (blanco puro y el fósforo por
+    // tres) y baja al color de la paleta en 200 ms. El fogonazo del fósforo es
+    // uno solo por palabra y va acá, no en el delegate: el bloom es del tubo.
+    property real burnGlow: 0
+    NumberAnimation {
+        id: burnAnim
+        target: crt
+        property: "burnGlow"
+        from: 1
+        to: 0
+        duration: 200
+        easing.type: Easing.OutQuad
+    }
+    function burnFlash() {
+        burnAnim.restart();
+    }
+    // Sin `words` (LRC "enhanced") el overburn no tiene reloj propio de palabra:
+    // va UNA POR TIEMPO, contando los golpes del compás. `burnStep` arranca en
+    // 0 y no en 1 a propósito: onLandedChanged no se dispara con el valor
+    // inicial del delegate, así que la palabra 0 naciendo ya encendida nunca se
+    // quemaría — el primer beat es el que la trae.
+    property int burnStep: 0
+    property int burnStride: 1
+    readonly property bool burnMode: entryStyle === "overburn" && !lineWords
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible && crt.burnMode
+        function onBeatTickChanged() {
+            crt.burnStep += crt.burnStride;
+        }
+    }
+
     // cambio de línea: patada de señal, y el verso viejo queda quemado atrás
     property string ghostText: ""
     property real ghostFade: 0
@@ -565,8 +652,22 @@ PanelWindow {
                 && sh.chunks[0].screen === crt.idx);
             if (mine) {
                 crt.hit(0.35 + Math.random() * 0.3);
+                // las entradas que son de la PANTALLA (no de cada palabra)
+                // arrancan acá, con la línea ya puesta
+                if (crt.entryStyle === "interlace")
+                    interlaceAnim.restart();
+                else if (crt.entryStyle === "tubeon")
+                    tubeOnAnim.restart();
             }
             crt.reveal = 0;
+            // el reloj del overburn sin `words`: una palabra por tiempo, de a
+            // dos si la línea no entra en los tiempos que quedan hasta la que
+            // viene (si no, la última palabra suena cuando ya cambió el verso)
+            crt.burnStep = 0;
+            const beats = crt.ctl.beatMs > 0
+                ? ((crt.ctl.crtLine.t1 || 0) - (crt.ctl.crtLine.t0 || 0)) * 1000 / crt.ctl.beatMs
+                : 0;
+            crt.burnStride = (beats > 0 && crt.myWords.length > beats) ? 2 : 1;
             if (sh.chan)
                 chanAnim.restart();
         }
@@ -692,8 +793,12 @@ PanelWindow {
                 * crt.hopChroma
             // el fósforo late con la música; en la pantalla apagada se va a cero
             // y el shader se saltea las ocho muestras del bloom
+            // el overburn multiplica el fósforo por tres mientras la palabra
+            // está blanca: es lo que hace que se lea como quemada y no como
+            // una palabra clara
             property real bloom: crt.showsText
-                ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt) : 0
+                ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt)
+                    * (1 + 2 * crt.burnGlow) : 0
             // el cambio de canal se lleva puesta la perilla: la estática de la
             // transición no es "ruido de fondo", es la pantalla sin señal
             property real noiseAmt: crt.chanNoise > 0 ? 1
@@ -722,6 +827,8 @@ PanelWindow {
             property real hopX0: crt.hopCentre - 0.11
             property real hopX1: crt.hopCentre + 0.11
             property real hopGain: crt.hopBand ? 1 : 0
+            // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
+            property real interlacePhase: crt.interlacePhase
             property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
             property variant tint: crt.pal.tint
             fragmentShader: Qt.resolvedUrl("crt.frag.qsb")
@@ -825,7 +932,16 @@ PanelWindow {
             Item {
                 id: lyric
                 anchors { fill: parent; margins: crt.pad }
-                transform: Translate { x: crt.hopShift }
+                transform: [
+                    // el tubo prendiéndose: la imagen se abre en vertical desde
+                    // la raya del haz (tubeon). El resto del tiempo vale 1.
+                    Scale {
+                        origin.x: lyric.width / 2
+                        origin.y: lyric.height / 2
+                        yScale: crt.tubeOnY
+                    },
+                    Translate { x: crt.hopShift }
+                ]
                 visible: crt.showsText && !crt.iownMode
                 // el pedazo que ya pasó queda prendido pero bajo, como fósforo
                 // que todavía no se apagó: así se lee la frase entera de un vistazo
@@ -897,8 +1013,15 @@ PanelWindow {
                             required property string modelData
                             width: words.width
                             height: label.implicitHeight * 0.88
-                            // aparece recién cuando le toca sonar
-                            readonly property bool landed: crt.reveal >= crt.dueFrac(index)
+                            // aparece recién cuando le toca sonar. Con
+                            // `overburn` sin tiempos por palabra el reloj es el
+                            // compás (una por tiempo); el `reveal >= 1` de
+                            // atrás es el paracaídas: si el compás se pierde a
+                            // mitad de línea, las que faltan aparecen igual en
+                            // vez de no llegar nunca.
+                            readonly property bool landed: crt.burnMode
+                                ? (index < crt.burnStep || crt.reveal >= 1)
+                                : crt.reveal >= crt.dueFrac(index)
                             opacity: landed ? 1 : 0
 
                             // T3.5, estilo "type": la palabra no aparece, se
@@ -973,7 +1096,11 @@ PanelWindow {
                             // palabra — con el destello a full se lee como que la
                             // letra titila todo el tiempo, y no es lo mismo que el
                             // latido del tubo.
-                            readonly property color entryTint: crt.ctl.crtWordFlash <= 0.01
+                            readonly property color entryTint: crt.entryStyle === "overburn"
+                                // sobrequemada: blanco puro, pase lo que pase
+                                // con `word_flash` — es lo que define la entrada
+                                ? "#ffffff"
+                                : crt.ctl.crtWordFlash <= 0.01
                                 ? crt.pal.ink
                                 // proporción directa: el piso de 0.25 que tenía
                                 // hacía que hasta en el mínimo la palabra entrara
@@ -981,6 +1108,10 @@ PanelWindow {
                                 : Qt.tint(crt.pal.ink, Qt.rgba(1, 1, 1, crt.ctl.crtWordFlash))
                             SequentialAnimation {
                                 id: entry
+                                ScriptAction {
+                                    script: if (crt.entryStyle === "overburn")
+                                        crt.burnFlash();
+                                }
                                 PropertyAction { target: label; property: "color"; value: slot.entryTint }
                                 // TODO el sacudón de entrada va por la misma
                                 // perilla, no sólo el color: los fantasmas de
@@ -995,7 +1126,9 @@ PanelWindow {
                                 PropertyAction { target: tr; property: "y"; value: crt.entryStyle === "roll" ? -measure.fontInfo.pixelSize * 0.55 * crt.ctl.crtWordFlash : 0 }
                                 PauseAnimation { duration: 28 }
                                 ParallelAnimation {
-                                    ColorAnimation { target: label; property: "color"; to: crt.pal.ink; duration: 70; easing.type: Easing.OutQuad }
+                                    // el blanco del overburn baja despacio (200 ms):
+                                    // es una quemadura del fósforo, no un destello
+                                    ColorAnimation { target: label; property: "color"; to: crt.pal.ink; duration: crt.entryStyle === "overburn" ? 200 : 70; easing.type: Easing.OutQuad }
                                     NumberAnimation { target: sc; property: "xScale"; to: 1; duration: crt.entryStyle === "slam" ? 150 : 90; easing.type: Easing.OutQuad }
                                     NumberAnimation { target: sc; property: "yScale"; to: 1; duration: crt.entryStyle === "slam" ? 150 : 90; easing.type: Easing.OutBack }
                                     NumberAnimation { target: tr; property: "y"; to: 0; duration: 140; easing.type: Easing.OutCubic }
@@ -1016,6 +1149,19 @@ PanelWindow {
                         }
                     }
                 }
+            }
+
+            // ---- el haz del tubo prendiéndose (entrada `tubeon`)
+            // Punto y raya: lo único que hay antes de que aparezca la imagen.
+            // Va encima del texto porque es el haz, no el texto.
+            Rectangle {
+                anchors.centerIn: parent
+                visible: crt.beamFade > 0.01
+                width: Math.max(parent.width * crt.beamW, 3)
+                height: 3
+                radius: 1.5
+                color: crt.pal.hot
+                opacity: crt.beamFade
             }
 
             // ---- pantalla sin letra: la animación que la mantiene viva

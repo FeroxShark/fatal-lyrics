@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
-from cartelitos import audio, config, ipc, lyrics, offsets, system, tray, util  # noqa: E402
+from cartelitos import audio, config, ipc, lyrics, offsets, setup, system, tray, util  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -2312,6 +2312,52 @@ class TestKnobsAreReachable(unittest.TestCase):
         for key in c.DEFAULTS["system"]:
             self.assertIn(key, config._CONFIG_COMMENTS["system"],
                           f"system.{key} no tiene comentario en _CONFIG_COMMENTS")
+
+    # Las perillas de [crt] que NO están en el menú de `fatal config`, a
+    # propósito. Cualquier otra que falte es la falla que este test busca: la
+    # perilla existe, viaja al overlay, y nadie que no lea el TOML se entera.
+    MENU_EXEMPT = {
+        "infect_lead",       # décimas de segundo de adelanto del color: se toca a mano
+        "alarm_threshold",   # cada cuánto sale el rojo: idem
+        "font",              # texto libre, no hay editor de fuentes en el menú
+        "noise", "chroma", "roll", "vignette",   # el panel de `fatal tune` los mueve en vivo
+    }
+
+    def test_every_crt_knob_can_be_reached_by_hand(self):
+        # el cuarto lugar de una perilla nueva. Sin esto la perilla existe,
+        # llega al overlay y hace lo suyo, pero no aparece en `fatal config`:
+        # así se perdió cascade_style durante tres fases
+        with open(os.path.join(self.SHELL, "tune.qml"), encoding="utf-8") as f:
+            sliders = set(re.findall(r'\{\s*key:\s*"([a-z_]+)"', f.read()))
+        menu = {key for key, section, _, _ in setup.SETTINGS if section == "crt"}
+        for key in c.DEFAULTS["crt"]:
+            if key in self.MENU_EXEMPT:
+                continue
+            self.assertTrue(key in menu or key in sliders,
+                            f"crt.{key} no está ni en SETTINGS ni en tune.qml: "
+                            "nadie la va a encontrar")
+
+    def test_the_exempt_list_has_no_ghosts(self):
+        # una perilla que se borra tiene que salir también de la lista de
+        # excepciones, o la excepción tapa la próxima que se olvide
+        for key in self.MENU_EXEMPT:
+            self.assertIn(key, c.DEFAULTS["crt"], f"{key} ya no es una perilla de [crt]")
+
+    def test_the_overlay_reads_exactly_the_keys_the_daemon_sends(self):
+        # `_configEventMap` en shell.qml es el otro extremo de CONFIG_EVENT_MAP:
+        # una clave de más ahí es una property que nunca se escribe, una de
+        # menos es una perilla que viaja y el overlay tira a la basura. Se
+        # comparan los dos conjuntos, en las dos direcciones.
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        block = re.search(r"_configEventMap:\s*\(\{(.*?)\}\)", qml, re.S)
+        self.assertIsNotNone(block, "no se encontró _configEventMap en shell.qml")
+        # el bloque son pares `clave: "propiedad"`, con comentarios en el medio
+        body = re.sub(r"//[^\n]*", "", block.group(1))
+        overlay = set(re.findall(r"([a-z_]+)\s*:\s*\"", body))
+        sent = {ev for ev, _, _ in ipc.CONFIG_EVENT_MAP}
+        self.assertEqual(overlay, sent,
+                          "shell.qml y CONFIG_EVENT_MAP no leen las mismas perillas")
 
     def test_every_slider_is_a_numeric_crt_key(self):
         # el panel escribe `clave=valor` y parse_tune descarta lo que no es un

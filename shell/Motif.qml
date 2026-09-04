@@ -18,7 +18,7 @@ Item {
     id: motif
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
-    // | static | none
+    // | static | textsea | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -63,6 +63,10 @@ Item {
     // para formar algo que signifique alguna cosa.
     property int lineNo: -1
     property string nextWord: ""
+    // la letra entera del tema, y si tiene tiempos. La marea de texto la hace
+    // correr; sin tiempos corre igual pero sin resaltar ninguna línea.
+    property var lines: []
+    property bool linesSynced: true
     property string fontFamily: "monospace"
     // ¿el tema está en un drop? Llega como booleano y NO como umbral sobre
     // `energy`: la energía viene multiplicada por el aviso del salto, así que
@@ -616,6 +620,29 @@ Item {
             lineNo: motif.lineNo
             nextWord: motif.nextWord
             fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+
+    // ------------------------------------------------------- marea de texto
+    // La letra entera subiendo como los créditos del final, con el verso que
+    // suena encendido al pasar.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "textsea"
+        visible: active
+
+        sourceComponent: TextSea {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            lines: motif.lines
+            synced: motif.linesSynced
+            lineNo: motif.lineNo
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            fontFamily: motif.fontFamily
+            seed: motif.seed
             running: motif.spinning
         }
     }

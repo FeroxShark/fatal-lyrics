@@ -1083,17 +1083,32 @@ ShellRoot {
     }
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
-                                       "rain", "ocean", "pond", "dunes", "static"]
+                                       "rain", "ocean", "pond", "dunes", "static",
+                                       "textsea"]
 
-    // los dos de agua se pueden apagar juntos (`water = false`) sin tocar el
-    // resto de las animaciones
+    // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
+    // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca
+    // muestren el mismo dibujo repartiendo UNA lista entre todas, y una lista
+    // distinta por pantalla rompe justo eso.
+    function motifAllowed(kind) {
+        if (kind === "textsea")
+            return crtLines.length > 0;
+        return true;
+    }
+
+    // Los dos de agua se pueden apagar juntos (`water = false`) sin tocar el
+    // resto de las animaciones, y de paso se caen los que ahora mismo no tienen
+    // con qué dibujarse.
     function motifPool(list) {
-        if (crtWater)
-            return list;
         const out = [];
-        for (let k = 0; k < list.length; k++)
-            if (list[k] !== "ocean" && list[k] !== "pond")
-                out.push(list[k]);
+        for (let k = 0; k < list.length; k++) {
+            const kind = list[k];
+            if (!crtWater && (kind === "ocean" || kind === "pond"))
+                continue;
+            if (!motifAllowed(kind))
+                continue;
+            out.push(kind);
+        }
         return out.length > 0 ? out : ["eye"];
     }
 
@@ -1109,7 +1124,8 @@ ShellRoot {
             for (let k = 0; k < motifWords.length; k++)
                 if (motifWords[k].re.test(text)) {
                     const kind = motifWords[k].kind;
-                    if (crtWater || (kind !== "ocean" && kind !== "pond"))
+                    if ((crtWater || (kind !== "ocean" && kind !== "pond"))
+                            && motifAllowed(kind))
                         return kind;
                 }
         }

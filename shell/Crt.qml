@@ -1220,6 +1220,8 @@ PanelWindow {
                 bpmLive: crt.ctl.bpmLive
                 lineNo: crt.ctl.crtLineNo
                 nextWord: crt.ctl.crtNextWord
+                lines: crt.ctl.crtLines
+                linesSynced: crt.ctl.crtLinesSynced
                 fontFamily: crt.fontFamily
                 // el drop viaja como booleano: los motivos no pueden sacarlo de
                 // `energy`, que acá arriba ya viene multiplicada por el aviso

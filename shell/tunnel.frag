@@ -14,6 +14,10 @@
 //   · nothing here depends on the tube moving. With the screen still, `t` stops
 //     and the shader still draws a complete frame of rings. Still, never empty.
 //
+// Framing: measured at 9:16, 16:9 and 21:9, the mouth never gets closer than
+// 0.24 of the frame to an edge, and `far` is 1 at every corner — so the ring
+// pattern reaches the corners and no zoom of the camera can uncover a hole.
+//
 // The music: `level` is how fast the rings arrive (up in QML), `twist` wrings
 // them around the axis — and the wring grows with depth, so the far end of the
 // tunnel turns more than the mouth — and the centre drifts on its own slow
@@ -42,10 +46,17 @@ void main() {
     vec2 uv = qt_TexCoord0;
     float ar = res.x / max(res.y, 1.0);
 
-    // the mouth wanders: three periods that do not divide each other, so it
-    // never comes back to where it was
-    vec2 centre = vec2(0.08 * sin(ct * 0.13 + seed * 6.283),
-                       0.06 * cos(ct * 0.091 + seed * 4.11));
+    // The mouth wanders on two periods that do not divide each other, so it
+    // never comes back to where it was — but the drift is measured as a
+    // fraction of the FRAME and clamped to 15% of the half-frame on each
+    // axis. A fixed number here is not a fixed fraction: this space is
+    // stretched by the aspect, so on a portrait screen (`ar` around 0.56)
+    // half the width is 0.28 and an 0.08 drift was almost a third of it —
+    // the mouth walked out of the picture.
+    vec2 halfFrame = vec2(0.5 * ar, 0.5);
+    vec2 drift = vec2(sin(ct * 0.13 + seed * 6.283),
+                      cos(ct * 0.091 + seed * 4.11));
+    vec2 centre = clamp(drift, -1.0, 1.0) * halfFrame * 0.15;
     vec2 p = vec2((uv.x - 0.5) * ar, uv.y - 0.5) - centre;
 
     // 1/r is the depth. Never divide by nothing: at the exact centre that is a

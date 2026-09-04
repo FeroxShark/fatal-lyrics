@@ -130,6 +130,13 @@ _CONFIG_COMMENTS = {
                       "focus, while the other quiet screens step back. The tube\n"
                       "reads as looking at where the phrase is about to go\n"
                       "instead of following it. Needs the director on",
+        "ring": "on the screen where the NEXT line is going to land, a ring\n"
+                "counts it down and gets eaten away — a step per beat when the\n"
+                "tempo is known, and breathing with the volume in between. It\n"
+                "opens into a spiral over the last seconds and collapses into a\n"
+                "dot exactly where the line then appears. Only on a screen with\n"
+                "nothing of the current line on it: over the text it would be an\n"
+                "ornament, not a warning",
         "motifs": "animations on the quiet screens (an eye, a scope, a radar,\n"
                   "falling data, hyperspace, a test card, the sea)",
         "water": "the two water animations: a sea of loose points seen in\n"
@@ -254,7 +261,7 @@ DEFAULTS = {
         "split": "mixed", "director": True, "focus": "roam", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.25,
-        "iown": True, "foreshadow": True, "motifs": True,
+        "iown": True, "foreshadow": True, "ring": True, "motifs": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,

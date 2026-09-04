@@ -156,6 +156,24 @@ PanelWindow {
         ? ctl.crtFace(ctl.crtShot.focus, false).ink : pal.ink
     Behavior on motifColour { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
 
+    // ------------------------------------------------- el aro que cuenta (T2.2)
+    // Va en la pantalla DONDE VA A CAER la próxima línea, y sólo si esa
+    // pantalla no tiene nada de la que suena: encima del texto sería un
+    // adorno, no un aviso. `shot.past` cuenta como tener algo — el pedazo
+    // quemado sigue siendo esta línea.
+    readonly property bool ringFree: {
+        const sh = ctl.crtShot;
+        for (let k = 0; k < sh.chunks.length; k++)
+            if (sh.chunks[k].screen === idx)
+                return false;
+        return true;
+    }
+    readonly property bool ringShows: ctl.crtRing && !noLyric && !allMode && !iownMode
+        && ctl.crtNextFocus === idx && ctl.crtNextFocus !== ctl.crtShot.focus
+        && !showsText && ringFree
+        // con la línea siguiente encima no hay nada que contar
+        && ctl.crtNextIn > 1500
+
     // T3.8 (idea 24): tres minutos sin nada que mostrar y sin música, y el tubo
     // se duerme — cinco cuadros por segundo y la estática apagada. Se despierta
     // solo, en cuanto vuelve a haber señal.
@@ -911,6 +929,26 @@ PanelWindow {
                 kick: crt.surgeGen
                 clock: crt.tubeTime
                 spinning: crt.visible && (crt.idle || crt.instrumental)
+            }
+
+            // ---- el aro de la línea que viene, encima del motif
+            Ring {
+                anchors.fill: parent
+                visible: crt.ringShows
+                colour: crt.pal.ink
+                hot: crt.pal.hot
+                level: crt.pump
+                dueAt: crt.ctl.crtNextAt
+                total: crt.ctl.crtNextIn
+                // sin compás confiable baja con el reloj: el paso se pierde,
+                // la respiración no
+                stepped: crt.ctl.bpmLive
+                beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
+                beat: crt.ctl.beatTick
+                cue: crt.ctl.cueGen
+                // el aro entrega la línea: el colapso pasa por el mismo portero
+                // que todo lo demás, no por una rotura inventada acá
+                onCollapsed: crt.hit(0.5)
             }
 
             // ---- instrumental: no hay letra pero SÍ hay música. La pantalla

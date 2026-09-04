@@ -105,6 +105,20 @@ void main() {
     // with the shape instead of a round blot being scaled afterwards
     q *= vec2(famSx, famSy);
 
+    // SAFE AREA (T4.1). The plate has to END inside the frame. The falloff
+    // below dies at r = 0.62, and r squashes y by 1.12, so a round family
+    // reached 0.554 of a HALF screen in y — more than half, i.e. the blot was
+    // always cut top and bottom, and on the portrait screen the wide family
+    // was cut at the sides too. Normalising the domain here (and not scaling
+    // the picture afterwards) keeps the ink grain part of the shape.
+    //
+    // 0.46 is half the frame minus 4 % of air. The bound is computed with the
+    // family already applied, so an elongated or two-lobed plate fits too.
+    float boundX = 0.62;
+    float boundY = 0.62 / 1.12 + famLobe + 0.20 * famSpat;
+    q *= max(1.0, max(boundX / max(0.46 * ar * famSx, 1e-3),
+                      boundY / max(0.46 * famSy, 1e-3)));
+
     vec2 off = vec2(seed * 91.0, seed * 47.0);
     float f1 = fbm(q * 3.4 + off + vec2(0.0, t * 0.06));
     float f2 = fbm(q * 1.3 - off * 0.7 - vec2(t * 0.035, 0.0));

@@ -32,6 +32,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   perilla `hop` (`corridor|interference|both|off`) manda una franja de scanlines cruzando cada
   pantalla del medio y la glitchea al pasar. El reloj del viaje (180 ms) lo publica `shell.qml`
   UNA vez (`crtHopStart`) y cada monitor lo lee: es una sola franja atravesando la pared.
+- **Una pantalla sin letra no dibuja cualquier cosa: dibuja algo del tema.** Los motivos de la
+  tanda 2 leen lo que el tubo ya sabe — `dunes` es el único paisaje (el paisaje está quieto y lo
+  que se mueve es la cámara, re-sembrada en cada aparición), `static` forma una vez por compás la
+  primera palabra de la línea que VIENE, `textsea` hace correr la letra entera con el verso que
+  suena encendido, y `eyes` es una grilla de ojos mirando a la pantalla que tiene la frase (y
+  girando hacia el destino durante el aviso del salto).
 - **Cómo entra la línea lo decide la música, no un sorteo parejo.** `crtEntriesFor` reparte UN
   estilo de entrada por pantalla al consumir la línea, pesado por el nivel de los últimos ~2 s y
   por la parte del tema (tabla `crtEntryTable` en `shell.qml`, con el comentario de cómo tunearla).
@@ -56,7 +62,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sync +|-|sing on|off`.
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
-- `shell/Motif.qml` — seis animaciones para las pantallas sin letra.
+- `shell/Motif.qml` — doce animaciones para las pantallas sin letra: reparte propiedades y elige
+  cuál dibuja. Las que tienen física propia viven al lado, un archivo cada una —
+  `Ocean.qml`, `Pond.qml`, `Dunes.qml`, `Static.qml` (con su `.frag` + `.qsb`), más
+  `TextSea.qml`, `Eyes.qml` y `Eye.qml` (el dibujo del ojo, que usan el motivo `eye` y la
+  grilla `eyes`).
+- `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
+  que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
 - `shell/Ring.qml` — el aro que se consume contando la línea que viene.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
@@ -65,7 +77,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `config.py` porque la escribe el propio daemon, no Ferox a mano.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 433 tests, stdlib puro.
+- `tests/` — 436 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -250,6 +262,29 @@ no-op → boot roto. No reintroducir un segundo.)
 - **En el QML la perilla `section_zoom` se llama `crtSectionZoom`** y multiplica al `camZoom` y al
   `cueZoom` en el mismo `Scale`: es otro plano de la misma cámara, no una cámara nueva. Achicar por
   debajo de 1 no deja agujeros negros porque el fondo de `stage` está FUERA del item `camera`.
+- **Un motivo no puede sacar el "drop" de `energy`.** Lo que le llega a `Motif` ya viene
+  multiplicado por el aviso del salto (×1.6 en la pantalla destino al final de CADA verso): un
+  umbral ahí levanta la arena de `dunes` en cualquier estrofa. El drop viaja como booleano
+  propio (`crt.ctl.audSection === "drop"`).
+- **El filtro `motifAllowed` NO mira qué pantalla pregunta.** `crtMotifFor` garantiza que dos
+  pantallas apagadas nunca muestren el mismo dibujo repartiendo UNA lista entre todas; una lista
+  distinta por pantalla rompe justo eso. Por eso `eyes` se descarta cuando no hay letra o hay una
+  sola pantalla, y no cuando "esta pantalla es la enfocada" (la enfocada muestra texto y no dibuja
+  ningún motivo).
+- **El número de verso no sale del `serial`.** `crtSerial` es un contador de la sesión: después de
+  un rebobinado, o entrando a mitad de tema, no dice en qué línea va. `crtLineNo` lo busca por
+  `t0` contra la letra entera (tolerancia 0.05 s: el daemon manda los tiempos redondeados a dos
+  decimales), y devuelve -1 si la letra no está sincronizada, porque ahí todas las líneas
+  arrancan en cero y la primera matchearía siempre.
+- **La letra sin sincronizar ahora TAMBIÉN viaja al overlay** (`lyrics_plain`, con
+  `synced: false`). Sin el campo `synced` no se distingue de una letra sincronizada que arranca en
+  cero. Es lo que hace correr `textsea` en un tema sin tiempos, sin resaltar nada.
+- **La máscara de `static` se esconde con `hideSource`, nunca con `visible: false`** — adentro de
+  un item invisible no se dibuja nada y la captura sale vacía (la misma trampa que el burn-in de
+  los carteles). Y lo que se va a formar se congela al arrancar la convergencia: `crtNext` cambia
+  cuando cae la línea siguiente y la palabra mutaría a mitad de camino.
+- **`property real window` en un componente QML es un nombre pisado** (`Window.window`): en
+  `Static.qml` la ventana legible se llama `formMs`.
 - **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
   test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
 
@@ -279,11 +314,12 @@ no-op → boot roto. No reintroducir un segundo.)
 - README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
   (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
   en qué orden se prueban.
-- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0, 1, 2 y 3** (perillas `foreshadow`,
-  `ring`, `hop` y `section_zoom`, más las entradas `interlace` / `tubeon` / `overburn` y el
-  director por energía). Faltan las fases 4 y 5: ocho motifs nuevos (dunes, static, textsea, eyes,
-  ekg, rorschach, plasma, tunnel) más dos mejorados, y el cierre de docs. Lo que hay que mirar a
-  ojo está en `docs/plans/CHECKS-VISUALES.md`.
+- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0, 1, 2, 3 y la primera mitad de la
+  4** (perillas `foreshadow`, `ring`, `hop` y `section_zoom`, las entradas `interlace` /
+  `tubeon` / `overburn`, el director por energía, y los motifs `dunes`, `static`, `textsea` y
+  `eyes`). De la FASE 4 faltan `ekg`, `rorschach`, `plasma` y `tunnel` más las dos mejoras
+  (`scope` a Lissajous, `stars` a hiperespacio); después va la FASE 5 (cierre de docs). Lo que
+  hay que mirar a ojo está en `docs/plans/CHECKS-VISUALES.md`.
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
   del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral

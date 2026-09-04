@@ -144,8 +144,11 @@ _CONFIG_COMMENTS = {
                "band goes over it, `both` does the two, `off` nothing.\n"
                "Screens side by side never do it \u2014 there is nothing in\n"
                "between to cross",
-        "motifs": "animations on the quiet screens (an eye, a scope, a radar,\n"
-                  "falling data, hyperspace, a test card, the sea)",
+        "motifs": "animations on the quiet screens (an eye, a grid of eyes\n"
+                  "watching the screen with the lyric, a scope, a radar,\n"
+                  "falling data, hyperspace, a test card, the sea, a pond,\n"
+                  "dunes, snow that almost forms a shape, and the whole lyric\n"
+                  "running by)",
         "water": "the two water animations: a sea of loose points seen in\n"
                  "perspective, and a dish of water that stands still and\n"
                  "SHIVERS at the frequency of what is playing. They take their\n"

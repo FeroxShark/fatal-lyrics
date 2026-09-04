@@ -782,6 +782,16 @@ ShellRoot {
     readonly property int crtNextFocus: crtPendingShot ? crtPendingShot.focus : -1
     // el salto de esta línea: de qué pantalla viene la frase y a cuál fue
     property var crtHop: ({ from: -1, to: -1, dir: 0 })
+    // T2.3: el reloj del salto. Lo publica el root — el Date.now() en que
+    // arrancó — y cada monitor lo LEE; ninguno se lo anota solo. Con un reloj
+    // por pantalla la franja entraría en la segunda antes de salir de la
+    // primera, que es justo lo que rompe la ilusión de que es una sola.
+    // 0 = no hay salto en curso (también es la forma de cancelarlo).
+    property double crtHopStart: 0
+    readonly property int crtHopMs: 180
+    // a qué altura cruza la franja, sorteada una vez por salto: es UNA franja
+    // atravesando la pared, no una por pantalla
+    property real crtHopY: 0.5
 
     function crtPredict() {
         crtPendingShot = null;
@@ -817,6 +827,28 @@ ShellRoot {
         crtNextAt = 0;
         crtNextIn = -1;
         crtHop = { from: -1, to: -1, dir: 0 };
+        // un salto a mitad de camino con otras pantallas (o con otra config)
+        // es una franja cruzando una pared que ya no es ésa: se corta
+        crtHopStart = 0;
+    }
+
+    // Se ve el viaje sólo cuando hay algo que cruzar: entre pantallas pegadas
+    // la frase ya aparece al lado y no hay nada en el medio. El IOWN no
+    // dispara (cruza la pared él solo) ni `all` (la línea está en todas).
+    function crtHopFire(shot) {
+        crtHopStart = 0;
+        if (crtHopMode !== "corridor" && crtHopMode !== "interference"
+            && crtHopMode !== "both")
+            return;
+        if (crtHop.from < 0 || Math.abs(crtHop.to - crtHop.from) < 2)
+            return;
+        if (shot.mode === "iown" || shot.mode === "all")
+            return;
+        crtHopY = 0.25 + Math.random() * 0.5;
+        crtHopStart = Date.now();
+        console.log("crt: hop sweep " + crtHop.from + "->" + crtHop.to
+            + " mids=" + (Math.abs(crtHop.to - crtHop.from) - 1)
+            + " y=" + crtHopY.toFixed(2));
     }
 
     // Dónde cae la palabra del IOWN en la pantalla i, medido sobre la PARED y
@@ -1270,6 +1302,9 @@ ShellRoot {
         crtHop = (prevFocus >= 0 && prevFocus !== shot.focus)
             ? { from: prevFocus, to: shot.focus, dir: shot.focus > prevFocus ? 1 : -1 }
             : { from: -1, to: -1, dir: 0 };
+        // el salto arranca ACÁ, antes del serial: cuando Crt.qml reciba la
+        // línea nueva el reloj de la franja ya tiene que estar corriendo
+        crtHopFire(shot);
         // último: Crt.qml cuelga de esta señal, y para cuando la reciba tiene
         // que ver la línea, el reparto y el salto ya puestos
         crtSerial++;

@@ -284,6 +284,26 @@ no-op → boot roto. No reintroducir un segundo.)
   contra la pantalla: `Motif.span` divide por `overscan`, y `Static`/`TextSea` reciben la property
   para que la palabra y la marea de texto no salgan un 22 % más grandes que el resto de la pared.
   Un motivo nuevo se prueba con `camera` al tope y la sección en `quiet`.
+- **El motivo lo elige UN solo `Loader`, no un `visible` por dibujo.** Con dieciséis
+  interruptores independientes alcanza que uno quede prendido para que se vean dos motivos
+  encima (así apareció el agua sin recortar sobre otra animación). `sourceComponent` es una
+  property sola: dos no pueden estar vivos ni por un cuadro. No reintroducir un `visible` ni un
+  `active` por motivo, y no sacarle el `clip` al Loader.
+- **Un `Behavior` sobre una property que se recalcula sola no es una transición: es un filtro.**
+  El encuadre era `camZoom` con un `Behavior` de 520 ms, y `pump` lo reescribe cada 70 ms: cada
+  muestra de audio reiniciaba el tween, así que al recibir la línea la pantalla tardaba ~300 ms
+  en llegar a su plano y la frase se veía nacer chica. Ahora son dos sumandos, `camFocus`
+  (instantáneo, la línea nace con su tamaño) y `camBreath` (`pump` ya viene suavizado a 90 ms).
+  El plano de la sección va por un `NumberAnimation` propio y no por `Behavior`, y se rearma
+  cuando se va la estática del cambio de canal: si no, los 350 ms corren tapados y lo que
+  aparece es el estado final — el salto seco.
+- **Una deriva fija en el espacio con aspecto NO es una fracción fija del cuadro.** El centro
+  del túnel derivaba 0.08 en un espacio donde la x va multiplicada por `ar`: en la pantalla
+  vertical (`ar` ≈ 0.56) medio ancho vale 0.28 y esos 0.08 eran casi un tercio, así que la boca
+  se iba del encuadre. Va medida contra `vec2(0.5*ar, 0.5)` y clampeada al 15 %.
+- **`fatal restart` deja el CRT APAGADO.** El interruptor es el archivo de `$XDG_RUNTIME_DIR` y
+  el `stop` lo borra: después de cualquier restart hay que volver a `fatal crt on` si estaba
+  prendido. Es la trampa de cualquier verificación en vivo.
 - **El filtro `motifAllowed` NO mira qué pantalla pregunta.** `crtMotifFor` garantiza que dos
   pantallas apagadas nunca muestren el mismo dibujo repartiendo UNA lista entre todas; una lista
   distinta por pantalla rompe justo eso. Por eso `eyes` se descarta cuando no hay letra o hay una
@@ -346,6 +366,10 @@ no-op → boot roto. No reintroducir un segundo.)
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
+- **Tanda 3, corrida 1 hecha** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): A1 (el overscan
+  de los motivos), A2 (un `Loader` solo), A3 (el encuadre y el plano de la sección), A4 (la boca
+  del túnel) y B7. Falta **B1-B6, B8, B9 y C**. Lo que se miró con capturas y lo que todavía
+  necesita un ojo está en `docs/plans/CHECKS-VISUALES.md`, sección "TANDA 3 corrida 1".
 - **El plan `docs/plans/2026-09-03-crt-tanda2.md` quedó COMPLETO** (FASE 0 a FASE 5): foco
   anticipado, aviso de destino (`foreshadow`/`ring`), saltos entre pantallas (`hop`), entradas
   nuevas + director por energía, y ocho motifs nuevos. Estado y mapa actualizado en

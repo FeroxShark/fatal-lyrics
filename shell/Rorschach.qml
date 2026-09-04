@@ -11,6 +11,8 @@ Item {
 
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real pitch: 0.5          // el registro: cuánto se retuerce
@@ -111,7 +113,7 @@ Item {
         running: blot.running && blot.visible
         onTriggered: {
             blot.pending += frameTime * Math.max(blot.energy, 0.35);
-            if (blot.pending >= 0.0142) {
+            if (blot.pending >= blot.stepMin) {
                 blot.clock += blot.pending;
                 blot.pending = 0;
             }

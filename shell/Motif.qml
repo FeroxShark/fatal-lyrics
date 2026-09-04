@@ -148,6 +148,18 @@ Item {
         punchDecay.start();
     }
 
+    // T4.3: cada cuánto tiene DERECHO a moverse un dibujo, en segundos.
+    //
+    // Los motivos con física propia corren con un `FrameAnimation`, que va al
+    // refresh del monitor — 200 Hz en uno de los de prueba. Ya acumulaban el
+    // `frameTime` y sólo escribían su reloj cada 14.2 ms (70 Hz), que es un
+    // número inventado; acá pasa a ser 60 Hz de verdad, y 30 cuando la pantalla
+    // está en el piso de volumen (nadie distingue 30 de 60 en una animación de
+    // fondo que se mueve sola). Cada escritura del reloj es un uniform nuevo
+    // para el shader o un repintado del Canvas: la mitad de escrituras es la
+    // mitad de ese trabajo.
+    readonly property real stepMin: (!spinning || level <= 0.12) ? (1 / 30) : (1 / 60)
+
     // El lado corto de la pantalla: la medida de toda figura centrada (el ojo,
     // el osciloscopio, la carta de ajuste). T4.1: el item mide exactamente lo
     // que mide la pantalla, así que es una división menos — hasta la tanda 3
@@ -640,6 +652,7 @@ Item {
             colour: motif.colour
             crest: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             low: motif.low
             high: motif.high
             beat: motif.beat
@@ -662,6 +675,7 @@ Item {
             colour: motif.colour
             crest: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             high: motif.high
             beat: motif.beat
             beatAmt: motif.beatAmt
@@ -705,6 +719,7 @@ Item {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             pitch: motif.pitch
             seed: motif.seed
             energy: motif.energy
@@ -725,6 +740,7 @@ Item {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             low: motif.low
             surge: motif.surge
             energy: motif.energy
@@ -745,6 +761,7 @@ Item {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             pitch: motif.pitch
             energy: motif.energy
             seed: motif.seed
@@ -763,6 +780,7 @@ Item {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             high: motif.high
             seed: motif.seed
             tick: motif.tick
@@ -785,6 +803,7 @@ Item {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             lines: motif.lines
             synced: motif.linesSynced
             lineNo: motif.lineNo
@@ -803,6 +822,7 @@ Item {
             colour: motif.colour
             crest: motif.hot
             level: motif.level
+            stepMin: motif.stepMin
             low: motif.low
             high: motif.high
             pitch: motif.pitch

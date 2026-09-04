@@ -12,6 +12,8 @@ Item {
 
     property color colour: "#4fe8ff"
     property color crest: "#e2fdff"
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4
@@ -36,7 +38,7 @@ Item {
         running: dish.running && dish.visible
         onTriggered: {
             dish.pending += frameTime;
-            if (dish.pending >= 0.0142) {
+            if (dish.pending >= dish.stepMin) {
                 dish.clock += dish.pending;
                 dish.pending = 0;
             }

@@ -20,6 +20,8 @@ Item {
 
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real high: 0.3
@@ -47,7 +49,7 @@ Item {
         running: snow.running && snow.visible
         onTriggered: {
             snow.pending += frameTime;
-            if (snow.pending >= 0.028) {
+            if (snow.pending >= Math.max(snow.stepMin, 0.028)) {
                 snow.clock += snow.pending;
                 snow.pending = 0;
             }

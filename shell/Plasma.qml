@@ -15,6 +15,8 @@ Item {
 
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4            // los graves: empujan las bolas para arriba
@@ -37,7 +39,7 @@ Item {
         running: lamp.running && lamp.visible
         onTriggered: {
             lamp.pending += frameTime * Math.max(lamp.energy, 0.35);
-            if (lamp.pending >= 0.0142) {
+            if (lamp.pending >= lamp.stepMin) {
                 lamp.clock += lamp.pending;
                 lamp.pending = 0;
             }

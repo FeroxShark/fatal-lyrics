@@ -19,6 +19,9 @@ Item {
 
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
+    property real pending: 0
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real pitch: 0.5          // el registro: la torsión
@@ -56,9 +59,16 @@ Item {
     FrameAnimation {
         running: tube.running && tube.visible
         onTriggered: {
+            // T4.3: el techo de cuadros. La velocidad se ACUMULA (la distancia
+            // recorrida es del túnel, no `reloj * velocidad`), así que juntar
+            // dos cuadros en uno no lo teletransporta: recorre lo mismo.
+            tube.pending += frameTime;
+            if (tube.pending < tube.stepMin)
+                return;
             const speed = (0.22 + 1.05 * tube.level) * Math.max(tube.energy, 0.35);
-            tube.travel += frameTime * speed;
-            tube.clock += frameTime;
+            tube.travel += tube.pending * speed;
+            tube.clock += tube.pending;
+            tube.pending = 0;
         }
     }
 

@@ -18,6 +18,9 @@ Item {
 
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
+    property real pending: 0
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property bool running: true
@@ -54,7 +57,13 @@ Item {
     FrameAnimation {
         running: sea.running && sea.visible && sea.lines.length > 0
         onTriggered: {
-            const dt = frameTime;
+            // T4.3: el techo de cuadros. La marea sube por acumulación, así que
+            // juntar dos cuadros recorre lo mismo.
+            sea.pending += frameTime;
+            if (sea.pending < sea.stepMin)
+                return;
+            const dt = sea.pending;
+            sea.pending = 0;
             sea.scroll += dt * 1000 / sea.stepMs;
             // el tirón hacia el verso que suena: es una corrección lenta, no un
             // salto — la columna nunca deja de subir parejo

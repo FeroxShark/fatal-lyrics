@@ -17,6 +17,8 @@ Item {
 
     property color colour: "#4fe8ff"     // color del grano
     property color crest: "#e2fdff"      // color de la cresta de la loma
+    // T4.3: el techo de cuadros que reparte Motif.qml
+    property real stepMin: 1 / 60
     property real level: 0.35            // volumen 0..1
     // Igual que en el mar: el nivel llega a 14 Hz y atado directo a algo que se
     // ve es titileo, no respiración.
@@ -44,7 +46,7 @@ Item {
         running: sand.running && sand.visible
         onTriggered: {
             sand.pending += frameTime;
-            if (sand.pending >= 0.0142) {
+            if (sand.pending >= sand.stepMin) {
                 sand.clock += sand.pending;
                 sand.pending = 0;
             }

@@ -133,6 +133,17 @@ PanelWindow {
     readonly property bool burned: !allMode && shot.past && !shot.active
     readonly property bool idle: !noLyric && !showsText
 
+    // ---- qué dibujo le toca a esta pantalla
+    // Sale por una property y no directo en el `kind` del Motif para poder
+    // CONTARLO: cuántas veces cambia de dibujo una pantalla por minuto es el
+    // número que Ferox describió como "las animaciones cambian y no llegás a
+    // entender qué ves", y sin marca en el log no se mide ni antes ni después.
+    readonly property string motifKind: ctl.crtMotifFor(idx)
+    onMotifKindChanged: {
+        if (ctl.crtOn)
+            console.log("crt: motif s" + idx + " " + motifKind);
+    }
+
     // ------------------------------------------------ el aviso del salto (T2.1)
     // La frase todavía está acá, pero la pantalla a la que va a saltar YA se
     // puso nerviosa: su animación se acelera y toma el color de la enfocada,
@@ -582,6 +593,10 @@ PanelWindow {
         if (now - lastHitAt < hitGap && amount < glitchAmt * 1.5)
             return;
         lastHitAt = now;
+        // el presupuesto de eventos se MIDE, no se estima: cada glitch que
+        // pasa el portero deja su marca, y con eso se cuentan las roturas por
+        // minuto antes y después de tocar cualquier número (tanda 4, corrida 3)
+        console.log("crt: hit s" + idx + " " + amount.toFixed(2));
         glitchDecay.stop();
         glitchAmt = Math.min(amount, 1);
         glitchDecay.start();
@@ -607,7 +622,7 @@ PanelWindow {
         PropertyAction { target: crt; property: "chanNoise"; value: 0 }
         // el texto ya está puesto: la rotura es la del emisor de siempre, no
         // una segunda fuente de glitch compitiendo con hit()
-        ScriptAction { script: crt.hit(1.0) }
+        ScriptAction { script: { console.log("crt: chan s" + crt.idx); crt.hit(1.0); } }
     }
 
     // -------------------------------------------- entradas del verso (T3.1)
@@ -1395,7 +1410,7 @@ PanelWindow {
 
                 Motif {
                     anchors.fill: parent
-                    kind: crt.ctl.crtMotifFor(crt.idx)
+                    kind: crt.motifKind
                     // el destino acelera (×1.6 al final de la línea), las otras
                     // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
                     energy: crt.ctl.sectionEnergy

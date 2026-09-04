@@ -68,6 +68,19 @@ ShellRoot {
         easing.type: Easing.InOutQuad
     }
 
+    // ---- ajuste de sync a ojo (tanda 3, C)
+    // El daemon avisa con un evento propio (`sync`) en vez de un cartel: con el
+    // tubo prendido un `show` PASA A SER la línea de la letra, así que avisar
+    // del ajuste borraba justo el verso que se estaba tratando de sincronizar.
+    // Acá se decide quién lo dibuja, porque acá se sabe si el tubo está arriba.
+    property real syncOffset: 0        // el offset acumulado, en segundos
+    property real syncDelta: 0         // cuánto se movió este golpe (signo)
+    property string syncArtist: ""
+    // el timbre: sube con cada ajuste. El rótulo del tubo se rearma con esto y
+    // no con un cambio de `syncOffset` — dos golpes iguales en sentido opuesto
+    // dejan el mismo número y el segundo no se vería.
+    property int syncGen: 0
+
     // ---- modo CRT: el tubo full-bleed que tapa cada monitor (opt-in)
     property bool crtOn: false
     property string crtScreens: "all"    // igual que `screen`, pero para el tubo ("same" = el mismo)
@@ -1557,6 +1570,40 @@ ShellRoot {
         }, true);
     }
 
+    // ---- el aviso del ajuste de sync (tanda 3, C)
+    // "+0.3 s · Frank Sinatra": el offset ACUMULADO, que es el número que a
+    // Ferox le sirve, no el escalón de 0.1 que acaba de tocar.
+    function syncLabel() {
+        return (syncOffset >= 0 ? "+" : "-") + Math.abs(syncOffset).toFixed(1) + " s"
+            + (syncArtist !== "" ? "  ·  " + syncArtist : "");
+    }
+
+    // En qué pantalla se dibuja el rótulo: la ENFOCADA, la que tiene la línea.
+    // Nunca una apagada — ahí estaría encima de un motif, y la regla es una
+    // animación por pantalla. Sin foco (una sola pantalla, o `focus = "all"`)
+    // va en la primera.
+    function crtSyncScreen() {
+        const f = crtShot.focus;
+        return (f >= 0 && f < activeCrtScreens.length) ? f : 0;
+    }
+
+    function syncNotice() {
+        if (crtOn) {
+            console.log("crt: sync toast screen=" + crtSyncScreen()
+                + " offset=" + syncLabel().replace(/\s+/g, " "));
+            return;      // lo dibuja Crt.qml, en la pantalla enfocada
+        }
+        // sin tubo, el cartel de Windows de siempre. El texto es el que
+        // mandaba el daemon hasta la tanda 2 (el escalón, no el acumulado):
+        // es un cartel más entre otros y ahí el número corto se lee mejor.
+        if (singMode && !singing)
+            return;
+        pushDialog({ text: "sync " + (syncDelta >= 0 ? "+" : "-")
+                         + Math.abs(syncDelta).toFixed(1) + " s",
+                     title: "fatal-lyrics", icon: randomIcon(),
+                     t0: 0, t1: 0, words: null }, true);
+    }
+
     // El daemon manda `np` también cuando el tubo está prendido y la funda
     // apagada (el instrumental necesita saber qué suena), así que prender la
     // funda acá se decide con el tubo a la vista: si no, al salir del CRT
@@ -1703,6 +1750,17 @@ ShellRoot {
                                 root.lastPeakAt = Date.now();
                                 root.audPeak++;
                             }
+                        } else if (ev.cmd === "sync") {
+                            // tanda 3, C: el ajuste a ojo. Con el tubo prendido
+                            // lo dibuja la pantalla ENFOCADA (un rótulo chico,
+                            // 1.5 s); sin tubo sigue siendo el cartel de
+                            // Windows de siempre, con el mismo texto que
+                            // mandaba el daemon hasta la tanda 2.
+                            root.syncDelta = ev.d || 0;
+                            root.syncOffset = ev.offset || 0;
+                            root.syncArtist = ev.artist || "";
+                            root.syncGen++;
+                            root.syncNotice();
                         } else if (ev.cmd === "sing") {
                             // T5.3: sólo llegan los cambios, no un nivel por
                             // bloque — el que decide es el daemon

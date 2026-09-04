@@ -1608,6 +1608,73 @@ PanelWindow {
             textH: Math.min(0.45, crt.shortSide * 0.34 / Math.max(crt.height, 1))
         }
 
+        // ---- el ajuste de sync a ojo (tanda 3, C)
+        // El rótulo va SÓLO en la pantalla enfocada, que es la que tiene la
+        // línea: encima de una apagada caería sobre su motif y la regla es una
+        // animación por pantalla. Encima del texto no la rompe — el texto no es
+        // una animación en curso, y es justo lo que se está tratando de
+        // sincronizar, así que el número tiene que leerse al lado.
+        // Vive en `stage` y FUERA de `camera`, por lo mismo que el rayo del
+        // salto: es un rótulo del tubo, no parte del plano que la cámara
+        // acerca y aleja.
+        Text {
+            id: syncHint
+            anchors {
+                horizontalCenter: parent.horizontalCenter
+                bottom: parent.bottom
+                bottomMargin: Math.round(crt.pad * 1.4)
+            }
+            property string full: ""
+            property int typed: 0
+            // entrada `type`, la misma que las palabras de la línea: no
+            // aparece, se ESCRIBE, un caracter cada 28 ms con el cursor pegado
+            // atrás. Contado por code point (Array.from) y no por unidad
+            // UTF-16: un nombre de artista con un caracter fuera del BMP se
+            // escribiría en dos mitades rotas.
+            readonly property int chars: Array.from(full).length
+            text: Array.from(full).slice(0, typed).join("") + (typed < chars ? "▮" : "")
+            color: crt.pal.ink
+            font.family: crt.fontFamily
+            font.bold: true
+            font.letterSpacing: 3
+            font.pixelSize: Math.max(12, Math.round(crt.shortSide * 0.030))
+            opacity: 0
+            visible: opacity > 0.01
+
+            Timer {
+                interval: 28
+                repeat: true
+                running: syncHint.opacity > 0.01 && syncHint.typed < syncHint.chars
+                onTriggered: syncHint.typed++
+            }
+
+            // El segundo y medio se mide por RELOJ, no por cuadros: la pantalla
+            // del medio corre a 20 fps y uno de los monitores va a 200.
+            SequentialAnimation {
+                id: syncShowAnim
+                PropertyAction { target: syncHint; property: "typed"; value: 0 }
+                NumberAnimation { target: syncHint; property: "opacity"; to: 1; duration: 120 }
+                PauseAnimation { duration: 1120 }
+                NumberAnimation {
+                    target: syncHint; property: "opacity"; to: 0
+                    duration: 260; easing.type: Easing.InQuad
+                }
+            }
+
+            // Se cuelga del timbre (`syncGen`) y no del número: dos ajustes
+            // opuestos dejan el mismo offset acumulado, y el segundo no se
+            // vería si el rearme dependiera de que el valor cambie.
+            Connections {
+                target: crt.ctl
+                function onSyncGenChanged() {
+                    if (crt.idx !== crt.ctl.crtSyncScreen())
+                        return;
+                    syncHint.full = crt.ctl.syncLabel().toUpperCase();
+                    syncShowAnim.restart();
+                }
+            }
+        }
+
         // ---- fogonazo del golpe, sólo en la pantalla enfocada
         Rectangle {
             id: flash

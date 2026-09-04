@@ -798,6 +798,20 @@ PanelWindow {
         : 1 - 0.15 * cam
     Behavior on sectionZoom { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
 
+    // T3.A1: el zoom MÁS CHICO que la cámara puede tomar. De los cuatro
+    // factores del Scale, tres nunca bajan de 1 (`camZoom`, `cueZoom` y el
+    // tirón del latido): el único que aleja es el plano de la sección, que en
+    // el silencio se va a 1 - 0.18·cam. Todo lo que va a sangre — los motivos,
+    // las barras del standby — se dibuja agrandado por 1/zoomMin y centrado,
+    // así el borde del dibujo queda SIEMPRE fuera del tubo. Sin esto la
+    // estrofa deja un marco de fondo plano alrededor de la animación y se lee
+    // como una imagen pegada encima de un color, no como el tubo.
+    readonly property real camZoomMin: sectionZoomOn
+        ? Math.max(1 - 0.18 * cam, 0.2) : 1
+    // el 1.02 es el margen del redondeo a píxeles enteros; el techo de 3 es
+    // para que una perilla `camera` disparatada no pida una textura enorme
+    readonly property real overscan: Math.min(1.02 / camZoomMin, 3)
+
     Item {
         id: stage
         anchors.fill: parent
@@ -1203,61 +1217,78 @@ PanelWindow {
             }
 
             // ---- pantalla sin letra: la animación que la mantiene viva
-            Motif {
-                anchors.fill: parent
+            //
+            // El marco es la regla del overscan (T3.A1/B7): el motivo se dibuja
+            // a pantalla completa MÁS el margen del zoom más lejano y la cámara
+            // escala por encima. `clip` acá adentro es lo que garantiza que
+            // ningún motivo pinte fuera de su caja, y `overscan` viaja al
+            // motivo para que las figuras centradas (el ojo, el osciloscopio,
+            // la carta de ajuste) midan exactamente lo mismo que antes: lo
+            // único que se estira es lo que va a sangre.
+            Item {
+                id: motifFrame
+                anchors.centerIn: parent
+                width: Math.ceil(parent.width * crt.overscan)
+                height: Math.ceil(parent.height * crt.overscan)
+                clip: true
                 // en el instrumental corren TODAS: es la pared entera moviéndose
                 // con el tema, que es justo lo que "NO SIGNAL" mataba
                 visible: crt.idle || crt.instrumental
-                kind: crt.ctl.crtMotifFor(crt.idx)
-                // el destino acelera (×1.6 al final de la línea), las otras
-                // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
-                energy: crt.ctl.sectionEnergy
-                    * (crt.foreTarget ? 1 + 0.6 * crt.foreRamp : 1)
-                    * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
-                dim: crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1
-                waterAmp: crt.ctl.crtWaterAmp
-                // la semilla de esta aparición: el reloj de los motivos cruzado
-                // con el número de pantalla, así dos pantallas con el mismo
-                // dibujo no arman el mismo paisaje
-                seed: crt.ctl.crtHash(crt.ctl.motifGen * 31 + crt.idx * 7 + 13)
-                quality: crt.ctl.crtQuality
-                // el compás y el verso: la estática forma algo una vez por
-                // compás, y lo que forma sale de la línea que viene
-                tick: crt.ctl.beatTick
-                beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
-                bpmLive: crt.ctl.bpmLive
-                lineNo: crt.ctl.crtLineNo
-                nextWord: crt.ctl.crtNextWord
-                lines: crt.ctl.crtLines
-                linesSynced: crt.ctl.crtLinesSynced
-                fontFamily: crt.fontFamily
-                // hacia dónde miran los ojos: a la pantalla que tiene la frase,
-                // y en el último tramo del verso, a la que la va a recibir
-                gaze: crt.motifGaze
-                // el drop viaja como booleano: los motivos no pueden sacarlo de
-                // `energy`, que acá arriba ya viene multiplicada por el aviso
-                drop: crt.ctl.audSection === "drop"
-                // la parte del tema: el osciloscopio elige con ella la relación
-                // entre sus dos ejes, que es lo que hace que la figura cambie
-                // al entrar el estribillo
-                section: crt.ctl.audSection
-                // el registro de lo que suena: con el tubo apagado no hay
-                // captura, y el laguito tiembla en un tono medio
-                pitch: crt.live ? crt.ctl.audCentroid : 0.5
-                colour: crt.motifColour
-                hot: crt.pal.hot
-                level: crt.pump
-                low: crt.live ? crt.ctl.audLo : 0.4
-                high: crt.live ? crt.ctl.audHi : 0.3
-                beat: crt.ctl.audBeat
-                beatAmt: crt.ctl.crtFlicker
-                // cuando el tubo parpadea, la animación acompaña: se acelera y
-                // crece un instante, así el golpe se ve en todas las pantallas.
-                // Va por contador y no por magnitud: aunque el parpadeo esté
-                // bajito, cuando pasa se tiene que ver acompañado.
-                kick: crt.surgeGen
-                clock: crt.tubeTime
-                spinning: crt.visible && (crt.idle || crt.instrumental)
+
+                Motif {
+                    anchors.fill: parent
+                    overscan: crt.overscan
+                    kind: crt.ctl.crtMotifFor(crt.idx)
+                    // el destino acelera (×1.6 al final de la línea), las otras
+                    // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
+                    energy: crt.ctl.sectionEnergy
+                        * (crt.foreTarget ? 1 + 0.6 * crt.foreRamp : 1)
+                        * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
+                    dim: crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1
+                    waterAmp: crt.ctl.crtWaterAmp
+                    // la semilla de esta aparición: el reloj de los motivos cruzado
+                    // con el número de pantalla, así dos pantallas con el mismo
+                    // dibujo no arman el mismo paisaje
+                    seed: crt.ctl.crtHash(crt.ctl.motifGen * 31 + crt.idx * 7 + 13)
+                    quality: crt.ctl.crtQuality
+                    // el compás y el verso: la estática forma algo una vez por
+                    // compás, y lo que forma sale de la línea que viene
+                    tick: crt.ctl.beatTick
+                    beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
+                    bpmLive: crt.ctl.bpmLive
+                    lineNo: crt.ctl.crtLineNo
+                    nextWord: crt.ctl.crtNextWord
+                    lines: crt.ctl.crtLines
+                    linesSynced: crt.ctl.crtLinesSynced
+                    fontFamily: crt.fontFamily
+                    // hacia dónde miran los ojos: a la pantalla que tiene la frase,
+                    // y en el último tramo del verso, a la que la va a recibir
+                    gaze: crt.motifGaze
+                    // el drop viaja como booleano: los motivos no pueden sacarlo de
+                    // `energy`, que acá arriba ya viene multiplicada por el aviso
+                    drop: crt.ctl.audSection === "drop"
+                    // la parte del tema: el osciloscopio elige con ella la relación
+                    // entre sus dos ejes, que es lo que hace que la figura cambie
+                    // al entrar el estribillo
+                    section: crt.ctl.audSection
+                    // el registro de lo que suena: con el tubo apagado no hay
+                    // captura, y el laguito tiembla en un tono medio
+                    pitch: crt.live ? crt.ctl.audCentroid : 0.5
+                    colour: crt.motifColour
+                    hot: crt.pal.hot
+                    level: crt.pump
+                    low: crt.live ? crt.ctl.audLo : 0.4
+                    high: crt.live ? crt.ctl.audHi : 0.3
+                    beat: crt.ctl.audBeat
+                    beatAmt: crt.ctl.crtFlicker
+                    // cuando el tubo parpadea, la animación acompaña: se acelera y
+                    // crece un instante, así el golpe se ve en todas las pantallas.
+                    // Va por contador y no por magnitud: aunque el parpadeo esté
+                    // bajito, cuando pasa se tiene que ver acompañado.
+                    kick: crt.surgeGen
+                    clock: crt.tubeTime
+                    spinning: crt.visible && (crt.idle || crt.instrumental)
+                }
             }
 
             // ---- el aro de la línea que viene, encima del motif
@@ -1304,9 +1335,16 @@ PanelWindow {
             }
 
             // ---- sin señal: barras de ajuste y estática
+            // Misma regla que el motivo: las barras van a sangre, así que se
+            // dibujan con el overscan. Sin eso, el plano de la sección (que
+            // sigue puesto cuando el tema para) deja las ocho barras con un
+            // marco de fondo alrededor.
             Item {
                 id: standbyLayer
-                anchors.fill: parent
+                anchors.centerIn: parent
+                width: Math.ceil(parent.width * crt.overscan)
+                height: Math.ceil(parent.height * crt.overscan)
+                clip: true
                 visible: crt.standby
 
                 Row {

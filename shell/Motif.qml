@@ -126,7 +126,14 @@ Item {
         punchDecay.start();
     }
 
-    readonly property real span: Math.min(width, height)
+    // T3.A1: cuánto más grande que la pantalla es este item. El motivo se
+    // dibuja siempre para el zoom más lejano de la cámara (`Crt.overscan`), y
+    // eso es lo que hace que lo que va a sangre no deje borde. Pero las
+    // figuras centradas se miden contra la PANTALLA y no contra la caja: si
+    // `span` creciera con el overscan, el ojo y la carta de ajuste saldrían un
+    // 22 % más grandes y en el drop quedarían recortados.
+    property real overscan: 1
+    readonly property real span: Math.min(width, height) / overscan
     // velocidad efectiva: la parte del tema, más el empujón del golpe
     readonly property real drive: energy * (1 + 1.6 * surge)
 
@@ -680,6 +687,7 @@ Item {
         visible: active
 
         sourceComponent: Static {
+            overscan: motif.overscan
             colour: motif.colour
             hot: motif.hot
             level: motif.level
@@ -704,6 +712,7 @@ Item {
         visible: active
 
         sourceComponent: TextSea {
+            overscan: motif.overscan
             colour: motif.colour
             hot: motif.hot
             level: motif.level

@@ -27,6 +27,8 @@ Item {
     property real dim: 1.0
     property bool running: true
     property string fontFamily: "monospace"
+    // cuánto más grande que la pantalla es este item (T3.A1)
+    property real overscan: 1
 
     // el compás: con tempo confiable la forma cae cada cuatro tiempos, y si no
     // hay tempo, cada 2.4 s (cuatro tiempos de un tema cualquiera)
@@ -139,7 +141,10 @@ Item {
             text: snow.shape === 1 ? ("0" + snow.shownNo).slice(-2) : snow.shownWord
             color: "white"
             font.family: snow.fontFamily
-            font.pixelSize: Math.round(Math.min(parent.width, parent.height) * 0.38)
+            // el 0.38 es de la PANTALLA, no de la caja: el item viene
+            // agrandado por el overscan de la cámara (T3.A1)
+            font.pixelSize: Math.round(Math.min(parent.width, parent.height)
+                * 0.38 / snow.overscan)
             font.bold: true
             // sin achicarse, una palabra larga se sale de la pantalla y la
             // máscara queda cortada por los dos costados

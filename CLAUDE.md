@@ -273,6 +273,16 @@ no-op → boot roto. No reintroducir un segundo.)
   multiplicado por el aviso del salto (×1.6 en la pantalla destino al final de CADA verso): un
   umbral ahí levanta la arena de `dunes` en cualquier estrofa. El drop viaja como booleano
   propio (`crt.ctl.audSection === "drop"`).
+- **Todo motivo se dibuja para el zoom MÁXIMO de la cámara, no para la pantalla.** De los cuatro
+  factores del `Scale` de `camera`, el único que aleja es el plano de la sección
+  (`1 - 0.18·camera` en el silencio): un dibujo del tamaño del stage deja ahí un marco de fondo
+  plano alrededor y se lee como una imagen pegada encima de un color. La regla es UNA y vale para
+  los dieciséis: el contenido que va a sangre vive dentro de `motifFrame` (`Crt.qml`), un item
+  `clip: true` centrado y agrandado por `crt.overscan` (= 1.02/zoomMin), y la cámara escala por
+  encima. Las barras del standby van en la misma caja. Lo que NO se agranda es lo que se mide
+  contra la pantalla: `Motif.span` divide por `overscan`, y `Static`/`TextSea` reciben la property
+  para que la palabra y la marea de texto no salgan un 22 % más grandes que el resto de la pared.
+  Un motivo nuevo se prueba con `camera` al tope y la sección en `quiet`.
 - **El filtro `motifAllowed` NO mira qué pantalla pregunta.** `crtMotifFor` garantiza que dos
   pantallas apagadas nunca muestren el mismo dibujo repartiendo UNA lista entre todas; una lista
   distinta por pantalla rompe justo eso. Por eso `eyes` se descarta cuando no hay letra o hay una

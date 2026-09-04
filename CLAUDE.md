@@ -359,22 +359,33 @@ no-op → boot roto. No reintroducir un segundo.)
   más. El contador se resetea también al cambiar `myText`, no sólo con el serial: en un relay el
   pedazo de la segunda pantalla arranca tiempos después de la línea.
 - **En el QML la perilla `section_zoom` se llama `crtSectionZoom`** y multiplica al `camZoom` y al
-  `cueZoom` en el mismo `Scale`: es otro plano de la misma cámara, no una cámara nueva. Achicar por
-  debajo de 1 no deja agujeros negros porque el fondo de `stage` está FUERA del item `camera`.
+  `cueZoom` en el mismo `Scale`: es otro plano de la misma cámara, no una cámara nueva. Desde la
+  tanda 4 ese plano DESCANSA EN 1 y sólo el drop lo empuja un momento (`sectionKick`): un zoom
+  sostenido por sección es lo que Ferox leyó como "está todo agrandado por default".
 - **Un motivo no puede sacar el "drop" de `energy`.** Lo que le llega a `Motif` ya viene
   multiplicado por el aviso del salto (×1.6 en la pantalla destino al final de CADA verso): un
   umbral ahí levanta la arena de `dunes` en cualquier estrofa. El drop viaja como booleano
   propio (`crt.ctl.audSection === "drop"`).
-- **Todo motivo se dibuja para el zoom MÁXIMO de la cámara, no para la pantalla.** De los cuatro
-  factores del `Scale` de `camera`, el único que aleja es el plano de la sección
-  (`1 - 0.18·camera` en el silencio): un dibujo del tamaño del stage deja ahí un marco de fondo
-  plano alrededor y se lee como una imagen pegada encima de un color. La regla es UNA y vale para
-  los dieciséis: el contenido que va a sangre vive dentro de `motifFrame` (`Crt.qml`), un item
-  `clip: true` centrado y agrandado por `crt.overscan` (= 1.02/zoomMin), y la cámara escala por
-  encima. Las barras del standby van en la misma caja. Lo que NO se agranda es lo que se mide
-  contra la pantalla: `Motif.span` divide por `overscan`, y `Static`/`TextSea` reciben la property
-  para que la palabra y la marea de texto no salgan un 22 % más grandes que el resto de la pared.
-  Un motivo nuevo se prueba con `camera` al tope y la sección en `quiet`.
+- **La cámara NUNCA se aleja por debajo de 1, y por eso no hay overscan** (tanda 4). Los cuatro
+  factores del `Scale` de `camera` (`camZoom`, `cueZoom`, el latido y el plano de la sección) valen
+  1 o más, así que un dibujo del tamaño del stage no puede dejar un marco de fondo plano alrededor.
+  Cada motivo se dibuja al TAMAÑO DE LA PANTALLA, dentro de `motifFrame` (`Crt.qml`), que es un
+  item `clip: true` que llena el padre; las barras del standby van en la misma caja. Hasta la tanda
+  3 ese marco venía agrandado por `crt.overscan` (= 1.02/zoomMin) para tapar el plano de la estrofa
+  (0.85), y el precio era que las dieciséis animaciones salían un 22 % más grandes y recortadas.
+  **Si alguna vez un plano vuelve a bajar de 1, vuelve el marco: la solución es el plano, no el
+  overscan.** Un motivo nuevo se prueba con `camera` al tope y la sección en `drop`.
+- **Safe area: nada se dibuja hasta el canto.** Toda figura tiene que terminar dentro del 92 % del
+  cuadro (4 % de aire por lado), medido con el ANCHO Y EL ALTO de esa pantalla, no con un radio
+  fijo: la mancha (`rorschach.frag`) y la lámpara (`plasma.frag`) se salían por arriba porque su
+  caída estaba clavada en 0.62 / 0.78 de un espacio corregido por aspecto, o sea más de medio alto.
+  El arreglo va en la GEOMETRÍA (normalizar el dominio, o medir contra los semiejes de la pantalla),
+  nunca escalando la imagen terminada: en un shader de ruido la silueta ES la textura.
+- **La letra tiene su propio plano, `textPlane`, y vale 0.85.** Es el plano que le daba la estrofa
+  antes de la tanda 4: sacarlo de la cámara sin dárselo a la letra la dejaba un 18 % más grande que
+  en `a85fefc`. Va como `Scale` sobre el item `lyric` (y sobre el verso quemado), NO como factor
+  sobre `font.pixelSize`: el tamaño lo deciden el tope en píxeles y la caja del `Text.Fit`, y
+  tocando sólo el tope una línea larga —limitada por la caja— no cambiaría de tamaño.
 - **El motivo lo elige UN solo `Loader`, no un `visible` por dibujo.** Con dieciséis
   interruptores independientes alcanza que uno quede prendido para que se vean dos motivos
   encima (así apareció el agua sin recortar sobre otra animación). `sourceComponent` es una

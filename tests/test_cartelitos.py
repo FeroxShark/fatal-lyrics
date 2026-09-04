@@ -157,7 +157,7 @@ class TestNextLine(unittest.TestCase):
     def test_the_next_line_travels_with_its_window(self):
         self.assertEqual(c.next_line(self.LINES, 0),
                           {"text": "take take take", "t0": 4.0, "t1": 9.0,
-                           "segs": ["take", "take", "take"]})
+                           "due": 4.0, "segs": ["take", "take", "take"]})
 
     def test_the_last_line_has_no_next(self):
         self.assertIsNone(c.next_line(self.LINES, 2))
@@ -165,7 +165,7 @@ class TestNextLine(unittest.TestCase):
     def test_the_one_before_the_last_closes_five_seconds_later(self):
         # mismo criterio que la línea actual: sin una línea después, se queda 5 s
         self.assertEqual(c.next_line(self.LINES, 1),
-                          {"text": "three", "t0": 9.0, "t1": 14.0})
+                          {"text": "three", "t0": 9.0, "t1": 14.0, "due": 9.0})
 
     def test_segs_only_when_the_line_repeats(self):
         self.assertNotIn("segs", c.next_line(self.LINES, 1))
@@ -177,6 +177,75 @@ class TestNextLine(unittest.TestCase):
     def test_before_the_first_line(self):
         # idx = -1 es "todavía no arrancó la letra": no se adelanta nada
         self.assertIsNone(c.next_line(self.LINES, -1))
+
+
+class TestNextLineDue(unittest.TestCase):
+    """`due` es el instante en que el daemon va a mandar el próximo `show`, en
+    posición cruda del player: `t0` menos el offset con el que elige la línea.
+
+    Sin esto el aro del tubo contaba contra el `t0` pelado y la línea llegaba
+    `offset` segundos ANTES de que terminara de contar — con un `fatal sync +`
+    de 0.3 s o más, no colapsaba nunca."""
+
+    LINES = [(0.0, "one"), (4.0, "two"), (9.0, "three")]
+
+    def test_without_offset_the_due_is_the_start(self):
+        self.assertEqual(c.next_line(self.LINES, 0)["due"], 4.0)
+
+    def test_the_offset_moves_the_due_earlier(self):
+        # el daemon elige la línea con pos + offset: con 0.15 la manda 0.15 s
+        # antes de que la posición cruda llegue a t0
+        self.assertEqual(c.next_line(self.LINES, 0, 0.15)["due"], 3.85)
+
+    def test_a_sync_nudge_re_sends_a_new_due(self):
+        # `fatal sync +0.3` resetea el índice del daemon: la misma línea vuelve
+        # a salir, y con ella un `next` con el `due` ya corregido
+        before = c.next_line(self.LINES, 0, 0.15)["due"]
+        after = c.next_line(self.LINES, 0, 0.45)["due"]
+        self.assertAlmostEqual(before - after, 0.3, places=2)
+
+    def test_a_negative_offset_pushes_the_due_later(self):
+        self.assertEqual(c.next_line(self.LINES, 0, -0.2)["due"], 4.2)
+
+
+class TestVoiceEnd(unittest.TestCase):
+    """Cuándo se deja de cantar una línea. El `t1` que viaja con ella es el
+    `t0` de la siguiente, así que no dice nada del silencio: el aro que espera
+    la próxima frase necesita esto para no aparecer encima de la voz."""
+
+    def test_with_word_times_it_is_the_last_word_plus_its_tail(self):
+        v = lyrics.voice_end(10.0, "one two three",
+                             [(10.0, "one"), (10.5, "two"), (11.2, "three")],
+                             20.0)
+        self.assertAlmostEqual(v, 11.65, places=2)
+
+    def test_without_word_times_it_is_the_word_count(self):
+        # 4 palabras: 0.32 cada una más 0.6 de cola
+        v = lyrics.voice_end(10.0, "one two three four", None, 30.0)
+        self.assertAlmostEqual(v, 11.88, places=2)
+
+    def test_it_never_eats_the_gap_the_ring_needs(self):
+        # la línea que viene arranca a los 12 s: la estimación (13.88) se
+        # recorta para que quede hueco de sobra
+        v = lyrics.voice_end(10.0, "one two three four five six seven eight",
+                             None, 12.0)
+        self.assertAlmostEqual(v, 10.3, places=2)
+
+    def test_it_never_lands_before_the_line_starts(self):
+        # hueco cortísimo: el recorte caería detrás de t0, y una voz que
+        # termina antes de empezar pondría el aro debajo de la frase
+        v = lyrics.voice_end(10.0, "one two", None, 10.5)
+        self.assertEqual(v, 10.0)
+
+    def test_the_last_line_of_the_song_has_no_clamp(self):
+        v = lyrics.voice_end(10.0, "one two", None, None)
+        self.assertAlmostEqual(v, 11.24, places=2)
+
+    def test_word_times_win_over_the_word_count(self):
+        # la última palabra tiene tiempo real: no se estima por largo
+        long_text = "a " * 20
+        v = lyrics.voice_end(0.0, long_text, [(0.0, "a"), (0.4, "a")], 60.0)
+        self.assertAlmostEqual(v, 0.85, places=2)
 
 
 class TestShowNext(unittest.TestCase):

@@ -662,3 +662,41 @@ def split_repeats(text):
     if len(out) > cap:
         out = out[:cap - 1] + [" ".join(out[cap - 1:])]
     return out
+
+
+# ------------------------------------------------- dónde termina la VOZ (T4.2)
+# El `t1` que viaja con una línea es el `t0` de la siguiente: mientras el tema
+# tenga letra, una línea "dura" hasta que empieza la otra. Sirve para el karaoke
+# —repartir el pintado— pero NO dice cuándo se dejó de cantar, que es lo que el
+# aro necesita para no aparecer encima de la voz.
+#
+# No hay forma de saberlo de verdad sin escuchar: se estima. Con LRC "enhanced"
+# el último tiempo por palabra es un dato real y sólo falta la cola de esa
+# palabra; sin tiempos, lo único que hay es cuántas palabras son.
+VOICE_TAIL = 0.45           # cuánto dura la última palabra que sí tiene tiempo
+VOICE_PER_WORD = 0.32       # a ojo, una palabra cantada
+VOICE_TAIL_BLIND = 0.6      # ...y la cola cuando el largo es todo lo que hay
+# El aro tiene que caber en lo que sobra: si la estimación se come el hueco, se
+# recorta. 1.7 y no 1.5 porque el overlay arma el aro con lo que ve un tick
+# después (10 Hz) y el gate de allá pide más de 1.4 s: clavarlo en 1.5 dejaba el
+# aro sin aparecer justo cuando el corte lo decidía.
+VOICE_MIN_GAP = 1.7
+
+
+def voice_end(t0, text, words=None, next_t0=None):
+    """Cuándo se deja de cantar esta línea, en segundos de la letra.
+
+    `words` son los tiempos por palabra del LRC "enhanced" (lista de
+    `(t, palabra)`), si los hay. `next_t0` es el arranque de la línea que sigue:
+    lo que se estima nunca puede pisarla."""
+    if words:
+        end = max(t for t, _ in words) + VOICE_TAIL
+    else:
+        n = len((text or "").split())
+        end = t0 + VOICE_PER_WORD * n + VOICE_TAIL_BLIND
+    if next_t0 is not None:
+        end = min(end, next_t0 - VOICE_MIN_GAP)
+    # nunca antes de que la línea empiece: con un hueco corto el recorte de
+    # arriba puede caer detrás de `t0`, y una voz que termina antes de empezar
+    # haría aparecer el aro debajo de la frase que se está cantando
+    return round(max(end, t0), 2)

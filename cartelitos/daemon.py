@@ -325,9 +325,17 @@ class DaemonLoop:
                         # el tercer campo (tiempos por palabra) es de T1.1: una
                         # letra que venga de dos campos sigue andando igual
                         self.last_show_at = now
-                        self._ipc.show(line[1], t["title"], line[0], t1,
-                                       line[2] if len(line) > 2 else None,
-                                       nxt=self._ipc.next_line(self.lyrics, i))
+                        words = line[2] if len(line) > 2 else None
+                        # el offset viaja con la línea: el aro del tubo cuenta
+                        # contra el instante en que ESTE daemon va a mandar el
+                        # próximo `show`, no contra el `t0` pelado de la letra
+                        nxt_t0 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else None
+                        v_end = self._lyr.voice_end(line[0], line[1], words,
+                                                    nxt_t0) - pos_offset
+                        self._ipc.show(line[1], t["title"], line[0], t1, words,
+                                       nxt=self._ipc.next_line(self.lyrics, i,
+                                                               pos_offset),
+                                       v_end=v_end)
 
             # silencio largo con la letra cargada: el programa se cuelga solo.
             # Con la letra sin sincronizar no aplica: ahí no viene ninguna línea

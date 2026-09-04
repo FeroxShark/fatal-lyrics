@@ -172,7 +172,7 @@ def sync_hint(delta, offset, artist):
           "artist": artist or ""})
 
 
-def next_line(lines, i):
+def next_line(lines, i, offset=0.0):
     """El campo `next` del evento `show`: la línea i+1 con su ventana, o None.
 
     El daemon manda UNA línea por vez, así que el overlay no sabe nada de la
@@ -181,14 +181,22 @@ def next_line(lines, i):
     razón que en la línea actual: el corte de las repeticiones se hace en el
     daemon, y el overlay calcula el reparto de la línea siguiente ANTES de que
     llegue. Sin los pedazos, lo que anticipó y lo que después se ve no serían
-    la misma cosa."""
+    la misma cosa.
+
+    `due` es EL MISMO instante en que este daemon va a mandar el próximo
+    `show`, en segundos de la posición cruda del player: `t0` menos el offset
+    con el que se elige la línea (`behavior.offset` + el del artista). El
+    overlay sólo conoce la posición cruda, así que restando el offset acá el
+    aro cuenta contra el instante real y no contra uno 0.15–0.6 s tarde — que
+    era la mitad de por qué llegaba a la mitad y la voz ya estaba cantando."""
     if not lines or i < 0 or i + 1 >= len(lines):
         return None
     nxt = lines[i + 1]
     # mismo criterio que la línea actual: termina donde arranca la siguiente,
     # y la última se queda 5 s
     end = lines[i + 2][0] if i + 2 < len(lines) else nxt[0] + 5
-    out = {"text": nxt[1], "t0": round(nxt[0], 2), "t1": round(end, 2)}
+    out = {"text": nxt[1], "t0": round(nxt[0], 2), "t1": round(end, 2),
+           "due": round(nxt[0] - offset, 2)}
     segs = lyrics.split_repeats(nxt[1])
     if len(segs) > 1:
         out["segs"] = segs
@@ -229,7 +237,8 @@ def lyrics_plain(text):
     send(ev)
 
 
-def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None):
+def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None,
+         v_end=None):
     # t0/t1: comienzo y fin estimado de la línea, para el karaoke del overlay
     ev = {"cmd": "show", "text": text, "title": title,
           "t0": round(t0, 2), "t1": round(t1, 2)}
@@ -248,6 +257,15 @@ def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None):
     segs = lyrics.split_repeats(text)
     if len(segs) > 1:
         ev["segs"] = segs      # golpes repetidos: cada uno a una pantalla
+    # Cuándo se deja de CANTAR esta línea, en posición cruda del player (mismo
+    # espacio que `next.due`). El `t1` de arriba es el `t0` de la línea que
+    # sigue, así que no dice nada del silencio: sin este campo el aro aparecía
+    # a mitad de verso, encima de la voz, que es lo primero que se ve mal.
+    # Viaja sólo acá y no en `next`: el aro cuenta el hueco de la línea que
+    # SUENA, y para cuando la siguiente sea la que suena ya llegó su propio
+    # `show` con su `v_end`.
+    if v_end is not None:
+        ev["v_end"] = round(v_end, 2)
     # explícito, incluso vacío: `null` significa "no hay próxima línea", y el
     # overlay tiene que poder distinguirlo de "el daemon es viejo y no lo manda"
     ev["next"] = nxt

@@ -259,7 +259,8 @@ class TestSeekBack(unittest.TestCase):
         loop._ipc.clear.assert_called_once()
         loop._log.assert_any_call("seek back: reset")
         loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0, None,
-                                          nxt=loop._ipc.next_line.return_value)
+                                          nxt=loop._ipc.next_line.return_value,
+                                          v_end=mock.ANY)
 
     def test_small_backward_jitter_does_not_reset(self):
         loop = make_loop()
@@ -304,7 +305,8 @@ class TestWordTimes(unittest.TestCase):
 
         loop._ipc.show.assert_called_with("one two", "Song", 0.0, 10.0,
                                           [(0.0, "one"), (0.5, "two")],
-                                          nxt=loop._ipc.next_line.return_value)
+                                          nxt=loop._ipc.next_line.return_value,
+                                          v_end=mock.ANY)
 
     def test_a_two_field_line_still_works(self):
         loop = make_loop()
@@ -315,7 +317,8 @@ class TestWordTimes(unittest.TestCase):
         loop.handle_track(track(id="t1", pos=1.0), now=0.0)
 
         loop._ipc.show.assert_called_with("a", "Song", 0.0, 5.0, None,
-                                          nxt=loop._ipc.next_line.return_value)
+                                          nxt=loop._ipc.next_line.return_value,
+                                          v_end=mock.ANY)
 
 
 class TestNextLineIsWired(unittest.TestCase):
@@ -331,7 +334,75 @@ class TestNextLineIsWired(unittest.TestCase):
 
         loop.handle_track(track(id="t1", pos=11.0), now=0.0)
 
-        loop._ipc.next_line.assert_called_once_with(loop.lyrics, 1)
+        # el offset viaja con el `next`: es con lo que el overlay calcula el
+        # `due` contra el que cuenta el aro
+        loop._ipc.next_line.assert_called_once_with(loop.lyrics, 1, mock.ANY)
+
+
+class TestTheRingClockTravels(unittest.TestCase):
+    """Tanda 4: el aro del tubo cuenta contra el instante en que ESTE daemon va
+    a mandar el próximo `show`, no contra el `t0` de la letra. Los dos números
+    que necesita (`next.due` y `v_end`) salen de acá, ya en posición cruda del
+    player — que es lo único que el overlay conoce."""
+
+    def test_the_offset_travels_with_the_next_line(self):
+        loop = make_loop(config=make_config(offset=0.15))
+        loop._lyr.current_line_index.return_value = 0
+        loop.lyrics = [(0.0, "a"), (10.0, "b")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        loop._ipc.next_line.assert_called_once_with(loop.lyrics, 0, 0.15)
+
+    def test_the_artist_offset_counts_too(self):
+        # el offset efectivo es el de la config MÁS el del artista: si el aro
+        # contara sólo con el de la config, un tema corregido a ojo se le
+        # adelantaría medio segundo
+        loop = make_loop(config=make_config(offset=0.15))
+        loop.session_offset = 0.45
+        loop._lyr.current_line_index.return_value = 0
+        loop.lyrics = [(0.0, "a"), (10.0, "b")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        loop._ipc.next_line.assert_called_once_with(loop.lyrics, 0, 0.6)
+
+    def test_the_voice_end_is_measured_against_the_next_line(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 0
+        loop._lyr.voice_end.return_value = 3.2
+        loop.lyrics = [(0.0, "a b c"), (10.0, "d")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        loop._lyr.voice_end.assert_called_once_with(0.0, "a b c", None, 10.0)
+
+    def test_the_voice_end_goes_out_in_raw_position(self):
+        # mismo espacio que `due`: el overlay compara los dos contra la
+        # posición cruda del player, que es lo único que le llega
+        loop = make_loop(config=make_config(offset=0.15))
+        loop._lyr.current_line_index.return_value = 0
+        loop._lyr.voice_end.return_value = 3.2
+        loop.lyrics = [(0.0, "a b c"), (10.0, "d")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        self.assertAlmostEqual(loop._ipc.show.call_args.kwargs["v_end"], 3.05,
+                               places=3)
+
+    def test_the_last_line_has_no_next_to_measure_against(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 0
+        loop.lyrics = [(0.0, "a b c")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=1.0), now=0.0)
+
+        loop._lyr.voice_end.assert_called_once_with(0.0, "a b c", None, None)
 
 
 class TestLyricsListIsSent(unittest.TestCase):

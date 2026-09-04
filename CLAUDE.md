@@ -37,7 +37,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   que se mueve es la cámara, re-sembrada en cada aparición), `static` forma una vez por compás la
   primera palabra de la línea que VIENE, `textsea` hace correr la letra entera con el verso que
   suena encendido, y `eyes` es una grilla de ojos mirando a la pantalla que tiene la frase (y
-  girando hacia el destino durante el aviso del salto).
+  girando hacia el destino durante el aviso del salto). Los cuatro de la segunda mitad leen el
+  ritmo: `ekg` escribe un QRS por tiempo (del `tick` cuantizado, no del bombo crudo),
+  `rorschach` abre la mancha bajando el umbral con el volumen, `plasma` deja que los graves
+  empujen las bolas para arriba y `tunnel` viaja más rápido cuanto más fuerte suena. Y `scope`
+  cierra la figura de Lissajous cuando el compás es confiable (la relación entre los ejes sale
+  de la parte del tema); `stars` salta al hiperespacio en el drop.
 - **Cómo entra la línea lo decide la música, no un sorteo parejo.** `crtEntriesFor` reparte UN
   estilo de entrada por pantalla al consumir la línea, pesado por el nivel de los últimos ~2 s y
   por la parte del tema (tabla `crtEntryTable` en `shell.qml`, con el comentario de cómo tunearla).
@@ -62,11 +67,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sync +|-|sing on|off`.
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
-- `shell/Motif.qml` — doce animaciones para las pantallas sin letra: reparte propiedades y elige
-  cuál dibuja. Las que tienen física propia viven al lado, un archivo cada una —
-  `Ocean.qml`, `Pond.qml`, `Dunes.qml`, `Static.qml` (con su `.frag` + `.qsb`), más
-  `TextSea.qml`, `Eyes.qml` y `Eye.qml` (el dibujo del ojo, que usan el motivo `eye` y la
-  grilla `eyes`).
+- `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
+  elige cuál dibuja. Las que tienen física propia viven al lado, un archivo cada una y por
+  `Loader` — `Ocean.qml`, `Pond.qml`, `Dunes.qml`, `Static.qml`, `Rorschach.qml`, `Plasma.qml`
+  y `Tunnel.qml` (con su `.frag` + `.qsb`), más `Ekg.qml` (Canvas), `TextSea.qml`, `Eyes.qml` y
+  `Eye.qml` (el dibujo del ojo, que usan el motivo `eye` y la grilla `eyes`). Lo que se dibuja
+  con items sueltos (el radar, la lluvia, el hiperespacio, la carta de ajuste, el
+  osciloscopio) sigue adentro de `Motif.qml`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
 - `shell/Ring.qml` — el aro que se consume contando la línea que viene.
@@ -283,6 +290,25 @@ no-op → boot roto. No reintroducir un segundo.)
   un item invisible no se dibuja nada y la captura sale vacía (la misma trampa que el burn-in de
   los carteles). Y lo que se va a formar se congela al arrancar la convergencia: `crtNext` cambia
   cuando cae la línea siguiente y la palabra mutaría a mitad de camino.
+- **Una velocidad NO se multiplica por el reloj: se acumula.** El túnel, el hiperespacio y el
+  giro del osciloscopio llevan su propia distancia recorrida, sumada cuadro a cuadro con la
+  velocidad del momento. Con `posición = reloj × velocidad`, el reloj vale miles de segundos y
+  cualquier cambio de velocidad (el drop es el más grande) se multiplica entero: todo se
+  teletransporta de una. Es la razón por la que el `tunnel` de una pasada vieja se veía mal.
+- **Un motivo no se puede apagar atándole el `visible` a `running`.** El `tunnel` anterior se
+  sacó por quedar EN BLANCO: con la pantalla quieta tiene que dibujar el cuadro completo, sin
+  avanzar. Lo mismo el cardiograma, que además necesita un `requestPaint()` en
+  `Component.onCompleted` y en `onVisibleChanged` — con el Timer parado no lo llama nadie.
+- **El QRS del `ekg` sale del `tick`, no del `beat`.** `beat` son onsets crudos: con ese, el
+  latido cae donde el bombo pega fuerte y no donde va el tiempo. `tick` ya está cuantizado al
+  compás. Sin compás confiable no hay más remedio que el crudo.
+- **En GLSL ES 100 el tope de un `for` tiene que ser constante.** El `plasma` recorre siempre
+  seis bolas y las que sobran (pantalla lenta) pesan cero por `step()`, en vez de recortar el
+  loop. Y todo `1/r²` va con `max(dot(d,d), ε)`: sin eso, el centro de una bola es un NaN y el
+  NaN es un agujero en la imagen.
+- **Un `ShaderEffectSource` con `live: true` re-renderiza su fuente en CADA cuadro.** La
+  máscara de `static` cambia una vez por compás: va `live: false` con `scheduleUpdate()` a mano
+  en `converge()`, en el cambio de tamaño y al nacer. Sin el de nacer no hay textura ninguna.
 - **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
   test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
 
@@ -312,12 +338,10 @@ no-op → boot roto. No reintroducir un segundo.)
 - README: documenta sólo lrclib, pero desde FASE 1 la búsqueda encadena un segundo proveedor
   (music.163.com/NetEase) y le manda artista + título. Falta decir cuáles son los proveedores y
   en qué orden se prueban.
-- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0, 1, 2, 3 y la primera mitad de la
-  4** (perillas `foreshadow`, `ring`, `hop` y `section_zoom`, las entradas `interlace` /
-  `tubeon` / `overburn`, el director por energía, y los motifs `dunes`, `static`, `textsea` y
-  `eyes`). De la FASE 4 faltan `ekg`, `rorschach`, `plasma` y `tunnel` más las dos mejoras
-  (`scope` a Lissajous, `stars` a hiperespacio); después va la FASE 5 (cierre de docs). Lo que
-  hay que mirar a ojo está en `docs/plans/CHECKS-VISUALES.md`.
+- **`docs/plans/2026-09-03-crt-tanda2.md`: hechas las FASES 0 a 4. Falta SÓLO la FASE 5**
+  (cierre de docs: README con las perillas nuevas y los dos proveedores de letra, y escribir
+  `docs/plans/2026-09-03-estado-tras-tanda2.md`). Lo que hay que mirar a ojo está en
+  `docs/plans/CHECKS-VISUALES.md`, y de la FASE 4 no lo vio nadie todavía.
 - **El plan de mejoras `docs/plans/2026-09-03-mejoras-fatal-lyrics.md` quedó COMPLETO** (FASE 0 a
   FASE 5). Falta probarlo cantando: el modo karaoke (`fatal sing on`) se verificó con la captura
   del micrófono andando y con los tests del `SingGate`, pero nadie cantó todavía — si el umbral

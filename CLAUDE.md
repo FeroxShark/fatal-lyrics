@@ -216,6 +216,9 @@ no-op → boot roto. No reintroducir un segundo.)
 - **Una perilla nueva son CUATRO lugares, no tres:** `DEFAULTS` + `_CONFIG_COMMENTS`
   (`config.py`), `CONFIG_EVENT_MAP` (`ipc.py`), `_configEventMap` (`shell.qml`) y `SETTINGS`
   (`setup.py`) — sin este último la perilla existe pero no aparece en `fatal config`.
+  **Excepción: las de `[keys]` son TRES.** No viajan al overlay (las aplica Hyprland desde el
+  daemon), así que meterlas en los dos mapas de eventos sería una property muerta en
+  `shell.qml`. Lo fija `test_the_key_binds_do_not_travel_to_the_overlay`: no "arreglarlo".
 - **El reflejo (`mirror`) son 8 tajadas, no una imagen con degradado.** El degradado necesitaría
   `OpacityMask` de `Qt5Compat.GraphicalEffects`, que este shell no importa en ningún lado.
 - **El cartel `kind: "hang"` muere solo sin plumbing propio:** nace con `pushDialog(..., false)`,
@@ -238,6 +241,14 @@ no-op → boot roto. No reintroducir un segundo.)
   `unbind` del anterior y después `bind` del nuevo — **volver al valor de fábrica también
   rebindea**, porque el unbind de antes se llevó puesto el bind del archivo de Hyprland y sin
   eso la tecla queda muerta hasta el próximo reload del compositor.
+- **Un reenvío de la MISMA línea no puede consumir la predicción.** `sync()` resetea el
+  índice del daemon a propósito, así que cada golpe de sync devuelve el mismo verso ~0.3 s
+  después. `show()` lo tomaba por una línea nueva y se comía el reparto anticipado para la
+  SIGUIENTE: la frase saltaba de pantalla en cada golpe (`hop sweep` justo detrás de cada
+  rótulo). El flag `again` (mismo `text` y mismo `t0`) hace que la línea que vuelve conserve
+  su reparto, con el serial re-sellado — `crtShot` sólo acepta el override si el serial
+  coincide con el de la línea. Tampoco se rehace como IOWN: mover la letra por haber tocado
+  el sync es exactamente lo que se estaba arreglando.
 - **El aviso del sync NO puede ser un `show`.** Con el tubo prendido un `show` PASA A SER la
   línea de la letra: avisar del ajuste borraba justo el verso que se estaba tratando de
   sincronizar. Va por un evento propio (`sync`) y el overlay decide qué dibujar — el rótulo

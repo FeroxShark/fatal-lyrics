@@ -506,7 +506,7 @@ package:
 |-------------|---------------------------------------------------------------------|
 | `util`      | `log()` + rotation, runtime paths (PID/log), `UA`, `FIELD_SEP`        |
 | `config`    | defaults, TOML read/write, live reload, CRT switch, sliders watcher   |
-| `lyrics`    | lrclib client, on-disk cache, line splitting into beats               |
+| `lyrics`    | lrclib + NetEase clients, on-disk cache, line splitting into beats    |
 | `art`       | album-cover colours (ImageMagick, optional)                           |
 | `system`    | playerctl / hyprctl / terminal lookups, daemon PID, optional-tool check |
 | `ipc`       | the Unix socket and every event sent to the overlay                   |

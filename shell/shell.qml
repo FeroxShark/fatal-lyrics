@@ -1031,6 +1031,9 @@ ShellRoot {
         // OJO: "rings" y "tunnel" existían hasta la 4ª pasada; hoy Motif.qml no
         // los conoce y estas palabras dejaban la pantalla en blanco. Van a los
         // motivos que quedaron con el mismo sentido.
+        // el desierto: arena, dunas, sed
+        { re: /\b(sand|desert|dune|dunes|dust|thirst)\b/i, kind: "dunes" },
+        { re: /\b(arena|desierto|duna|dunas|polvo|sed)\b/i, kind: "dunes" },
         { re: /\b(fire|burn|heart|beat|blood|fuego|arde|coraz[oó]n|late)\b/i, kind: "radar" },
         { re: /\b(run|road|drive|fall|corr[eo]|camino|caigo)\b/i, kind: "stars" },
     ]
@@ -1046,7 +1049,7 @@ ShellRoot {
     }
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
-                                       "rain", "ocean", "pond"]
+                                       "rain", "ocean", "pond", "dunes"]
 
     // los dos de agua se pueden apagar juntos (`water = false`) sin tocar el
     // resto de las animaciones

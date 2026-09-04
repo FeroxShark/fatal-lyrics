@@ -1208,6 +1208,14 @@ PanelWindow {
                     * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
                 dim: crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1
                 waterAmp: crt.ctl.crtWaterAmp
+                // la semilla de esta aparición: el reloj de los motivos cruzado
+                // con el número de pantalla, así dos pantallas con el mismo
+                // dibujo no arman el mismo paisaje
+                seed: crt.ctl.crtHash(crt.ctl.motifGen * 31 + crt.idx * 7 + 13)
+                quality: crt.ctl.crtQuality
+                // el drop viaja como booleano: los motivos no pueden sacarlo de
+                // `energy`, que acá arriba ya viene multiplicada por el aviso
+                drop: crt.ctl.audSection === "drop"
                 // el registro de lo que suena: con el tubo apagado no hay
                 // captura, y el laguito tiembla en un tono medio
                 pitch: crt.live ? crt.ctl.audCentroid : 0.5

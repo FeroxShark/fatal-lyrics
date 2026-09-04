@@ -17,7 +17,7 @@ import QtQuick
 Item {
     id: motif
 
-    // eye | scope | radar | rain | stars | testcard | ocean | pond | none
+    // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -43,6 +43,18 @@ Item {
     // registro de lo que suena (0 grave .. 1 agudo): la frecuencia a la que
     // vibra el laguito
     property real pitch: 0.5
+    // La semilla de ESTA aparición (el `motifGen` de la pared cruzado con el
+    // número de pantalla). Los motivos que arman un paisaje la usan para que
+    // nunca salga dos veces el mismo: sin ella, el mismo dibujo aparecería
+    // idéntico cada 25 segundos.
+    property real seed: 0
+    // `crt.quality`: un motivo no puede bajarle los cuadros a la pantalla
+    // enfocada, así que los que dibujan muchas cosas achican la cuenta acá.
+    property real quality: 1.0
+    // ¿el tema está en un drop? Llega como booleano y NO como umbral sobre
+    // `energy`: la energía viene multiplicada por el aviso del salto, así que
+    // un umbral acá se dispararía al final de cualquier verso.
+    property bool drop: false
     // El golpe del tubo: cuando la pantalla parpadea, la animación ACOMPAÑA —
     // se acelera y crece un instante. Sin esto el parpadeo es una luz que se
     // mueve sola; con esto es el golpe de la canción atravesando todo.
@@ -542,6 +554,31 @@ Item {
             beatAmt: motif.beatAmt
             energy: motif.energy * (1 + 0.5 * motif.surge)
             amp: motif.waterAmp
+            running: motif.spinning
+        }
+    }
+
+    // ----------------------------------------------------------------- arena
+    // Las dunas son el desierto del mar: la misma técnica de puntos en
+    // perspectiva (`dunes.frag`), pero el paisaje está quieto y lo que se
+    // mueve es la cámara. Cada golpe es un pisotón que levanta la arena; en el
+    // drop la arena se queda flotando.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "dunes"
+        visible: active
+
+        sourceComponent: Dunes {
+            colour: motif.colour
+            crest: motif.hot
+            level: motif.level
+            high: motif.high
+            beat: motif.beat
+            beatAmt: motif.beatAmt
+            energy: motif.energy * (1 + 0.5 * motif.surge)
+            quality: motif.quality
+            seed: motif.seed
+            drop: motif.drop
             running: motif.spinning
         }
     }

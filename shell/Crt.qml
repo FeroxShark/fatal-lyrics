@@ -310,25 +310,31 @@ PanelWindow {
     //
     // Se anotan al arrancar el salto y no por cuadro: para cuando el rayo va
     // por la mitad, esta pantalla ya está mostrando otra cosa.
+    //
+    // OJO: se mapea contra `stage`, que es el item que el rayo llena, y NO
+    // contra `crt` — `crt` es el PanelWindow, no un Item, así que `mapToItem`
+    // tiraba "Could not convert argument 0 ... to const QQuickItem*" y devolvía
+    // undefined: las hebras salían SIEMPRE del fallback centrado. El salto de
+    // dos pantallas era tan raro que el warning pasaba desapercibido.
     property var hopSources: []
     function hopAnchors() {
         const out = [];
-        if (!showsText || width <= 0 || height <= 0)
+        if (!showsText || stage.width <= 0 || stage.height <= 0)
             return out;
         if (allMode) {
-            const p = wholeLine.mapToItem(crt, wholeLine.width / 2,
-                                          wholeLine.height / 2);
+            const p = wholeLine.mapToItem(stage, Qt.point(wholeLine.width / 2,
+                                                         wholeLine.height / 2));
             const w = Math.max(wholeLine.contentWidth, 1);
             for (let k = -1; k <= 1; k++)
-                out.push([(p.x + k * w * 0.30) / width, p.y / height]);
+                out.push([(p.x + k * w * 0.30) / stage.width, p.y / stage.height]);
             return out;
         }
         for (let k = 0; k < wordRows.count; k++) {
             const it = wordRows.itemAt(k);
             if (!it || it.opacity < 0.5)
                 continue;                  // la palabra que todavía no sonó
-            const q = it.mapToItem(crt, it.width / 2, it.height / 2);
-            out.push([q.x / width, q.y / height]);
+            const q = it.mapToItem(stage, Qt.point(it.width / 2, it.height / 2));
+            out.push([q.x / stage.width, q.y / stage.height]);
         }
         return out;
     }

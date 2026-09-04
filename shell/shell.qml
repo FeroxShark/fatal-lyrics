@@ -1074,7 +1074,11 @@ ShellRoot {
         // el desierto: arena, dunas, sed
         { re: /\b(sand|desert|dune|dunes|dust|thirst)\b/i, kind: "dunes" },
         { re: /\b(arena|desierto|duna|dunas|polvo|sed)\b/i, kind: "dunes" },
-        { re: /\b(fire|burn|heart|beat|blood|fuego|arde|coraz[oó]n|late)\b/i, kind: "radar" },
+        // el corazón: el cardiograma, no el radar (hasta la 5ª pasada estas
+        // palabras caían ahí porque no había con qué dibujar un latido)
+        { re: /\b(heart|heartbeat|beat|beating|blood|pulse)\b/i, kind: "ekg" },
+        { re: /\b(coraz[oó]n|late|latido|latir|sangre|pulso)\b/i, kind: "ekg" },
+        { re: /\b(fire|burn|fuego|arde)\b/i, kind: "radar" },
         { re: /\b(run|road|drive|fall|corr[eo]|camino|caigo)\b/i, kind: "stars" },
     ]
     // Cada cuánto se cambia de animación. Antes se sorteaba por LÍNEA: las
@@ -1090,7 +1094,7 @@ ShellRoot {
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
                                        "rain", "ocean", "pond", "dunes", "static",
-                                       "textsea", "eyes"]
+                                       "textsea", "eyes", "ekg"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca

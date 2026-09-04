@@ -18,7 +18,7 @@ Item {
     id: motif
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
-    // | static | textsea | eyes | none
+    // | static | textsea | eyes | ekg | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -508,6 +508,30 @@ Item {
             quality: motif.quality
             seed: motif.seed
             drop: motif.drop
+            running: motif.spinning
+        }
+    }
+
+    // ----------------------------------------------------------- cardiograma
+    // El monitor de hospital: la traza se ESCRIBE de izquierda a derecha y el
+    // cursor borra la vuelta anterior. Va por Loader como los demás: son 240
+    // muestras y un Canvas, y no tiene por qué existir mientras la pantalla
+    // muestra otra cosa.
+    Loader {
+        anchors.fill: parent
+        active: motif.kind === "ekg"
+        visible: active
+
+        sourceComponent: Ekg {
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            beat: motif.beat
+            beatAmt: motif.beatAmt
+            tick: motif.tick
+            bpmLive: motif.bpmLive
+            quality: motif.quality
+            seed: motif.seed
             running: motif.spinning
         }
     }

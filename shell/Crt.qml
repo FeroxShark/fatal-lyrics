@@ -195,16 +195,24 @@ PanelWindow {
     // origen pega un tirón hacia donde se fue. El texto del medio no se toca:
     // la franja pasa por arriba, no lo reemplaza.
     //
-    // El reloj (0→1 en 180 ms) sale de `ctl.crtHopStart`, que es del root: acá
-    // se LEE por cuadro. Cada pantalla anotándose su propio arranque hacía que
-    // la franja entrara en la segunda antes de salir de la primera.
-    property real hopClock: 1
+    // El reloj (0→1 en `crtHopMs`, más la cola) sale de `ctl.crtHopStart`, que
+    // es del root: acá se LEE por cuadro. Cada pantalla anotándose su propio
+    // arranque hacía que la cabeza entrara en la segunda antes de salir de la
+    // primera.
+    //
+    // El reparto del reloj: la pantalla de origen se lleva el 22 % (las hebras
+    // saliendo de la letra), las del medio el 56 % entre todas, y el destino el
+    // 22 % final. Después de eso quedan 150 ms de cola apagándose ENCIMA de la
+    // línea que ya entró, que es lo que ata el viaje con la frase.
+    readonly property real hopTailFrac: 150 / Math.max(ctl.crtHopMs, 1)
+    property real hopClock: 2
     readonly property bool hopLive: ctl.crtHopStart > 0 && ctl.crtHop.from >= 0
     readonly property bool hopCorridor: ctl.crtHopMode === "corridor"
         || ctl.crtHopMode === "both"
     readonly property bool hopInterf: ctl.crtHopMode === "interference"
         || ctl.crtHopMode === "both"
     readonly property bool hopFrom: hopLive && ctl.crtHop.from === idx
+    readonly property bool hopTo: hopLive && ctl.crtHop.to === idx
     // ¿esta pantalla queda EN EL MEDIO del salto?
     readonly property bool hopMid: hopLive
         && idx > Math.min(ctl.crtHop.from, ctl.crtHop.to)
@@ -216,14 +224,30 @@ PanelWindow {
         Math.abs(ctl.crtHop.to - ctl.crtHop.from) - 1, 1)
     readonly property int hopPos: ctl.crtHop.dir > 0
         ? idx - ctl.crtHop.from - 1 : ctl.crtHop.from - idx - 1
-    readonly property real hopLocal: Math.min(Math.max(
-        (hopClock - hopPos / hopMids) * hopMids, 0), 1)
-    // el centro de la franja entra por el borde de `from` y sale por el de `to`;
-    // arranca y termina afuera de la pantalla, así entra desde el borde en vez
-    // de aparecer adentro (y por eso fuera de su tramo no se ve nada)
-    readonly property real hopCentre: ctl.crtHop.dir > 0
-        ? -0.16 + 1.32 * hopLocal : 1.16 - 1.32 * hopLocal
-    readonly property bool hopBand: hopCorridor && hopMid && hopClock < 1
+    // Cuánto avanzó el rayo DENTRO de esta pantalla. En la de origen y en las
+    // del medio se lo deja pasar de 1 (hasta que la cola termina de salir por
+    // el borde); en la de destino se clava en 1, que es el centro, y lo que
+    // sigue es la cola apagándose.
+    readonly property real hopRayP: {
+        if (!hopLive || !hopCorridor)
+            return 0;
+        if (hopFrom)
+            return Math.min(Math.max(hopClock / 0.22, 0), 1.45);
+        if (hopMid)
+            return Math.min(Math.max(
+                (hopClock - 0.22) / 0.56 * hopMids - hopPos, 0), 1.45);
+        if (hopTo)
+            return Math.min(Math.max((hopClock - 0.78) / 0.22, 0), 1);
+        return 0;
+    }
+    readonly property real hopRayFade: hopTo
+        ? Math.min(Math.max(1 - (hopClock - 1) / hopTailFrac, 0), 1) : 1
+    // el tramo del degradado que le toca a esta pantalla: el color va del de la
+    // letra que se va al de la que llega a lo largo de TODO el viaje
+    readonly property real hopRayG0: hopFrom ? 0
+        : (hopMid ? 0.22 + 0.56 * hopPos / hopMids : 0.78)
+    readonly property real hopRayG1: hopFrom ? 0.22
+        : (hopMid ? 0.22 + 0.56 * (hopPos + 1) / hopMids : 1)
 
     // la crominancia por cuatro mientras la franja está encima: tres cuadros,
     // contados en cuadros y no en reloj, que es como dura un glitch de verdad
@@ -232,11 +256,14 @@ PanelWindow {
     FrameAnimation {
         // corre sólo durante el salto (y los tres cuadros del glitch): el resto
         // del tiempo la pantalla del medio sigue a sus 20 fps de siempre
-        running: crt.visible && (crt.hopClock < 1 || crt.hopChromaFrames > 0)
+        running: crt.visible
+            && (crt.hopClock < 1 + crt.hopTailFrac || crt.hopChromaFrames > 0)
         onTriggered: {
+            const end = 1 + crt.hopTailFrac;
             crt.hopClock = crt.ctl.crtHopStart > 0
-                ? Math.min((Date.now() - crt.ctl.crtHopStart) / crt.ctl.crtHopMs, 1)
-                : 1;
+                ? Math.min((Date.now() - crt.ctl.crtHopStart) / crt.ctl.crtHopMs,
+                           end)
+                : end;
             if (crt.hopChromaFrames > 0 && --crt.hopChromaFrames === 0)
                 crt.hopChroma = 1;
         }
@@ -275,7 +302,7 @@ PanelWindow {
             if (crt.ctl.crtHopStart <= 0) {
                 // cancelado a mitad de camino (hotplug, config, otro tema)
                 hopGlitch.stop();
-                crt.hopClock = 1;
+                crt.hopClock = 1 + crt.hopTailFrac;
                 crt.hopChroma = 1;
                 crt.hopChromaFrames = 0;
                 return;
@@ -287,8 +314,12 @@ PanelWindow {
             }
             if (!crt.hopMid || !crt.hopInterf)
                 return;
+            // cuándo le pasa el rayo por encima a ESTA pantalla: el tramo del
+            // medio arranca al 22 % del reloj y se reparte entre las
+            // intermedias
             hopGlitch.interval = Math.max(Math.round(
-                ((crt.hopPos + 0.5) / crt.hopMids) * crt.ctl.crtHopMs
+                (0.22 + 0.56 * (crt.hopPos + 0.5) / crt.hopMids)
+                * crt.ctl.crtHopMs
                 - (Date.now() - crt.ctl.crtHopStart)), 1);
             hopGlitch.restart();
         }
@@ -923,12 +954,6 @@ PanelWindow {
             property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
                 * (crt.focused ? 1 : 0.6) * crt.ctl.flickerAmt
             property real blink: crt.beatBlink
-            // la franja del salto: la altura es de la pared (la publica el root,
-            // es UNA franja cruzando) y el tramo horizontal, de esta pantalla
-            property real hopY: crt.ctl.crtHopY
-            property real hopX0: crt.hopCentre - 0.11
-            property real hopX1: crt.hopCentre + 0.11
-            property real hopGain: crt.hopBand ? 1 : 0
             // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
             property real interlacePhase: crt.interlacePhase
             property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
@@ -1485,6 +1510,26 @@ PanelWindow {
                     font.pixelSize: Math.round(crt.shortSide * 0.05)
                 }
             }
+        }
+
+        // ---- el rayo del salto (T3.B4)
+        // Va en `stage` y NO adentro de `camera`: el recorrido se mide contra
+        // los bordes del tubo, y con el plano de la sección encima terminaría
+        // agarrando por un borde que no es el borde. Sigue pasando por el
+        // vidrio, que es lo que importa.
+        HopRay {
+            anchors.fill: parent
+            visible: crt.hopRayP > 0 && crt.hopRayFade > 0.01
+            role: crt.hopFrom ? "from" : (crt.hopMid ? "mid" : "to")
+            dir: crt.ctl.crtHop.dir
+            progress: crt.hopRayP
+            fade: crt.hopRayFade
+            globalFrom: crt.hopRayG0
+            globalTo: crt.hopRayG1
+            edgeTop: crt.ctl.crtHopEdge
+            colFrom: crt.ctl.crtFace(crt.ctl.crtHop.from, false).ink
+            colTo: crt.ctl.crtFace(crt.ctl.crtHop.to, false).ink
+            textH: Math.min(0.45, crt.shortSide * 0.34 / Math.max(crt.height, 1))
         }
 
         // ---- fogonazo del golpe, sólo en la pantalla enfocada

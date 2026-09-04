@@ -29,12 +29,6 @@ layout(std140, binding = 0) uniform buf {
     float vignette;
     float pulse;      // 0..1 golpe de la canción: el tubo levanta con el ritmo
     float blink;      // 0..1 apagón corto, para los picos
-    // the jump corridor: a few scanlines light up and cross the screen while
-    // the phrase travels over it to a screen further down the wall
-    float hopY;       // height of the band, 0..1 of the tube
-    float hopX0;      // left edge of the band, in uv.x
-    float hopX1;      // right edge
-    float hopGain;    // 0 = no band on this screen
     // the interlaced entrance: the line shows up on half the scanlines first
     float interlacePhase;  // 0 = off, 1 = even rows only, 2 = odd rows only
     vec2 res;         // surface size in pixels
@@ -142,18 +136,10 @@ void main() {
         col *= mix(0.10, 1.0, keep);
     }
 
-    // The corridor of a jump (T2.3). It rides the comb instead of being drawn
-    // on top: what crosses the screen is the signal passing through on its way
-    // to another tube, so it has to be made of the same scanlines.
-    if (hopGain > 0.001) {
-        float dy = abs(fc.y - hopY * res.y);
-        float inY = smoothstep(8.0, 0.0, dy);          // 3-4 scanlines thick
-        float inX = smoothstep(0.0, 0.03, uv.x - hopX0)
-                  * smoothstep(0.0, 0.03, hopX1 - uv.x);
-        float band = inY * inX * hopGain;
-        col *= 1.0 + 0.8 * band;                       // x1.8 where it passes
-        col += tint * 0.22 * band;
-    }
+    // The corridor of a jump used to live here: a band of scanlines crossing
+    // the middle of the screen. It is `HopRay.qml` now (T3.B4) — the ray has to
+    // have a head, a tail, a gradient and a route that goes around the motif by
+    // the EDGE, and none of that fits in a band riding the comb.
 
     // rolling bar: the classic bright band sliding down an out-of-sync tube
     float by = fract(t * 0.085);

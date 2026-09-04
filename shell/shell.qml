@@ -800,10 +800,14 @@ ShellRoot {
     // primera, que es justo lo que rompe la ilusión de que es una sola.
     // 0 = no hay salto en curso (también es la forma de cancelarlo).
     property double crtHopStart: 0
-    readonly property int crtHopMs: 180
-    // a qué altura cruza la franja, sorteada una vez por salto: es UNA franja
-    // atravesando la pared, no una por pantalla
-    property real crtHopY: 0.5
+    // 180 ms alcanzaban para una franja pareja; para un rayo que sale de la
+    // letra, cruza por el borde y converge en el destino son pocos: no se
+    // llegaba a leer para dónde iba (T3.B4).
+    readonly property int crtHopMs: 360
+    // por qué borde cruza las pantallas del medio: arriba o abajo, alternando
+    // salto a salto. Es UN rayo atravesando la pared, así que el borde lo
+    // decide el root una vez y todos los monitores lo leen.
+    property bool crtHopEdge: true
 
     function crtPredict() {
         crtPendingShot = null;
@@ -883,11 +887,13 @@ ShellRoot {
             return;
         if (shot.mode === "iown" || shot.mode === "all")
             return;
-        crtHopY = 0.25 + Math.random() * 0.5;
+        // alterna en vez de sortear: dos saltos seguidos por el mismo borde se
+        // leen como una decoración fija, y sorteando salen repetidos igual
+        crtHopEdge = !crtHopEdge;
         crtHopStart = Date.now();
         console.log("crt: hop sweep " + crtHop.from + "->" + crtHop.to
             + " mids=" + (Math.abs(crtHop.to - crtHop.from) - 1)
-            + " y=" + crtHopY.toFixed(2));
+            + " edge=" + (crtHopEdge ? "top" : "bottom"));
     }
 
     // Dónde cae la palabra del IOWN en la pantalla i, medido sobre la PARED y

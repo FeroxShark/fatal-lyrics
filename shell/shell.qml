@@ -980,7 +980,13 @@ ShellRoot {
     // 180 ms alcanzaban para una franja pareja; para un rayo que sale de la
     // letra, cruza por el borde y converge en el destino son pocos: no se
     // llegaba a leer para dónde iba (T3.B4).
-    readonly property int crtHopMs: 360
+    // T4.3: sale de `Motion.enterMs` y no de un número suelto. `show()` publica
+    // el arranque del salto y sube el serial en el MISMO milisegundo, así que
+    // la letra empieza a entrar y el rayo a viajar juntos: con la cabeza
+    // llegando 40 ms después de que la palabra terminó de asentarse, la
+    // convergencia y la frase se leen como UNA cosa. Lo dice el log:
+    // `crt: hop land` es la diferencia medida contra el arranque.
+    readonly property int crtHopMs: Motion.enterMs + 40
     // por qué borde cruza las pantallas del medio: arriba o abajo, alternando
     // salto a salto. Es UN rayo atravesando la pared, así que el borde lo
     // decide el root una vez y todos los monitores lo leen.

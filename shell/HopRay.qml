@@ -38,8 +38,14 @@ Item {
     property bool edgeTop: true       // por qué borde cruza la intermedia
     property color colFrom: "#4fe8ff"
     property color colTo: "#ffd6de"
-    // alto del bloque de texto, 0..1 de la pantalla: de ahí nacen las hebras
+    // alto del bloque de texto, 0..1 de la pantalla: el fallback de dónde nacen
+    // las hebras cuando la pantalla de origen no pudo medir sus palabras
     property real textH: 0.34
+    // T4.3: de dónde nacen las hebras DE VERDAD — el centro de cada palabra de
+    // la pantalla de origen, en 0..1. Una hebra por palabra (ciclando si hay
+    // menos palabras que hebras). Con la franja centrada de antes el rayo salía
+    // "del texto" sólo de nombre: salía de una altura promedio.
+    property var sources: []
 
     readonly property int strands: 3
     readonly property real tailU: 0.42     // largo de la cola, en u
@@ -71,19 +77,24 @@ Item {
             const spread = (k - (ray.strands - 1) / 2) / Math.max(ray.strands, 1);
             const ey = ray.edgeTop ? 0.09 : 0.91;
             if (ray.role === "from") {
-                // nacen del alto del texto y se van estirando hacia el borde
-                const y0 = 0.5 + spread * ray.textH;
+                // nacen de la PALABRA y se van estirando hacia el borde
+                const n = ray.sources.length;
+                const src = n > 0 ? ray.sources[k % n]
+                                  : [0.5, 0.5 + spread * ray.textH];
                 const e = u * u * (3 - 2 * u);
-                return [0.5 + ray.dir * u * 0.62 + spread * 0.04,
-                        ray.lerp(y0, ey, e)];
+                return [src[0] + ray.dir * u * 0.62 + spread * 0.04,
+                        ray.lerp(src[1], ey, e)];
             }
             if (ray.role === "mid") {
                 // por el borde, sin acercarse al centro
                 return [ray.dir > 0 ? -0.08 + 1.16 * u : 1.08 - 1.16 * u,
                         ey + spread * 0.05 + 0.012 * Math.sin(u * 9 + k)];
             }
-            // destino: entra por el borde y converge al medio
-            const e = u * u * (3 - 2 * u);
+            // Destino: entra por el borde y converge al medio, con SNAP —
+            // `OutExpo`, la misma curva con la que entra la letra. Con el
+            // smoothstep de antes la cabeza frenaba antes de llegar y el
+            // encuentro con la frase no se leía como un encuentro.
+            const e = u >= 1 ? 1 : 1 - Math.pow(2, -10 * u);
             const x0 = ray.dir > 0 ? -0.08 : 1.08;
             return [ray.lerp(x0, 0.5, e) + spread * 0.03 * (1 - e),
                     ray.lerp(ey, 0.5, e * e) + spread * 0.06 * (1 - e)];

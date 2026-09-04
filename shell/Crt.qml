@@ -292,6 +292,38 @@ PanelWindow {
     readonly property real hopRayG1: hopFrom ? 0.22
         : (hopMid ? 0.22 + 0.56 * (hopPos + 1) / hopMids : 1)
 
+    // ---- de dónde nacen las hebras del rayo (T4.3)
+    // Salían del ALTO del bloque de texto: tres hebras repartidas sobre una
+    // franja centrada, o sea de ningún lado en particular. Ahora salen de las
+    // palabras de verdad — el centro de cada renglón del director, o tres
+    // puntos sobre el ancho de la línea en modo `all` —, que es lo que hace
+    // que el rayo se lea como que la LETRA se estira y se va.
+    //
+    // Se anotan al arrancar el salto y no por cuadro: para cuando el rayo va
+    // por la mitad, esta pantalla ya está mostrando otra cosa.
+    property var hopSources: []
+    function hopAnchors() {
+        const out = [];
+        if (!showsText || width <= 0 || height <= 0)
+            return out;
+        if (allMode) {
+            const p = wholeLine.mapToItem(crt, wholeLine.width / 2,
+                                          wholeLine.height / 2);
+            const w = Math.max(wholeLine.contentWidth, 1);
+            for (let k = -1; k <= 1; k++)
+                out.push([(p.x + k * w * 0.30) / width, p.y / height]);
+            return out;
+        }
+        for (let k = 0; k < wordRows.count; k++) {
+            const it = wordRows.itemAt(k);
+            if (!it || it.opacity < 0.5)
+                continue;                  // la palabra que todavía no sonó
+            const q = it.mapToItem(crt, it.width / 2, it.height / 2);
+            out.push([q.x / width, q.y / height]);
+        }
+        return out;
+    }
+
     // La crominancia por cuatro mientras el rayo pasa por encima. Duraba TRES
     // CUADROS, contados en cuadros: a 60 Hz son 50 ms y a 200 Hz son 15, y en
     // los dos casos pasa sin que nadie lo registre (T3.B6). Ahora dura por
@@ -309,9 +341,17 @@ PanelWindow {
         onTriggered: {
             const now = Date.now();
             const end = 1 + crt.hopTailFrac;
+            const before = crt.hopClock;
             crt.hopClock = crt.ctl.crtHopStart > 0
                 ? Math.min((now - crt.ctl.crtHopStart) / crt.ctl.crtHopMs, end)
                 : end;
+            // el enganche con la letra, MEDIDO: cuánto tarda la cabeza en
+            // converger contra el mismo arranque que publicó el root. La
+            // entrada de la frase dura `Motion.enterMs` desde ese mismo
+            // instante, así que este número menos 320 es el desfase real.
+            if (crt.hopTo && before < 1 && crt.hopClock >= 1)
+                console.log("crt: hop land s" + crt.idx + " +"
+                    + Math.round(now - crt.ctl.crtHopStart) + "ms");
             if (crt.hopChromaUntil > 0 && now >= crt.hopChromaUntil) {
                 if (!crt.hopChromaPunch) {
                     // el cuadro de más, al doble: el remate del glitch
@@ -326,16 +366,22 @@ PanelWindow {
         }
     }
     Timer {
-        // se dispara cuando la franja está sobre ESTA pantalla: el medio de su
-        // tramo, medido contra el mismo arranque que publicó el root
+        // T4.3: se dispara cuando la cabeza LLEGA al centro de esta pantalla,
+        // que es el destino. Hasta la tanda 3 esto era la pantalla del MEDIO:
+        // el rayo le pegaba un glitch y un `hit(0.25)` al pasar por su borde, y
+        // eso es exactamente lo que Ferox veía como "el rayo pasa por encima de
+        // las animaciones". El rayo va por el BORDE justamente para no tocar el
+        // motif de la intermedia; romperla encima era deshacerlo.
+        //
+        // El modo `interference` sigue existiendo y ahora es el remate de la
+        // LLEGADA: la crominancia se abre 120 ms cuando la cabeza converge, o
+        // sea encima de la letra que entra. Es el mismo evento, no uno nuevo:
+        // por eso no lleva `hit()`.
         id: hopGlitch
         onTriggered: {
             crt.hopChroma = 4;
             crt.hopChromaPunch = false;
             crt.hopChromaUntil = Date.now() + crt.glitchMinMs;
-            // por el portero de siempre: si esta pantalla acaba de romperse,
-            // que se descarte es lo correcto
-            crt.hit(0.25);
         }
     }
     // la pantalla que se quedó vacía acusa el golpe: el verso se corre hacia
@@ -368,18 +414,19 @@ PanelWindow {
             }
             crt.hopClock = 0;
             if (crt.hopFrom) {
+                // las hebras nacen de las LETRAS de esta pantalla: se anotan
+                // ahora, con el texto todavía puesto
+                crt.hopSources = crt.hopAnchors();
                 hopKick.restart();
                 return;
             }
-            if (!crt.hopMid || !crt.hopInterf)
+            if (!crt.hopTo || !crt.hopInterf)
                 return;
-            // cuándo le pasa el rayo por encima a ESTA pantalla: el tramo del
-            // medio arranca al 22 % del reloj y se reparte entre las
-            // intermedias
+            // cuándo LLEGA la cabeza al centro de esta pantalla: el final del
+            // reloj del salto, medido contra el mismo arranque que publicó el
+            // root
             hopGlitch.interval = Math.max(Math.round(
-                (0.22 + 0.56 * (crt.hopPos + 0.5) / crt.hopMids)
-                * crt.ctl.crtHopMs
-                - (Date.now() - crt.ctl.crtHopStart)), 1);
+                crt.ctl.crtHopMs - (Date.now() - crt.ctl.crtHopStart)), 1);
             hopGlitch.restart();
         }
     }
@@ -1286,6 +1333,7 @@ PanelWindow {
 
                 // modo viejo (focus = "all"): la línea entera, iluminándose
                 Text {
+                    id: wholeLine
                     anchors.fill: parent
                     visible: crt.allMode
                     text: {
@@ -1317,6 +1365,7 @@ PanelWindow {
                     spacing: Math.round(measure.fontInfo.pixelSize * 0.02)
 
                     Repeater {
+                        id: wordRows
                         model: crt.allMode ? [] : crt.myWords
 
                         Item {
@@ -1744,6 +1793,7 @@ PanelWindow {
             colFrom: crt.ctl.crtFace(crt.ctl.crtHop.from, false).ink
             colTo: crt.ctl.crtFace(crt.ctl.crtHop.to, false).ink
             textH: Math.min(0.45, crt.shortSide * 0.34 / Math.max(crt.height, 1))
+            sources: crt.hopSources
         }
 
         // ---- el ajuste de sync a ojo (tanda 3, C)

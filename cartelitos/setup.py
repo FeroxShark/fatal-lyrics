@@ -209,6 +209,9 @@ SETTINGS = [
     ("iown", "crt", "One word crossing every screen on a drop",
      lambda c: _pick("On a drop, a short line crosses the whole wall as one "
                      "giant word", YESNO, c)),
+    ("foreshadow", "crt", "The next screen gives the jump away",
+     lambda c: _pick("The screen the next line lands on speeds up its animation "
+                     "and takes the focus colour before the line gets there", YESNO, c)),
     ("motifs", "crt", "Animations on the quiet screens",
      lambda c: _pick("Animations on the screens without lyric", YESNO, c)),
     ("water", "crt", "Water animations (sea, shivering pond)",

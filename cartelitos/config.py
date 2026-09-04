@@ -124,6 +124,12 @@ _CONFIG_COMMENTS = {
         "iown": "on a drop, a one-word line crosses the whole wall as a single\n"
                 "giant word travelling right to left — it leaves one screen\n"
                 "exactly where it enters the next. Needs `order` to be right",
+        "foreshadow": "the screen the NEXT line is going to land on gives it\n"
+                      "away: over the last stretch of the current line its\n"
+                      "animation speeds up and takes the colour of the screen in\n"
+                      "focus, while the other quiet screens step back. The tube\n"
+                      "reads as looking at where the phrase is about to go\n"
+                      "instead of following it. Needs the director on",
         "motifs": "animations on the quiet screens (an eye, a scope, a radar,\n"
                   "falling data, hyperspace, a test card, the sea)",
         "water": "the two water animations: a sea of loose points seen in\n"
@@ -248,7 +254,7 @@ DEFAULTS = {
         "split": "mixed", "director": True, "focus": "roam", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.25,
-        "iown": True, "motifs": True,
+        "iown": True, "foreshadow": True, "motifs": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,

@@ -133,6 +133,29 @@ PanelWindow {
     readonly property bool burned: !allMode && shot.past && !shot.active
     readonly property bool idle: !noLyric && !showsText
 
+    // ------------------------------------------------ el aviso del salto (T2.1)
+    // La frase todavía está acá, pero la pantalla a la que va a saltar YA se
+    // puso nerviosa: su animación se acelera y toma el color de la enfocada,
+    // mientras las otras apagadas se corren un paso atrás. Es lo único que
+    // dice a dónde mirar ANTES de que el texto llegue; sin esto el salto se
+    // descubre cuando ya pasó.
+    //
+    // La rampa es el último 40% de la línea medido con crtProgress() — el
+    // reloj de la letra, no uno propio: así el aviso dura lo que dura el verso
+    // y no se corta a la mitad en una línea corta.
+    property real foreRamp: 0
+    readonly property bool foreOn: ctl.crtForeshadow && !noLyric
+        && ctl.crtNextFocus >= 0 && ctl.crtNextFocus !== ctl.crtShot.focus
+    readonly property bool foreTarget: foreOn && ctl.crtNextFocus === idx && !showsText
+    readonly property bool foreOther: foreOn && ctl.crtNextFocus !== idx && !showsText
+    readonly property real foreAmt: foreTarget ? foreRamp : 0
+    // el color de la pantalla ENFOCADA: es el que se va mudando al destino.
+    // El tween de 400 ms vale para cualquier cambio de color del motif de esta
+    // pantalla, contagio de paleta incluido — que también se ve mejor así.
+    property color motifColour: foreAmt > 0.02
+        ? ctl.crtFace(ctl.crtShot.focus, false).ink : pal.ink
+    Behavior on motifColour { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
+
     // T3.8 (idea 24): tres minutos sin nada que mostrar y sin música, y el tubo
     // se duerme — cinco cuadros por segundo y la estática apagada. Se despierta
     // solo, en cuanto vuelve a haber señal.
@@ -207,6 +230,10 @@ PanelWindow {
             const st = crt.ctl.crtChunkState(crt.idx);
             crt.shot = st;
             crt.reveal = st.reveal;
+            // la rampa del aviso sale del mismo reloj: no necesita animación
+            // propia, el avance de la línea YA es la rampa
+            crt.foreRamp = Math.max(0, Math.min(
+                (crt.ctl.crtProgress() - 0.6) / 0.4, 1));
         }
     }
 
@@ -860,12 +887,17 @@ PanelWindow {
                 // con el tema, que es justo lo que "NO SIGNAL" mataba
                 visible: crt.idle || crt.instrumental
                 kind: crt.ctl.crtMotifFor(crt.idx)
+                // el destino acelera (×1.6 al final de la línea), las otras
+                // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
                 energy: crt.ctl.sectionEnergy
+                    * (crt.foreTarget ? 1 + 0.6 * crt.foreRamp : 1)
+                    * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
+                dim: crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1
                 waterAmp: crt.ctl.crtWaterAmp
                 // el registro de lo que suena: con el tubo apagado no hay
                 // captura, y el laguito tiembla en un tono medio
                 pitch: crt.live ? crt.ctl.audCentroid : 0.5
-                colour: crt.pal.ink
+                colour: crt.motifColour
                 hot: crt.pal.hot
                 level: crt.pump
                 low: crt.live ? crt.ctl.audLo : 0.4

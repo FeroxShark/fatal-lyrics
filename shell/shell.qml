@@ -96,6 +96,9 @@ ShellRoot {
     property real crtChannelSwitch: 0.25
     // T3.2: la palabra gigante que cruza la pared en el drop
     property bool crtIown: true
+    // T2.1: la pantalla a la que va a saltar la frase lo delata antes de que
+    // llegue (ver foreRamp en Crt.qml)
+    property bool crtForeshadow: true
     // qué tan seguido una línea sale "critical" (pantalla roja): umbral del
     // sorteo determinístico en crtPlanFor, más alto = más raro
     property real crtAlarmThreshold: 0.87
@@ -1332,6 +1335,7 @@ ShellRoot {
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
+        crt_foreshadow: "crtForeshadow",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",

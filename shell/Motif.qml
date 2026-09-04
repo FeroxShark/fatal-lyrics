@@ -63,7 +63,15 @@ Item {
         easing.type: Easing.OutQuad
     }
 
-    opacity: Math.min(0.62 + 0.30 * surge, 1)
+    // El aviso de a dónde salta la frase (T2.1) apaga un poco las pantallas que
+    // NO son el destino. Va como factor aparte y no pisando `opacity` desde
+    // afuera: asignarle un binding nuevo desde Crt.qml se llevaría puesto el
+    // acompañamiento del golpe (`surge`), que es lo que hace que la pared
+    // entera pegue junta.
+    property real dim: 1
+    Behavior on dim { NumberAnimation { duration: 380; easing.type: Easing.OutQuad } }
+
+    opacity: Math.min(0.62 + 0.30 * surge, 1) * dim
 
     // pulso del golpe: sube de un saque y baja solo
     property real punch: 0

@@ -27,6 +27,12 @@ layout(std140, binding = 0) uniform buf {
     float vignette;
     float pulse;      // 0..1 golpe de la canción: el tubo levanta con el ritmo
     float blink;      // 0..1 apagón corto, para los picos
+    // the jump corridor: a few scanlines light up and cross the screen while
+    // the phrase travels over it to a screen further down the wall
+    float hopY;       // height of the band, 0..1 of the tube
+    float hopX0;      // left edge of the band, in uv.x
+    float hopX1;      // right edge
+    float hopGain;    // 0 = no band on this screen
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
 };
@@ -121,6 +127,19 @@ void main() {
     if (tri > 1.0 && tri <= 2.0) mask = vec3(0.86, 1.16, 0.86);
     else if (tri > 2.0) mask = vec3(0.86, 0.86, 1.16);
     col *= mix(vec3(1.0), mask, 0.55);
+
+    // The corridor of a jump (T2.3). It rides the comb instead of being drawn
+    // on top: what crosses the screen is the signal passing through on its way
+    // to another tube, so it has to be made of the same scanlines.
+    if (hopGain > 0.001) {
+        float dy = abs(fc.y - hopY * res.y);
+        float inY = smoothstep(8.0, 0.0, dy);          // 3-4 scanlines thick
+        float inX = smoothstep(0.0, 0.03, uv.x - hopX0)
+                  * smoothstep(0.0, 0.03, hopX1 - uv.x);
+        float band = inY * inX * hopGain;
+        col *= 1.0 + 0.8 * band;                       // x1.8 where it passes
+        col += tint * 0.22 * band;
+    }
 
     // rolling bar: the classic bright band sliding down an out-of-sync tube
     float by = fract(t * 0.085);

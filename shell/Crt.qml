@@ -174,6 +174,112 @@ PanelWindow {
         // con la línea siguiente encima no hay nada que contar
         && ctl.crtNextIn > 1500
 
+    // ------------------------------------------------ el salto de pantalla (T2.3)
+    // La frase saltó a una pantalla que NO es la de al lado. Lo que se ve es el
+    // viaje: una franja de scanlines cruza cada pantalla del medio en su tramo
+    // del reloj, la del medio glitchea justo cuando le pasa por encima, y la de
+    // origen pega un tirón hacia donde se fue. El texto del medio no se toca:
+    // la franja pasa por arriba, no lo reemplaza.
+    //
+    // El reloj (0→1 en 180 ms) sale de `ctl.crtHopStart`, que es del root: acá
+    // se LEE por cuadro. Cada pantalla anotándose su propio arranque hacía que
+    // la franja entrara en la segunda antes de salir de la primera.
+    property real hopClock: 1
+    readonly property bool hopLive: ctl.crtHopStart > 0 && ctl.crtHop.from >= 0
+    readonly property bool hopCorridor: ctl.crtHopMode === "corridor"
+        || ctl.crtHopMode === "both"
+    readonly property bool hopInterf: ctl.crtHopMode === "interference"
+        || ctl.crtHopMode === "both"
+    readonly property bool hopFrom: hopLive && ctl.crtHop.from === idx
+    // ¿esta pantalla queda EN EL MEDIO del salto?
+    readonly property bool hopMid: hopLive
+        && idx > Math.min(ctl.crtHop.from, ctl.crtHop.to)
+        && idx < Math.max(ctl.crtHop.from, ctl.crtHop.to)
+    // cuántas pantallas hay en el medio y cuál es ésta, contadas en el sentido
+    // del viaje: cada una recibe un tramo igual del reloj (con dos, [0,0.5] y
+    // [0.5,1]), así la franja se pasa de una a la otra sin superponerse
+    readonly property int hopMids: Math.max(
+        Math.abs(ctl.crtHop.to - ctl.crtHop.from) - 1, 1)
+    readonly property int hopPos: ctl.crtHop.dir > 0
+        ? idx - ctl.crtHop.from - 1 : ctl.crtHop.from - idx - 1
+    readonly property real hopLocal: Math.min(Math.max(
+        (hopClock - hopPos / hopMids) * hopMids, 0), 1)
+    // el centro de la franja entra por el borde de `from` y sale por el de `to`;
+    // arranca y termina afuera de la pantalla, así entra desde el borde en vez
+    // de aparecer adentro (y por eso fuera de su tramo no se ve nada)
+    readonly property real hopCentre: ctl.crtHop.dir > 0
+        ? -0.16 + 1.32 * hopLocal : 1.16 - 1.32 * hopLocal
+    readonly property bool hopBand: hopCorridor && hopMid && hopClock < 1
+
+    // la crominancia por cuatro mientras la franja está encima: tres cuadros,
+    // contados en cuadros y no en reloj, que es como dura un glitch de verdad
+    property real hopChroma: 1
+    property int hopChromaFrames: 0
+    FrameAnimation {
+        // corre sólo durante el salto (y los tres cuadros del glitch): el resto
+        // del tiempo la pantalla del medio sigue a sus 20 fps de siempre
+        running: crt.visible && (crt.hopClock < 1 || crt.hopChromaFrames > 0)
+        onTriggered: {
+            crt.hopClock = crt.ctl.crtHopStart > 0
+                ? Math.min((Date.now() - crt.ctl.crtHopStart) / crt.ctl.crtHopMs, 1)
+                : 1;
+            if (crt.hopChromaFrames > 0 && --crt.hopChromaFrames === 0)
+                crt.hopChroma = 1;
+        }
+    }
+    Timer {
+        // se dispara cuando la franja está sobre ESTA pantalla: el medio de su
+        // tramo, medido contra el mismo arranque que publicó el root
+        id: hopGlitch
+        onTriggered: {
+            crt.hopChroma = 4;
+            crt.hopChromaFrames = 3;
+            // por el portero de siempre: si esta pantalla acaba de romperse,
+            // que se descarte es lo correcto
+            crt.hit(0.25);
+        }
+    }
+    // la pantalla que se quedó vacía acusa el golpe: el verso se corre hacia
+    // donde saltó la frase y vuelve
+    property real hopShift: 0
+    SequentialAnimation {
+        id: hopKick
+        ScriptAction { script: crt.hit(0.4) }
+        NumberAnimation {
+            target: crt; property: "hopShift"
+            to: crt.ctl.crtHop.dir * 16
+            duration: 60; easing.type: Easing.OutQuad
+        }
+        NumberAnimation {
+            target: crt; property: "hopShift"; to: 0
+            duration: 140; easing.type: Easing.OutQuad
+        }
+    }
+    Connections {
+        target: crt.ctl
+        function onCrtHopStartChanged() {
+            if (crt.ctl.crtHopStart <= 0) {
+                // cancelado a mitad de camino (hotplug, config, otro tema)
+                hopGlitch.stop();
+                crt.hopClock = 1;
+                crt.hopChroma = 1;
+                crt.hopChromaFrames = 0;
+                return;
+            }
+            crt.hopClock = 0;
+            if (crt.hopFrom) {
+                hopKick.restart();
+                return;
+            }
+            if (!crt.hopMid || !crt.hopInterf)
+                return;
+            hopGlitch.interval = Math.max(Math.round(
+                ((crt.hopPos + 0.5) / crt.hopMids) * crt.ctl.crtHopMs
+                - (Date.now() - crt.ctl.crtHopStart)), 1);
+            hopGlitch.restart();
+        }
+    }
+
     // T3.8 (idea 24): tres minutos sin nada que mostrar y sin música, y el tubo
     // se duerme — cinco cuadros por segundo y la estática apagada. Se despierta
     // solo, en cuanto vuelve a haber señal.
@@ -579,7 +685,9 @@ PanelWindow {
             property real scanline: crt.ctl.crtScanlines
             // `intensity` es la perilla única: mueve el ruido, la separación de
             // canales y la barra que rueda, además de los golpes de glitch
+            // x4 los tres cuadros en que la franja del salto pasa por acá
             property real chroma: crt.ctl.crtChroma * (0.45 + 0.55 * crt.rest)
+                * crt.hopChroma
             // el fósforo late con la música; en la pantalla apagada se va a cero
             // y el shader se saltea las ocho muestras del bloom
             property real bloom: crt.showsText
@@ -606,6 +714,12 @@ PanelWindow {
             property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
                 * (crt.focused ? 1 : 0.6) * crt.ctl.flickerAmt
             property real blink: crt.beatBlink
+            // la franja del salto: la altura es de la pared (la publica el root,
+            // es UNA franja cruzando) y el tramo horizontal, de esta pantalla
+            property real hopY: crt.ctl.crtHopY
+            property real hopX0: crt.hopCentre - 0.11
+            property real hopX1: crt.hopCentre + 0.11
+            property real hopGain: crt.hopBand ? 1 : 0
             property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
             property variant tint: crt.pal.tint
             fragmentShader: Qt.resolvedUrl("crt.frag.qsb")
@@ -663,6 +777,9 @@ PanelWindow {
             // ---- verso anterior, quemado en el fósforo mientras se apaga
             Text {
                 anchors { fill: parent; margins: crt.pad }
+                // el tirón del salto: en la pantalla de origen esto es lo único
+                // que queda de la frase, así que es lo que se tiene que ir
+                transform: Translate { x: crt.hopShift }
                 visible: crt.ghostFade > 0.01 && crt.showsText
                 opacity: crt.ghostFade
                 text: crt.ghostText.toUpperCase()
@@ -706,6 +823,7 @@ PanelWindow {
             Item {
                 id: lyric
                 anchors { fill: parent; margins: crt.pad }
+                transform: Translate { x: crt.hopShift }
                 visible: crt.showsText && !crt.iownMode
                 // el pedazo que ya pasó queda prendido pero bajo, como fósforo
                 // que todavía no se apagó: así se lee la frase entera de un vistazo

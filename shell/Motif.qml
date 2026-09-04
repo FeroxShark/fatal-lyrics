@@ -75,6 +75,10 @@ Item {
     // `energy`: la energía viene multiplicada por el aviso del salto, así que
     // un umbral acá se dispararía al final de cualquier verso.
     property bool drop: false
+    // en qué parte del tema va (quiet | verse | build | drop). El osciloscopio
+    // la usa para elegir la relación entre sus dos ejes: es lo que cambia la
+    // figura al pasar del verso al estribillo.
+    property string section: "verse"
     // El golpe del tubo: cuando la pantalla parpadea, la animación ACOMPAÑA —
     // se acelera y crece un instante. Sin esto el parpadeo es una luz que se
     // mueve sola; con esto es el golpe de la canción atravesando todo.
@@ -169,9 +173,20 @@ Item {
     }
 
     // ------------------------------------------------------------ osciloscopio
-    // Figura de Lissajous, la que dejaba un osciloscopio de laboratorio: la
-    // relación entre los dos ejes se mueve con graves y agudos, así que la figura
-    // se abre y se retuerce con la música sin ser "barritas".
+    // La figura de Lissajous de un osciloscopio de laboratorio: dos senos, uno
+    // por eje. Lo que se ve no es el dibujo sino la RELACIÓN entre las dos
+    // frecuencias — si es un número redondo la figura se cierra y queda quieta,
+    // y si no, gira y no cierra nunca.
+    //
+    // Con tempo confiable la relación sale de la parte del tema (1 en el
+    // silencio, 3/2 en la estrofa, 4/3 en el puente, 2 en el drop) y la figura
+    // CIERRA: es una figura estable que da una vuelta por compás. Sin tempo la
+    // relación deriva sola y la figura no cierra: caos, que es exactamente lo
+    // que hacía un osciloscopio con una señal que no enganchaba.
+    //
+    // La fase y la deriva se ACUMULAN, no salen de multiplicar el reloj: el
+    // reloj vale miles de segundos y cualquier cambio de tempo pegaría un salto
+    // de la figura entera (la misma trampa del hiperespacio y del túnel).
     Canvas {
         id: scope
         anchors.centerIn: parent
@@ -180,32 +195,58 @@ Item {
         visible: motif.kind === "scope"
         renderStrategy: Canvas.Cooperative
 
-        property real phase: 0
-        onPhaseChanged: requestPaint()
+        // la relación entre los ejes, por parte del tema; el tween es lo que
+        // hace que la figura se transforme en vez de cambiar de golpe
+        readonly property real target: motif.section === "quiet" ? 1
+            : motif.section === "build" ? (4 / 3)
+            : motif.section === "drop" ? 2 : 1.5
+        property real ratio: target
+        Behavior on ratio { NumberAnimation { duration: 600; easing.type: Easing.InOutCubic } }
+
+        // cuántas vueltas hay que dibujar para que cierre: el denominador de la
+        // relación (3/2 cierra en dos, 4/3 en tres)
+        readonly property int turns: !motif.bpmLive ? 3
+            : (Math.abs(ratio - 1.5) < 0.02 ? 2 : (Math.abs(ratio - 4 / 3) < 0.02 ? 3 : 1))
+
+        property real phase: 0        // el giro de la figura: una vuelta por compás
+        property real wobble: 0       // la deriva de la relación cuando no hay tempo
 
         Timer {
             interval: 33          // 30 Hz: una traza no necesita más
             repeat: true
             running: scope.visible && motif.spinning
-            onTriggered: scope.phase = motif.clock
+            onTriggered: {
+                const dt = 0.033;
+                const bar = Math.max(motif.beatMs, 120) * 4 / 1000;
+                scope.phase = (scope.phase + dt / bar * Math.PI * 2) % (Math.PI * 2);
+                scope.wobble += dt;
+                scope.requestPaint();
+            }
         }
+
+        onVisibleChanged: if (visible) requestPaint()
+        Component.onCompleted: requestPaint()
 
         onPaint: {
             const c = getContext("2d");
             c.reset();
             const w = width, h = height;
+            if (w <= 0 || h <= 0)
+                return;
             const cx = w / 2, cy = h / 2;
             const rx = w * 0.42, ry = h * 0.42;
-            const a = 3 + Math.round(motif.low * 3);
-            const b = 2 + Math.round(motif.high * 4);
-            const d = phase * 0.6;
-            const amp = 0.75 + 0.25 * motif.level;
+            const amp = 0.55 + 0.40 * motif.level;
+            // sin tempo la relación se va sola: la figura no cierra
+            const b = ratio + (motif.bpmLive ? 0 : 0.06 * Math.sin(wobble * 0.8));
+            const steps = Math.max(140, Math.round(240 * turns * Math.max(motif.quality, 0.5)));
+
             c.strokeStyle = motif.colour;
             c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
+            c.lineJoin = "round";
             c.beginPath();
-            for (let i = 0; i <= 220; i++) {
-                const t = i / 220 * Math.PI * 2;
-                const x = cx + Math.sin(a * t + d) * rx * amp;
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps * Math.PI * 2 * turns;
+                const x = cx + Math.sin(t + phase) * rx * amp;
                 const y = cy + Math.sin(b * t) * ry * amp;
                 if (i === 0)
                     c.moveTo(x, y);
@@ -215,8 +256,8 @@ Item {
             c.stroke();
 
             // el punto del haz, corriendo por la traza
-            const t2 = (phase * 1.7 % 1) * Math.PI * 2;
-            const px = cx + Math.sin(a * t2 + d) * rx * amp;
+            const t2 = (wobble * 1.1 % 1) * Math.PI * 2 * turns;
+            const px = cx + Math.sin(t2 + phase) * rx * amp;
             const py = cy + Math.sin(b * t2) * ry * amp;
             c.fillStyle = motif.hot;
             c.beginPath();

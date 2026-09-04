@@ -1237,6 +1237,10 @@ PanelWindow {
                 // el drop viaja como booleano: los motivos no pueden sacarlo de
                 // `energy`, que acá arriba ya viene multiplicada por el aviso
                 drop: crt.ctl.audSection === "drop"
+                // la parte del tema: el osciloscopio elige con ella la relación
+                // entre sus dos ejes, que es lo que hace que la figura cambie
+                // al entrar el estribillo
+                section: crt.ctl.audSection
                 // el registro de lo que suena: con el tubo apagado no hay
                 // captura, y el laguito tiembla en un tono medio
                 pitch: crt.live ? crt.ctl.audCentroid : 0.5

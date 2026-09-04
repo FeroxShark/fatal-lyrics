@@ -27,7 +27,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   el `show` viaja con `next` (`{text, t0, t1, segs}`, o `null`) y hay un evento `lyrics` con la
   letra entera del tema. Con eso el overlay calcula el reparto de la línea k+1 mientras suena la k
   y lo **consume** cuando llega: la anticipación es la verdad, no un pronóstico. De ahí salen el
-  motif que huye (`foreshadow`) y el aro que cuenta (`ring`, `shell/Ring.qml`).
+  motif que huye (`foreshadow`) y el aro que cuenta (`ring`, `shell/Ring.qml`). Con el `next`
+  viaja también el `due` — cuándo va a salir el próximo `show`, con el offset del daemon ya
+  descontado — y con el `show`, el `v_end` de la línea que suena.
 - **Un salto largo se ve viajar.** Si la frase cae en una pantalla que no es la de al lado, la
   perilla `hop` (`corridor|interference|both|off`) manda un rayo: nace como hebras estiradas de
   la letra que se va, cruza cada pantalla del medio POR EL BORDE (arriba o abajo, alternando) y
@@ -94,8 +96,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
-- `shell/Ring.qml` — el aro que se consume contando la línea que viene: por tiempo si hay compás,
-  si no por golpe de graves, y desarmándose en hebras sobre el final.
+- `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
+  doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
+- `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
+  `enterFastMs`, `exitMs`, `cameraMs`, `dimMs`, `holdMs`, `bridgeMs`). El aro ya las usa; el resto
+  de las animaciones migra en la corrida 3 de la tanda 4.
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
@@ -107,7 +112,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 480 tests, stdlib puro.
+- `tests/` — 495 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -295,12 +300,28 @@ no-op → boot roto. No reintroducir un segundo.)
 - **El borde por el que cruza el rayo lo decide el ROOT y alterna, no se sortea** (`crtHopEdge`,
   antes `crtHopY`, que era una altura al azar). Dos saltos seguidos por el mismo borde se leen
   como una decoración fija, y sorteando salen repetidos igual. El log dice `edge=top|bottom`.
-- **El aro come por GOLPE cuando no hay compás confiable**, no por reloj. `bpm conf > 0.6` casi
-  nunca se cumple, y un reloj se lee como un cronómetro, no como algo que come. El golpe es el
-  onset crudo (`audBeat`), NO el pico del tubo (`surgeGen`/`flickerGen`): el pico va uno cada
-  cuatro segundos y comería el aro dos veces por verso. El escalón se calcula contra lo que falta
-  (`(1-eaten) / (left/espaciado)`), así que se corrige solo y llega a cero a tiempo. El log dice
-  `crt: ring mode=beat|kick|lineal`.
+- **El aro cuenta por RELOJ contra el `due` del daemon; el ritmo sólo dibuja** (tanda 4, al revés
+  de lo que decía esta nota hasta la tanda 3). `eaten = 1 - left/span` cada cuadro, y el compás o
+  el grave sólo mueven el mordisco (±2 %, vuelve solo en `Motion.enterFastMs`). Comiendo por golpe
+  el arco quedaba a un tercio cuando el tema pegaba cada tres segundos, y en `beat` sin ticks se
+  quedaba parado hasta que vencía el compás. El `due` es del daemon (`next.due`), en posición
+  CRUDA del player: el `t0` de la letra llega `behavior.offset` + el del artista tarde, y con un
+  `fatal sync +` de 0.3 s el aro no colapsaba nunca. `crt: ring mode=beat|kick|lineal` sigue en el
+  log, pero ahora es el modo del DIBUJO.
+- **El aro sólo aparece en el hueco SIN VOZ, y eso no se puede leer del `t1`:** el `t1` que manda
+  el daemon es el `t0` de la línea siguiente. El fin de la voz lo estima el daemon
+  (`lyrics.voice_end`, viaja como `v_end` en el `show`): con LRC "enhanced", el último tiempo por
+  palabra más 0.45 s; sin tiempos, 0.32 s por palabra más 0.6. Con un hueco de menos de 1.7 s no
+  hay silencio y no hay aro. El que prende y apaga es `crtRingLive` en el ROOT, no un binding de
+  `Crt.qml`: `show()` le pregunta dónde ESTABA el aro para elegir la entrada de esa pantalla, y en
+  ese instante falta ~0 ms para la línea — cualquier condición sin memoria contesta "en ninguna"
+  siempre. En un hueco largo aparece recién cuando faltan 8 s; antes de eso la pantalla es del
+  motif. El log dice `crt: ring armed|zero|dash`.
+- **El aro llega a cero en la hora, pero la raya sale con la LÍNEA.** El `show` cae 0–300 ms
+  después del instante real (el poll del daemon): entre el cero y la línea el aro se queda quieto
+  en "0.0", y recién cuando llega la frase sale la raya con la rotura. Un colapso que entrega en
+  la hora se gasta el portero (`hit`) justo antes de la entrada, y una raya que se corta seco
+  deja el aro apagado antes de que aparezca la letra. Si no llega en medio segundo, se apaga solo.
 - **Las hebras del aro acumulan SU ángulo, cuadro a cuadro.** Misma trampa que el túnel y el
   hiperespacio: con `ángulo = reloj × velocidad` cualquier cambio de tempo multiplica un reloj de
   miles de segundos y las hebras se teletransportan.

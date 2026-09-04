@@ -58,10 +58,14 @@ Item {
     property real qrsAmp: 1
     readonly property int qrsLen: Math.max(8, Math.round(slots * 0.09))
 
+    // El QRS tiene PISO (T3.B9). Con la altura saliendo sólo del parpadeo del
+    // tubo, un tema bajo dibujaba latidos de dos píxeles y el cardiograma
+    // parecía una línea plana con ruido. El piso es el 45 % de la escala; lo
+    // que la música mueve es el resto.
     function strike() {
-        if (!running || beatAmt <= 0.01 || silent)
+        if (!running || silent)
             return;
-        qrsAmp = beatAmt * (0.5 + 0.5 * level);
+        qrsAmp = Math.min(0.45 + 0.55 * beatAmt * (0.5 + 0.5 * level), 1.15);
         qrsPhase = 0;
     }
     onTickChanged: if (bpmLive) strike()
@@ -144,12 +148,13 @@ Item {
                 return;
             const n = a.length;
             const mid = h * 0.62;
-            const amp = h * 0.34;
+            const amp = h * 0.42;
 
-            // la línea de base: lo que queda cuando no hay nada
+            // la línea de base: lo que queda cuando no hay nada. Un píxel a
+            // secas desaparece en 1080p con la curvatura del vidrio encima.
             c.strokeStyle = ekg.colour;
-            c.globalAlpha = 0.18;
-            c.lineWidth = 1;
+            c.globalAlpha = 0.22;
+            c.lineWidth = Math.max(2, h / 540);
             c.beginPath();
             c.moveTo(0, mid);
             c.lineTo(w, mid);

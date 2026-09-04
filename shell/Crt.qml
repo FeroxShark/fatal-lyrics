@@ -183,21 +183,32 @@ PanelWindow {
     // dice a dónde mirar ANTES de que el texto llegue; sin esto el salto se
     // descubre cuando ya pasó.
     //
-    // La rampa es el último 40% de la línea medido con crtProgress() — el
+    // La rampa es el último 25% de la línea medido con crtProgress() — el
     // reloj de la letra, no uno propio: así el aviso dura lo que dura el verso
     // y no se corta a la mitad en una línea corta.
+    //
+    // T4.3: era el último 40 % de CADA verso que cambia de foco, o sea casi
+    // todos: la pantalla de al lado aceleraba y se recoloreaba doce veces por
+    // minuto, y eso es otra de las "animaciones que siguen a otra pantalla"
+    // que Ferox no entendía. Ahora sólo cuando falta más de un hold para la
+    // línea que viene (si falta menos, el aviso y la llegada son el mismo
+    // evento), sobre el último 25 %, con la curva de siempre y sin
+    // recolorear — el color ya lo muda `infect_lead`, y hacerlo dos veces era
+    // el mismo cambio contado dos veces.
     property real foreRamp: 0
     readonly property bool foreOn: ctl.crtForeshadow && !noLyric
         && ctl.crtNextFocus >= 0 && ctl.crtNextFocus !== ctl.crtShot.focus
+        && ctl.crtNextIn > 2000
     readonly property bool foreTarget: foreOn && ctl.crtNextFocus === idx && !showsText
     readonly property bool foreOther: foreOn && ctl.crtNextFocus !== idx && !showsText
     readonly property real foreAmt: foreTarget ? foreRamp : 0
-    // el color de la pantalla ENFOCADA: es el que se va mudando al destino.
-    // El tween de 400 ms vale para cualquier cambio de color del motif de esta
-    // pantalla, contagio de paleta incluido — que también se ve mejor así.
-    property color motifColour: foreAmt > 0.02
-        ? ctl.crtFace(ctl.crtShot.focus, false).ink : pal.ink
-    Behavior on motifColour { ColorAnimation { duration: 400; easing.type: Easing.OutQuad } }
+    // el color del motif de esta pantalla. El tween vale para cualquier cambio
+    // — contagio de paleta incluido —, que se ve mejor así. Lo que YA NO hace
+    // es tomar el color de la enfocada durante el aviso (T4.3): el color del
+    // destino lo muda `infect_lead` cuando la frase llega de verdad, y las dos
+    // cosas juntas eran el mismo cambio contado dos veces.
+    property color motifColour: pal.ink
+    Behavior on motifColour { ColorAnimation { duration: Motion.cameraMs; easing.type: Easing.OutQuad } }
 
     // A dónde mira la pared: a la pantalla enfocada, y durante el aviso del
     // salto (el último 40% del verso) a la que va a recibir la frase. -1 en
@@ -449,8 +460,12 @@ PanelWindow {
             crt.reveal = st.reveal;
             // la rampa del aviso sale del mismo reloj: no necesita animación
             // propia, el avance de la línea YA es la rampa
-            crt.foreRamp = Math.max(0, Math.min(
-                (crt.ctl.crtProgress() - 0.6) / 0.4, 1));
+            // el último 25 % del verso, con snap: la rampa lineal subía a
+            // velocidad constante y no se leía como un aviso, se leía como
+            // que la animación de al lado se había vuelto loca sola
+            const u = Math.max(0, Math.min(
+                (crt.ctl.crtProgress() - 0.75) / 0.25, 1));
+            crt.foreRamp = u >= 1 ? 1 : 1 - Math.pow(2, -10 * u);
         }
     }
 
@@ -1474,7 +1489,7 @@ PanelWindow {
                     // el destino acelera (×1.6 al final de la línea), las otras
                     // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
                     energy: crt.ctl.sectionEnergy
-                        * (crt.foreTarget ? 1 + 0.6 * crt.foreRamp : 1)
+                        * (crt.foreTarget ? 1 + 0.25 * crt.foreRamp : 1)
                         * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
                     // A5: con el aro contando en esta pantalla el motivo se
                     // apaga entero. Dos animaciones a la vez en la misma

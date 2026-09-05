@@ -74,7 +74,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   vertical), y gira hacia el destino durante el aviso del salto. Los cuatro de la segunda mitad leen el
   ritmo: `ekg` escribe un QRS por tiempo (del `tick` cuantizado, no del bombo crudo),
   `rorschach` abre la mancha bajando el umbral con el volumen, `plasma` deja que los graves
-  empujen las bolas para arriba y `tunnel` viaja más rápido cuanto más fuerte suena. Y `scope`
+  abran y estiren la burbuja —el golpe la parte en dos o tres gotas y el resorte las vuelve a
+  fundir— y `tunnel` viaja más rápido cuanto más fuerte suena. Y `scope`
   cierra la figura de Lissajous cuando el compás es confiable (la relación entre los ejes sale
   de la parte del tema); `stars` salta al hiperespacio en el drop.
 - **Cómo entra la línea lo decide la música, no un sorteo parejo.** `crtEntriesFor` reparte UN
@@ -586,10 +587,23 @@ no-op → boot roto. No reintroducir un segundo.)
 - **El QRS del `ekg` sale del `tick`, no del `beat`.** `beat` son onsets crudos: con ese, el
   latido cae donde el bombo pega fuerte y no donde va el tiempo. `tick` ya está cuantizado al
   compás. Sin compás confiable no hay más remedio que el crudo.
-- **En GLSL ES 100 el tope de un `for` tiene que ser constante.** El `plasma` recorre siempre
-  seis bolas y las que sobran (pantalla lenta) pesan cero por `step()`, en vez de recortar el
-  loop. Y todo `1/r²` va con `max(dot(d,d), ε)`: sin eso, el centro de una bola es un NaN y el
-  NaN es un agujero en la imagen.
+- **En GLSL ES 100 el tope de un `for` tiene que ser constante.** El `plasma` no tiene loop:
+  evalúa las seis bolas DESENROLLADAS y las que la pantalla lenta no usa llegan con radio cero,
+  que pesa cero. Y todo `1/r²` va con `max(dot(d,d), ε)`: sin eso, el centro de una bola es un
+  NaN y el NaN es un agujero en la imagen.
+- **La burbuja del `plasma` es física de QML, no senos del shader** (tanda 4b). Las seis bolas
+  viajan como `vec4(x, y, radio, ángulo)`: la posición la calcula un resorte amortiguado en
+  `Plasma.qml` a 60 Hz, porque un seno no tiene inercia y no hay golpe que lo empuje ni que lo
+  devuelva — eso era la elipse quieta que Ferox vio. Cuatro cosas que no se tocan: (1) las
+  posiciones van en unidades de `rmin` y se reparten sobre el ÓVALO de la pantalla
+  (`axX`/`axY`), no sobre un círculo, así en la vertical se separan para arriba y para abajo,
+  que es donde hay lugar, y las gotas siguen valiendo lo mismo en las tres pantallas; (2) la
+  dirección del estirón viaja como ÁNGULO (`b.w`) y no como `normalize(xy)`, que en reposo —con
+  todas las bolas encima del centro— es una división por nada; (3) el safe area lo garantiza el
+  óvalo del shader (`smoothstep(1.0, 0.78, length(p/glass))`), NO el clamp de QML: el clamp
+  acota UNA bola y la superficie de tres fundidas llega más lejos que cualquiera de ellas; (4)
+  los empujones entran por CONTADOR (`beat`, `kick`) y nunca por magnitud — `if (surge > 0.9)`
+  se cumple ~24 ms, o sea dos cuadros a 60 Hz y cinco en el monitor de 200.
 - **Un `ShaderEffectSource` con `live: true` re-renderiza su fuente en CADA cuadro.** La
   máscara de `static` cambia una vez por compás: va `live: false` con `scheduleUpdate()` a mano
   en `converge()`, en el cambio de tamaño y al nacer. Sin el de nacer no hay textura ninguna.

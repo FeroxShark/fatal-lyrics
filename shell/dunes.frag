@@ -46,8 +46,24 @@ layout(std140, binding = 0) uniform buf {
 // --------------------------------------------------------------- the camera
 // Eye `camY` above the sand looking flat along it. A grain at (X, h, Z) in
 // camera space lands at screen y = HORIZON + (camY - h) / Z, x = X / Z.
-const float HORIZON = 0.30;
+//
+// T4.2 — THE LATTICE IS GEOMETRIC, NOT EVENLY SPACED IN Z. Rows used to sit
+// every DZ = 0.135 world units, so their spacing ON SCREEN fell off as 1/Z^2:
+// by Z = 8 four rows landed on the same pixel and what you saw at the horizon
+// was a moire staircase, not sand. Now Z_j = Z0 * exp((j - drift) * KZ), which
+// puts the rows a constant RATIO apart — their screen spacing shrinks
+// proportionally to the height above the horizon, which is what perspective
+// actually does, and no two rows ever collapse into one. The forward drift
+// works out too: dZ/dt is proportional to Z, so on screen the near rows run
+// fast and the far ones creep.
+//
+// The columns follow: the horizontal step grows with Z (DXr = DX * Z / Z0), so
+// the grains keep the same spacing on screen all the way back instead of
+// crowding. That alone would line them up in perfect vertical columns, so each
+// row gets its own horizontal offset from a hash — a stagger of 0.5 every other
+// row (what was here before) reads as a woven grid at this density.
 const float Z0 = 1.30;    // first row of grains still on screen
+const float ZMAX = 34.0;  // the last row that draws anything at all
 const float GRAINR = 0.020;
 const float GRAV = 3.2;   // how fast a thrown grain comes back down
 const float BOUNCE = 0.42;
@@ -108,6 +124,10 @@ void main() {
     vec2 uv = qt_TexCoord0;
     float aspect = res.x / max(res.y, 1.0);
     float sx = (uv.x - 0.5) * aspect;
+    // T4.3b: en la pantalla vertical el horizonte a 0.30 deja 576 px de cielo
+    // vacío arriba y la arena arranca a media pantalla. Sube a 0.22 cuando el
+    // monitor es más alto que ancho.
+    float HORIZON = res.y > res.x ? 0.22 : 0.30;
     float dy = uv.y - HORIZON;
 
     // The drift. Three periods that do not line up: the shot never repeats.
@@ -116,85 +136,139 @@ void main() {
     float camZ = tt * 0.075;
     float camY = 1.0 + 0.16 * sin(tt * 0.021 + seed * 3.1);
 
-    // grain spacing: fewer, bigger grains on a screen that cannot afford them
+    // grain spacing. KZ is the RATIO between one row and the next, not a
+    // distance: 0.095 puts the first two rows 0.13 apart, which is what the old
+    // constant step gave near the eye.
     float q = clamp(qual, 0.45, 1.0);
-    float DZ = 0.135 / q;
-    float DX = 0.165 / q;
+    float KZ = 0.095 / q;
+    // T4.2 — LAS COLUMNAS SIGUEN EN EL MUNDO, NO EN LA PANTALLA. Un intento
+    // anterior escaló también el paso horizontal con Z (DX * Z / Z0) para que
+    // los granos guardaran la misma separación en pantalla: el resultado son
+    // COLUMNAS VERTICALES PERFECTAS, sin punto de fuga, y en la vertical cinco
+    // granos por fila (medido en /tmp/dw-a-*.png). La perspectiva de verdad es
+    // que las filas de atrás tengan MÁS granos, no los mismos. El paso queda en
+    // unidades de mundo; el amontonamiento lejano lo resuelve el `fade`, no el
+    // muestreo.
+    //
+    // El ancho de mundo que entra en la pantalla es proporcional al aspecto:
+    // con el mismo DX la vertical (aspect 0.56) tendría la mitad de granos por
+    // fila que la apaisada. El clamp la acerca sin agrandar la apaisada.
+    float DX = 0.165 / q * clamp(aspect, 0.62, 1.0);
 
-    vec3 col = vec3(0.0);
-    float a = 0.0;
+    // ------------------------------------------------------------- el cielo
+    // T4.2c/d: el horizonte era una raya encendida (dos exponenciales en |dy|),
+    // que es exactamente la banda clara que Ferox vio partiendo el cuadro al
+    // medio. El horizonte de un desierto no es una raya: es donde la niebla y
+    // el suelo se tocan. Así que el cielo es un degradado vertical — oscuro
+    // arriba, tibio contra el suelo — y la MISMA niebla sigue por debajo del
+    // horizonte y se apaga hacia abajo con `smoothstep`, cuya derivada es cero
+    // en dy = 0: sin derivada no hay canto, y por eso no hay banda.
+    float skyT = clamp(1.0 - max(-dy, 0.0) / max(HORIZON, 0.001), 0.0, 1.0);
+    skyT = skyT * skyT;
+    vec3 hazeCol = ink * (0.16 + 0.14 * level);
+    vec3 skyCol = mix(ink * 0.03, hazeCol, skyT);
+    float skyA = mix(0.04, 0.17, skyT) * (0.7 + 0.4 * level);
+    if (dy > 0.0) {
+        skyCol = hazeCol;
+        skyA = 0.17 * (0.7 + 0.4 * level) * (1.0 - smoothstep(0.0, 0.34, dy));
+    }
 
-    // the far edge. Darker than the grains on purpose: the horizon of a desert
-    // is where the sand runs out of light, not a lit stripe like the sea's.
-    float glow = exp(-abs(dy) * 55.0) * 0.22 + exp(-abs(dy) * 9.0) * 0.07;
-    col += mix(ink, vec3(0.0), 0.45) * glow * (0.6 + 0.5 * level);
-    a = max(a, glow * 0.6);
+    // OJO: la salida es premultiplicada (`col * a`), así que acá `col` va SIN
+    // multiplicar por su propia cobertura — si no, el cielo sale con el alfa
+    // al cuadrado y no se ve.
+    vec3 col = skyCol;
+    float a = skyA;
 
     if (dy > 0.0008) {
-        float drift = fract(camZ / DZ) * DZ;
         float z = camY / dy;              // depth of flat sand under this pixel
-        float jf = (z - Z0 + drift) / DZ;
-        float worldX = sx * z;
-        int j0 = int(floor(jf));
+        if (z > 0.0 && z < ZMAX * 1.3) {
+            // el corrimiento hacia adelante. `n` es el índice de la fila en el
+            // MUNDO: sin él, `drift` da la vuelta cada vez que la cámara avanza
+            // Z0*KZ (1.6 s) y todas las semillas de las filas se renumeran al
+            // mismo tiempo — la arena entera cambiaba de lugar de golpe, que es
+            // "cambia sin razón". Con `jw` la identidad de la fila sobrevive al
+            // salto del índice local.
+            float dnum = camZ / (Z0 * KZ);
+            float drift = fract(dnum);
+            float n = floor(dnum);
+            float jf = log(z / Z0) / KZ + drift;
+            int j0 = int(floor(jf));
 
-        for (int dj = -2; dj <= 2; dj++) {
-            // low quality also looks at fewer neighbouring rows: the far ones
-            // are the expensive half and the ones nobody can resolve
-            if (q < 0.8 && (dj < -1 || dj > 1))
-                continue;
-            int j = j0 + dj;
-            if (j < 0)
-                continue;
-            float Z = Z0 + float(j) * DZ - drift;
-            if (Z < 0.55)
-                continue;
+            for (int dj = -2; dj <= 2; dj++) {
+                // low quality also looks at fewer neighbouring rows: the far
+                // ones are the expensive half and the ones nobody can resolve
+                if (q < 0.8 && (dj < -1 || dj > 1))
+                    continue;
+                int j = j0 + dj;
+                float Z = Z0 * exp((float(j) - drift) * KZ);
+                if (Z < 0.55 || Z > ZMAX)
+                    continue;
+                float jw = float(j) + n;
 
-            float stagger = mod(float(j), 2.0) * 0.5;
-            float ifl = worldX / DX - stagger;
-            int i0 = int(floor(ifl));
-
-            float rad = clamp(GRAINR / Z * res.y, 0.8, res.y * 0.010);
-
-            for (int di = -1; di <= 1; di++) {
-                int i = i0 + di;
-                float X = (float(i) + stagger) * DX;
-                float px = X / Z;
-                float dx = (sx - px) * res.y;
-                if (abs(dx) > rad + 1.0)
+                // T4.2b: el grano se apaga ANTES de tocar el horizonte, y llega
+                // a CERO. La exponencial de antes (exp(-(Z-Z0)*0.13)) nunca
+                // llegaba, así que siempre quedaba un resto amontonado sobre la
+                // línea del horizonte: eso era el escalón.
+                float fade = smoothstep(ZMAX, ZMAX * 0.55, Z);
+                if (fade <= 0.002)
                     continue;
 
-                // world position of this grain: the lattice is in CAMERA space
-                // and the landscape is not, so the camera offset goes in here.
-                // Without it the dunes would travel with the eye and nothing
-                // would ever come closer.
-                vec2 wp = vec2(X + camX, Z + camZ);
-                float own = hash21(vec2(float(i), float(j)));
-                float h = dune(wp);
-                // The footstep is measured in CAMERA space, not world space:
-                // it lasts three seconds and has to stay where it landed on
-                // screen. In world space the pan would carry it off frame.
-                h += footstep(vec2(X, Z), jump1) + footstep(vec2(X, Z), jump2);
-                // the drop: the field hangs in the air, shivering. The shiver is
-                // in world units, sized so it lands on one or two pixels at the
-                // depth where most of the grains are.
-                h += lift * (0.20 + 0.10 * own);
-                h += lift * sin(t * 38.0 + own * 6.283) * 0.0035 * (0.4 + high);
+                // el corrimiento horizontal de la fila: sin él las filas quedan
+                // alineadas en columnas y la arena se lee como una malla.
+                float stagger = hash21(vec2(jw, 3.7));
+                float ifl = sx * Z / DX - stagger;
+                int i0 = int(floor(ifl));
 
-                float py = HORIZON + (camY - h) / Z;
-                vec2 d = vec2(dx, (uv.y - py) * res.y);
-                float g = smoothstep(rad, rad * 0.3, length(d));
-                if (g <= 0.001)
+                float rad = clamp(GRAINR / Z * res.y, 0.7, res.y * 0.010) * mix(0.55, 1.0, fade);
+                if (rad < 0.3)
                     continue;
 
-                float fade = exp(-(Z - Z0) * 0.13);
-                // the ridge catches the light; the trough only dims. A grain
-                // drawn darker than the sand reads as a hole in the picture.
-                float crest = clamp(h * 6.0 + 0.5, 0.0, 1.0);
-                vec3 c = mix(ink, hot, crest * crest);
-                float bright = (0.42 + 0.8 * crest) * fade;
+                for (int di = -1; di <= 1; di++) {
+                    int i = i0 + di;
+                    float X = (float(i) + stagger) * DX;
+                    float px = X / Z;
+                    float dx = (sx - px) * res.y;
+                    if (abs(dx) > rad + 1.0)
+                        continue;
 
-                col += c * g * bright;
-                a = max(a, g * bright * 0.92);
+                    // world position of this grain: the lattice is in CAMERA
+                    // space and the landscape is not, so the camera offset goes
+                    // in here. Without it the dunes would travel with the eye
+                    // and nothing would ever come closer.
+                    vec2 wp = vec2(X + camX, Z + camZ);
+                    float own = hash21(vec2(float(i), jw));
+                    float h = dune(wp);
+                    // The footstep is measured in CAMERA space, not world
+                    // space: it lasts three seconds and has to stay where it
+                    // landed on screen. In world space the pan would carry it
+                    // off frame.
+                    h += footstep(vec2(X, Z), jump1) + footstep(vec2(X, Z), jump2);
+                    // the drop: the field hangs in the air, shivering. The
+                    // shiver is in world units, sized so it lands on one or two
+                    // pixels at the depth where most of the grains are.
+                    h += lift * (0.20 + 0.10 * own);
+                    h += lift * sin(t * 38.0 + own * 6.283) * 0.0035 * (0.4 + high);
+
+                    float py = HORIZON + (camY - h) / Z;
+                    vec2 d = vec2(dx, (uv.y - py) * res.y);
+                    float g = smoothstep(rad, rad * 0.3, length(d));
+                    if (g <= 0.001)
+                        continue;
+
+                    // the ridge catches the light; the trough only dims. A
+                    // grain drawn darker than the sand reads as a hole in the
+                    // picture.
+                    float crest = clamp(h * 6.0 + 0.5, 0.0, 1.0);
+                    vec3 c = mix(ink, hot, crest * crest);
+                    float bright = (0.42 + 0.8 * crest) * fade;
+                    // la niebla: el grano lejano se va HACIA el color del cielo
+                    // en función de la DISTANCIA, no del |dy|. Así no hay
+                    // ninguna línea: la arena se disuelve en el aire.
+                    c = mix(hazeCol, c, fade);
+
+                    col += c * g * bright;
+                    a = max(a, g * bright * 0.92);
+                }
             }
         }
     }

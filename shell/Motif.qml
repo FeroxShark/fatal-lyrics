@@ -894,8 +894,9 @@ Item {
 
     // ---------------------------------------------------------------- plasma
     // La lámpara de lava: bolas de campo que se funden entre sí
-    // (`plasma.frag`). Los graves las empujan para arriba y el golpe del tubo
-    // les hace temblar la superficie.
+    // (`plasma.frag`). Los graves abren la burbuja y la estiran; el golpe
+    // CRUDO (`beat`, no el pico del tubo) le pega el empujón que la parte en
+    // gotas, y el resorte de `Plasma.qml` las vuelve a juntar.
     Component {
         id: plasmaC
 
@@ -906,6 +907,8 @@ Item {
             stepMin: motif.stepMin
             low: motif.low
             surge: motif.surge
+            beat: motif.beat
+            drop: motif.drop
             energy: motif.energy
             seed: motif.seed
             quality: motif.quality

@@ -964,7 +964,6 @@ Item {
             low: motif.low
             beat: motif.beat
             tick: motif.tick
-            beatMs: motif.beatMs
             bpmLive: motif.bpmLive
             drop: motif.drop
             seed: motif.seed

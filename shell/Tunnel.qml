@@ -61,7 +61,6 @@ Item {
     Behavior on low { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property int beat: 0
     property int tick: 0
-    property real beatMs: 500
     property bool bpmLive: false
 
     // qué tan adelante de la cámara va la luz, y cuánto le queda
@@ -93,6 +92,9 @@ Item {
     }
 
     property real lightPeak: 0.6
+    // 900 ms no sale de `Motion.qml` a propósito: no es una entrada ni una
+    // salida ni un movimiento de cámara, es un VIAJE — dura lo que la luz tarda
+    // en irse hasta el fondo, y ese largo es del túnel y de nadie más.
     ParallelAnimation {
         id: lightRunAnim
         NumberAnimation {
@@ -107,13 +109,15 @@ Item {
         }
     }
 
-    // El período fijo del final de la cadena: si en un segundo y medio no llegó
-    // ni un tiempo ni un golpe, la luz sale igual.
+    // El período fijo del final de la cadena: si en 1.4 s no llegó ni un tiempo
+    // ni un golpe, la luz sale igual. El intervalo del `Timer` ES el período —
+    // con uno más corto y la condición más larga, el período de verdad es la
+    // suma de los dos y no lo que dice ninguno de los dos números.
     Timer {
-        interval: 900
+        interval: 1400
         repeat: true
         running: tube.running && tube.visible
-        onTriggered: if (Date.now() - tube.lastLightAt > 1500) tube.lightRun(0.7)
+        onTriggered: if (Date.now() - tube.lastLightAt > 1300) tube.lightRun(0.7)
     }
 
     // distancia viajada (anillos), los segundos pelados para la deriva de la

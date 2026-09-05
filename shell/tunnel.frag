@@ -44,9 +44,10 @@
 // `ZCAP` it freezes: further than that the phase would wind faster than the
 // pixels and the middle of the picture would turn to noise.
 //
-// The music: `level` is how fast the rings arrive (up in QML), `twist` wrings
-// them around the axis — and the wring grows with depth, so the far end of the
-// tunnel turns more than the mouth.
+// The music: `level` is how hot the wall burns, `twist` wrings the bricks
+// around the axis — and the wring grows with depth, so the far end of the
+// tunnel is turned further round than the mouth. What the music does NOT do is
+// change the speed: that is the drop and nothing else (see THE DROP below).
 //
 // CONTRAST (T3.B8). The first version had a wide soft plateau per ring, and at
 // any distance that reads as one gradient: Ferox saw "casi no hay contraste

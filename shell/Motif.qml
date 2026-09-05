@@ -288,7 +288,11 @@ Item {
             Canvas {
                 id: scope
                 anchors.centerIn: parent
-                width: motif.span * 0.7
+                // T4.3b: la figura ocupaba un tercio del ancho de la vertical y
+                // se leía como un garabato en el medio de una pantalla vacía.
+                // La caja es CUADRADA y sale del lado corto: la misma figura en
+                // las tres pantallas, y entra dentro del 92 % en las dos formas.
+                width: motif.span * 0.86
                 height: width
                 renderStrategy: Canvas.Cooperative
 
@@ -332,7 +336,10 @@ Item {
                         return;
                     const cx = w / 2, cy = h / 2;
                     const rx = w * 0.42, ry = h * 0.42;
-                    const amp = 0.55 + 0.40 * motif.level;
+                    // T4.3b: la amplitud de REPOSO también tiene que llenar la
+                    // caja. Con 0.55 y el player parado (`level` en el piso) la
+                    // figura quedaba a la mitad de su propio marco.
+                    const amp = 0.78 + 0.20 * motif.level;
                     // sin tempo la relación se va sola: la figura no cierra
                     const b = ratio + (motif.bpmLive ? 0 : 0.06 * Math.sin(wobble * 0.8));
                     const steps = Math.max(140, Math.round(240 * turns * Math.max(motif.quality, 0.5)));
@@ -521,25 +528,35 @@ Item {
                 onTriggered: stars.travel += frameTime * stars.speed
             }
 
+            // T4.3b: eran 46 y en la cara clara del tubo se leían como cuatro
+            // puntos. La densidad y el brillo son lo que hace que un campo de
+            // estrellas sea un campo: 46 puntos repartidos por fase dejan la
+            // mitad cerca del centro, donde casi no se ven.
+            readonly property int count: 110
+
             Repeater {
-                model: stars.visible ? 46 : 0
+                model: stars.visible ? stars.count : 0
 
                 Rectangle {
                     required property int index
                     readonly property real ang: index * 2.399963      // ángulo áureo: reparte parejo
-                    readonly property real phase: (stars.travel + index / 46) % 1
-                    readonly property real dist: phase * motif.span * 0.75
+                    readonly property real phase: (stars.travel + index / stars.count) % 1
+                    // llegan hasta el borde: con 0.75 el campo terminaba antes
+                    // que la pantalla y quedaba un marco vacío alrededor
+                    readonly property real dist: phase * motif.span * 1.05
                     x: stars.width / 2 + Math.cos(ang) * dist - width / 2
                     y: stars.height / 2 + Math.sin(ang) * dist - height / 2
                     // la estela: en el hiperespacio el punto deja de ser un punto
-                    width: Math.max(2, motif.span * 0.006 + dist * 0.03 * (1 + 4 * stars.warp))
-                    height: Math.max(2, motif.span * 0.005)
+                    width: Math.max(3, motif.span * 0.009 + dist * 0.03 * (1 + 4 * stars.warp))
+                    height: Math.max(3, motif.span * 0.008)
                     radius: height / 2
                     rotation: ang * 180 / Math.PI
                     color: index % 7 === 0 ? motif.hot
                         : Qt.tint(motif.colour, Qt.rgba(motif.hot.r, motif.hot.g,
                                                         motif.hot.b, 0.75 * stars.warp))
-                    opacity: phase * (0.8 - 0.4 * phase)
+                    // el piso de brillo: una estrella que nace invisible y
+                    // tarda media pantalla en aparecer no es una estrella
+                    opacity: Math.min(1, 0.30 + phase * 1.1) * (1 - 0.35 * phase * phase)
                 }
             }
         }

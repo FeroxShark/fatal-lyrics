@@ -38,10 +38,13 @@ Item {
     // lo que tarda en subir UNA línea
     readonly property real stepMs: bpmLive && beatMs > 0 ? beatMs : 800
 
-    // T4.1: la caja mide lo que mide la pantalla, así que el renglón se mide
-    // contra ella directo (antes descontaba el overscan de la cámara).
-    readonly property real lineH: Math.max(2, Math.round(height * 0.032))
-    readonly property real fontPx: Math.max(1, Math.round(height * 0.020))
+    // T4.3b: EL RENGLÓN SE MIDE CON EL LADO CORTO. Medido contra el alto, la
+    // misma letra salía de 22 px en la apaisada y de 38 en la vertical — y en la
+    // apaisada no se leía a dos metros, que es la distancia a la que Ferox mira
+    // la pared. Con el lado corto son 35 px en las dos.
+    readonly property real span: Math.min(width, height)
+    readonly property real fontPx: Math.max(1, Math.round(span * 0.032))
+    readonly property real lineH: Math.max(2, Math.round(fontPx * 1.6))
 
     // Tope: una letra de doscientas líneas son doscientos bindings por cuadro y
     // nadie ve más allá de la pantalla. Se recorta alrededor del verso que
@@ -81,7 +84,7 @@ Item {
     Item {
         id: column
         anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.7
+        width: parent.width * 0.88
         height: parent.height
         clip: true
 
@@ -134,7 +137,7 @@ Item {
                     anchors.centerIn: parent
                     text: row.modelData.text || ""
                     color: row.current ? sea.hot : sea.colour
-                    opacity: row.current ? 1 : 0.35
+                    opacity: row.current ? 1 : 0.55
                     font.family: sea.fontFamily
                     font.pixelSize: sea.fontPx
                     horizontalAlignment: Text.AlignHCenter

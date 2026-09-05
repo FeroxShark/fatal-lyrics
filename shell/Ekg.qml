@@ -147,14 +147,18 @@ Item {
             if (!a || a.length < 4 || w <= 0 || h <= 0)
                 return;
             const n = a.length;
+            // T4.3b: los grosores se miden con el LADO CORTO, no con el alto.
+            // Con el alto, la misma traza sale de 13 px en la apaisada y de 23
+            // en la vertical: no es el mismo dibujo en las dos pantallas.
+            const span = Math.min(w, h);
             const mid = h * 0.62;
-            const amp = h * 0.42;
+            const amp = span * 0.42;
 
             // la línea de base: lo que queda cuando no hay nada. Un píxel a
             // secas desaparece en 1080p con la curvatura del vidrio encima.
             c.strokeStyle = ekg.colour;
             c.globalAlpha = 0.22;
-            c.lineWidth = Math.max(2, h / 540);
+            c.lineWidth = Math.max(2, span / 540);
             c.beginPath();
             c.moveTo(0, mid);
             c.lineTo(w, mid);
@@ -162,7 +166,7 @@ Item {
 
             c.globalAlpha = 1;
             c.strokeStyle = ekg.colour;
-            c.lineWidth = Math.max(1.5, h * 0.012);
+            c.lineWidth = Math.max(2, span * 0.007);
             c.lineJoin = "round";
             c.beginPath();
             let pen = false;

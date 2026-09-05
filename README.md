@@ -339,6 +339,8 @@ fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer t
 fatal demo       # throws a few fake dialogs, to try settings without music
 fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
 fatal crt setup           # a number on each screen, to write down [crt] order
+fatal crt motif <kind> [--screen <name|index|all>]   # force one screen's drawing right away
+fatal crt motif off       # give the roll back to chance
 fatal tune       # sliders for the CRT settings you want to move while it plays
 fatal sync + | -          # nudge the lyric 0.1 s forward/back, live
 fatal sync show           # the artist offsets it has learned so far
@@ -490,11 +492,14 @@ because there is nothing to install.
 | `crt`      | `color_hold`         | Seconds a colour must stay before it may change                 | `10`        |
 | `crt`      | `infect_lead`        | Seconds of lead the colour takes on the next screen before the line actually arrives there | `0.35` |
 | `crt`      | `alarm_threshold`    | How rare the full-red "critical" screen is (rolled against a peak); higher = rarer, `1.0` = never | `0.87` |
-| `crt`      | `channel_switch`     | Chance a line lands like a channel being changed: static, a red frame, then the words (the first line of a track always does) | `0.25` |
+| `crt`      | `channel_switch`     | Chance a line lands like a channel being changed: static, a red frame, then the words (the first line of a track always does, and two of them never land less than 20 s apart) | `0.08` |
+| `crt`      | `pace`               | How much the tube is allowed to happen at once: `calm` (a drawing stays 20 s), `normal` (12 s, one break every 4 s at most), `wild` (a drawing per line, a break per beat — the old behaviour). A budget, not a speed | `"normal"` |
+| `crt`      | `ghost_ms`           | Milliseconds the previous line stays burnt in behind the new one (`0` = no ghost) | `550` |
 | `crt`      | `iown`               | On a drop, a one-word line crosses the whole wall as one giant word travelling right to left | `true` |
 | `crt`      | `foreshadow`         | The screen the NEXT line will land on gives it away: it speeds up and takes the focus colour before the line arrives | `true` |
-| `crt`      | `ring`               | A ring counts the next line down on the screen it will land on, stepping with the beat and collapsing to a dot right where the line appears | `true` |
-| `crt`      | `hop`                | How a jump to a non-adjacent screen is shown: `corridor` (a band of scanlines sweeps the screens between), `interference` (each one glitches as it passes), `both`, or `off` | `"both"` |
+| `crt`      | `ring`               | A ring counts down the wait on the screen the lyric will land on, only once the song has gone `ring_gap` seconds without a word — it says "the voice is coming back", not where the line falls | `true` |
+| `crt`      | `ring_gap`           | Seconds without a single word before the ring is worth drawing at all | `10`        |
+| `crt`      | `hop`                | How a jump between screens is shown: `corridor` (a band of scanlines sweeps the screens between), `interference` (each one glitches as it passes), `both`, or `off` — also covers a short ray for a jump to the next screen over | `"both"` |
 | `crt`      | `motifs`             | Animations on the screens without lyric                         | `true`      |
 | `crt`      | `water`              | The two water animations (the sea, and the pond that shivers with the song) take their turn | `true` |
 | `crt`      | `water_amp`          | How much the water moves (`0` = a flat field of points)         | `0.55`      |

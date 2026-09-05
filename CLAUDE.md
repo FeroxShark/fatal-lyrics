@@ -75,7 +75,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   ritmo: `ekg` escribe un QRS por tiempo (del `tick` cuantizado, no del bombo crudo),
   `rorschach` abre la mancha bajando el umbral con el volumen, `plasma` deja que los graves
   abran y estiren la burbuja —el golpe la parte en dos o tres gotas y el resorte las vuelve a
-  fundir— y `tunnel` viaja más rápido cuanto más fuerte suena. Y `scope`
+  fundir— y `tunnel` viaja a velocidad CONSTANTE (sólo el drop lo acelera) con una luz que
+  corre pared adentro en cada tiempo. Y `scope`
   cierra la figura de Lissajous cuando el compás es confiable (la relación entre los ejes sale
   de la parte del tema); `stars` salta al hiperespacio en el drop.
 - **Cómo entra la línea lo decide la música, no un sorteo parejo.** `crtEntriesFor` reparte UN
@@ -418,8 +419,24 @@ no-op → boot roto. No reintroducir un segundo.)
   que llega a 1 en `t1` y apagaría la palabra antes de la última pantalla.
 - **Un anillo del túnel es un BORDE fino, no una meseta**, y la densidad va con él: con el perfil
   fino y los 2.5 anillos de antes (`0.42/r`) queda un campo negro con dos aros. Van `2.0/r` y
-  fondo casi negro entre anillos. El anillo que enciende el golpe no se mueve a mano: un valor
-  fijo de `depth` se abre solo mientras `t` crece.
+  fondo casi negro entre anillos. Desde la tanda 5 la pared además va en DOVELAS (una hilada por
+  anillo, aparejo a soga, un tono por ladrillo): anillos concéntricos sobre un piso liso son
+  aros, no un túnel.
+- **La curva del túnel es una PROYECCIÓN, no un offset.** El eje del tubo se aparta con la
+  profundidad y en pantalla eso vale una fracción del radio de ESE anillo (`c = r·C/2`), así la
+  boca se queda quieta y el fondo camina. Escrito de la forma obvia — un offset en función de la
+  profundidad — el mapa se PLIEGA y salen garras encima de los anillos del medio: `d(dz)/dr` es
+  `-dz²/2`, cientos cerca del centro, y el offset deja de ser menor que el radio. Por lo mismo,
+  resolver `p = q - c(depth(p))` iterando no converge. El techo es `|C| < 2`, y lo que pliega es
+  el PRODUCTO de la amplitud por la frecuencia: subir una obliga a bajar la otra.
+- **El túnel se compone por alpha como todos los motivos, y por eso en las caras de paleta
+  invertida el fondo del pozo es CLARO.** Las dos alternativas están probadas y son peores
+  (documentadas adentro de `tunnel.frag`): pintar el fondo negro opaco tira el negro ENCIMA de
+  las dovelas y aplana la pared, y dibujar todo casi opaco sobre un fondo propio deja la cara
+  invertida como una losa oscura. Mismo trato que el cielo de `ocean`.
+- **La velocidad del túnel no puede leer `energy`.** La energía llega ×1.25 en la pantalla a la
+  que va a saltar la frase: atada ahí, el túnel pegaba un tirón cada vez que estaba por caer una
+  línea. Velocidad constante, ±3 % de volumen, y el único que la cambia es el drop.
 - **El QRS del `ekg` tiene PISO** (45 % de la escala). Con la altura saliendo sólo del parpadeo
   del tubo, un tema bajo dibujaba latidos de dos píxeles.
 - **En el QML la perilla `hop` se llama `crtHopMode`:** `crtHop` ya era el descriptor del salto de
@@ -554,7 +571,10 @@ no-op → boot roto. No reintroducir un segundo.)
 - **Una deriva fija en el espacio con aspecto NO es una fracción fija del cuadro.** El centro
   del túnel derivaba 0.08 en un espacio donde la x va multiplicada por `ar`: en la pantalla
   vertical (`ar` ≈ 0.56) medio ancho vale 0.28 y esos 0.08 eran casi un tercio, así que la boca
-  se iba del encuadre. Va medida contra `vec2(0.5*ar, 0.5)` y clampeada al 15 %.
+  se iba del encuadre. Desde la tanda 5 el túnel no tiene ese espacio: normaliza por `min(w, h)`
+  —el lado corto va de -0.5 a 0.5 y el largo desborda—, que es lo que hace que un anillo mida lo
+  mismo en la vertical y en las apaisadas. Escalar la x por el aspecto ES normalizar por el
+  ALTO; en DP-4 el radio de esquina valía 0.57 contra 1.02 de las otras dos.
 - **`fatal restart` deja el CRT APAGADO.** El interruptor es el archivo de `$XDG_RUNTIME_DIR` y
   el `stop` lo borra: después de cualquier restart hay que volver a `fatal crt on` si estaba
   prendido. Es la trampa de cualquier verificación en vivo.

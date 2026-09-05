@@ -6,8 +6,8 @@
 // lentes idénticas a la misma escala, con la cámara al tope, quedaban cortadas
 // contra el borde.
 //
-// Lo que se lee acá es UNA mirada: el ojo grande sigue el foco con la pupila
-// estirada hacia allá y el párpado entrecerrado en calma, abierto en el drop.
+// Lo que se lee acá es UNA mirada: el ojo grande sigue el foco con el iris
+// corrido hacia allá y el párpado entrecerrado en calma, abierto en el drop.
 // Los chicos son el público, no una textura: van y vienen, cada uno con su
 // propio reloj, y nunca están los tres a la vez por casualidad más de un rato.
 //
@@ -37,6 +37,12 @@ Item {
 
     readonly property bool tall: height > width
 
+    // Cuánto se entrecierran TODOS los párpados. Es uno solo para el grande y
+    // los chicos: si el grande está a medio cerrar y los chicos abiertos del
+    // todo, las almendras tienen relaciones distintas en la misma pantalla y
+    // eso es justo lo que Ferox leyó como "los raros son los múltiples".
+    readonly property real squint: Math.min(0.45 + 0.35 * level + (drop ? 0.20 : 0), 1)
+
     // el golpe los junta: un contador que cada ojo mira para parpadear YA
     property int blinkAll: 0
     onKickChanged: if (running) blinkAll++
@@ -60,8 +66,7 @@ Item {
         blinkNow: wall.blinkAll
         // en calma el ojo está entrecerrado y en el drop se abre entero: es lo
         // que hace que la pantalla apagada tenga estado sin cambiar de dibujo
-        lid: Math.min(0.45 + 0.35 * wall.level + (wall.drop ? 0.20 : 0), 1)
-        pupilStretch: 0.9 * Math.abs(wall.gaze)
+        lid: wall.squint
     }
 
     // ---- los chicos, en los bordes
@@ -75,19 +80,38 @@ Item {
             id: slot
             required property int index
 
-            // T4.1: los lugares dejan el 4 % de aire contra el borde. Con
-            // 0.09 / 0.91 el ojo chico quedaba a 43 px del canto en una
-            // pantalla de 1920 — no cortado, pero pegado, que es la mitad de
-            // la sensación de "se sale de la pantalla".
-            readonly property var spot: wall.tall
-                ? [[0.30, 0.13], [0.70, 0.87], [0.19, 0.63]][index]
-                : [[0.13, 0.28], [0.87, 0.72], [0.50, 0.13]][index]
-            readonly property int period: [2300, 3100, 4300][index]
+            // T4.1: el ojo chico vive en una caja CUADRADA de lado `side`, y el
+            // lugar sale de ese lado — no de fracciones sueltas del ancho y del
+            // alto. Con fracciones separadas el margen contra el borde valía
+            // distinto en cada monitor (un 4 % de 1080 y un 4 % de 1920 no son
+            // el mismo aire) y en la vertical los de arriba y abajo quedaban
+            // pegados al canto.
+            readonly property real side: wall.span * 0.24
+            // El aire contra el borde: 4 % MÁS media caja. El 4 % se mide con
+            // el ancho para la x y con el alto para la y (la regla de la safe
+            // area del CLAUDE.md), no con el lado corto para las dos: en la
+            // apaisada, 4 % de 1080 son 43 px de un ancho de 1920 — 2.2 % —, y
+            // ahí la curvatura del tubo ya se come la punta de la almendra
+            // (medido: el ojo de la izquierda salía cortado en HDMI-A-2).
+            readonly property real mx: wall.width * 0.04 + side / 2
+            readonly property real my: wall.height * 0.04 + side / 2
 
-            x: wall.width * spot[0] - width / 2
-            y: wall.height * spot[1] - height / 2
-            width: wall.span * 0.24
-            height: width * 0.52
+            readonly property var spot: wall.tall
+                ? [[wall.width * 0.30, my],
+                   [wall.width * 0.70, wall.height - my],
+                   [mx, wall.height * 0.63]][index]
+                : [[mx, wall.height * 0.28],
+                   [wall.width - mx, wall.height * 0.72],
+                   [wall.width * 0.50, my]][index]
+            // T4.1: holds de por lo menos tres segundos (el lenguaje de
+            // movimiento de la corrida 3). Con 2.3 s el de arriba prendía y
+            // apagaba antes de que el ojo terminara de abrirse.
+            readonly property int period: [3300, 4300, 5300][index]
+
+            x: spot[0] - width / 2
+            y: spot[1] - height / 2
+            width: side
+            height: side
 
             // arranca prendido el primero: una pantalla que aparece con los tres
             // apagados tarda dos segundos en ser el motivo de los ojos
@@ -101,10 +125,16 @@ Item {
 
             opacity: on ? 1 : 0
             visible: opacity > 0.01
-            Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.InOutQuad } }
+            Behavior on opacity {
+                NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo }
+            }
 
             Eye {
-                anchors.fill: parent
+                anchors.centerIn: parent
+                // la MISMA relación que el ojo grande: el ancho es el lado de
+                // la caja y el alto sale de ahí, nunca del alto de la pantalla
+                width: slot.side
+                height: width * 0.52
                 colour: wall.colour
                 hot: wall.hot
                 level: wall.level
@@ -113,7 +143,7 @@ Item {
                 gaze: wall.gaze
                 blinking: wall.running
                 blinkNow: wall.blinkAll
-                pupilStretch: 0.7 * Math.abs(wall.gaze)
+                lid: wall.squint
                 // el desfasaje sale del lugar y de la semilla: determinístico,
                 // pero distinto en cada aparición
                 phase: Math.round(((slot.index * 37 + wall.seed * 991) % 23) * 190)

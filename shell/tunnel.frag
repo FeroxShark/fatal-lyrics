@@ -50,9 +50,22 @@
 //
 // CONTRAST (T3.B8). The first version had a wide soft plateau per ring, and at
 // any distance that reads as one gradient: Ferox saw "casi no hay contraste
-// entre los anillos". Now a ring is a THIN hot edge over a near-black floor,
-// there is a vignette so the mouth falls off at the corners as well as at the
-// far end, and every kick plants a lit ring that flies out with the others.
+// entre los anillos". A ring is a THIN hot edge over a dark floor.
+//
+// THE WALL (T5.2). Concentric rings on a flat floor are hoops, not a tunnel:
+// there is nothing to tell you the wall is a surface. So the wall is laid in
+// VOUSSOIRS at two scales — a course of bricks per ring, offset by half a brick
+// every other course (running bond, which is what stops the joints from lining
+// up into radial spokes), and three hairline sub-joints inside each brick — and
+// every brick gets its own tone out of a hash of (course, brick), so no two are
+// the same. The bricks turn with the tube: `roll` is an accumulated angle from
+// QML (never `clock × speed`, which teleports on any change of rate) and the
+// torsion adds to it with depth, so the far end is wrung further round than the
+// mouth.
+//
+// The detail FADES with distance (`detail`), and that is not decoration: past
+// about twelve deep, one brick is thinner than a pixel and the texture turns
+// into crawling noise. What is left there is the plain course edge.
 //
 // The pulse costs nothing to move: a constant value of `depth` travels outwards
 // by itself, because `depth = 2/r + t` and `t` grows — so a ring planted at
@@ -70,6 +83,7 @@ layout(std140, binding = 0) uniform buf {
     float t;        // distance travelled down the tunnel (NOT a clock × speed)
     float ct;       // plain seconds: only the bend slither uses this
     float twist;    // -0.5..0.5, from pitch: the wring
+    float roll;     // accumulated barrel rotation, in turns (from QML)
     float seed;     // 0..1, re-rolled every appearance
     float level;    // overall volume: how hot the walls burn
     float bend;     // how hard the tunnel curves, in tube radii (< 1.8)
@@ -85,6 +99,44 @@ layout(std140, binding = 0) uniform buf {
 // ONE axis offset. Without the cap the phase winds infinitely fast as `dz` goes
 // to infinity and the middle of the picture turns to noise.
 const float ZCAP = 12.0;
+
+// one number per brick: a hash of (course, brick). `sin` of a big argument is
+// the cheapest hash there is and this one only has to look uneven.
+float brickTone(vec2 v) {
+    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// The wall at a depth and an angle. It is a function because the drop samples
+// it twice; outside the drop the second sample lands on the same place.
+// `soft` widens every edge (the smear), `detail` fades the brickwork out with
+// distance so it does not alias into noise.
+float wallAt(float depth, float a, float detail, float soft, float sd) {
+    float course = floor(depth);
+    float v = fract(depth);
+    // running bond: half a brick of offset on every other course
+    float ab = a * 12.0 + 0.5 * mod(course, 2.0);
+    float brick = floor(ab);
+    float u = fract(ab);
+
+    // the joint around each brick: dark mortar, the brick face inside it
+    float face = smoothstep(0.0, 0.045 + soft, u) * (1.0 - smoothstep(0.955 - soft, 1.0, u))
+               * smoothstep(0.0, 0.075 + soft, v) * (1.0 - smoothstep(0.925 - soft, 1.0, v));
+    // and three hairlines inside the brick, so the scale reads at the mouth too
+    float fine = fract(ab * 3.0);
+    float hair = 1.0 - 0.22 * detail * (1.0 - smoothstep(0.0, 0.05 + soft, fine));
+
+    // Every brick its own tone. `detail` does not switch the texture off, it
+    // FLATTENS it: far away every brick is worth the average and the wall is
+    // one even tone, instead of going dark and leaving a hole in the picture.
+    float lum = 0.20 + 0.17 * brickTone(vec2(brick, course) + sd);
+    lum = mix(lum, mix(0.045, lum, face), detail) * hair;
+
+    // the near edge of the course lights up: THAT is what reads as a ring, and
+    // it is even all the way round — modulated by the brick it turned into a
+    // ring of bright dashes and the wall read as a machine, not as masonry
+    float d0 = abs(v - 0.5) * 2.0;
+    return lum + smoothstep(0.74 - soft, 1.0, d0) * 0.40;
+}
 
 void main() {
     vec2 uv = qt_TexCoord0;
@@ -120,24 +172,15 @@ void main() {
     // the wring grows with depth: the far end turns more than the mouth. It
     // rides on `dz` and NOT on `depth`, which carries `t`: `t` is hundreds by
     // then, so a change of pitch would multiply it and spin every ring at once.
-    float a = ang + twist * dz * 0.03;
+    float a = ang + roll + twist * dz * 0.03;
 
-    // A ring is an EDGE, not a plateau: `d0` is 0 in the middle of a ring and 1
-    // on its boundary, and only the last fifth of that lights up. Between two
-    // rings the wall stays near black, which is the whole difference between a
-    // tunnel and a lamp shade.
+    // Past twelve deep a brick is thinner than a pixel: the brickwork fades out
+    // and what is left is the course edge. Without this the middle of the
+    // picture crawls.
+    float detail = smoothstep(15.0, 5.0, dz);
+    float wall = wallAt(depth, a, detail, 0.0, seed * 31.7);
     float d0 = abs(fract(depth) - 0.5) * 2.0;
     float edge = smoothstep(0.72, 1.0, d0);
-    float stave = fract(a * 10.0);
-    float staveEdge = smoothstep(0.0, 0.10, stave) * (1.0 - smoothstep(0.72, 1.0, stave));
-
-    // brick parity: alternate the tone ring by ring, so the walls have a grain
-    float parity = mod(floor(depth) + floor(a * 10.0), 2.0);
-
-    // the floor is not black-black — a tunnel with nothing between the rings is
-    // a set of hoops floating in the dark — but it is far below the edge
-    float floorLum = 0.11 + 0.10 * staveEdge + 0.05 * parity;
-    float wall = floorLum + edge * (0.60 + 0.40 * staveEdge);
 
     // the far end goes dark: without this the middle is a white pinprick and
     // the whole thing reads as a lamp, not as a hole
@@ -152,8 +195,7 @@ void main() {
 
     float lum = wall * far * vig * (0.42 + 0.62 * level) + pulse * far * 0.85;
 
-    vec3 col = mix(ink, hot,
-                   clamp(edge * 0.70 + parity * 0.12 + pulse, 0.0, 1.0)) * lum;
+    vec3 col = mix(ink, hot, clamp(edge * 0.70 + pulse, 0.0, 1.0)) * lum;
     float alpha = clamp(lum * 0.95 * dim, 0.0, 1.0);
     col = clamp(col * dim, 0.0, 1.6);
     fragColor = vec4(col * alpha, alpha) * qt_Opacity;   // premultiplied

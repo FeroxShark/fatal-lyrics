@@ -66,9 +66,17 @@ Item {
         easing.type: Easing.OutQuad
     }
 
-    // distancia viajada (anillos), y los segundos pelados para la deriva
+    // distancia viajada (anillos), los segundos pelados para la deriva de la
+    // curva, y el giro del tubo sobre su eje (T5.2), en vueltas.
+    //
+    // El giro se ACUMULA, como la distancia: con `vuelta = reloj × velocidad`
+    // cualquier cambio de registro multiplica un reloj de miles de segundos y
+    // toda la pared de ladrillos se teletransporta. Tiene una base constante,
+    // así que en el silencio el tubo sigue girando despacio (la deriva del
+    // video de referencia: velocidad uniforme que nunca para).
     property real travel: 0
     property real clock: 0
+    property real roll: 0
     FrameAnimation {
         running: tube.running && tube.visible
         onTriggered: {
@@ -81,6 +89,7 @@ Item {
             const speed = (0.22 + 1.05 * tube.level) * Math.max(tube.energy, 0.35);
             tube.travel += tube.pending * speed;
             tube.clock += tube.pending;
+            tube.roll += tube.pending * (0.012 + 0.055 * (tube.pitch - 0.5));
             tube.pending = 0;
         }
     }
@@ -96,6 +105,7 @@ Item {
         property real t: tube.travel
         property real ct: tube.clock
         property real twist: tube.pitch - 0.5
+        property real roll: tube.roll
         property real bend: tube.bend
         property real seed: tube.seed
         property real level: tube.level

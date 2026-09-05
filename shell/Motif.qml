@@ -601,11 +601,44 @@ Item {
             readonly property real midH: Math.max(sp * 0.2, ch - barsH - stepsH - gap * 2)
             readonly property real dia: Math.min(cw, midH) * 0.92
 
-            // el segundo entero: la aguja camina de a un tick, como un reloj de
-            // pared, y no se desliza. `clock` es el reloj del tubo en segundos.
-            readonly property int sec: Math.floor(motif.clock)
+            // El segundo entero: la aguja camina de a un tick, como un reloj de
+            // pared, y no se desliza. Sale de la hora DE VERDAD y no del reloj
+            // del tubo (que corre escalado por la parte del tema): la aguja y
+            // el rótulo son la misma hora, así que tienen que salir del mismo
+            // tick. Un reloj que marca las 10:41:23 con la aguja en cualquier
+            // parte del cuadrante es un reloj roto.
+            //
+            // El ángulo se ACUMULA y siempre hacia adelante: con `getSeconds()
+            // * 6` pelado, el paso de 354° a 0° es un `Behavior` que se da toda
+            // la vuelta para atrás una vez por minuto.
+            property real handAngle: 0
+            property int wall: -1
             property string stamp: Qt.formatTime(new Date(), "hh:mm:ss")
-            onSecChanged: stamp = Qt.formatTime(new Date(), "hh:mm:ss")
+
+            function tickClock() {
+                var d = new Date();
+                if (d.getSeconds() === wall)
+                    return;
+                wall = d.getSeconds();
+                stamp = Qt.formatTime(d, "hh:mm:ss");
+                var step = wall * 6 - (handAngle % 360);
+                if (step < 0)
+                    step += 360;
+                handAngle += step;
+            }
+            // 200 ms y no 1000: un timer de un segundo entero se corre contra
+            // el segundo del reloj y la aguja salta de a dos tics.
+            Timer {
+                interval: 200
+                repeat: true
+                running: card.visible
+                triggeredOnStart: true
+                onTriggered: card.tickClock()
+            }
+            Component.onCompleted: {
+                tickClock();
+                handAngle = wall * 6;   // la primera aparición ya nace en hora
+            }
 
             // ---- las barras de color, arriba. La SMPTE son siete combinaciones
             // de R, G y B prendidos o apagados (blanco, amarillo, cian, verde,
@@ -746,13 +779,12 @@ Item {
                     }
                 }
 
-                // ---- la aguja: camina de a un segundo con snap, no se desliza.
-                // El ángulo se ACUMULA (sec * 6): con el resto de 360 la aguja
-                // volvería para atrás una vuelta entera cada minuto.
+                // ---- la aguja: camina de a un segundo con snap, no se desliza,
+                // y marca los segundos de la hora que dice el rótulo de abajo.
                 Item {
                     id: hand
                     anchors.fill: parent
-                    rotation: card.sec * 6
+                    rotation: card.handAngle
                     Behavior on rotation {
                         NumberAnimation {
                             duration: Motion.enterFastMs

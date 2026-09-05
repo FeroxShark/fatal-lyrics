@@ -966,7 +966,7 @@ Item {
             tick: motif.tick
             beatMs: motif.beatMs
             bpmLive: motif.bpmLive
-            energy: motif.energy
+            drop: motif.drop
             seed: motif.seed
             kick: motif.kick
             running: motif.spinning

@@ -39,7 +39,7 @@ Item {
     property real bend: 0.45
     property real pitch: 0.5          // el registro: la torsión
     Behavior on pitch { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
-    property real energy: 1.0
+    property bool drop: false
     property real seed: 0
     property real dim: 1.0
     property bool running: true
@@ -127,6 +127,28 @@ Item {
     property real travel: 0
     property real clock: 0
     property real roll: 0
+
+    // El drop: el túnel acelera y las dovelas se barren en el sentido del
+    // viaje. Las dos van por una animación de CÁMARA (un solo movimiento por
+    // cambio de parte, `Motion.cameraMs`, `OutExpo`) y no por un `Behavior`
+    // sobre algo que se recalcula solo: eso último no es una transición, es un
+    // filtro que nunca llega.
+    property real rush: 1
+    property real blur: 0
+    onDropChanged: rushAnim.restart()
+    ParallelAnimation {
+        id: rushAnim
+        NumberAnimation {
+            target: tube; property: "rush"
+            to: tube.drop ? 2.4 : 1.0
+            duration: Motion.cameraMs; easing.type: Easing.OutExpo
+        }
+        NumberAnimation {
+            target: tube; property: "blur"
+            to: tube.drop ? 1.0 : 0.0
+            duration: Motion.cameraMs; easing.type: Easing.OutExpo
+        }
+    }
     FrameAnimation {
         running: tube.running && tube.visible
         onTriggered: {
@@ -136,7 +158,14 @@ Item {
             tube.pending += frameTime;
             if (tube.pending < tube.stepMin)
                 return;
-            const speed = (0.22 + 1.05 * tube.level) * Math.max(tube.energy, 0.35);
+            // La velocidad es CONSTANTE fuera del drop (T5.4). Antes salía de
+            // `level` y de `energy`, y las dos se mueven todo el tiempo: la
+            // energía además llega ×1.25 en la pantalla a la que va a saltar la
+            // frase, así que el túnel pegaba un tirón cada vez que estaba por
+            // caer una línea ahí. Eso es justo lo que la regla de fluidez
+            // prohíbe — la deriva es de velocidad uniforme y el único que la
+            // cambia es el drop. Al volumen le queda un ±3 %, que es respirar.
+            const speed = 0.78 * (1 + 0.06 * (tube.level - 0.4)) * tube.rush;
             tube.travel += tube.pending * speed;
             tube.clock += tube.pending;
             tube.roll += tube.pending * (0.012 + 0.055 * (tube.pitch - 0.5));
@@ -157,6 +186,7 @@ Item {
         property real twist: tube.pitch - 0.5
         property real roll: tube.roll
         property real bend: tube.bend
+        property real blur: tube.blur
         property real seed: tube.seed
         property real level: tube.level
         // la luz corre HACIA EL FONDO: su profundidad va más rápido que la

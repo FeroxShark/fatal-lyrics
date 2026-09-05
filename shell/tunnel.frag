@@ -73,6 +73,10 @@
 // own so the near wall is the brightest thing on screen. Before this the middle
 // of the picture was the brightest part and it read as a lamp shade.
 //
+// THE DROP (T5.4). Outside a drop the tunnel travels at a CONSTANT speed — the
+// uniform drift the reference video is built on — and the drop is the one thing
+// that changes it: it speeds up and the wall smears in the direction of travel.
+//
 // And one light RUNS: on every beat a band of brightness is planted at the mouth
 // and pushed down the wall away from the camera (QML moves `lightDepth`), which
 // is the only thing here that says which way you are travelling. It replaced the
@@ -94,6 +98,7 @@ layout(std140, binding = 0) uniform buf {
     float seed;     // 0..1, re-rolled every appearance
     float level;    // overall volume: how hot the walls burn
     float bend;     // how hard the tunnel curves, in tube radii (< 1.8)
+    float blur;     // 0..1: the drop smear, along the direction of travel
     float lightDepth; // where the running light is now, in depth
     float lightAmt;   // 1 when it is planted, decaying as it runs
     float dim;
@@ -185,7 +190,16 @@ void main() {
     // and what is left is the course edge. Without this the middle of the
     // picture crawls.
     float detail = smoothstep(15.0, 5.0, dz);
-    float wall = wallAt(depth, a, detail, 0.0, seed * 31.7);
+    // THE DROP (T5.4): the tube speeds up and the wall SMEARS along the way it
+    // is travelling. Two samples a fraction of a course apart, averaged, plus
+    // every edge widened: what was one course of bricks becomes two ghosts of
+    // it, which is a smear in depth and reads as radial on screen. Two samples
+    // and not a loop — one evaluation per pixel is the budget, and outside the
+    // drop the second one lands on the same place and costs the same.
+    float soft = 0.11 * blur;
+    float wall = mix(wallAt(depth, a, detail, soft, seed * 31.7),
+                     wallAt(depth - 0.55 * blur, a, detail, soft, seed * 31.7),
+                     0.45 * blur);
     float d0 = abs(fract(depth) - 0.5) * 2.0;
     float edge = smoothstep(0.72, 1.0, d0);
 
@@ -207,7 +221,11 @@ void main() {
     float ld = depth - lightDepth;
     float lite = lightAmt * exp(-ld * ld * 0.32);
 
-    float lum = wall * fog * mouth * vig * (0.55 + 0.80 * level) + lite * fog * 0.85;
+    // The smear costs brightness by construction: averaging two samples halves
+    // any highlight only one of them has, and measured, the drop came out
+    // DARKER than the verse — which is backwards. The gain pays it back.
+    float lum = wall * fog * mouth * vig * (0.55 + 0.80 * level) * (1.0 + 0.75 * blur)
+              + lite * fog * 0.85;
 
 
     vec3 col = mix(ink, hot, clamp(edge * 0.70 + lite, 0.0, 1.0)) * lum;

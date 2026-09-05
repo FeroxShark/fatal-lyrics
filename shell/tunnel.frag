@@ -67,10 +67,17 @@
 // about twelve deep, one brick is thinner than a pixel and the texture turns
 // into crawling noise. What is left there is the plain course edge.
 //
-// The pulse costs nothing to move: a constant value of `depth` travels outwards
-// by itself, because `depth = 2/r + t` and `t` grows — so a ring planted at
-// a depth stays at that depth and its radius opens up. The beat only has to say
-// WHERE to plant it.
+// LIGHT AND FOG (T5.3). What tells you a tunnel is deep is not the rings, it is
+// that the far end goes DARK: `fog` is a plain exponential in depth, so the far
+// end reaches the background and stays there, and the mouth gets a light of its
+// own so the near wall is the brightest thing on screen. Before this the middle
+// of the picture was the brightest part and it read as a lamp shade.
+//
+// And one light RUNS: on every beat a band of brightness is planted at the mouth
+// and pushed down the wall away from the camera (QML moves `lightDepth`), which
+// is the only thing here that says which way you are travelling. It replaced the
+// ring the kick used to plant — a hoop flying at you and a light running away
+// from you, both on the same beat, read as a fault and not as a pulse.
 //
 // Build:  qsb --glsl "100 es,120,150" -o tunnel.frag.qsb tunnel.frag
 
@@ -87,8 +94,8 @@ layout(std140, binding = 0) uniform buf {
     float seed;     // 0..1, re-rolled every appearance
     float level;    // overall volume: how hot the walls burn
     float bend;     // how hard the tunnel curves, in tube radii (< 1.8)
-    float pulseDepth; // where the lit ring was planted, in depth
-    float pulseAmt;   // 1 on a kick, decaying
+    float lightDepth; // where the running light is now, in depth
+    float lightAmt;   // 1 when it is planted, decaying as it runs
     float dim;
     vec2 res;
     vec3 ink;
@@ -182,20 +189,41 @@ void main() {
     float d0 = abs(fract(depth) - 0.5) * 2.0;
     float edge = smoothstep(0.72, 1.0, d0);
 
-    // the far end goes dark: without this the middle is a white pinprick and
-    // the whole thing reads as a lamp, not as a hole
-    float far = smoothstep(0.02, 0.26, r);
-    // and the mouth falls off at the corners, so the walls do not end in a flat
-    // wash against the edge of the tube
-    float vig = 1.0 - 0.22 * smoothstep(0.50, 0.95, r);
+    // The far end goes dark, and it gets there smoothly: an exponential has no
+    // knee, so there is no ring where "the fog starts". It is measured from the
+    // nearest thing on screen (the corners, at depth 2), so the mouth is not
+    // already dimmed before anything has happened.
+    float za = max(dz - 2.0, 0.0);
+    float fog = exp(-za * 0.17);
+    // and the mouth has a light of its own: the near wall is the brightest
+    // thing in the picture, which is what says the hole goes AWAY
+    float mouth = 1.0 + 0.75 * exp(-za * 0.45);
+    // the corners still fall off, so the wall does not end in a flat wash
+    // against the edge of the tube
+    float vig = 1.0 - 0.20 * smoothstep(0.55, 1.05, r);
 
-    // the ring the beat lit up, on its way out
-    float pd = depth - pulseDepth;
-    float pulse = pulseAmt * exp(-pd * pd * 2.0);
+    // the light running down the wall. A BAND and not a ring: it has to read as
+    // light falling on a surface, not as one more course of bricks.
+    float ld = depth - lightDepth;
+    float lite = lightAmt * exp(-ld * ld * 0.32);
 
-    float lum = wall * far * vig * (0.42 + 0.62 * level) + pulse * far * 0.85;
+    float lum = wall * fog * mouth * vig * (0.55 + 0.80 * level) + lite * fog * 0.85;
 
-    vec3 col = mix(ink, hot, clamp(edge * 0.70 + pulse, 0.0, 1.0)) * lum;
+
+    vec3 col = mix(ink, hot, clamp(edge * 0.70 + lite, 0.0, 1.0)) * lum;
+    // Alpha-composited like every other motif: what is far away has no
+    // brightness, so it hands the picture back to the tube. Two things that do
+    // NOT work were tried here and are worth not trying again: painting the far
+    // end opaque black (`max(lum, 1 - fog)`) puts the black ON TOP of the
+    // bricks, and at half a screen of depth that is a 50% wash over the only
+    // texture this picture has — the wall went flat; and drawing the whole
+    // thing near-opaque over a backdrop of its own kills the inverted palette
+    // faces, where `ink` is dark and the tube bed is light, and the screen came
+    // out an even dark slab.
+    //
+    // The price is that on those inverted faces the far end is the LIGHT of the
+    // bed instead of black. That is the same deal every motif on this wall
+    // takes, and it is in CHECKS-VISUALES to be looked at.
     float alpha = clamp(lum * 0.95 * dim, 0.0, 1.0);
     col = clamp(col * dim, 0.0, 1.6);
     fragColor = vec4(col * alpha, alpha) * qt_Opacity;   // premultiplied

@@ -45,25 +45,75 @@ Item {
     property bool running: true
     property int kick: 0
 
-    // El anillo que enciende el golpe. No hace falta moverlo: un valor fijo de
-    // `depth` se abre solo mientras `travel` crece, así que el golpe sólo dice
-    // A QUÉ PROFUNDIDAD plantarlo. Siete anillos adentro es como una vuelta y
-    // media de tubo: se lo ve venir.
-    property real pulseDepth: 0
-    property real pulseAmt: 0
+    // ---- LA LUZ QUE CORRE (T5.3)
+    //
+    // En cada tiempo se planta una banda de luz en la boca y se la empuja pared
+    // adentro, lejos de la cámara: es lo único acá que dice hacia dónde se
+    // viaja. Reemplaza al anillo que plantaba el golpe — un aro viniendo y una
+    // luz yéndose, los dos en el mismo tiempo, se leen como una falla y no como
+    // un pulso.
+    //
+    // De dónde salen los tiempos, en este orden (el mismo que el cardiograma):
+    // del `tick` cuantizado si hay compás confiable, del onset crudo si no, y
+    // si no llega ninguno de los dos, de un período fijo — un túnel sin luz que
+    // corra es un dibujo quieto.
+    property real low: 0.4
+    Behavior on low { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
+    property int beat: 0
+    property int tick: 0
+    property real beatMs: 500
+    property bool bpmLive: false
+
+    // qué tan adelante de la cámara va la luz, y cuánto le queda
+    property real lightAhead: 0
+    property real lightAmt: 0
+    property double lastLightAt: 0
+
+    onTickChanged: if (bpmLive) lightRun(1.0)
+    onBeatChanged: if (!bpmLive) lightRun(1.0)
+    // El golpe del tubo no planta una luz propia: le sube el brillo a la que ya
+    // está corriendo. Dos luces con 100 ms de diferencia son dos eventos, y por
+    // pantalla va uno.
     onKickChanged: {
-        if (!running)
-            return;
-        pulseDepth = travel + 7;
-        pulseFade.restart();
+        if (lightAmt > 0.15)
+            lightAmt = Math.min(1.0, lightAmt + 0.25);
+        else
+            lightRun(0.85);
     }
-    NumberAnimation {
-        id: pulseFade
-        target: tube
-        property: "pulseAmt"
-        from: 1; to: 0
-        duration: 900
-        easing.type: Easing.OutQuad
+
+    function lightRun(gain) {
+        if (!running || !visible)
+            return;
+        var now = Date.now();
+        if (now - lastLightAt < 140)
+            return;
+        lastLightAt = now;
+        lightPeak = Math.min(1.0, gain * (0.45 + 0.9 * Math.max(0, low - 0.30)));
+        lightRunAnim.restart();
+    }
+
+    property real lightPeak: 0.6
+    ParallelAnimation {
+        id: lightRunAnim
+        NumberAnimation {
+            target: tube; property: "lightAhead"
+            from: 0.5; to: 13
+            duration: 900; easing.type: Easing.OutQuad
+        }
+        NumberAnimation {
+            target: tube; property: "lightAmt"
+            from: tube.lightPeak; to: 0
+            duration: 900; easing.type: Easing.InQuad
+        }
+    }
+
+    // El período fijo del final de la cadena: si en un segundo y medio no llegó
+    // ni un tiempo ni un golpe, la luz sale igual.
+    Timer {
+        interval: 900
+        repeat: true
+        running: tube.running && tube.visible
+        onTriggered: if (Date.now() - tube.lastLightAt > 1500) tube.lightRun(0.7)
     }
 
     // distancia viajada (anillos), los segundos pelados para la deriva de la
@@ -109,8 +159,10 @@ Item {
         property real bend: tube.bend
         property real seed: tube.seed
         property real level: tube.level
-        property real pulseDepth: tube.pulseDepth
-        property real pulseAmt: tube.pulseAmt
+        // la luz corre HACIA EL FONDO: su profundidad va más rápido que la
+        // distancia viajada, si no se quedaría clavada en la pared
+        property real lightDepth: tube.travel + tube.lightAhead
+        property real lightAmt: tube.lightAmt
         property real dim: tube.dim
         property variant res: Qt.vector2d(Math.max(width, 1), Math.max(height, 1))
         property variant ink: Qt.vector3d(tube.colour.r, tube.colour.g, tube.colour.b)

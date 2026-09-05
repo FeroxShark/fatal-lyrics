@@ -961,6 +961,11 @@ Item {
             level: motif.level
             stepMin: motif.stepMin
             pitch: motif.pitch
+            low: motif.low
+            beat: motif.beat
+            tick: motif.tick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
             energy: motif.energy
             seed: motif.seed
             kick: motif.kick

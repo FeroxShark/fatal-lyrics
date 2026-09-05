@@ -657,6 +657,11 @@ no-op → boot roto. No reintroducir un segundo.)
   Canvas. Los sospechosos son el estado del aparejo y que el baseline se tomó con el
   `dunes.frag` a medio hacer del worker anterior cargado. Antes de festejar la baja, medir de
   nuevo con el mismo `cpu-bench.py` en frío.
+- **Corrida 5 (túnel de verdad), mismo aparejo, Spotify parado: 22-39% de un core, media 30%**
+  (29.3 y 30.6 las dos corridas). Sube ~3 puntos contra el cierre de la corrida 4: el sospechoso
+  es que el túnel ahora evalúa la pared DOS veces (el barrido del drop), y es uno de los tres
+  motivos que el aparejo fuerza. Es el número vigente; falta re-medirlo en frío sin el aparejo
+  forzando motivos caros (pendiente, ver abajo).
 - El análisis de audio es Python puro sobre `pw-record` (sin cava, sin numpy): 0.79% de CPU.
   Arma el mapa del tema por percentil de energía dentro de la propia canción
   (quiet/verse/build/drop) y lo cachea: la segunda vez que suena, anticipa los golpes.
@@ -675,13 +680,27 @@ no-op → boot roto. No reintroducir un segundo.)
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
-- **CPU del overlay: falta re-medir en silencio.** El baseline de la corrida 3 de la tanda 4
-  (31.6 % de un core, ocho muestras) se tomó con el player en pausa; cuando estuvo el techo de
-  cuadros de los motivos ya había música sonando, y el A/B en esas condiciones (wild 42 % /
-  normal 52 %, con muestras de 29 a 68 %) es ruido. `docs/plans/cpu-bench.py`, con Spotify
-  parado.
+- **CPU del overlay: falta re-medir en frío.** Todos los números de "Números medidos" de acá en
+  más se toman con el mismo aparejo de `cpu-bench.py` — motivos caros (tunnel/rorschach/ekg)
+  forzados en las tres pantallas y un verso cada 2 s —, que es el TECHO, no el uso normal.
+  Nunca se corrió con música de verdad, sin forzar nada, para saber el número que Ferox va a ver
+  la mayor parte del tiempo.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
+- **La tanda 4 quedó COMPLETA** (`docs/plans/2026-09-04-crt-tanda4.md`,
+  `docs/plans/2026-09-04-estado-tras-tanda4.md`): corrida 1 (sacar el overscan), 2 (el aro es un
+  cronómetro exacto), 2b (el aro sólo avisa instrumental, la flecha es el rayo), 3 (lenguaje de
+  movimiento y perilla `pace`), 4-pre (`fatal crt motif`, para dejar de pescar con palabras
+  clave), 4 (ojos/dunes/testcard), 4b (la burbuja se parte, la aguja de la carta de ajuste, el
+  mar) y 5 (el túnel se dobla, dovelas, niebla, luz que corre). Lo que falta mirar a ojo con
+  música de verdad está en `docs/plans/CHECKS-VISUALES.md`, secciones "TANDA 4 corrida …".
+  Decisiones abiertas para Ferox (no tocar sin su OK): qué motifs "feos" sacar del pool por
+  default (`stars` en cara oscura, `dunes`/`textsea`/`testcard` en la auditoría de la corrida 3,
+  ya mejorados en la 4 — falta que Ferox los vea con música), el fondo del túnel en las paletas
+  invertidas (queda claro, no negro: dos alternativas probadas y documentadas en
+  `tunnel.frag`), si la burbuja de `plasma` va más ovalada/huevo (bajar la compuerta del vidrio
+  en `plasma.frag`) y qué tan seguido se parte con el grave real, y si el alcance del campo de
+  `stars` (factor `1.05` en `Motif.qml:549`) necesita subir.
 - **La tanda 3 quedó COMPLETA** (`docs/plans/2026-09-04-crt-tanda3-feedback.md`): la corrida 1
   fue A1 (el overscan de los motivos), A2 (un `Loader` solo), A3 (el encuadre y el plano de la
   sección), A4 (la boca del túnel) y B7; la 2 fue A5 (una animación por pantalla), B1 (el aro que

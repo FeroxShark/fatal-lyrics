@@ -390,6 +390,21 @@ no-op → boot roto. No reintroducir un segundo.)
   `famSx`, `famSy`, `famSpat`). Así cruzar de una a otra es interpolar seis números con un
   `Behavior` en QML y el shader sigue siendo UNA evaluación: mezclar dos evaluaciones serían
   dieciséis octavas de fbm por píxel para cambiar una silueta.
+- **Un dibujo que se mide contra el ALTO sale de dos tamaños distintos en la pared.** DP-4 es
+  vertical, así que `height` vale 1920 donde en las otras dos vale 1080: el mismo trazo salía de
+  13 px en la apaisada y de 23 en la vertical (`ekg`), y la misma letra de 22 y de 38
+  (`textsea`). Todo grosor, todo cuerpo de letra y toda caja se miden con `Math.min(w, h)`. Lo
+  que SÍ se mide con el ancho y el alto por separado es el aire contra el borde (4 % de cada
+  uno), que es una fracción del cuadro y no un tamaño.
+- **Una retícula proyectada se muestrea geométrica en Z y CONSTANTE en X.** En `dunes`, con paso
+  constante en Z las filas lejanas caen todas en el mismo píxel (el escalón sobre el horizonte);
+  con el paso horizontal escalado por Z para que los granos guarden su separación EN PANTALLA,
+  desaparece el punto de fuga y quedan columnas verticales perfectas con cinco granos por fila
+  en la vertical. La perspectiva de verdad es que las filas de atrás tengan MÁS granos.
+- **Un horizonte no se dibuja: se deja de dibujar.** El `glow` de dos exponenciales en `|dy|` es
+  una raya encendida, y una raya encendida en el medio del cuadro es lo que Ferox vio partiendo
+  la imagen. Va una niebla que sigue por debajo del horizonte y se apaga con `smoothstep`, cuya
+  derivada es cero en el cruce: sin derivada no hay canto.
 - **Todo dibujo nuevo se prueba con el ancho y el alto dados vuelta.** `DP-4` es vertical y el
   compositor ya se la entrega al overlay como 1080×1920, así que un `grim -o DP-4` ES la prueba.
   Los ojos reparten los chicos según la forma (a los costados si `w > h`, arriba y abajo si no).
@@ -601,6 +616,13 @@ no-op → boot roto. No reintroducir un segundo.)
   midió con otro aparejo y no es comparable. Apagado: 1.7% (sin captura, sin texturas).
   El overscan de la tanda 3 (la cámara alejando hasta 0.82 y dibujando 1.5× de área) ya no
   existe desde la corrida 1.
+- **Al CERRAR la corrida 4 de la tanda 4, mismo aparejo y Spotify parado: 17-39% de un core,
+  media 27%** (26.2 y 27.9 las dos corridas). Baja un tercio contra el baseline de arriba y
+  **la causa NO está medida**: esta corrida no optimizó nada — la arena recorre más lejos
+  (`ZMAX` 16 → 34), el hiperespacio pasó de 46 items a 110 y la carta de ajuste AGREGÓ un
+  Canvas. Los sospechosos son el estado del aparejo y que el baseline se tomó con el
+  `dunes.frag` a medio hacer del worker anterior cargado. Antes de festejar la baja, medir de
+  nuevo con el mismo `cpu-bench.py` en frío.
 - El análisis de audio es Python puro sobre `pw-record` (sin cava, sin numpy): 0.79% de CPU.
   Arma el mapa del tema por percentil de energía dentro de la propia canción
   (quiet/verse/build/drop) y lo cachea: la segunda vez que suena, anticipa los golpes.

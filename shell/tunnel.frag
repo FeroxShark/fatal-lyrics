@@ -14,14 +14,39 @@
 //   · nothing here depends on the tube moving. With the screen still, `t` stops
 //     and the shader still draws a complete frame of rings. Still, never empty.
 //
-// Framing: measured at 9:16, 16:9 and 21:9, the mouth never gets closer than
-// 0.24 of the frame to an edge, and `far` is 1 at every corner — so the ring
-// pattern reaches the corners and no zoom of the camera can uncover a hole.
+// FRAME (T5.1). Everything is measured against the SHORT SIDE of the screen
+// (`min(w, h)`), so a ring is the same size on the portrait monitor and on the
+// landscape ones. Before this the x was scaled by the aspect, which is
+// normalising by the HEIGHT: on DP-4 (1080x1920) that made the mouth as wide as
+// the screen is TALL, and the far end reached a corner radius of 0.57 where the
+// landscape screens reached 1.02 — two different tunnels on the same wall.
+//
+// THE CURVE (T5.1). The tunnel BENDS: the axis of the tube walks sideways as
+// it goes away, `C(z)`, so the far rings are off-centre and the mouth stays put
+// — you are flying into a bend. The centre used to drift as one 2D offset for
+// the whole picture, which moves the mouth as much as the far end and reads as
+// the whole tube sliding sideways.
+//
+// The projection is what keeps it from tearing. A ring whose axis is `C` at
+// distance `z` lands on screen offset by `C/z`, and its radius is `R/z` — so
+// the offset is a FRACTION of that ring's own radius, and that fraction is
+// `C/R`, which changes slowly. Written that way (`c = r · C(dz)/2`) the warp is
+// injective for `|C| < 2` and the picture cannot fold.
+//
+// Written the obvious way (`c = A · w(dz)`, a plain offset in depth) it DOES
+// fold, and it is worth knowing why: `d(dz)/dr = -dz²/2`, hundreds near the
+// centre, and on top of that `|c|` stops being smaller than `r` — the first
+// try at this drew claws and cusps over the middle rings. And solving
+// `p = q - c(depth(p))` by iterating does not converge for the same reason.
+//
+// `C` is zero at the camera (the axis passes through the eye: the sines are
+// written as differences so `C(0) = 0`), so the mouth never slides, and past
+// `ZCAP` it freezes: further than that the phase would wind faster than the
+// pixels and the middle of the picture would turn to noise.
 //
 // The music: `level` is how fast the rings arrive (up in QML), `twist` wrings
 // them around the axis — and the wring grows with depth, so the far end of the
-// tunnel turns more than the mouth — and the centre drifts on its own slow
-// clock, which is what keeps it from looking like a target painted on glass.
+// tunnel turns more than the mouth.
 //
 // CONTRAST (T3.B8). The first version had a wide soft plateau per ring, and at
 // any distance that reads as one gradient: Ferox saw "casi no hay contraste
@@ -30,7 +55,7 @@
 // far end, and every kick plants a lit ring that flies out with the others.
 //
 // The pulse costs nothing to move: a constant value of `depth` travels outwards
-// by itself, because `depth = 0.42/r + t` and `t` grows — so a ring planted at
+// by itself, because `depth = 2/r + t` and `t` grows — so a ring planted at
 // a depth stays at that depth and its radius opens up. The beat only has to say
 // WHERE to plant it.
 //
@@ -43,10 +68,11 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float t;        // distance travelled down the tunnel (NOT a clock × speed)
-    float ct;       // plain seconds: only the centre drift uses this
+    float ct;       // plain seconds: only the bend slither uses this
     float twist;    // -0.5..0.5, from pitch: the wring
     float seed;     // 0..1, re-rolled every appearance
     float level;    // overall volume: how hot the walls burn
+    float bend;     // how hard the tunnel curves, in tube radii (< 1.8)
     float pulseDepth; // where the lit ring was planted, in depth
     float pulseAmt;   // 1 on a kick, decaying
     float dim;
@@ -55,34 +81,46 @@ layout(std140, binding = 0) uniform buf {
     vec3 hot;
 };
 
+// Past this depth the bend stops winding: beyond it the whole far end shares
+// ONE axis offset. Without the cap the phase winds infinitely fast as `dz` goes
+// to infinity and the middle of the picture turns to noise.
+const float ZCAP = 12.0;
+
 void main() {
     vec2 uv = qt_TexCoord0;
-    float ar = res.x / max(res.y, 1.0);
-
-    // The mouth wanders on two periods that do not divide each other, so it
-    // never comes back to where it was — but the drift is measured as a
-    // fraction of the FRAME and clamped to 15% of the half-frame on each
-    // axis. A fixed number here is not a fixed fraction: this space is
-    // stretched by the aspect, so on a portrait screen (`ar` around 0.56)
-    // half the width is 0.28 and an 0.08 drift was almost a third of it —
-    // the mouth walked out of the picture.
-    vec2 halfFrame = vec2(0.5 * ar, 0.5);
-    vec2 drift = vec2(sin(ct * 0.13 + seed * 6.283),
-                      cos(ct * 0.091 + seed * 4.11));
-    vec2 centre = clamp(drift, -1.0, 1.0) * halfFrame * 0.15;
-    vec2 p = vec2((uv.x - 0.5) * ar, uv.y - 0.5) - centre;
+    // normalised by the SHORT side: the short edge runs -0.5..0.5 and the long
+    // one overflows, so the same ring is the same size on every screen
+    vec2 q = (uv - 0.5) * (res / max(min(res.x, res.y), 1.0));
 
     // 1/r is the depth. Never divide by nothing: at the exact centre that is a
     // NaN, and a NaN is a hole punched in the picture.
+    float rq = max(length(q), 0.0015);
+    float dzq = 2.0 / rq;               // depth ahead of the camera, unbent
+
+    // Where the axis of the tube is at that depth, in tube radii. Two periods
+    // that do not divide each other, so the bend never comes back to where it
+    // was, and both written as a DIFFERENCE of sines so that `C(0) = 0`: the
+    // axis goes through the camera, so the mouth cannot slide sideways.
+    float zc = min(dzq, ZCAP) + t;
+    float p1 = ct * 0.21 + seed * 6.283;
+    float p2 = ct * 0.17 + seed * 4.11;
+    vec2 axis = bend * vec2(sin(zc * 0.130 + p1) - sin(t * 0.130 + p1),
+                            sin(zc * 0.098 + p2) - sin(t * 0.098 + p2));
+    // and the projection: offset on screen = axis / distance = axis · r / 2
+    vec2 p = q - rq * 0.5 * axis;
+
     float r = max(length(p), 0.0015);
     float ang = atan(p.y, p.x) / 6.283185;
 
     // The 2.0 sets how many rings fit on screen: with the old 0.42 there were
     // barely two and a half between the mouth and the far end, which with a
     // thin edge profile leaves a black field with a couple of hoops in it.
-    float depth = 2.0 / r + t;
-    // the wring grows with depth: the far end turns more than the mouth
-    float a = ang + twist * depth * 0.11;
+    float dz = 2.0 / r;
+    float depth = dz + t;
+    // the wring grows with depth: the far end turns more than the mouth. It
+    // rides on `dz` and NOT on `depth`, which carries `t`: `t` is hundreds by
+    // then, so a change of pitch would multiply it and spin every ring at once.
+    float a = ang + twist * dz * 0.03;
 
     // A ring is an EDGE, not a plateau: `d0` is 0 in the middle of a ring and 1
     // on its boundary, and only the last fifth of that lights up. Between two

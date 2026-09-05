@@ -97,12 +97,28 @@ void main() {
     vec3 col = vec3(0.0);
     float a = 0.0;
 
-    // the far edge: where the dots run out of resolution they melt into a band.
-    // Kept faint on purpose — a hard line reads as a drawn horizon, and what
-    // sells the distance is the dots getting smaller, not a stripe.
-    float glow = exp(-abs(dy) * 60.0) * 0.26 + exp(-abs(dy) * 11.0) * 0.09;
-    col += mix(ink, hot, 0.35) * glow * (0.5 + 0.5 * level);
-    a = max(a, glow * 0.7);
+    // ------------------------------------------------------------- the sky
+    // T4.2c/d, same fix the dunes got: the far edge used to be two exponentials
+    // in |dy| — a lit STRIPE across the middle of the picture, which reads as a
+    // drawn horizon and not as distance. A horizon is not drawn: it is where
+    // you stop drawing. So the sky is a vertical gradient — dark up top, warm
+    // against the water — and the SAME haze carries on below the horizon and
+    // fades down with a `smoothstep`, whose derivative is zero at dy = 0. No
+    // derivative, no edge, no band.
+    float skyT = clamp(1.0 - max(-dy, 0.0) / max(HORIZON, 0.001), 0.0, 1.0);
+    skyT = skyT * skyT;
+    vec3 hazeCol = mix(ink, hot, 0.25) * (0.16 + 0.14 * level);
+    vec3 skyCol = mix(ink * 0.03, hazeCol, skyT);
+    float skyA = mix(0.04, 0.17, skyT) * (0.7 + 0.4 * level);
+    if (dy > 0.0) {
+        skyCol = hazeCol;
+        skyA = 0.17 * (0.7 + 0.4 * level) * (1.0 - smoothstep(0.0, 0.34, dy));
+    }
+    // CAREFUL: the output is premultiplied (`col * a`), so `col` here goes
+    // WITHOUT its own coverage folded in — otherwise the sky comes out with its
+    // alpha squared and is not there at all.
+    col = skyCol;
+    a = skyA;
 
     if (dy > 0.0008) {
         // the whole field creeps towards the eye; rows slide in from the far

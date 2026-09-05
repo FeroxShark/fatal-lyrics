@@ -677,6 +677,8 @@ no-op → boot roto. No reintroducir un segundo.)
 
 ## Pendientes
 
+**Tanda 5 (próxima):** el feedback de Ferox del 2026-09-05 está en `docs/plans/2026-09-05-feedback-ferox-tanda5.md` (stars, dunas sin relieve ni arena que levite, entrada de letra "línea que se levanta" fea, zooms sin intención, cómo/cuándo aparecen los motifs, círculo sobre ruido aburrido). Leerlo antes de planear.
+
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.

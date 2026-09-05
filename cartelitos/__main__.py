@@ -1,7 +1,7 @@
 """Punto de entrada: `python3 -m cartelitos` (y lo que llama bin/fatal)."""
 import sys
 
-from . import daemon, offsets, setup, system
+from . import daemon, motifs, offsets, setup, system
 
 
 def _sync_reset(who):
@@ -54,6 +54,10 @@ def run(argv=None):
     if "--sync-reset" in argv:
         rest = argv[argv.index("--sync-reset") + 1:]
         sys.exit(_sync_reset(rest[0].strip() if rest else ""))
+    # `fatal crt motif`: no necesita el daemon (le habla al socket del overlay
+    # directo), pero entra por acá porque este archivo ya pone el repo en el path
+    if "--crt-motif" in argv:
+        sys.exit(motifs.force_cli(argv[argv.index("--crt-motif") + 1:]))
     if "--setup" in argv:
         try:
             setup.setup()

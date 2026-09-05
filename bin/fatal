@@ -189,8 +189,12 @@ crt() {
         off)    rm -f "$CRT_SETUP"; crt_set 0 ;;
         status) crt_state ;;
         setup)  crt_setup "$2" ;;
+        # Forzar un dibujo en una pantalla, para MIRARLO — no hace falta que
+        # suene el tema con la palabra justa ni rerollear el sorteo. Le habla
+        # al socket del overlay, así que no necesita el daemon.
+        motif)  shift; python3 "$DAEMON" --crt-motif "$@" ;;
         toggle) [ "$(crt_state)" = "on" ] && { rm -f "$CRT_SETUP"; crt_set 0; } || crt_set 1 ;;
-        *)      echo "usage: fatal crt [on|off|toggle|status|setup [off]]" >&2; exit 1 ;;
+        *)      echo "usage: fatal crt [on|off|toggle|status|setup [off]|motif <kind> [--screen <name|idx|all>]|motif off]" >&2; exit 1 ;;
     esac
 }
 
@@ -259,9 +263,10 @@ case "${1:-toggle}" in
     config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
-    crt)       crt "$2" "$3" ;;
+    # con "$@" y no con "$2" "$3": `crt motif <kind> --screen <n>` son cuatro
+    crt)       shift; crt "$@" ;;
     sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
 esac

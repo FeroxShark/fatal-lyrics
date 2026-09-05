@@ -143,6 +143,14 @@ PanelWindow {
     // número que Ferox describió como "las animaciones cambian y no llegás a
     // entender qué ves", y sin marca en el log no se mide ni antes ni después.
     readonly property string motifKind: ctl.crtMotifFor(idx)
+    // `fatal crt motif`: esta pantalla tiene un dibujo forzado. Cambia lo que
+    // se DIBUJA (el motivo se ve aunque haya letra o no haya música), nunca lo
+    // que se muestra de la letra: el forzado sirve justamente para mirar un
+    // motivo con el verso encima.
+    readonly property bool motifForced: ctl.crtMotifForced(idx)
+    // el tubo dormido dibuja a 5 fps: si alguien pidió mirar un motivo, se
+    // despierta igual que cuando vuelve la señal
+    onMotifForcedChanged: if (motifForced) deepSleep = false;
     onMotifKindChanged: {
         if (ctl.crtOn)
             console.log("crt: motif s" + idx + " " + motifKind);
@@ -452,7 +460,7 @@ PanelWindow {
     property bool deepSleep: false
     Timer {
         interval: 180000
-        running: crt.visible && crt.standby && !crt.deepSleep
+        running: crt.visible && crt.standby && !crt.deepSleep && !crt.motifForced
         onTriggered: crt.deepSleep = true
     }
     onStandbyChanged: {
@@ -1124,7 +1132,7 @@ PanelWindow {
             property real noiseAmt: crt.chanNoise > 0 ? 1
                 : crt.deepSleep ? 0
                 : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
-                * (crt.standby ? 3.5 : (crt.showsText ? 1 : 1.6))
+                * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
             property real glitch: Math.min(crt.glitchAmt, 1)
             // La barra que rueda va atada al verso: arranca con el peso de
             // siempre y llega al doble sobre el final de la línea, así el
@@ -1571,7 +1579,11 @@ PanelWindow {
                 clip: true
                 // en el instrumental corren TODAS: es la pared entera moviéndose
                 // con el tema, que es justo lo que "NO SIGNAL" mataba
-                visible: crt.idle || crt.instrumental
+                visible: crt.idle || crt.instrumental || crt.motifForced
+                // con el dibujo forzado esta caja puede coexistir con la letra,
+                // y está declarada DESPUÉS del verso: sin bajarla, el motivo
+                // taparía justo lo que se quiere ver encima de él
+                z: crt.motifForced ? -1 : 0
 
                 Motif {
                     anchors.fill: parent
@@ -1648,7 +1660,7 @@ PanelWindow {
                     // bajito, cuando pasa se tiene que ver acompañado.
                     kick: crt.surgeGen
                     clock: crt.tubeTime
-                    spinning: crt.visible && (crt.idle || crt.instrumental)
+                    spinning: crt.visible && (crt.idle || crt.instrumental || crt.motifForced)
                 }
             }
 
@@ -1713,7 +1725,11 @@ PanelWindow {
                 id: standbyLayer
                 anchors.fill: parent
                 clip: true
-                visible: crt.standby
+                // el dibujo forzado se pide con el player parado (que es
+                // standby): estas barras están declaradas DESPUÉS del motivo,
+                // así que sin esto lo que se captura es "NO SIGNAL" y no el
+                // dibujo que se quería mirar
+                visible: crt.standby && !crt.motifForced
 
                 Row {
                     anchors.fill: parent

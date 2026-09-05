@@ -104,8 +104,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 
 ## Mapa
 
-- `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sing on|off` y
-  `sync +|-|show|reset [<artista>|all]` (los dos últimos NO necesitan el daemon).
+- `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sing on|off`,
+  `crt motif <kind> [--screen <nombre|idx|all>]|off` y `sync +|-|show|reset [<artista>|all]`
+  (`sync show|reset` y `crt motif` NO necesitan el daemon: el último le habla al socket del
+  overlay, que es el que escucha).
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
@@ -118,6 +120,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
+- `cartelitos/motifs.py` + `crtSetForceMotif` / `crtMotifForced` (`shell.qml`) — el forzado de
+  `fatal crt motif`: el parseo y el socket de un lado, el evento `motif` y el pisado del sorteo
+  del otro. La lista de kinds del `--help` se LEE de `motifKinds` en `shell.qml`, no se copia.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
@@ -137,7 +142,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 495 tests, stdlib puro.
+- `tests/` — 522 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -152,6 +157,22 @@ fatal sync + | -           # ajuste fino ±0.1s, también Super+Alt+Right/Left o
 python3 -m unittest discover -s tests
 ```
 
+### Para VER un motif
+
+```bash
+fatal crt motif dunes --screen DP-4    # esa pantalla, ese dibujo, ya
+fatal crt motif tunnel --screen all    # toda la pared (rompe la unicidad a propósito)
+fatal crt motif off                    # vuelve el sorteo normal
+docs/plans/motif-force.py dunes DP-4 10 --shot t4-dunes   # + captura, y deja todo como estaba
+```
+
+**NUNCA pescar un motif con palabras clave ni rerollear con `cue drop`.** Así se hacía hasta la
+tanda 4 (`drive-motif.py`, `motif-hunt.py`, hoy OBSOLETOS) y era esperar minutos a que el sorteo
+sacara el dibujo que se quería mirar. El forzado pisa el pool, el hold, el filtro de validez y la
+palabra clave, y se ve aunque no suene nada. La letra sigue dibujándose encima: sirve para mirar
+un motivo CON el verso puesto. Los kinds válidos los lista `fatal crt motif --help` (salen de
+`motifKinds` en `shell.qml`, no de una copia).
+
 Autostart: **UNO solo** `exec-once` en `execs.conf` con `sleep 6 && cartelitos restart`. `restart`
 deja estado limpio aunque haya quedado media instancia. (Hubo dos exec-once compitiendo: el de
 `hyprland.conf` arrancaba en t=0 sin monitores y el de `execs.conf` veía sus pidfiles y hacía
@@ -159,6 +180,13 @@ no-op → boot roto. No reintroducir un segundo.)
 
 ## Trampas
 
+- **El forzado de motif va por un `cmd` propio (`motif`), no por una perilla de `config`.** El
+  daemon reenvía el evento `config` ENTERO en cada reconexión y `applyConfig` llama a
+  `crtForget()`: un forzado que viajara ahí se apagaría solo y de paso movería el reparto de la
+  línea. Y del lado del dibujo son TRES `visible` y no uno: `motifFrame` (que sin el forzado sólo
+  se dibuja sin letra), `standbyLayer` (declarado DESPUÉS: sin apagarlo, con el player parado la
+  captura sale "NO SIGNAL" en vez del dibujo) y el `z` del motivo (declarado después del verso:
+  sin bajarlo tapa justo la letra que se quería ver encima).
 - **Lanzar el overlay con `qs -p ... &` pelado NO sirve:** muere junto con la shell que lo lanzó
   (una terminal que se cierra, un tool call de Claude, un script efímero), sin log ni coredump —
   parece magia negra. `bin/fatal` usa `spawn()` con `setsid` y el PID lo escribe el propio hijo

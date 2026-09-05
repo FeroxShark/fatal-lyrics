@@ -1422,7 +1422,62 @@ ShellRoot {
     property var crtMotifSeeds: []
     property int crtMotifRoll: 0
 
+    // ---- forzar un dibujo (`fatal crt motif <kind> [--screen ...]`)
+    //
+    // Modo TEST y nada más: pisa el pool, el hold, el filtro de validez y la
+    // palabra clave, y con `all` rompe a propósito la invariante de que dos
+    // pantallas apagadas nunca muestran lo mismo. Existe porque ver un motivo
+    // concreto era pescarlo con una letra armada y rerollear hasta que saliera.
+    //
+    // Va por un `cmd` propio ("motif") y NO por una perilla de `config`: el
+    // daemon reenvía el evento `config` entero en cada reconexión y
+    // `applyConfig` llama a `crtForget()`, así que un forzado que viajara ahí
+    // se apagaría solo y de paso movería el reparto de la línea.
+    property string crtForceKind: ""
+    property int crtForceIdx: -1           // -1 = todas las pantallas
+
+    // nombre | índice | "all" -> índice de activeCrtScreens (-1 todas, -2 no existe)
+    function crtForceScreenIdx(v) {
+        if (v === undefined || v === null || v === "" || v === "all")
+            return -1;
+        if (typeof v === "number")
+            return Math.floor(v);
+        const n = parseInt(v, 10);
+        if (!isNaN(n) && String(n) === String(v))
+            return n;
+        for (let i = 0; i < activeCrtScreens.length; i++)
+            if (activeCrtScreens[i].name === v)
+                return i;
+        return -2;
+    }
+
+    function crtSetForceMotif(kind, screen) {
+        if (!kind) {
+            crtForceKind = "";
+            crtForceIdx = -1;
+            console.log("crt: force motif off");
+            return;
+        }
+        const i = crtForceScreenIdx(screen);
+        if (i === -2 || i >= activeCrtScreens.length) {
+            console.log("crt: force motif unknown screen " + screen);
+            return;
+        }
+        crtForceIdx = i;
+        crtForceKind = kind;
+        console.log("crt: force motif " + kind + " screen="
+                    + (i < 0 ? "all" : activeCrtScreens[i].name));
+    }
+
+    function crtMotifForced(i) {
+        return crtForceKind !== "" && (crtForceIdx < 0 || crtForceIdx === i);
+    }
+
     function crtMotifFor(i) {
+        // el forzado gana incluso con los motivos apagados: es una herramienta
+        // para mirar un dibujo, no una fuente más del sorteo
+        if (crtMotifForced(i))
+            return crtForceKind;
         if (!crtMotifs)
             return "none";
         return crtMotifKinds[i] || "eye";
@@ -2156,7 +2211,9 @@ ShellRoot {
                             }
                             else
                                 root.dialogList = [];
-                        } else if (ev.cmd === "config")
+                        } else if (ev.cmd === "motif")
+                            root.crtSetForceMotif(ev.kind, ev.screen);
+                        else if (ev.cmd === "config")
                             root.applyConfig(ev);
                     } catch (e) {
                         console.log("cartelitos: evento inválido:", message);

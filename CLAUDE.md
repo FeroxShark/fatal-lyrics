@@ -395,6 +395,12 @@ no-op → boot roto. No reintroducir un segundo.)
 - **El log del overlay tiene códigos de color EN EL MEDIO del prefijo:** `grep "qml:"` no matchea
   nunca (entre `qml` y los dos puntos hay un escape ANSI). Se grepea el texto propio:
   `grep -a "crt:" $XDG_RUNTIME_DIR/cartelitos/qs.log`.
+- **`fatal restart` NO trunca `qs.log`: lo ROTA por tamaño** (`rotate_log`, 5 MB). Así que un
+  warning de una sesión vieja — o de un `shell.qml` a medio editar que se hot-recargó — sobrevive
+  al restart y se lee como si fuera de ahora, con números de línea de un archivo que ya no
+  existe. Antes de auditar warnings: `: > $XDG_RUNTIME_DIR/cartelitos/qs.log`, después
+  `fatal restart` y `fatal crt on`. (Así se cayó el "bug" de los 44 `TypeError: crtMotifRefresh
+  is not a function` de la tanda 4: eran del hot-reload roto de la corrida 3, no de HEAD.)
 - **`fatal demo` no sirve para probar nada de la anticipación:** los carteles de demo van sin letra
   de verdad, así que `next` viaja en `null` y `t0`/`t1` en 0. Hace falta música con letra
   sincronizada. Para probar sin depender de qué suena, se le puede hablar al overlay directo por
@@ -559,12 +565,14 @@ no-op → boot roto. No reintroducir un segundo.)
   letra, un verso cada 2 s, ocho muestras de 8 s) el overlay pasó de **41 %** de un core a
   **35 %**. Baja sobre todo porque la grilla de ojos eran quince Canvas y ahora son cuatro; lo
   que se agregó (las hebras del aro, el rayo del salto) dura menos de medio segundo por verso.
-- CRT prendido: **20-37% de un core** (media 29 sobre ocho muestras de 8 s, tres monitores,
-  motivos de shader en las laterales). Era ~19% antes del overscan de la tanda 3: la cámara
-  aleja el cuadro hasta 0.82 y esos píxeles ANTES no se dibujaban — que es exactamente lo que
-  se veía como un marco de color plano. El área de más es 1/0.82² ≈ 1.5×, así que el número
-  sube por construcción, no por un desperdicio que se pueda sacar. Apagado: 1.7% (sin captura,
-  sin texturas).
+- CRT prendido, baseline de la corrida 4 de la tanda 4 (`docs/plans/cpu-bench.py`, dos corridas
+  de ocho muestras de 8 s, tres monitores, Spotify PARADO): **31-53% de un core**, media
+  **41%** (39.1 y 42.9 las dos corridas). El aparejo fuerza los motivos caros por la letra
+  (tunnel / rorschach / ekg) y manda un verso cada 2 s, así que es el techo, no el uso normal.
+  Es el número contra el que se compara de acá en adelante: el "20-37%, media 29" viejo se
+  midió con otro aparejo y no es comparable. Apagado: 1.7% (sin captura, sin texturas).
+  El overscan de la tanda 3 (la cámara alejando hasta 0.82 y dibujando 1.5× de área) ya no
+  existe desde la corrida 1.
 - El análisis de audio es Python puro sobre `pw-record` (sin cava, sin numpy): 0.79% de CPU.
   Arma el mapa del tema por percentil de energía dentro de la propia canción
   (quiet/verse/build/drop) y lo cachea: la segunda vez que suena, anticipa los golpes.

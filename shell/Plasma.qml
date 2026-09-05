@@ -31,7 +31,7 @@ Item {
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4            // los graves: abren la burbuja y la estiran
     Behavior on low { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
-    property real surge: 0            // el golpe del tubo: un empujón de más
+    property int kick: 0              // el golpe del tubo: un empujón de más
     property int beat: 0              // el golpe CRUDO: el que parte la burbuja
     property bool drop: false         // en el drop: órbitas al máximo, borde nervioso
     property real energy: 1.0
@@ -106,8 +106,13 @@ Item {
 
     // El empujón del golpe: cada bola sale con su propia fuerza (por semilla),
     // así se parte en dos o tres gotas y no en cinco iguales.
+    // Los dos empujones van por CONTADOR y nunca por magnitud. Con
+    // `onSurgeChanged: if (surge > 0.9)`, el pico del tubo pegaba una vez por
+    // CUADRO mientras el decaimiento estaba arriba de 0.9: dos veces a 60 Hz y
+    // cinco en el monitor de 200: la misma burbuja saltaba dos veces y media
+    // más en una pantalla que en la otra.
     onBeatChanged: kickOut(0.34 + 0.75 * Math.max(0, low - 0.3))
-    onSurgeChanged: if (surge > 0.9) kickOut(0.30)
+    onKickChanged: kickOut(0.30)
 
     function kickOut(f) {
         if (bx.length < 6)

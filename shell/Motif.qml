@@ -938,7 +938,7 @@ Item {
             level: motif.level
             stepMin: motif.stepMin
             low: motif.low
-            surge: motif.surge
+            kick: motif.kick
             beat: motif.beat
             drop: motif.drop
             energy: motif.energy

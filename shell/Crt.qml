@@ -1634,6 +1634,8 @@ PanelWindow {
                     lines: crt.ctl.crtLines
                     linesSynced: crt.ctl.crtLinesSynced
                     fontFamily: crt.fontFamily
+                    // el rótulo de la carta de ajuste
+                    title: crt.ctl.npTitle
                     // hacia dónde miran los ojos: a la pantalla que tiene la frase,
                     // y en el último tramo del verso, a la que la va a recibir
                     gaze: crt.motifGaze

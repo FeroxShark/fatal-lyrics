@@ -80,6 +80,9 @@ Item {
     property var lines: []
     property bool linesSynced: true
     property string fontFamily: "monospace"
+    // el nombre del tema, para el rótulo de la carta de ajuste. Vacío = el
+    // tubo no sabe qué suena y la carta dice el nombre del programa.
+    property string title: ""
     // Hacia dónde miran los ojos: -1 a la izquierda, 0 al frente, 1 a la
     // derecha. Lo decide Crt.qml, que es el único que sabe dónde está la frase.
     property real gaze: 0
@@ -563,94 +566,237 @@ Item {
     }
 
     // -------------------------------------------------------- carta de ajuste
-    // El patrón de prueba que quedaba en el aire cuando terminaba la
-    // programación: círculo, rejilla y escalera de grises, con la aguja girando.
+    // T4.3 — UNA CARTA DE AJUSTE DE VERDAD, no un marco con un círculo. Lo que
+    // quedaba en el aire cuando terminaba la programación tenía siempre las
+    // mismas cuatro cosas, y son las cuatro que faltaban: las barras de color
+    // arriba, la escalera de grises abajo, el círculo con la rejilla fina en el
+    // medio (la rejilla sirve para ver la convergencia, y por eso va DENTRO del
+    // círculo y recortada por él) y el rótulo de la emisora con la hora.
+    //
+    // Reparto: todo se mide con el LADO CORTO y se ancla al 92 % del cuadro, así
+    // que la misma carta entra igual en la vertical y en la apaisada — barras
+    // arriba, escalera abajo, círculo en el medio, y el medio es lo que sobra.
+    //
+    // El único Canvas es el círculo: la rejilla recortada por una circunferencia
+    // no se puede hacer con `clip`, que es rectangular. Las barras, la escalera,
+    // la aguja y el rótulo son items, que se animan gratis — un Canvas del
+    // tamaño de la pantalla repintándose con cada muestra de graves es
+    // exactamente lo que no se puede pagar.
     Component {
         id: testcardC
 
         Item {
+            id: card
+
+            // safe area: nada toca el canto del tubo
+            readonly property real mx: width * 0.04
+            readonly property real my: height * 0.04
+            readonly property real cw: width - mx * 2
+            readonly property real ch: height - my * 2
+            readonly property real sp: motif.span
+            readonly property real barsH: sp * 0.12
+            readonly property real stepsH: sp * 0.09
+            readonly property real gap: sp * 0.05
+            readonly property real midY: my + barsH + gap
+            readonly property real midH: Math.max(sp * 0.2, ch - barsH - stepsH - gap * 2)
+            readonly property real dia: Math.min(cw, midH) * 0.92
+
+            // el segundo entero: la aguja camina de a un tick, como un reloj de
+            // pared, y no se desliza. `clock` es el reloj del tubo en segundos.
+            readonly property int sec: Math.floor(motif.clock)
+            property string stamp: Qt.formatTime(new Date(), "hh:mm:ss")
+            onSecChanged: stamp = Qt.formatTime(new Date(), "hh:mm:ss")
+
+            // ---- las barras de color, arriba. La SMPTE son siete combinaciones
+            // de R, G y B prendidos o apagados (blanco, amarillo, cian, verde,
+            // magenta, rojo, azul), y eso es lo que va acá: la máscara de la
+            // barra MULTIPLICA al color caliente del tema. Con una rampa de
+            // luminancia sobre un solo tinte —el primer intento— las siete
+            // barras salían siete azules y no se distinguían de la escalera de
+            // grises de abajo, que es justo lo que la escalera ya hace.
+
+            Row {
+                x: card.mx
+                y: card.my
+                width: card.cw
+                height: card.barsH
+                spacing: 0
+
+                Repeater {
+                    model: card.visible ? 7 : 0
+                    Rectangle {
+                        required property int index
+                        // blanco · amarillo · cian · verde · magenta · rojo · azul
+                        readonly property int mask: [7, 6, 3, 2, 5, 4, 1][index]
+                        width: card.cw / 7
+                        height: card.barsH
+                        color: Qt.rgba(motif.hot.r * ((mask & 4) ? 1 : 0.10),
+                                       motif.hot.g * ((mask & 2) ? 1 : 0.10),
+                                       motif.hot.b * ((mask & 1) ? 1 : 0.10), 1)
+                        opacity: 0.9
+                    }
+                }
+            }
+
+            // ---- la escalera de grises, abajo. Late con los graves: es la
+            // única parte de la carta que se mueve con el tema.
+            Row {
+                x: card.mx
+                y: card.my + card.ch - card.stepsH
+                width: card.cw
+                height: card.stepsH
+                spacing: 0
+                opacity: 0.55 + 0.45 * motif.low
+
+                Repeater {
+                    model: card.visible ? 8 : 0
+                    Rectangle {
+                        required property int index
+                        width: card.cw / 8
+                        height: card.stepsH
+                        readonly property real lu: index / 7
+                        color: Qt.rgba(motif.colour.r * lu, motif.colour.g * lu,
+                                       motif.colour.b * lu, 1)
+                    }
+                }
+            }
+
+            // ---- el círculo con la rejilla y la cruz
             Item {
-                id: card
-                anchors.centerIn: parent
-                width: motif.span * 0.8
-                height: width * 0.75
+                id: dial
+                x: card.mx + (card.cw - card.dia) / 2
+                y: card.midY + (card.midH - card.dia) / 2
+                width: card.dia
+                height: card.dia
 
-                Rectangle {
+                Canvas {
+                    id: disc
                     anchors.fill: parent
-                    color: "transparent"
-                    border.width: Math.max(2, card.width * 0.005)
-                    border.color: motif.colour
-                    opacity: 0.6
-                }
+                    renderStrategy: Canvas.Cooperative
 
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.height * 0.86
-                    height: width
-                    radius: width / 2
-                    color: "transparent"
-                    border.width: Math.max(2, card.width * 0.006)
-                    border.color: motif.colour
-                    opacity: 0.75
-                }
+                    // El Canvas no se repinta solo: con la pantalla quieta no
+                    // hay Timer que lo llame y la carta saldría en blanco (la
+                    // misma trampa del cardiograma).
+                    onVisibleChanged: if (visible) requestPaint()
+                    Component.onCompleted: requestPaint()
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+                    Connections {
+                        target: motif
+                        function onColourChanged() { disc.requestPaint(); }
+                        function onHotChanged() { disc.requestPaint(); }
+                    }
 
-                Repeater {
-                    model: card.visible ? 6 : 0
-                    Rectangle {
-                        required property int index
-                        x: card.width * (index + 1) / 7
-                        width: Math.max(1, card.width * 0.002)
-                        height: card.height
-                        color: motif.colour
-                        opacity: 0.25
+                    onPaint: {
+                        const c = getContext("2d");
+                        c.reset();
+                        const d = width;
+                        if (d <= 4)
+                            return;
+                        const r = d / 2, cx = r, cy = r;
+                        const lw = Math.max(2, d * 0.004);
+
+                        // la rejilla, recortada por el círculo: es para lo que
+                        // sirve el círculo de una carta de ajuste
+                        c.save();
+                        c.beginPath();
+                        c.arc(cx, cy, r - lw, 0, Math.PI * 2);
+                        c.clip();
+                        c.strokeStyle = motif.colour;
+                        c.globalAlpha = 0.38;
+                        c.lineWidth = Math.max(1, d * 0.0025);
+                        const cells = 10;
+                        for (let i = 1; i < cells; i++) {
+                            const p = i / cells * d;
+                            c.beginPath(); c.moveTo(p, 0); c.lineTo(p, d); c.stroke();
+                            c.beginPath(); c.moveTo(0, p); c.lineTo(d, p); c.stroke();
+                        }
+                        c.restore();
+
+                        // dos circunferencias: la de afuera y la del cuarto
+                        c.globalAlpha = 0.85;
+                        c.strokeStyle = motif.colour;
+                        c.lineWidth = lw;
+                        c.beginPath(); c.arc(cx, cy, r - lw, 0, Math.PI * 2); c.stroke();
+                        c.globalAlpha = 0.45;
+                        c.lineWidth = Math.max(1, lw * 0.6);
+                        c.beginPath(); c.arc(cx, cy, r * 0.5, 0, Math.PI * 2); c.stroke();
+
+                        // los doce ticks de la hora
+                        c.globalAlpha = 0.7;
+                        c.lineWidth = lw;
+                        for (let k = 0; k < 12; k++) {
+                            const ang = k / 12 * Math.PI * 2 - Math.PI / 2;
+                            const long = (k % 3 === 0) ? 0.10 : 0.055;
+                            c.beginPath();
+                            c.moveTo(cx + Math.cos(ang) * r * (1 - long),
+                                     cy + Math.sin(ang) * r * (1 - long));
+                            c.lineTo(cx + Math.cos(ang) * r * 0.96,
+                                     cy + Math.sin(ang) * r * 0.96);
+                            c.stroke();
+                        }
+
+                        // la cruz del centro
+                        c.globalAlpha = 0.9;
+                        c.strokeStyle = motif.hot;
+                        c.lineWidth = lw;
+                        const arm = r * 0.16;
+                        c.beginPath(); c.moveTo(cx - arm, cy); c.lineTo(cx + arm, cy); c.stroke();
+                        c.beginPath(); c.moveTo(cx, cy - arm); c.lineTo(cx, cy + arm); c.stroke();
                     }
                 }
-                Repeater {
-                    model: card.visible ? 4 : 0
-                    Rectangle {
-                        required property int index
-                        y: card.height * (index + 1) / 5
-                        width: card.width
-                        height: Math.max(1, card.width * 0.002)
-                        color: motif.colour
-                        opacity: 0.25
-                    }
-                }
 
-                // escalera de grises que late con los graves
-                Row {
-                    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: card.height * 0.08 }
-                    height: card.height * 0.1
-                    spacing: 0
-
-                    Repeater {
-                        model: card.visible ? 8 : 0
-                        Rectangle {
-                            required property int index
-                            width: card.width * 0.6 / 8
-                            height: card.height * 0.1
-                            color: motif.colour
-                            opacity: (index + 1) / 9 * (0.5 + 0.5 * motif.low)
+                // ---- la aguja: camina de a un segundo con snap, no se desliza.
+                // El ángulo se ACUMULA (sec * 6): con el resto de 360 la aguja
+                // volvería para atrás una vuelta entera cada minuto.
+                Item {
+                    id: hand
+                    anchors.fill: parent
+                    rotation: card.sec * 6
+                    Behavior on rotation {
+                        NumberAnimation {
+                            duration: Motion.enterFastMs
+                            easing.type: Easing.OutExpo
                         }
                     }
-                }
-
-                // la aguja: gira siempre, es lo que evita que la carta parezca una foto
-                Item {
-                    anchors.centerIn: parent
-                    width: card.height * 0.86
-                    height: width
-                    rotation: motif.clock * 24 * motif.drive
 
                     Rectangle {
                         x: parent.width / 2
                         y: parent.height / 2 - height / 2
-                        width: parent.width / 2
-                        height: Math.max(2, card.width * 0.008)
+                        width: parent.width * 0.44
+                        height: Math.max(2, card.dia * 0.010)
+                        transformOrigin: Item.Left
+                        rotation: -90          // el cero de la aguja son las 12
                         color: motif.hot
-                        opacity: 0.85
+                        opacity: 0.9
                     }
                 }
+            }
+
+            // ---- el rótulo de la emisora y la hora, con la fuente del tubo
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: card.midY + (card.midH - card.dia) / 2 - card.gap * 0.9
+                text: (motif.title || "FATAL LYRICS").toUpperCase()
+                color: motif.hot
+                opacity: 0.85
+                font.family: motif.fontFamily
+                font.pixelSize: Math.max(8, card.sp * 0.038)
+                font.letterSpacing: card.sp * 0.006
+                width: card.cw
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: card.midY + (card.midH + card.dia) / 2 + card.gap * 0.2
+                text: card.stamp
+                color: motif.colour
+                opacity: 0.8
+                font.family: motif.fontFamily
+                font.pixelSize: Math.max(8, card.sp * 0.046)
+                font.letterSpacing: card.sp * 0.010
+                horizontalAlignment: Text.AlignHCenter
             }
         }
     }

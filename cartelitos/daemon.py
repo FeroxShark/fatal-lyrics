@@ -170,7 +170,7 @@ class DaemonLoop:
                     self.track_id = None
                     self.lyrics = None
                     self.idx = -1
-                    self._ipc.clear()
+                    self._ipc.clear(why="pause")
                     # un tubo full-bleed encima de un juego es lo peor que puede
                     # pasar: se apaga y se devuelve como estaba al salir
                     self.crt_paused_by_game = self._config.crt_on()

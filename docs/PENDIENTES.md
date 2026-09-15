@@ -3,7 +3,8 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
-**Tanda 5 (próxima):** el feedback de Ferox del 2026-09-05 está en `docs/plans/2026-09-05-feedback-ferox-tanda5.md` (stars, dunas sin relieve ni arena que levite, entrada de letra "línea que se levanta" fea, zooms sin intención, cómo/cuándo aparecen los motifs, círculo sobre ruido aburrido). Leerlo antes de planear.
+**Tanda 6 (en curso):** `docs/plans/2026-09-15-crt-tanda6-dinamismo.md`. De la tanda 5 absorbe los
+puntos 3 y 5; 1, 2, 4 y 6 siguen abiertos.
 
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar

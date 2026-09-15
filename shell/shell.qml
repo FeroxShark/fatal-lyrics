@@ -372,6 +372,33 @@ ShellRoot {
     // true mientras la línea que suena es la primera del tema (ver show())
     property bool crtTrackStart: false
 
+    // ---- el tubo apagado (tanda 6, corrida 0): primitivo que consumen las
+    // secciones (corrida 4), el intro de tema (corrida 5) y los raros
+    // (corrida 7). Bool por índice de `activeCrtScreens`; ausente = prendida.
+    property var crtDark: []
+    // cuántas pantallas están prendidas ahora mismo
+    readonly property int crtLitCount: activeCrtScreens.length
+        - crtDark.slice(0, activeCrtScreens.length).filter(d => d === true).length
+
+    // i = -1 -> todas. Recorta/rellena para que `crtDark` siempre tenga el
+    // largo de `activeCrtScreens` (lo real lo fija `onActiveCrtScreensChanged`
+    // en el hotplug; acá alcanza con no escribir corto).
+    function crtSetDark(i, on) {
+        const n = activeCrtScreens.length;
+        if (i < 0) {
+            crtDark = new Array(n).fill(on);
+            console.log("crt: dark all " + (on ? "on" : "off"));
+            return;
+        }
+        if (i >= n)
+            return;
+        let next = crtDark.slice(0, n);
+        while (next.length < n) next.push(false);
+        next[i] = on;
+        crtDark = next;
+        console.log("crt: dark " + (on ? "on" : "off") + " screen=" + i);
+    }
+
     // ---- la línea que VIENE (T2.0)
     // El daemon manda una línea por vez: hasta acá el tubo no sabía nada de la
     // próxima, y sin eso no hay forma de avisar a dónde va a saltar la frase.
@@ -417,6 +444,22 @@ ShellRoot {
         repeat: true
         running: root.crtOn && root.crtNextAt > 0
         onTriggered: root.crtNow = Date.now()
+    }
+
+    // "la letra prende el tubo" (`crtPredict()`): UN timer que el root
+    // reprograma cada vez que se anticipa la línea siguiente, no uno por
+    // pantalla — el target cambia, el timer no se multiplica.
+    Timer {
+        id: crtRelightTimer
+        property int targetScreen: -1
+        repeat: false
+        onTriggered: {
+            if (targetScreen >= 0 && root.crtDark[targetScreen] === true) {
+                root.crtSetDark(targetScreen, false);
+                console.log("crt: dark relight screen=" + targetScreen
+                            + " in=" + Motion.tubeOnMs);
+            }
+        }
     }
 
     // ---- el aro: en qué pantalla está, ahora mismo (-1 = en ninguna)
@@ -736,6 +779,13 @@ ShellRoot {
         crtMotifSince = [];
         crtMotifSeeds = [];
         crtMotifRefresh(true);
+        // el apagado también habla de índices viejos: se recorta/rellena (con
+        // "prendida") al nuevo largo en vez de arrastrar un mapeo que ya no
+        // corresponde a ningún monitor real
+        const n = activeCrtScreens.length;
+        let dark = crtDark.slice(0, n);
+        while (dark.length < n) dark.push(false);
+        crtDark = dark;
     }
 
     function updateInfection() {
@@ -1055,6 +1105,18 @@ ShellRoot {
         // offset (0.15 s de fábrica, más lo que haya ajustado el sync).
         const due = nx.due !== undefined ? nx.due : (nx.t0 || 0);
         crtNextAt = Date.now() + Math.max(due - songPos(), 0) * 1000;
+        // "la letra prende el tubo" (tanda 6, corrida 0): si el próximo verso
+        // cae en una pantalla oscura, se prende en la ventana de
+        // anticipación, ANTES de que llegue el texto — no cuando ya está
+        // sonando. Hoy el único apagado es manual (`fatal crt dark`); las
+        // secciones/intro/raros de las corridas 4, 5 y 7 cuelgan de esta
+        // misma regla.
+        const focus = crtPendingShot.focus;
+        if (focus >= 0 && crtDark[focus] === true) {
+            crtRelightTimer.targetScreen = focus;
+            crtRelightTimer.interval = Math.max(crtNextAt - Motion.tubeOnMs - Date.now(), 0);
+            crtRelightTimer.restart();
+        }
         // El hueco del aro es el de la línea NUEVA. Un reenvío de la misma
         // línea (el sync resetea el índice del daemon) vuelve a pasar por acá
         // con lo que falta, no con el hueco entero: sin esto un hueco de 12 s
@@ -1523,6 +1585,11 @@ ShellRoot {
             }
         let changed = false;
         for (let i = 0; i < n; i++) {
+            // una pantalla apagada (tanda 6, corrida 0) no dibuja nada: no
+            // gasta su hold (nunca "vence" mientras esté oscura) ni reserva
+            // el kind que tenía para las demás
+            if (crtDark[i] === true)
+                continue;
             // el filtro de validez SÍ es inmediato: un dibujo que ya no tiene
             // con qué dibujarse (los ojos sin letra, la marea sin lyrics, el
             // agua apagada) se cambia en esa pantalla y no toca a las otras
@@ -1531,8 +1598,9 @@ ShellRoot {
             const expired = force || !valid || now - since[i] >= hold;
             if (!expired)
                 continue;
-            // las que no se tocan también reservan su dibujo
-            const taken = kinds.filter((k, j) => j !== i && k !== "");
+            // las que no se tocan también reservan su dibujo (salvo las
+            // apagadas: ver arriba)
+            const taken = kinds.filter((k, j) => j !== i && k !== "" && crtDark[j] !== true);
             let pick = (i === chosen && wanted !== "" && taken.indexOf(wanted) < 0)
                 ? wanted : crtMotifDraw(i, taken.concat(kinds[i] ? [kinds[i]] : []));
             if (pick === kinds[i] && !force)
@@ -2220,7 +2288,13 @@ ShellRoot {
                                 root.dialogList = [];
                         } else if (ev.cmd === "motif")
                             root.crtSetForceMotif(ev.kind, ev.screen);
-                        else if (ev.cmd === "config")
+                        else if (ev.cmd === "dark") {
+                            const di = root.crtForceScreenIdx(ev.screen);
+                            if (di === -2)
+                                console.log("crt: dark unknown screen " + ev.screen);
+                            else
+                                root.crtSetDark(di, ev.on === true);
+                        } else if (ev.cmd === "config")
                             root.applyConfig(ev);
                     } catch (e) {
                         console.log("cartelitos: evento inválido:", message);

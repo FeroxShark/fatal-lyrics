@@ -47,6 +47,11 @@ Item {
     property real beatAmt: 1
     property real clock: 0         // reloj del tubo, en segundos
     property bool spinning: true   // false = quieto (pantalla apagada)
+    // el tubo apagado (tanda 6, corrida 0): a diferencia de `spinning`, esto
+    // DESACTIVA el `Loader` de abajo entero. Un dibujo con física propia
+    // (plasma, túnel) sigue corriendo su `FrameAnimation` con `visible: false`
+    // — vivo bajo negro sigue gastando CPU — así que la instancia se destruye.
+    property bool dark: false
     // cuánto empuja la parte del tema (silencio ≈ 0.45, estribillo ≈ 1.6): las
     // animaciones se aquietan o se aceleran con la canción, no con el reloj
     property real energy: 1.0
@@ -200,6 +205,7 @@ Item {
     Loader {
         anchors.fill: parent
         clip: true
+        active: !motif.dark
         sourceComponent: motif.kind === "eye" ? eyeC
             : motif.kind === "eyes" ? eyesC
             : motif.kind === "scope" ? scopeC

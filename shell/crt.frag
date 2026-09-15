@@ -31,6 +31,10 @@ layout(std140, binding = 0) uniform buf {
     float blink;      // 0..1 apagón corto, para los picos
     // the interlaced entrance: the line shows up on half the scanlines first
     float interlacePhase;  // 0 = off, 1 = even rows only, 2 = odd rows only
+    // el tubo apagado (tanda 6, corrida 0): 1 = prendido, 0 = apagado. Va
+    // ANTES del ruido estático: el resto de fósforo (`noiseAmt` al 3 %) tiene
+    // que quedar visible aunque esto llegue a 0, o se lee "desenchufado".
+    float tubeLevel;
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
 };
@@ -145,6 +149,11 @@ void main() {
     float by = fract(t * 0.085);
     float d = abs(fract(uv.y - by + 0.5) - 0.5);
     col += tint * 0.05 * smoothstep(0.07, 0.0, d) * roll;
+
+    // el tubo apagado: la señal se contrae a nada, y el ruido de fósforo (más
+    // abajo) queda solo, no multiplicado por esto — es lo que se ve cuando NO
+    // hay señal, no una señal a media luz.
+    col *= tubeLevel;
 
     // static, worse mid-glitch
     float n = hash21(fc + floor(t * 60.0));

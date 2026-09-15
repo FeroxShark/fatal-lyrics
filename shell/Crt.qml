@@ -137,6 +137,38 @@ PanelWindow {
     readonly property bool burned: !allMode && shot.past && !shot.active
     readonly property bool idle: !noLyric && !showsText
 
+    // ---- el tubo apagado (tanda 6, corrida 0): esta pantalla, oscurecida a
+    // propósito (`fatal crt dark`, o más adelante secciones/intro/raros).
+    // `crtDark[idx]` puede no existir todavía en un hotplug a mitad de golpe;
+    // `=== true` (y no un cast) es lo que hace que eso lea "prendida".
+    readonly property bool tubeDark: ctl.crtDark[idx] === true
+    property real tubeLevel: 1
+    NumberAnimation {
+        id: tubeDarkOffAnim
+        target: crt; property: "tubeLevel"; to: 0
+        duration: Motion.tubeOffMs; easing.type: Easing.InQuad
+    }
+    // el encendido NO es una animación propia: es `tubeLevel` yendo a 1 al
+    // mismo tiempo que el haz de `tubeon` (más abajo) hace punto → raya →
+    // imagen. Separada del `tubeOnAnim` a propósito — ese también corre en
+    // cada línea que entra con ese estilo, y ahí `tubeLevel` no tiene que
+    // tocarse (la pantalla ya estaba prendida).
+    NumberAnimation {
+        id: tubeLevelOnAnim
+        target: crt; property: "tubeLevel"; to: 1
+        duration: Motion.tubeOnMs; easing.type: Easing.OutExpo
+    }
+    onTubeDarkChanged: {
+        if (tubeDark) {
+            tubeLevelOnAnim.stop();
+            tubeDarkOffAnim.restart();
+        } else {
+            tubeDarkOffAnim.stop();
+            tubeOnAnim.restart();
+            tubeLevelOnAnim.restart();
+        }
+    }
+
     // ---- qué dibujo le toca a esta pantalla
     // Sale por una property y no directo en el `kind` del Motif para poder
     // CONTARLO: cuántas veces cambia de dibujo una pantalla por minuto es el
@@ -872,7 +904,7 @@ PanelWindow {
                 const moved = crt.ctl.crtHop.from >= 0;
                 const wasRing = crt.ctl.crtRingWas === crt.idx;
                 const held = Date.now() - crt.lastHitAt >= Motion.holdMs;
-                if (moved && held && !wasRing)
+                if (moved && held && !wasRing && !crt.tubeDark)
                     crt.hit(0.35 + Math.random() * 0.3);
                 // las entradas que son de la PANTALLA (no de cada palabra)
                 // arrancan acá, con la línea ya puesta
@@ -909,16 +941,18 @@ PanelWindow {
     // veces por minuto vive en un solo lugar. Hasta la tanda 3 colgaba del
     // serial de la línea, y entonces cada pantalla decidía por su cuenta con
     // un dato (`shot.chan`) que ya venía sorteado.
+    // ninguna sobre un tubo apagado (tanda 6, corrida 0): la pared no "cambia
+    // de canal" ni se rompe una pantalla que ya está oscura a propósito.
     Connections {
         target: crt.ctl
-        enabled: crt.visible
+        enabled: crt.visible && !crt.tubeDark
         function onCrtChanGenChanged() { chanAnim.restart(); }
     }
 
     // interferencia espontánea: la programa el root, y sólo para una pantalla
     Connections {
         target: crt.ctl
-        enabled: crt.visible
+        enabled: crt.visible && !crt.tubeDark
         function onInterfGenChanged() {
             if (crt.ctl.interfScreen !== crt.idx)
                 return;
@@ -1129,10 +1163,16 @@ PanelWindow {
                     * (1 + 2 * crt.burnGlow) : 0
             // el cambio de canal se lleva puesta la perilla: la estática de la
             // transición no es "ruido de fondo", es la pantalla sin señal
-            property real noiseAmt: crt.chanNoise > 0 ? 1
+            // tubo apagado (tanda 6, corrida 0): un resto de ruido de fósforo
+            // al 3 %, no el negro absoluto — así se lee "tubo apagado" y no
+            // "monitor desenchufado". Pisa todo lo demás: no hay standby ni
+            // cambio de canal sobre una pantalla oscura.
+            property real noiseAmt: crt.tubeDark ? crt.ctl.crtNoise * 0.06
+                : crt.chanNoise > 0 ? 1
                 : crt.deepSleep ? 0
                 : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
                 * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
+            property real tubeLevel: crt.tubeLevel
             property real glitch: Math.min(crt.glitchAmt, 1)
             // La barra que rueda va atada al verso: arranca con el peso de
             // siempre y llega al doble sobre el final de la línea, así el
@@ -1258,7 +1298,7 @@ PanelWindow {
             // deslizamiento (T3.B5).
             Item {
                 anchors.fill: parent
-                visible: crt.iownMode && crt.showsText && crt.iownOpen > 0.005
+                visible: crt.iownMode && crt.showsText && crt.iownOpen > 0.005 && !crt.tubeDark
 
                 Text {
                     id: iownWord
@@ -1324,7 +1364,7 @@ PanelWindow {
                     },
                     Translate { x: crt.hopShift }
                 ]
-                visible: crt.showsText && !crt.iownMode
+                visible: crt.showsText && !crt.iownMode && !crt.tubeDark
                 // el pedazo que ya pasó queda prendido pero bajo, como fósforo
                 // que todavía no se apagó: así se lee la frase entera de un vistazo
                 opacity: crt.burned ? 0.42 : 1
@@ -1579,7 +1619,7 @@ PanelWindow {
                 clip: true
                 // en el instrumental corren TODAS: es la pared entera moviéndose
                 // con el tema, que es justo lo que "NO SIGNAL" mataba
-                visible: crt.idle || crt.instrumental || crt.motifForced
+                visible: (crt.idle || crt.instrumental || crt.motifForced) && !crt.tubeDark
                 // con el dibujo forzado esta caja puede coexistir con la letra,
                 // y está declarada DESPUÉS del verso: sin bajarla, el motivo
                 // taparía justo lo que se quiere ver encima de él
@@ -1587,6 +1627,7 @@ PanelWindow {
 
                 Motif {
                     anchors.fill: parent
+                    dark: crt.tubeDark
                     // lo que se ve es el dibujo YA cambiado, que va un puente
                     // atrás de lo que el root asignó (ver motifBridge)
                     kind: crt.motifShown
@@ -1731,7 +1772,7 @@ PanelWindow {
                 // standby): estas barras están declaradas DESPUÉS del motivo,
                 // así que sin esto lo que se captura es "NO SIGNAL" y no el
                 // dibujo que se quería mirar
-                visible: crt.standby && !crt.motifForced
+                visible: crt.standby && !crt.motifForced && !crt.tubeDark
 
                 Row {
                     anchors.fill: parent

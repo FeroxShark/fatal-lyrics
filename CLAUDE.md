@@ -125,6 +125,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `cartelitos/motifs.py` + `crtSetForceMotif` / `crtMotifForced` (`shell.qml`) — el forzado de
   `fatal crt motif`: el parseo y el socket de un lado, el evento `motif` y el pisado del sorteo
   del otro. La lista de kinds del `--help` se LEE de `motifKinds` en `shell.qml`, no se copia.
+- `crtDark[]` / `crtSetDark(i, on)` / `tubeDark` (`Crt.qml`) — el tubo apagado: `fatal crt dark
+  <screen|all> on|off` lo prende/apaga por socket, y `crtPredict()` lo reenciende solo antes de
+  que llegue la letra ("la letra prende el tubo").
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

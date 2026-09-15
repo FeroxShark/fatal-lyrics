@@ -109,6 +109,9 @@ _CONFIG_COMMENTS = {
                     "the phrase continues on the next one, the rest go quiet",
         "focus": '"roam" = the focus moves around | "all" = every screen shows\n'
                  "the whole line at the same time (the old behaviour)",
+        "set": "each track picks its own set of four drawings, one family of\n"
+               "entrances, a colour scheme and a font; `off` = the whole pool\n"
+               "every time, as before",
         "audio": "react to what's actually playing (captures the sound card's\n"
                  "monitor with pw-record/parec — no extra packages). Only while\n"
                  "the tube is up. false = everything follows the lyric clock",
@@ -305,7 +308,7 @@ DEFAULTS = {
     },
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
-        "split": "mixed", "director": True, "focus": "roam", "audio": True,
+        "split": "mixed", "director": True, "focus": "roam", "set": "track", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "ghost_ms": 550,

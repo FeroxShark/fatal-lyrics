@@ -100,6 +100,11 @@ ShellRoot {
     property bool crtChrome: true
     property bool crtDirector: true
     property string crtFocusMode: "roam"     // roam | all
+    // tanda 6, corrida 1: "track" = cada tema arma su propio set de cuatro
+    // dibujos, una familia de entradas, un esquema de color y una fuente;
+    // "off" = el pool entero de siempre (ver `crtSetFor` más abajo)
+    property string crtSetMode: "track"      // track | off
+    readonly property bool crtSetOn: crtSetMode !== "off"
     property bool crtColorFromPitch: true
     property int crtColorHold: 10
     // segundos de anticipación con que el color infecta la pantalla siguiente
@@ -2124,7 +2129,7 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
-        crt_director: "crtDirector", crt_focus: "crtFocusMode",
+        crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_set: "crtSetMode",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",

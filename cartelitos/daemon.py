@@ -221,7 +221,7 @@ class DaemonLoop:
             if not self.pause_cleared and (near_end or (
                     self._config.CFG["behavior"]["pause_clear"] > 0
                     and now - self.pause_started > self._config.CFG["behavior"]["pause_clear"])):
-                self._ipc.clear()
+                self._ipc.clear(why="pause")
                 self.pause_cleared = True
                 self.resend_np = True
                 self.idx = -1
@@ -245,7 +245,7 @@ class DaemonLoop:
         # verso): la línea vieja quedaba pegada porque `idx` sólo avanza
         if t["id"] == self.track_id and t["pos"] < self.last_pos - 2.0:
             self.idx = -1
-            self._ipc.clear()
+            self._ipc.clear(why="seek")
             self._log("seek back: reset")
         self.last_pos = t["pos"]
 
@@ -259,7 +259,7 @@ class DaemonLoop:
             self.session_offset = self._offsets.effective(t["artist"], t["id"])
             self._audio.set_profile(self._audio.profile_for(t))
             self.idx = -1
-            self._ipc.clear()
+            self._ipc.clear(why="track")
             self._log(f"track: {t['artist']} — {t['title']}")
             if self._np_wanted():
                 self._ipc.send({"cmd": "np", "title": t["title"], "artist": t["artist"],

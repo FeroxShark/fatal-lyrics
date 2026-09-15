@@ -151,7 +151,7 @@ class TestTrackChangeCleanup(unittest.TestCase):
         self.assertEqual(loop.track_id, "new")
         self.assertIsNone(loop.lyrics)
         self.assertEqual(loop.idx, -1)
-        loop._ipc.clear.assert_called_once()
+        loop._ipc.clear.assert_called_once_with(why="track")
 
     def test_new_track_kicks_off_a_lyrics_fetch(self):
         loop = make_loop()
@@ -256,7 +256,7 @@ class TestSeekBack(unittest.TestCase):
 
         loop.handle_track(track(id="t1", pos=20.0), now=1.0)
 
-        loop._ipc.clear.assert_called_once()
+        loop._ipc.clear.assert_called_once_with(why="seek")
         loop._log.assert_any_call("seek back: reset")
         loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0, None,
                                           nxt=loop._ipc.next_line.return_value,
@@ -450,7 +450,7 @@ class TestPauseNearEnd(unittest.TestCase):
         loop.track_id = "t1"
         loop.handle_track(track(id="t1", status="Paused", pos=99.0, length=100.0), now=0.0)
         self.assertTrue(loop.pause_cleared)
-        loop._ipc.clear.assert_called_once()
+        loop._ipc.clear.assert_called_once_with(why="pause")
         loop._log.assert_any_call("track ending: dialogs cleared")
 
     def test_paused_far_from_end_does_not_clear_immediately(self):
@@ -663,7 +663,7 @@ class TestLongPauseClear(unittest.TestCase):
         loop._ipc.reset_mock()
         loop.handle_track(track(status="Paused"), now=16.0)
         self.assertTrue(loop.pause_cleared)
-        loop._ipc.clear.assert_called_once()
+        loop._ipc.clear.assert_called_once_with(why="pause")
 
     def test_zero_disables_the_long_pause_clear(self):
         loop = make_loop(config=make_config(pause_clear=0))

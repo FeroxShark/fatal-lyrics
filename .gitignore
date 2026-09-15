@@ -1,3 +1,9 @@
 __pycache__/
 *.pyc
 .claude/
+
+# planes de trabajo del orquestador: citas crudas de Ferox, nombres de
+# monitores, capturas personales. Repo público.
+/docs/plans/
+/docs/demo1.gif
+/docs/demo2-crt.gif

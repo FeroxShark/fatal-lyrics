@@ -1283,6 +1283,60 @@ ShellRoot {
     // `overburn` tiene su propio portero (compás confiable + drop) y el estilo
     // de la línea anterior EN ESA PANTALLA se descarta, salvo que sea el único
     // que quedó con peso.
+    // ---- tanda 6, corrida 1: el set del tema
+    //
+    // Coherencia ADENTRO de un tema, variedad ENTRE temas: un tema arranca y
+    // elige con qué juega — cuatro dibujos, una familia de entradas, un
+    // esquema de color y (corrida 2) una fuente — y esos son los únicos
+    // hasta que cambie el tema. `crt.set = "off"` (crtSetOn === false) apaga
+    // esto entero y vuelve al pool parejo de siempre.
+    //
+    // Los 16 motivos en tres grupos, por temperamento (la corrida 3 les
+    // cambia las cuotas según el mood; sin mood: 2 calm + 1 hot + 1 neutral).
+    readonly property var motifGroups: ({
+        calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach"],
+        hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar"],
+        neutral: ["textsea", "eyes", "testcard", "rain"],
+    })
+    // Familias de entradas para cuando hay set puesto (el wiring adentro de
+    // `crtEntriesFor`/`crtPickEntry` es un paso aparte; acá sólo se define
+    // la tabla). `tubeon` queda afuera a propósito (tanda 5, punto 3: "muy
+    // feo") — sigue sólo donde lo pide el aro y para encender un tubo
+    // oscuro (corrida 0).
+    readonly property var crtEntryFamilies: ({
+        typed: { calm: { type: 0.7, snap: 0.3 },      strong: { type: 0.4, interlace: 0.6 } },
+        hard:  { calm: { snap: 0.6, slam: 0.4 },      strong: { slam: 0.5, interlace: 0.5 } },
+        burn:  { calm: { snap: 0.5, interlace: 0.5 }, strong: { overburn: 0.6, interlace: 0.4 } },
+        soft:  { calm: { type: 0.5, roll: 0.5 },      strong: { snap: 0.6, roll: 0.4 } },
+    })
+    readonly property var crtSetFamilyKeys: Object.keys(crtEntryFamilies)
+
+    // Elige UN kind de `group`, sin repetir lo que ya salió en este set.
+    function crtSetPick(group, seed, k, chosen) {
+        const opts = group.filter(m => chosen.indexOf(m) < 0);
+        const pool = opts.length > 0 ? opts : group;
+        return pool[Math.floor(crtHash(seed * 7 + k) * pool.length)];
+    }
+
+    // PURA: mismo seed + mismo mood → mismo set siempre. No se guarda; se
+    // re-evalúa sola como binding (`crtSet`, abajo) cada vez que cambia
+    // `crtTrackSeed`. `mood` todavía no se usa (corrida 3, cuotas de
+    // `motifGroups`); `font` siempre "system" hasta la corrida 2.
+    function crtSetFor(seed, mood) {
+        const motifs = [];
+        motifs.push(crtSetPick(motifGroups.calm, seed, 0, motifs));
+        motifs.push(crtSetPick(motifGroups.calm, seed, 1, motifs));
+        motifs.push(crtSetPick(motifGroups.hot, seed, 2, motifs));
+        motifs.push(crtSetPick(motifGroups.neutral, seed, 3, motifs));
+        const families = crtSetFamilyKeys;
+        const family = families[Math.floor(crtHash(seed * 7 + 4) * families.length)];
+        const scheme = Math.floor(crtHash(seed * 7 + 5) * schemes.length);
+        return { motifs: motifs, family: family, scheme: scheme, font: "system" };
+    }
+    // null con `crt.set = "off"`: todo lo que lo consume cae al camino de
+    // siempre (pool entero, `crtEntryTable`, el esquema de pitch/tapa).
+    readonly property var crtSet: crtSetOn ? crtSetFor(crtTrackSeed, null) : null
+
     readonly property var crtEntryTable: ({
         calm:   { type: 0.35, tubeon: 0.30, snap: 0.15, interlace: 0.10,
                   slam: 0.05, roll: 0.05, overburn: 0.00 },
@@ -2037,6 +2091,13 @@ ShellRoot {
                 + " hop=" + crtHop.from + "->" + crtHop.to
                 + " ring=" + ringScreen
                 + " entry=" + JSON.stringify(crtEntryStyles));
+        // tanda 6, corrida 1: el set se arma UNA vez por tema, al primer
+        // verso — se loguea acá y no en el binding para que salga una vez
+        // por tema y no una vez por evaluación
+        if (crtOn && crtTrackStart && crtSet)
+            console.log("crt: set motifs=[" + crtSet.motifs.join(",") + "]"
+                + " family=" + crtSet.family + " scheme=" + crtSet.scheme
+                + " font=" + crtSet.font);
         updatePitchPalette();
         if (crtOn)
             return;

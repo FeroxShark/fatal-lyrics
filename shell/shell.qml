@@ -1962,6 +1962,21 @@ ShellRoot {
         }
         crtShotOverride = taken;
         const shot = taken || fresh;
+        // "la letra prende el tubo", el camino que faltaba (addendum tanda 6,
+        // corrida 0): `crtPredict()` sólo prende lo que anticipó para la línea
+        // SIGUIENTE. Si ÉSTA cae en una pantalla oscura sin haber sido
+        // anticipada (primer verso del tema, o un `show` sin `next` antes),
+        // se prende YA — sin esto la letra llegaba y no se veía. Si ya estaba
+        // prendida (la anticipó `crtPredict`, o ya lo estaba) `crtDark[i]` da
+        // false y no se toca ni se loguea nada.
+        const litNow = shot.mode === "all"
+            ? activeCrtScreens.map((_, i) => i) : shot.chunks.map(c => c.screen);
+        for (const i of litNow) {
+            if (crtDark[i] === true) {
+                crtSetDark(i, false);
+                console.log("crt: dark relight screen=" + i + " in=0");
+            }
+        }
         crtHop = (prevFocus >= 0 && prevFocus !== shot.focus)
             ? { from: prevFocus, to: shot.focus, dir: shot.focus > prevFocus ? 1 : -1 }
             : { from: -1, to: -1, dir: 0 };

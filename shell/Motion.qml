@@ -52,4 +52,13 @@ Singleton {
     // el piso de 120 ms de la tanda 3 (nada visible dura menos), y también el
     // techo: un puente que se ve como efecto dejó de ser un puente.
     readonly property int bridgeMs: 120
+
+    // ---- el tubo apagado (tanda 6, corrida 0). NO son `exitMs`/`enterMs`: un
+    // tubo no es un dibujo que se va y otro que entra, es EL MISMO fósforo
+    // contrayéndose y volviendo. Se apaga más despacio que sale cualquier cosa
+    // (una pantalla no corta de golpe) y prende con el mismo tiempo que ya
+    // tenía el haz de `tubeon` (`Crt.qml:774`): reusar ese número es reusar el
+    // haz entero, no inventar un segundo encendido.
+    readonly property int tubeOffMs: 260        // Easing.InQuad
+    readonly property int tubeOnMs: 220         // Easing.OutExpo (haz de tubeon)
 }

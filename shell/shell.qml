@@ -2194,7 +2194,14 @@ ShellRoot {
                             root.motifPreCued = false;
                             // el tubo se queda sin señal y rota el fósforo
                             root.crtLine = { text: "", t0: 0, t1: 0, serial: root.crtSerial, segs: [], words: [] };
-                            root.crtTrackSeed++;
+                            // el daemon manda `clear` también al rebobinar y en
+                            // pausa, no sólo al cambiar de tema (tanda 6, corrida
+                            // 0): re-sortear la semilla en esos casos sería
+                            // "rebobiné y cambió la fuente, el color y los
+                            // dibujos". `why` ausente = daemon viejo, se trata
+                            // como tema nuevo.
+                            if (ev.why === "track" || ev.why === undefined)
+                                root.crtTrackSeed++;
                             // otro tema: la letra y todo lo anticipado sobre la
                             // anterior no valen nada. Sin esto los pedazos del
                             // reparto viejo sobreviven al cambio de tema.

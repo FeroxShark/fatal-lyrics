@@ -126,6 +126,50 @@ class TestParseForce(unittest.TestCase):
         self.assertNotIn("off", motifs.read_kinds())
 
 
+class TestParseDark(unittest.TestCase):
+    def test_a_screen_and_on_turns_it_dark_wait_no_lights_it(self):
+        ev, err = motifs.parse_dark(["DP-4", "on"], screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev, {"cmd": "dark", "screen": "DP-4", "on": True})
+
+    def test_all_and_off(self):
+        ev, err = motifs.parse_dark(["all", "off"], screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev, {"cmd": "dark", "screen": "all", "on": False})
+
+    def test_a_numeric_screen_travels_as_an_int(self):
+        ev, err = motifs.parse_dark(["2", "on"], screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev["screen"], 2)
+        self.assertIsInstance(ev["screen"], int)
+
+    def test_an_unknown_screen_is_an_error(self):
+        ev, err = motifs.parse_dark(["DP-9", "on"], screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("DP-9", err)
+        self.assertIn("DP-4", err)
+
+    def test_an_index_past_the_last_screen_is_an_error(self):
+        ev, err = motifs.parse_dark(["3", "on"], screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("out of range", err)
+
+    def test_an_unknown_state_is_an_error(self):
+        ev, err = motifs.parse_dark(["DP-4", "sideways"], screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("sideways", err)
+
+    def test_missing_state_is_an_error(self):
+        ev, err = motifs.parse_dark(["DP-4"], screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("usage:", err)
+
+    def test_no_arguments_prints_the_usage(self):
+        ev, err = motifs.parse_dark([], screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("usage:", err)
+
+
 class TestForceCli(unittest.TestCase):
     """El código de salida: lo que ve bin/fatal. La salida se traga: el módulo
     imprime para la persona, y el reporte de los tests no es para eso."""

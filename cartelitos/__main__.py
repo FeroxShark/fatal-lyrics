@@ -58,6 +58,8 @@ def run(argv=None):
     # directo), pero entra por acá porque este archivo ya pone el repo en el path
     if "--crt-motif" in argv:
         sys.exit(motifs.force_cli(argv[argv.index("--crt-motif") + 1:]))
+    if "--crt-dark" in argv:
+        sys.exit(motifs.dark_cli(argv[argv.index("--crt-dark") + 1:]))
     if "--setup" in argv:
         try:
             setup.setup()

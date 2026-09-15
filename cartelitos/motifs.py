@@ -123,6 +123,56 @@ def parse_force(argv, kinds=None, screens=None):
     return {"cmd": "motif", "kind": kind, "screen": screen}, None
 
 
+def usage_dark():
+    return "usage: fatal crt dark <screen|idx|all> on|off"
+
+
+def parse_dark(argv, screens=None):
+    """Los argumentos de `fatal crt dark` -> (evento, error).
+
+    Mismo patrón que `parse_force`: pura, los monitores se le pasan. `on` es
+    "esta pantalla se prende", no "hay algo raro" — el nombre lo pone el
+    interruptor del tubo, no el CLI."""
+    argv = list(argv)
+    if not argv or argv[0] in ("-h", "--help"):
+        return None, usage_dark()
+    if len(argv) != 2:
+        return None, usage_dark()
+    screen, state = argv
+    if state not in ("on", "off"):
+        return None, f"unknown state {state!r} (want on|off)\n" + usage_dark()
+    on = state == "on"
+    if screen == "all":
+        return {"cmd": "dark", "screen": "all", "on": on}, None
+    if re.fullmatch(r"-?\d+", screen):
+        idx = int(screen)
+        if idx < 0:
+            return None, f"screen index {idx} is out of range"
+        if screens is not None and idx >= len(screens):
+            return None, (f"screen index {idx} is out of range "
+                          f"(hay {len(screens)}: " + ", ".join(screens) + ")")
+        return {"cmd": "dark", "screen": idx, "on": on}, None
+    if screens is not None and screen not in screens:
+        return None, (f"unknown screen {screen!r} — hay: " + ", ".join(screens))
+    return {"cmd": "dark", "screen": screen, "on": on}, None
+
+
+def dark_cli(argv, screens=None):
+    """`fatal crt dark ...`. Devuelve el código de salida (mismo patrón que
+    `force_cli`)."""
+    ev, err = parse_dark(argv, screens=screens if screens is not None else screen_names())
+    if ev is None:
+        print(err)
+        return 0 if (not argv or argv[0] in ("-h", "--help")) else 1
+    try:
+        send(ev, SOCK_PATH)
+    except OSError as exc:
+        print(f"can't talk to the overlay ({exc}) — is it running? fatal status")
+        return 1
+    print(f"dark {ev['screen']} {'on' if ev['on'] else 'off'}")
+    return 0
+
+
 def send(event, path=SOCK_PATH):
     """El evento al socket DEL OVERLAY (el daemon es otro cliente más)."""
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

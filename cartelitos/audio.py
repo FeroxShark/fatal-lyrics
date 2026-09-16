@@ -90,6 +90,12 @@ class TrackProfile:
         self.conf = 0.0
         self.section = "verse"
         self.since = 0.0
+        # ganancia efectiva (sink × stream, ver _capture_gain) con la que se
+        # midió el rms de este perfil. None = todavía no se midió (perfil de
+        # antes de este arreglo, o nunca se abrió la captura): mood.energy()
+        # lo lee como "sin normalizar, comportamiento de siempre" — no es lo
+        # mismo que una ganancia real de 1.0.
+        self.gain = None
         # Curva suavizada aparte para decidir la PARTE. Con el rms crudo, un tema
         # cambiaba de "parte" cada dos segundos: eso no es una sección, es el
         # bombo. Una sección dura estrofas, no compases.
@@ -116,6 +122,7 @@ class TrackProfile:
         self.cen = data.get("cen", [])
         self.bpm = data.get("bpm", 0.0) or 0.0
         self.conf = data.get("conf", 0.0) or 0.0
+        self.gain = data.get("gain")     # None si el JSON no la tiene (perfil viejo)
         self.known = True
         return True
 
@@ -125,11 +132,14 @@ class TrackProfile:
         try:
             os.makedirs(PROFILE_DIR, exist_ok=True)
             tmp = self.path() + ".tmp"
+            payload = {"step": PROFILE_STEP, "len": self.length,
+                       "rms": [round(v, 4) for v in self.rms],
+                       "cen": [round(v, 3) for v in self.cen],
+                       "bpm": round(self.bpm, 1), "conf": round(self.conf, 2)}
+            if self.gain is not None:
+                payload["gain"] = round(self.gain, 4)
             with open(tmp, "w") as f:
-                json.dump({"step": PROFILE_STEP, "len": self.length,
-                           "rms": [round(v, 4) for v in self.rms],
-                           "cen": [round(v, 3) for v in self.cen],
-                           "bpm": round(self.bpm, 1), "conf": round(self.conf, 2)}, f)
+                json.dump(payload, f)
             os.replace(tmp, self.path())
             return True
         except OSError as e:
@@ -139,7 +149,8 @@ class TrackProfile:
     def summary(self):
         """Copia liviana para quien no necesita el objeto entero (mood.py:
         no puede importar TrackProfile sin acoplarse al hilo de audio)."""
-        return {"known": self.known, "rms": list(self.rms), "cen": list(self.cen)}
+        return {"known": self.known, "rms": list(self.rms), "cen": list(self.cen),
+                "gain": self.gain}
 
     # ---- en vivo
     def at(self, pos):
@@ -939,6 +950,10 @@ def _capture_loop():
         last_save = time.monotonic()
         quiet_since = time.monotonic()
         last_sink_check = time.monotonic()
+        # con qué volumen se está grabando (T?: normalizar mood.energy() por
+        # volumen). Se refresca junto al chequeo de sink, ni antes: es el mismo
+        # par de pactl de más baratos de correr cada rato, no en cada hop.
+        cur_gain = _capture_gain(config.CFG["behavior"]["player"])
         warned = False
         try:
             while config.CFG["crt"]["audio"] and config.crt_on():
@@ -951,6 +966,7 @@ def _capture_loop():
                     if sink_changed(cur_sink, _default_sink):
                         log("audio: default sink changed, reopening the capture")
                         break
+                    cur_gain = _capture_gain(config.CFG["behavior"]["player"])
                 ev = an.feed(chunk, now)
                 if not ev:
                     continue
@@ -1004,6 +1020,7 @@ def _capture_loop():
                 if bpm.bpm > 0:
                     prof.bpm = bpm.bpm
                     prof.conf = bpm.conf
+                prof.gain = cur_gain
                 # se guarda cada tanto, no sólo al cambiar de tema: si el daemon
                 # se cae en la mitad, el mapa de lo escuchado no se pierde
                 if now - last_save > PROFILE_SAVE_EVERY:

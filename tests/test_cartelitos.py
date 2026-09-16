@@ -2274,6 +2274,28 @@ class TestTrackProfile(unittest.TestCase):
         self.assertTrue(again.known)
         self.assertEqual(len(again.rms), 80)
 
+    def test_it_remembers_the_gain_between_plays(self):
+        p = self.filled()
+        p.gain = 0.064
+        self.assertTrue(p.save())
+        again = c.TrackProfile("tema", 120.0)
+        self.assertTrue(again.load())
+        self.assertAlmostEqual(again.gain, 0.064)
+
+    def test_an_old_profile_without_gain_loads_as_none(self):
+        """Compatibilidad con perfiles de antes de este arreglo: el JSON viejo
+        no tiene la clave "gain". mood.energy() interpreta ese None como "sin
+        normalizar, comportamiento de siempre" — no es lo mismo que 1.0."""
+        p = self.filled()
+        self.assertIsNone(p.gain)
+        self.assertTrue(p.save())
+        with open(p.path()) as f:
+            data = json.load(f)
+        self.assertNotIn("gain", data)   # nunca se midió: no se inventa un valor
+        again = c.TrackProfile("tema", 120.0)
+        self.assertTrue(again.load())
+        self.assertIsNone(again.gain)
+
     def test_half_a_song_is_not_a_map(self):
         p = c.TrackProfile("corto", 10.0)
         p.record(0.0, 0.3, 0.5)
@@ -2295,7 +2317,7 @@ class TestTrackProfile(unittest.TestCase):
     def test_summary_is_a_copy_not_the_live_lists(self):
         p = self.filled()
         s = p.summary()
-        self.assertEqual(s, {"known": False, "rms": p.rms, "cen": p.cen})
+        self.assertEqual(s, {"known": False, "rms": p.rms, "cen": p.cen, "gain": None})
         s["rms"].append(9.9)
         self.assertNotIn(9.9, p.rms)
 

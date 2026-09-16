@@ -1,5 +1,5 @@
 pkgbase = fatal-lyrics-git
-	pkgdesc = Synced Spotify lyrics as glitchy Win95 error dialogs (Wayland overlay)
+	pkgdesc = Synced Spotify lyrics as glitchy Win95 error dialogs, or a full-screen CRT takeover (Wayland overlay)
 	pkgver = r1.0000000
 	pkgrel = 1
 	url = https://github.com/FeroxShark/fatal-lyrics

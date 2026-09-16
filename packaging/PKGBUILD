@@ -35,6 +35,10 @@ package() {
   install -Dm644 shell/ocean.frag "$pkgdir/usr/share/fatal-lyrics/shell/ocean.frag"
   install -Dm644 shell/pond.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/pond.frag.qsb"
   install -Dm644 shell/pond.frag "$pkgdir/usr/share/fatal-lyrics/shell/pond.frag"
+  # tanda 6, corrida 2: fuentes OFL de la letra + sus licencias
+  for f in shell/fonts/*; do
+    install -Dm644 "$f" "$pkgdir/usr/share/fatal-lyrics/$f"
+  done
   install -Dm755 cartelitos.py "$pkgdir/usr/share/fatal-lyrics/cartelitos.py"
   # el código está en el paquete; cartelitos.py sólo delega
   for m in cartelitos/*.py; do

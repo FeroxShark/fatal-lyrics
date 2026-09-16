@@ -1542,6 +1542,25 @@ ShellRoot {
     // vez, al asignar.
     property var crtMotifSeeds: []
     property int crtMotifRoll: 0
+    // Mazo barajado del set del tema: se agota antes de repetir kind (tanda 6,
+    // corrida 1). Se rellena solo cuando queda vacío (`crtMotifDraw`) o cuando
+    // cambia el tema (handler de `clear`, `why === "track"` o ausente — misma
+    // condición que resiembra `crtTrackSeed`).
+    property var crtMotifBag: []
+
+    // Baraja `motifPool(crtSet.motifs)` con Fisher-Yates determinístico
+    // (`crtHash`, nunca `Math.random`). `crtTrackSeed` en la semilla: dos
+    // temas con el mismo set no barajan igual si el roll ya avanzó distinto.
+    function crtMotifBagFill() {
+        const bag = motifPool(crtSet.motifs).slice();
+        for (let k = bag.length - 1; k > 0; k--) {
+            crtMotifRoll++;
+            const j = Math.floor(crtHash(crtTrackSeed * 131 + crtMotifRoll) * (k + 1));
+            const tmp = bag[k]; bag[k] = bag[j]; bag[j] = tmp;
+        }
+        crtMotifBag = bag;
+        console.log("crt: bag refill [" + bag.join(",") + "]");
+    }
 
     // ---- forzar un dibujo (`fatal crt motif <kind> [--screen ...]`)
     //
@@ -1609,17 +1628,38 @@ ShellRoot {
     // mismo dibujo) y lo que mostraba ella misma.
     function crtMotifDraw(i, taken) {
         const calm = audSection === "quiet";
-        // tanda 6, corrida 1: con el set puesto el pool de la línea normal es
-        // el del tema, no los 16 kinds. El pool chico de `quiet` (la sección
-        // decide, no el set) sigue mandando arriba de esto; la palabra clave
-        // (motifAllowed más abajo, en crtMotifRefresh) sigue pudiendo traer
-        // un kind de afuera del set, a propósito.
-        const base = motifPool(calm ? ["eye", "testcard", "scope", "pond"]
-            : (crtSet ? crtSet.motifs : motifKinds));
-        const free = base.filter(k => taken.indexOf(k) < 0);
-        const pool = free.length > 0 ? free : base;
-        crtMotifRoll++;
-        return pool[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * pool.length)];
+        // tanda 6, corrida 1: el pool chico de `quiet` (la sección decide, no
+        // el set) y el camino sin set (`crt.set = "off"`) siguen con reemplazo,
+        // como siempre. La palabra clave (motifAllowed más abajo, en
+        // crtMotifRefresh) sigue pudiendo traer un kind de afuera del set.
+        if (calm || !crtSet) {
+            const base = motifPool(calm ? ["eye", "testcard", "scope", "pond"] : motifKinds);
+            const free = base.filter(k => taken.indexOf(k) < 0);
+            const pool = free.length > 0 ? free : base;
+            crtMotifRoll++;
+            return pool[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * pool.length)];
+        }
+        // shuffle-bag: con el set puesto el sorteo es SIN reemplazo, un mazo
+        // que se agota antes de repetir kind.
+        if (crtMotifBag.length === 0)
+            crtMotifBagFill();
+        const bag = crtMotifBag.slice();
+        const idx = bag.findIndex(k => taken.indexOf(k) < 0);
+        if (idx < 0) {
+            // el mazo entero está tomado (4 kinds, 3 pantallas + la propia):
+            // se admite repetir con el set puesto antes de salir de él
+            const base = motifPool(crtSet.motifs);
+            if (base.length > 0)
+                return base[0];
+            // defensivo: si ni eso hay, el pool entero de siempre
+            const full = motifPool(motifKinds);
+            crtMotifRoll++;
+            return full[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * full.length)];
+        }
+        const pick = bag[idx];
+        bag.splice(idx, 1);
+        crtMotifBag = bag;
+        return pick;
     }
 
     // Repartir de nuevo lo que VENCIÓ, y nada más. `force` es el cambio de
@@ -2355,8 +2395,13 @@ ShellRoot {
                             // "rebobiné y cambió la fuente, el color y los
                             // dibujos". `why` ausente = daemon viejo, se trata
                             // como tema nuevo.
-                            if (ev.why === "track" || ev.why === undefined)
+                            if (ev.why === "track" || ev.why === undefined) {
                                 root.crtTrackSeed++;
+                                // tema nuevo: el mazo del set anterior no vale
+                                // para el que viene (`crtMotifBagFill` lo
+                                // rellena solo, en el próximo `crtMotifDraw`)
+                                root.crtMotifBag = [];
+                            }
                             // otro tema: la letra y todo lo anticipado sobre la
                             // anterior no valen nada. Sin esto los pedazos del
                             // reparto viejo sobreviven al cambio de tema.

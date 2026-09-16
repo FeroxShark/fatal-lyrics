@@ -488,6 +488,27 @@ ShellRoot {
         }
     }
 
+    // tanda 6, corrida 4: el apagado de a una del final del tema. UN timer
+    // que el root reprograma con la cola que le dejó `crtSceneStartOutro`,
+    // no uno por pantalla — se retargetea, no se multiplica (mismo patrón
+    // que `crtRelightTimer`).
+    Timer {
+        id: crtSceneOutroTimer
+        property var queue: []
+        repeat: false
+        onTriggered: {
+            if (queue.length === 0)
+                return;
+            const q = queue.slice();
+            const i = q.shift();
+            queue = q;
+            if (root.crtDark[i] !== true && i !== root.crtNextFocus)
+                root.crtSetDark(i, true);
+            if (queue.length > 0)
+                restart();
+        }
+    }
+
     // ---- el aro: en qué pantalla está, ahora mismo (-1 = en ninguna)
     //
     // El enganche vive ACÁ y no en Crt.qml por dos razones. Una: `show()` le
@@ -1158,6 +1179,128 @@ ShellRoot {
             crtNextGen++;
             crtNextIn = crtNextAt - Date.now();
         }
+    }
+
+    // ---- tanda 6, corrida 4: la sección decide qué pantallas viven
+    //
+    // Cuántas pantallas viven por sección. PURA: mismo section/outro/n/focus
+    // siempre da la misma máscara. El apagado de a una del outro NO es cosa
+    // de acá — acá sólo va el estado al que apunta; quien la aplica
+    // (`crtSceneStartOutro`) es quien escalona los apagados en el tiempo.
+    //   quiet → 1 (la del foco)      verse → 2 (foco + la más cercana)
+    //   build → todas                drop  → todas, siempre (pasa por
+    //                                         encima del outro)
+    //   outro (afuera del drop)      → sólo el foco
+    function crtSceneFor(section, outro, n, focus) {
+        if (n <= 0)
+            return [];
+        const f = (focus >= 0 && focus < n) ? focus : 0;
+        if (section === "build" || section === "drop")
+            return new Array(n).fill(true);
+        if (n === 1)
+            return [true];
+        const mask = new Array(n).fill(false);
+        mask[f] = true;
+        if (outro)
+            return mask;
+        if (section === "verse") {
+            // "la más cercana" al foco; empate (foco en el medio) lo
+            // desempata crtHash con la generación de sección, así que dos
+            // empates seguidos en la misma sección eligen lo mismo
+            let bestDist = Infinity;
+            for (let i = 0; i < n; i++) {
+                if (i === f) continue;
+                const d = Math.abs(i - f);
+                if (d < bestDist) bestDist = d;
+            }
+            const ties = [];
+            for (let i = 0; i < n; i++)
+                if (i !== f && Math.abs(i - f) === bestDist) ties.push(i);
+            if (ties.length > 0) {
+                const near = ties.length === 1 ? ties[0]
+                    : ties[Math.floor(crtHash(crtTrackSeed * 43 + sectionGen) * ties.length)];
+                mask[near] = true;
+            }
+        }
+        return mask;
+    }
+
+    // último cambio de máscara de sección (portero `sceneGapMs`)
+    property double crtLastSceneAt: 0
+    // si el final del tema está apagando pantallas de a una ahora mismo
+    property bool crtSceneOutroOn: false
+
+    // Aplica la máscara de `crtSceneFor` para un cambio de sección real (`sec`
+    // secMoved, o el primer verso del tema). Portero `sceneGapMs`, salvo
+    // `force` (el drop siempre pasa: es cambio de escena). Corta cualquier
+    // outro en curso: un cambio de sección de verdad manda por sobre el
+    // apagado escalonado. "La letra prende el tubo" sigue arriba de esto: no
+    // apaga la pantalla que tiene el próximo foco ya prendido por anticipación.
+    function crtSceneApply(section, force, focus) {
+        crtSceneOutroTimer.stop();
+        crtSceneOutroTimer.queue = [];
+        crtSceneOutroOn = false;
+        if (!crtOn || !crtSceneOn || crtFocusMode === "all")
+            return;
+        const n = activeCrtScreens.length;
+        if (n <= 1)
+            return;
+        if (!force && Date.now() - crtLastSceneAt < pace.sceneGapMs)
+            return;
+        crtLastSceneAt = Date.now();
+        const f = (focus >= 0 && focus < n) ? focus : 0;
+        const mask = crtSceneFor(section, false, n, f);
+        for (let i = 0; i < n; i++) {
+            if (mask[i] && crtDark[i] === true)
+                crtSetDark(i, false);
+            else if (!mask[i] && crtDark[i] !== true && i !== crtNextFocus)
+                crtSetDark(i, true);
+        }
+        console.log("crt: scene " + section + " lit=" + JSON.stringify(mask.map(b => b ? 1 : 0)));
+    }
+
+    // Arranca el apagado de a una del final del tema: la máscara final ya es
+    // "sólo el foco" (crtSceneFor con outro=true), pero se llega ahí
+    // pantalla por pantalla, de afuera hacia el foco, una cada Motion.holdMs
+    // — nunca de un saque, que sería un cambio de escena y no un final.
+    function crtSceneStartOutro(section, focus) {
+        if (!crtOn || !crtSceneOn || crtFocusMode === "all" || section === "drop")
+            return;
+        const n = activeCrtScreens.length;
+        if (n <= 1)
+            return;
+        const f = (focus >= 0 && focus < n) ? focus : 0;
+        const mask = crtSceneFor(section, true, n, f);
+        crtLastSceneAt = Date.now();
+        console.log("crt: scene " + section + " lit=" + JSON.stringify(mask.map(b => b ? 1 : 0)));
+        const queue = [];
+        for (let i = 0; i < n; i++)
+            if (!mask[i]) queue.push(i);
+        queue.sort((a, b) => Math.abs(b - f) - Math.abs(a - f));
+        crtSceneOutroTimer.queue = queue;
+        crtSceneOutroTimer.interval = Motion.holdMs;
+        crtSceneOutroTimer.restart();
+    }
+
+    // Umbral del outro: no es una parte que mande el daemon (`audio.py` sólo
+    // sabe quiet|verse|build|drop, sin outro) — es la posición del tema, y se
+    // mira en el reloj de `pos` (1 Hz), que es lo único que avisa que el tema
+    // se está por terminar. Con flanco: sólo dispara al CRUZAR el umbral, no
+    // en cada tick mientras dura.
+    function crtSceneOutroCheck() {
+        if (!crtOn || !crtSceneOn || crtFocusMode === "all")
+            return;
+        if (activeCrtScreens.length <= 1)
+            return;
+        const outro = posLen > 0 && (posAbs / posLen) > 0.92 && audSection !== "drop";
+        if (outro === crtSceneOutroOn)
+            return;
+        crtSceneOutroOn = outro;
+        if (outro)
+            crtSceneStartOutro(audSection, crtShot.focus);
+        else
+            // volvió a haber tema por delante (rebobinaron): reenciende junto
+            crtSceneApply(audSection, true, crtShot.focus);
     }
 
     // En qué verso va el tema: el índice de la línea que suena adentro de la
@@ -2311,6 +2454,10 @@ ShellRoot {
         crtVEndAt = vEnd !== undefined && vEnd !== null
             ? Date.now() + (vEnd - songPos()) * 1000 : 0;
         crtPredict();
+        // tanda 6, corrida 4: el primer verso del tema también es un cambio
+        // de escena para la máscara de pantallas vivas
+        if (crtOn && crtTrackStart)
+            crtSceneApply(audSection, audSection === "drop", shot.focus);
         // el dibujo de las pantallas apagadas: un tema nuevo reparte todo
         // junto (es un cambio de escena), un verso más sólo le da su
         // oportunidad a la pantalla que ya cumplió el hold
@@ -2474,6 +2621,11 @@ ShellRoot {
                             root.posAbs = ev.p;
                             root.posLen = ev.l;
                             root.posAt = Date.now();
+                            // tanda 6, corrida 4: el outro es un umbral de
+                            // posición, no una parte que mande el daemon —
+                            // se mira acá, en el único reloj que lo sabe
+                            if (root.crtOn)
+                                root.crtSceneOutroCheck();
                         } else if (ev.cmd === "sec") {
                             // T4.3: el cambio de PARTE es un cambio de escena,
                             // y ahí el cambio de canal es el puente (el
@@ -2484,6 +2636,11 @@ ShellRoot {
                             root.audSection = ev.kind;
                             if (root.crtOn && secMoved)
                                 root.crtChanFire(false);
+                            // tanda 6, corrida 4: la sección también decide
+                            // qué pantallas viven; el drop pasa el portero
+                            // siempre (`force`), es cambio de escena
+                            if (root.crtOn && secMoved)
+                                root.crtSceneApply(ev.kind, ev.kind === "drop", root.crtShot.focus);
                             root.audPct = ev.p;
                             // cambiar de parte cambia el dibujo y el reparto de
                             // colores: es el momento en el que el tema respira
@@ -2609,6 +2766,13 @@ ShellRoot {
                                 // `show()` lo vuelva a fijar
                                 root.crtMood = { valence: 0, energy: 0.5, bright: 0.5, known: false };
                                 root.crtMoodLocked = null;
+                                // corrida 4: tema nuevo también corta un
+                                // outro en curso y destraba el portero —
+                                // el primer verso arma la escena de cero
+                                root.crtSceneOutroTimer.stop();
+                                root.crtSceneOutroTimer.queue = [];
+                                root.crtSceneOutroOn = false;
+                                root.crtLastSceneAt = 0;
                             }
                             // otro tema: la letra y todo lo anticipado sobre la
                             // anterior no valen nada. Sin esto los pedazos del

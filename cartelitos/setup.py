@@ -232,6 +232,9 @@ SETTINGS = [
         "entrances, a colour scheme and a font", [
         ("track: a coherent set for the whole track", "track"),
         ("off: the whole pool every time, as before", "off")], c)),
+    ("intro", "crt", "New track is an event (dark, static, title card)",
+     lambda c: _pick("A new track goes dark, static, a title/artist card, "
+                      "then the first line", YESNO, c)),
     ("audio", "crt", "React to the music",
      lambda c: _pick("React to what's actually playing", YESNO, c)),
     ("color_from_pitch", "crt", "Colour follows the register",

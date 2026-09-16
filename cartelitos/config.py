@@ -115,6 +115,9 @@ _CONFIG_COMMENTS = {
         "set": "each track picks its own set of four drawings, one family of\n"
                "entrances, a colour scheme and a font; `off` = the whole pool\n"
                "every time, as before",
+        "intro": "a new track is a whole event: every tube goes dark, static, a\n"
+                 "title/artist card, then the first line. false = the old plain\n"
+                 "channel-change into the first lyric",
         "audio": "react to what's actually playing (captures the sound card's\n"
                  "monitor with pw-record/parec — no extra packages). Only while\n"
                  "the tube is up. false = everything follows the lyric clock",
@@ -312,7 +315,7 @@ DEFAULTS = {
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "scene": "sections",
-        "set": "track", "audio": True,
+        "set": "track", "intro": True, "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "ghost_ms": 550,

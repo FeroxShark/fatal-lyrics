@@ -110,6 +110,10 @@ ShellRoot {
     // "all" = todas dibujan siempre, como antes de esta corrida.
     property string crtSceneMode: "sections" // sections | all
     readonly property bool crtSceneOn: crtSceneMode !== "all"
+    // tanda 6, corrida 5: el cambio de tema es un evento (apagado, estática,
+    // tarjeta con título/artista, primer verso) en vez de un simple cambio
+    // de canal. false = el cambio de canal de siempre.
+    property bool crtIntro: true
     property bool crtColorFromPitch: true
     property int crtColorHold: 10
     // segundos de anticipación con que el color infecta la pantalla siguiente
@@ -2592,7 +2596,7 @@ ShellRoot {
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
-        crt_set: "crtSetMode",
+        crt_set: "crtSetMode", crt_intro: "crtIntro",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",

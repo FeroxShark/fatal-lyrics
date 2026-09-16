@@ -135,6 +135,11 @@ class TrackProfile:
             log(f"couldn't save the track profile ({e})")
             return False
 
+    def summary(self):
+        """Copia liviana para quien no necesita el objeto entero (mood.py:
+        no puede importar TrackProfile sin acoplarse al hilo de audio)."""
+        return {"known": self.known, "rms": list(self.rms), "cen": list(self.cen)}
+
     # ---- en vivo
     def at(self, pos):
         """Índice de muestra para un momento de la canción."""

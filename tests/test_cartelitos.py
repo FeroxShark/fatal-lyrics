@@ -2154,6 +2154,13 @@ class TestTrackProfile(unittest.TestCase):
         self.assertIn(p.coming(19.0, ahead=2.0), ("build", "drop"))
         self.assertIsNone(p.coming(5.0, ahead=2.0))   # dentro de la misma parte
 
+    def test_summary_is_a_copy_not_the_live_lists(self):
+        p = self.filled()
+        s = p.summary()
+        self.assertEqual(s, {"known": False, "rms": p.rms, "cen": p.cen})
+        s["rms"].append(9.9)
+        self.assertNotIn(9.9, p.rms)
+
     def test_a_change_needs_to_hold_before_it_counts(self):
         p = self.filled()
         p.section = "quiet"

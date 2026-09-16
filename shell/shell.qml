@@ -1609,7 +1609,13 @@ ShellRoot {
     // mismo dibujo) y lo que mostraba ella misma.
     function crtMotifDraw(i, taken) {
         const calm = audSection === "quiet";
-        const base = motifPool(calm ? ["eye", "testcard", "scope", "pond"] : motifKinds);
+        // tanda 6, corrida 1: con el set puesto el pool de la línea normal es
+        // el del tema, no los 16 kinds. El pool chico de `quiet` (la sección
+        // decide, no el set) sigue mandando arriba de esto; la palabra clave
+        // (motifAllowed más abajo, en crtMotifRefresh) sigue pudiendo traer
+        // un kind de afuera del set, a propósito.
+        const base = motifPool(calm ? ["eye", "testcard", "scope", "pond"]
+            : (crtSet ? crtSet.motifs : motifKinds));
         const free = base.filter(k => taken.indexOf(k) < 0);
         const pool = free.length > 0 ? free : base;
         crtMotifRoll++;

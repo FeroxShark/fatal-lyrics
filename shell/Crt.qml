@@ -142,6 +142,13 @@ PanelWindow {
     // `crtDark[idx]` puede no existir todavía en un hotplug a mitad de golpe;
     // `=== true` (y no un cast) es lo que hace que eso lea "prendida".
     readonly property bool tubeDark: ctl.crtDark[idx] === true
+    // tanda 6, corrida 7: el raro `nosignal` en ESTA pantalla — no es lo
+    // mismo que `standby` (que depende de si hay música), acá se fuerza
+    // aunque el tema esté sonando. "Una animación por pantalla": mientras
+    // dura, ni el motivo instrumental ni ningún otro dibujo compiten con
+    // las barras de ajuste.
+    readonly property bool rareNoSignalOn: ctl.crtRare.kind === "nosignal"
+        && ctl.crtRare.screen === idx
     property real tubeLevel: 1
     NumberAnimation {
         id: tubeDarkOffAnim
@@ -1606,7 +1613,7 @@ PanelWindow {
                 // no dibuja motivo — es la estática o la tarjeta, nunca
                 // las dos cosas a la vez ("una animación por pantalla")
                 visible: (crt.idle || crt.instrumental || crt.motifForced)
-                    && !crt.tubeDark && !crt.ctl.crtIntroOn
+                    && !crt.tubeDark && !crt.ctl.crtIntroOn && !crt.rareNoSignalOn
                 // con el dibujo forzado esta caja puede coexistir con la letra,
                 // y está declarada DESPUÉS del verso: sin bajarla, el motivo
                 // taparía justo lo que se quiere ver encima de él
@@ -1758,8 +1765,12 @@ PanelWindow {
                 // el dibujo forzado se pide con el player parado (que es
                 // standby): estas barras están declaradas DESPUÉS del motivo,
                 // así que sin esto lo que se captura es "NO SIGNAL" y no el
-                // dibujo que se quería mirar
-                visible: crt.standby && !crt.motifForced && !crt.tubeDark && !crt.ctl.crtIntroOn
+                // dibujo que se quería mirar. El raro `nosignal` (corrida 7)
+                // fuerza las mismas barras en una pantalla puntual aunque el
+                // tema esté sonando — misma imagen, la diferencia es que
+                // ésta vuelve sola a los 3 s.
+                visible: (crt.standby || crt.rareNoSignalOn)
+                    && !crt.motifForced && !crt.tubeDark && !crt.ctl.crtIntroOn
 
                 Row {
                     anchors.fill: parent
@@ -1798,7 +1809,7 @@ PanelWindow {
                     Timer {
                         interval: 900
                         repeat: true
-                        running: crt.visible && crt.standby
+                        running: crt.visible && (crt.standby || crt.rareNoSignalOn)
                         onTriggered: noSignal.blink = !noSignal.blink
                     }
                 }

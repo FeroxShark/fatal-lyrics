@@ -157,6 +157,14 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   una palabra si le toca dentro de `Motion.enterMs` de la entrada de la línea — la regla de no
   superponer animaciones. El auto-drop de calidad en vivo (`FrameAnimation`, frame > 28ms por
   3s → `crtQuality` a 0.75 sin recuperación en la sesión) apaga este `Flow` sin avisar.
+- `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
+  `crt.rare`, tanda 6, corrida 7) — eventos raros: `bsod` (pantalla azul de cero en `Crt.qml`,
+  sin nada del modo Win95, fondo `#0000aa` y el verso en la fuente del set), `nosignal`
+  (reusa `standbyLayer`, 3 s, vuelve sola) y `testcard` (motivo `testcard` forzado, 6 s). El
+  sorteo nunca cae en intro ni en pantalla oscura. `motifs.py` (`parse_rare`) + `fatal crt
+  rare <kind> [--screen ...]` fuerza uno por socket.
+  `dialog` (el raro sobre el modo Win95) queda fuera de esta tanda.
+  3s → `crtQuality` a 0.75 sin recuperación en la sesión) apaga este `Flow` sin avisar.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
@@ -248,7 +256,9 @@ no-op → boot roto. No reintroducir un segundo.)
 
 ## Decisiones cerradas (Ferox las descartó, no re-proponer)
 
-- BSOD, sonidos, easter egg `wolf.exe` (el video de Mr Wolf es UN tema puntual — no insistir).
+- Sonidos, easter egg `wolf.exe` (el video de Mr Wolf es UN tema puntual, no insistir).
+- BSOD como MODO permanente: descartado. 2026-09-15: aprobado como evento RARO (`crt.rare`,
+  corrida 7) — no reabrir la idea de un modo aparte, ya existe como raro.
 - Temas visuales (win95 / XP / vaporwave): le gustó la idea pero **no la pidió**. Esperar a que la
   pida.
 - Defaults que él usa: `karaoke = true`, `max_dialogs = 0` (sin límite), `cascade` y `np_vinyl` en

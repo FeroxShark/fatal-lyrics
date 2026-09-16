@@ -8,10 +8,16 @@ fuente por tema, mood, secciones que apagan pantallas, intro de tema, palabra co
 eventos raros. De la tanda 5 absorbió los puntos 3 y 5; **1 (`stars`), 2 (`dunes`), 4 (zooms)
 y 6 (círculo aburrido) siguen abiertos.**
 
-- **Mood sesgado por volumen:** `mood.energy()` usa el rms medido post-fader (`pw-record`
-  sobre el monitor del sink), así que un tema escuchado bajito da "tranquilo". Opciones:
-  compensar con el volumen del sink (no ve el volumen propio de la app) o medir dinámica
-  relativa dentro del tema.
+- **Mood sesgado por volumen — RESUELTO 2026-09-16.** `audio.py` guarda ahora la ganancia
+  efectiva de captura (`TrackProfile.gain`, `_capture_gain()`: stream de la app, más el sink
+  sólo si NO tiene `HW_VOLUME_CTRL` — medido que si lo tiene, el sink se aplica en hardware
+  después de donde `pw-record` engancha el monitor, así que su volumen no afecta el rms
+  capturado). `mood.energy()` divide el rms por esa ganancia antes de compararlo contra
+  FLOOR/CEIL, reescalados por `ENERGY_GAIN_REF` (docs/NUMEROS-MEDIDOS.md). Perfiles viejos sin
+  `gain` guardado siguen el camino de siempre, sin reescalar nada — quedan como estaban, no se
+  puede saber a qué ganancia se midieron. Pendiente menor: el blend entre escuchadas
+  (`PROFILE_BLEND_OLD/NEW`) promedia rms de sesiones a volúmenes distintos sin ponderar por
+  gain — con perfiles ya normalizados esto pesa mucho menos que antes, no se tocó.
 
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar

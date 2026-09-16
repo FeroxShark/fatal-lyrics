@@ -33,6 +33,14 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   es que el túnel ahora evalúa la pared DOS veces (el barrido del drop), y es uno de los tres
   motivos que el aparejo fuerza. Es el número vigente; falta re-medirlo en frío sin el aparejo
   forzando motivos caros (pendiente, ver abajo).
+- **`ENERGY_GAIN_REF` (mood.py), medido en vivo el 2026-09-16:** ganancia lineal real 0.064,
+  de Spotify con el stream al 40% (`0.40**3` — la escala de PipeWire/pactl es CÚBICA, no
+  lineal, ver docs/TRAMPAS.md) sobre el sink de Ferox (Kingston HyperX USB, `HW_VOLUME_CTRL`:
+  el volumen del SINK no entra, se aplica en hardware después de donde `pw-record` engancha
+  el monitor — medido: 100%→30% de sink apenas movió el rms capturado, 0.4109→0.4066). Es la
+  referencia contra la que `mood.energy()` reescala FLOOR/CEIL para perfiles con `gain`
+  guardado: un solo dato, no una distribución — si el volumen habitual de escucha cambia
+  mucho, remedir.
 - El análisis de audio es Python puro sobre `pw-record` (sin cava, sin numpy): 0.79% de CPU.
   Arma el mapa del tema por percentil de energía dentro de la propia canción
   (quiet/verse/build/drop) y lo cachea: la segunda vez que suena, anticipa los golpes.

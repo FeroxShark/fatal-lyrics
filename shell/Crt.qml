@@ -780,8 +780,17 @@ PanelWindow {
         PropertyAction { target: crt; property: "chanFlash"; value: false }
         PropertyAction { target: crt; property: "chanNoise"; value: 0 }
         // el texto ya está puesto: la rotura es la del emisor de siempre, no
-        // una segunda fuente de glitch compitiendo con hit()
-        ScriptAction { script: { console.log("crt: chan s" + crt.idx); crt.hit(1.0); } }
+        // una segunda fuente de glitch compitiendo con hit(). El `enabled` de
+        // arriba (`!crt.tubeDark`) sólo se mira al ARRANCAR: si la escena
+        // apaga esta pantalla a mitad de las `PauseAnimation` (146 ms), la
+        // animación sigue corriendo igual y llegaba acá con el tubo ya
+        // oscuro — se vuelve a chequear acá, en el momento real del golpe.
+        ScriptAction { script: {
+            if (crt.tubeDark)
+                return;
+            console.log("crt: chan s" + crt.idx);
+            crt.hit(1.0);
+        } }
     }
 
     // -------------------------------------------- entradas del verso (T3.1)

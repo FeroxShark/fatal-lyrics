@@ -53,6 +53,48 @@ class TestEnergy(unittest.TestCase):
     def test_known_profile_with_no_samples_falls_back_to_neutral(self):
         self.assertEqual(mood.energy({"known": True, "rms": []}, 0), 0.5)
 
+    def test_a_profile_without_gain_uses_the_old_thresholds_unchanged(self):
+        # Perfil de antes de este arreglo (docs/PENDIENTES.md: "Mood sesgado
+        # por volumen"): sin "gain" en el summary, mood.energy() no reescala
+        # nada -- si no fuera así, los cuatro tests de arriba (escritos antes
+        # de que existiera "gain") habrían dejado de valer lo mismo.
+        no_gain = {"known": True, "rms": [0.09] * 20}
+        span = mood.ENERGY_RMS_CEIL - mood.ENERGY_RMS_FLOOR
+        expected = max(0.0, min(1.0, (0.09 - mood.ENERGY_RMS_FLOOR) / span))
+        self.assertAlmostEqual(mood.energy(no_gain, 0), expected)
+
+    def test_same_track_at_different_volume_gives_the_same_energy(self):
+        # El mismo tema, escuchado a volumen 1.0 y a 0.3 (la escala de
+        # PipeWire es cúbica: ganancia = volumen**3): el rms crudo capturado
+        # sale distinto, pero normalizado por la ganancia guardada tiene que
+        # dar aproximadamente lo mismo. Esta es la razón de ser del arreglo.
+        true_rms = 0.09    # el rms "real" del tema, a ganancia 1.0
+        gain_loud = 1.0 ** 3
+        gain_quiet = 0.3 ** 3
+        loud = {"known": True, "rms": [true_rms * gain_loud] * 20, "gain": gain_loud}
+        quiet = {"known": True, "rms": [true_rms * gain_quiet] * 20, "gain": gain_quiet}
+        self.assertAlmostEqual(mood.energy(loud, 0), mood.energy(quiet, 0), delta=0.05)
+
+    def test_zero_gain_falls_back_to_bpm(self):
+        # Volumen muteado (o casi): dividir por una ganancia ~0 dispararía el
+        # rms normalizado a cualquier valor absurdo, así que ni se intenta --
+        # se cae al bpm, como si no hubiera perfil.
+        muted = {"known": True, "rms": [0.09] * 20, "gain": 0.0}
+        self.assertAlmostEqual(mood.energy(muted, 180), 1.0)
+
+    def test_zero_gain_without_bpm_falls_back_to_neutral(self):
+        muted = {"known": True, "rms": [0.09] * 20, "gain": 0.0}
+        self.assertEqual(mood.energy(muted, 0), 0.5)
+
+    def test_a_typical_gain_stays_comparable_to_a_mid_track(self):
+        # Con la ganancia de referencia (la típica medida en vivo, ver
+        # docs/NUMEROS-MEDIDOS.md), un rms crudo "mediano" de siempre (~0.09,
+        # la mediana real de los ~300 perfiles) tiene que seguir cayendo cerca
+        # del medio de la escala, no saturado en 0 o en 1.
+        mid = {"known": True, "rms": [0.09] * 20, "gain": mood.ENERGY_GAIN_REF}
+        self.assertGreater(mood.energy(mid, 0), 0.3)
+        self.assertLess(mood.energy(mid, 0), 0.7)
+
 
 class TestBrightness(unittest.TestCase):
     def test_unknown_profile_is_neutral(self):

@@ -15,6 +15,28 @@ import unicodedata
 ENERGY_RMS_FLOOR = 0.02
 ENERGY_RMS_CEIL = 0.15
 
+# Ganancia de referencia para normalizar perfiles CON `gain` (docs/PENDIENTES.md:
+# "Mood sesgado por volumen"; medido en cartelitos/audio.py:_capture_gain).
+# `rms / gain` estima el rms que hubiera dado el tema a ganancia 1.0 (volumen
+# máximo, sin atenuar) — pero los ~300 perfiles que calibraron FLOOR/CEIL de
+# arriba son rms CRUDO, medido siempre a la ganancia real con la que Ferox
+# venía escuchando (nunca 1.0). Dividir por esa ganancia típica en vez de por
+# 1.0 mantiene el rms normalizado en la MISMA escala que calibró FLOOR/CEIL:
+# floor/ceil de un perfil CON ganancia son FLOOR/CEIL de arriba divididos por
+# esta referencia (ver ENERGY_RMS_FLOOR_NORM/CEIL_NORM). El número es la
+# ganancia real medida en vivo el 2026-09-16 (Spotify al 40% de stream, único
+# factor: el sink de Ferox es HW_VOLUME_CTRL y no entra — docs/TRAMPAS.md).
+# Es UN dato, no una distribución: si el volumen habitual de escucha cambia
+# mucho, este número se desactualiza y hay que remedirlo (docs/PENDIENTES.md).
+ENERGY_GAIN_REF = 0.064
+ENERGY_RMS_FLOOR_NORM = ENERGY_RMS_FLOOR / ENERGY_GAIN_REF
+ENERGY_RMS_CEIL_NORM = ENERGY_RMS_CEIL / ENERGY_GAIN_REF
+
+# Por debajo de esto la ganancia es tan chica (mute o casi) que dividir por
+# ella dispara el rms normalizado a cualquier cosa: mejor no usar el perfil
+# para energy y caer a bpm/neutral, como si no hubiera perfil.
+ENERGY_GAIN_FLOOR = 0.001
+
 # Léxico chico es/en, minúsculas y sin tildes (se normaliza lo que se mide
 # contra esto, no hace falta duplicar acentuado/sin acento acá).
 POSITIVE = {
@@ -83,14 +105,32 @@ def energy(profile_summary, bpm):
 
     No se mezcla con bpm cuando hay perfil: `profile_summary` no trae bpm/conf
     (TrackProfile.summary() sólo copia rms/cen), así que no hay confianza de
-    bpm con la que ponderar acá adentro."""
+    bpm con la que ponderar acá adentro.
+
+    Perfiles con "gain" (audio.py:_capture_gain, docs/PENDIENTES.md: "Mood
+    sesgado por volumen"): el rms crudo se normaliza dividiendo por la
+    ganancia con la que se capturó, contra FLOOR/CEIL reescalados por
+    ENERGY_GAIN_REF — así un tema escuchado bajito no sale "tranquilo" sólo
+    por el volumen. Sin "gain" (perfil viejo, de antes de este arreglo): se
+    usan FLOOR/CEIL tal cual, como siempre — se asume que ya está a la
+    ganancia con la que se calibraron. Ganancia ~0 (mute): no se puede
+    normalizar sin disparar el rms a cualquier cosa, se cae a bpm/neutral."""
     if profile_summary and profile_summary.get("known"):
         rms = profile_summary.get("rms") or []
         heard = [v for v in rms if v > 0.0]
         if heard:
             mean_rms = sum(heard) / len(heard)
-            span = ENERGY_RMS_CEIL - ENERGY_RMS_FLOOR
-            return max(0.0, min(1.0, (mean_rms - ENERGY_RMS_FLOOR) / span))
+            gain = profile_summary.get("gain")
+            if gain is None:
+                floor, ceil = ENERGY_RMS_FLOOR, ENERGY_RMS_CEIL
+            elif gain > ENERGY_GAIN_FLOOR:
+                mean_rms = mean_rms / gain
+                floor, ceil = ENERGY_RMS_FLOOR_NORM, ENERGY_RMS_CEIL_NORM
+            else:
+                mean_rms = None
+            if mean_rms is not None:
+                span = ceil - floor
+                return max(0.0, min(1.0, (mean_rms - floor) / span))
     if bpm and bpm > 0:
         return max(0.0, min(1.0, (bpm - 70.0) / 110.0))
     return 0.5

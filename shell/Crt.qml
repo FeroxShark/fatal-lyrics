@@ -1884,17 +1884,13 @@ PanelWindow {
         // fuera de `camera`, igual que el rayo del salto y el rótulo del
         // sync — es la pared reaccionando al cambio de disco, no parte
         // del plano que la sección acerca y aleja.
-        readonly property bool introStaticHere: crt.ctl.crtIntroPhase === "static" && !crt.tubeDark
-        readonly property bool introCardHere: crt.ctl.crtIntroPhase === "card"
-            && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark
-
         // la estática antes de la tarjeta: reusa `Static.qml` (la misma
         // pieza que arma el motivo `static`), no una segunda estática
         // aparte — sin número ni palabra que anticipar, todavía no hay
         // línea de la que anticipar nada.
         Loader {
             anchors.fill: parent
-            active: introStaticHere
+            active: crt.ctl.crtIntroPhase === "static" && !crt.tubeDark
             visible: active
             sourceComponent: Static {
                 colour: crt.pal.ink
@@ -1912,7 +1908,7 @@ PanelWindow {
         // misma regla que la letra, no la de los rótulos de chrome.
         Item {
             anchors.fill: parent
-            visible: introCardHere
+            visible: crt.ctl.crtIntroPhase === "card" && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark
 
             Text {
                 id: introTitle
@@ -1930,7 +1926,7 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
-                opacity: introCardHere ? 1 : 0
+                opacity: (crt.ctl.crtIntroPhase === "card" && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark) ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo } }
             }
 
@@ -1949,7 +1945,7 @@ PanelWindow {
                 font.pixelSize: Math.round(crt.shortSide * 0.032)
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
-                opacity: introCardHere ? 1 : 0
+                opacity: (crt.ctl.crtIntroPhase === "card" && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark) ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo } }
             }
         }

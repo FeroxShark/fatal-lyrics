@@ -277,12 +277,14 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 - **El log del overlay tiene códigos de color EN EL MEDIO del prefijo:** `grep "qml:"` no matchea
   nunca (entre `qml` y los dos puntos hay un escape ANSI). Se grepea el texto propio:
   `grep -a "crt:" $XDG_RUNTIME_DIR/cartelitos/qs.log`.
-- **`fatal restart` NO trunca `qs.log`: lo ROTA por tamaño** (`rotate_log`, 5 MB). Así que un
-  warning de una sesión vieja — o de un `shell.qml` a medio editar que se hot-recargó — sobrevive
-  al restart y se lee como si fuera de ahora, con números de línea de un archivo que ya no
-  existe. Antes de auditar warnings: `: > $XDG_RUNTIME_DIR/cartelitos/qs.log`, después
-  `fatal restart` y `fatal crt on`. (Así se cayó el "bug" de los 44 `TypeError: crtMotifRefresh
-  is not a function` de la tanda 4: eran del hot-reload roto de la corrida 3, no de HEAD.)
+- **`fatal restart` rota `qs.log` a `qs.log.1` en cada arranque** (tanda 6 corrida 6, `rotate_log`
+  en `bin/fatal`; antes rotaba sólo pasados los 5 MB, y un log de pocos KB con warnings de diez
+  restarts viejos nunca llegaba a ese tamaño — un warning de una sesión vieja, o de un `shell.qml`
+  a medio editar que se hot-recargó, sobrevivía al restart y se leía como si fuera de ahora, con
+  números de línea de un archivo que ya no existe. Así se cayó el "bug" de los 44 `TypeError:
+  crtMotifRefresh is not a function` de la tanda 4: eran del hot-reload roto de la corrida 3, no
+  de HEAD). No hace falta truncar a mano antes de auditar: cada `fatal restart` ya arranca con
+  `qs.log` vacío.
 - **`fatal demo` no sirve para probar nada de la anticipación:** los carteles de demo van sin letra
   de verdad, así que `next` viaja en `null` y `t0`/`t1` en 0. Hace falta música con letra
   sincronizada. Para probar sin depender de qué suena, se le puede hablar al overlay directo por

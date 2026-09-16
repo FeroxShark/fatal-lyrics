@@ -22,7 +22,6 @@ LYRICS="$RUN/lyrics"
 # una instancia que había arrancado con la versión vieja
 OLD_QS_PID=/tmp/cartelitos-qs.pid
 OLD_D_PID=/tmp/cartelitos-daemon.pid
-LOG_MAX=5242880   # 5 MB, igual que el tope del daemon en cartelitos/util.py
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos.sock"
 # interruptor del modo CRT: un archivo, no el socket — apagarlo tiene que
 # funcionar aunque el daemon esté colgado (el tubo tapa todas las pantallas)
@@ -60,15 +59,19 @@ running() {
     printf '%s' "$cmd" | grep -qF -- "$want"
 }
 
-# Rotación por tamaño con UN backup, para que un daemon de semanas no llene el
-# tmpfs. Acá se rota antes de abrir el archivo (renombrar y listo); ya en marcha
-# rota el propio daemon truncando el mismo inodo, porque el redirect lo tiene
-# abierto. Por eso spawn() usa `>>`: en append el truncado no deja un agujero.
+# UN backup, siempre, antes de abrir el archivo de la sesión nueva (renombrar y
+# listo). Antes rotaba sólo si pasaba los 5 MB: un log de pocos KB con warnings
+# de diez restarts viejos nunca llegaba a ese tamaño y no rotaba nunca, así que
+# cada `fatal restart` mezclaba warnings de la sesión anterior (o de un
+# `shell.qml` a medio editar que hot-recargó) con los de la sesión que arranca
+# — falso positivo/negativo en cualquier `grep "crt:" qs.log` después de un
+# restart. Ya en marcha rota el propio daemon truncando el mismo inodo (por
+# eso spawn() usa `>>`: en append el truncado no deja un agujero); esto es
+# sólo el corte entre sesión vieja y sesión nueva.
 rotate_log() {
-    local f="$1" size
+    local f="$1"
     [ -f "$f" ] || return 0
-    size=$(stat -c %s "$f" 2>/dev/null) || return 0
-    [ "$size" -gt "$LOG_MAX" ] && mv -f "$f" "$f.1"
+    mv -f "$f" "$f.1"
     return 0
 }
 

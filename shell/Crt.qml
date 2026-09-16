@@ -1068,10 +1068,17 @@ PanelWindow {
     }
     // T0.12: modo degradado por GPU. Promedio móvil del frame time; tres
     // segundos seguidos por encima de 28ms (bajo 36fps) y se baja quality a
-    // 0.75 una sola vez — no vuelve a subir sola, eso lo hace el hot-reload
-    // del TOML si Ferox toca la perilla.
+    // 0.75. Recupera sola con histéresis: baja rápido (corta el chorro de
+    // frames largos ya) y sube lento (28 s sanos seguidos), y CUALQUIER frame
+    // malo en el medio reinicia la cuenta de recuperación desde cero — así
+    // nunca oscila entre 0.75 y 1 con la música real, donde un cambio de
+    // motif es un pico de CPU de medio segundo.
+    readonly property real qualitySlowMs: 28        // umbral: bajo 36fps
+    readonly property real qualityDropHoldS: 3      // sostenido así de mal → baja
+    readonly property real qualityRecoverHoldS: 28  // sostenido así de bien → sube (20-30s pedidos)
     property real frameAvgMs: 1000 / 60
     property real slowSince: -1
+    property real healthySince: -1
     FrameAnimation {
         running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep
         onTriggered: {
@@ -1083,14 +1090,26 @@ PanelWindow {
             if (crt.iownMode)
                 crt.iownAt = crt.ctl.crtIownScreen();
             crt.frameAvgMs = crt.frameAvgMs * 0.9 + frameTime * 1000 * 0.1;
-            if (crt.frameAvgMs <= 28) {
+            if (crt.frameAvgMs <= crt.qualitySlowMs) {
                 crt.slowSince = -1;
+                if (crt.healthySince < 0) {
+                    crt.healthySince = crt.tubeTime;
+                } else if (crt.tubeTime - crt.healthySince > crt.qualityRecoverHoldS
+                           && crt.ctl.crtQuality < 1) {
+                    console.log("crt: quality " + crt.ctl.crtQuality + " -> 1 (frame sano " +
+                                crt.qualityRecoverHoldS + "s)");
+                    crt.ctl.crtQuality = 1;
+                    crt.healthySince = crt.tubeTime;
+                }
             } else {
-                if (crt.slowSince < 0)
+                crt.healthySince = -1;
+                if (crt.slowSince < 0) {
                     crt.slowSince = crt.tubeTime;
-                else if (crt.tubeTime - crt.slowSince > 3 && crt.ctl.crtQuality > 0.75) {
+                } else if (crt.tubeTime - crt.slowSince > crt.qualityDropHoldS
+                           && crt.ctl.crtQuality > 0.75) {
+                    console.log("crt: quality " + crt.ctl.crtQuality + " -> 0.75 (frame " +
+                                crt.frameAvgMs.toFixed(1) + "ms)");
                     crt.ctl.crtQuality = 0.75;
-                    console.log("crt: quality auto 0.75");
                 }
             }
         }

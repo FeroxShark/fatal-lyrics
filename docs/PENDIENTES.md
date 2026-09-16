@@ -12,8 +12,6 @@ y 6 (círculo aburrido) siguen abiertos.**
   sobre el monitor del sink), así que un tema escuchado bajito da "tranquilo". Opciones:
   compensar con el volumen del sink (no ve el volumen propio de la app) o medir dinámica
   relativa dentro del tema.
-- **Calidad del CRT se queda baja:** en vivo `crtQuality` bajó sola a 0.75 y no se recuperó;
-  con eso la línea entera por palabra (`crt.wholeWordsOn`, necesita >= 1) casi nunca se ve.
 
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar

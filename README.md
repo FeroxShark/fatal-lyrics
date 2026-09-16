@@ -487,6 +487,7 @@ because there is nothing to install.
 | `crt`      | `exit_on`            | How you get out: `mouse` (cursor hidden, moving it returns) / `keyboard` (any key returns) | `"mouse"` |
 | `crt`      | `director`           | The lyric travels across the screens instead of cloning        | `true`      |
 | `crt`      | `focus`              | `roam` (one screen at a time) / `all` (every screen shows the whole line) | `"roam"` |
+| `crt`      | `scene`              | Which screens stay lit: `sections` (a quiet part keeps one screen, a drop lights the whole wall, the end of the track goes dark one screen at a time) / `all` (every screen always draws, as before) | `"sections"` |
 | `crt`      | `audio`              | React to what's playing (captures the sound card's monitor)     | `true`      |
 | `crt`      | `color_from_pitch`   | Phosphor leans on the register of what's playing                | `true`      |
 | `crt`      | `color_hold`         | Seconds a colour must stay before it may change                 | `10`        |

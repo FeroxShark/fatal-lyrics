@@ -128,6 +128,14 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `crtDark[]` / `crtSetDark(i, on)` / `tubeDark` (`Crt.qml`) — el tubo apagado: `fatal crt dark
   <screen|all> on|off` lo prende/apaga por socket, y `crtPredict()` lo reenciende solo antes de
   que llegue la letra ("la letra prende el tubo").
+- `crtSceneFor(section, outro, n, focus)` + `crtSceneApply`/`crtSceneStartOutro`/
+  `crtSceneOutroCheck` (`shell.qml`, perilla `crt.scene = sections | all`, tanda 6, corrida 4) —
+  la sección decide qué pantallas viven sobre el primitivo `crtSetDark` de la corrida 0: la
+  estrofa deja una sola pantalla prendida (la del foco), el drop enciende la pared entera
+  (portero `sceneGapMs` de `crtPaceTable` salteado a propósito, siempre pasa) y el final del
+  tema (umbral de `posAbs/posLen`, no lo manda el daemon) apaga de a una hacia el foco, una
+  cada `Motion.holdMs`, con un timer único reapuntado (mismo patrón que `crtRelightTimer`).
+  Nunca apaga la pantalla que `crtPredict()` ya prendió por anticipación.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

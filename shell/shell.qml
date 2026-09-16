@@ -2769,8 +2769,8 @@ ShellRoot {
                                 // corrida 4: tema nuevo también corta un
                                 // outro en curso y destraba el portero —
                                 // el primer verso arma la escena de cero
-                                root.crtSceneOutroTimer.stop();
-                                root.crtSceneOutroTimer.queue = [];
+                                crtSceneOutroTimer.stop();
+                                crtSceneOutroTimer.queue = [];
                                 root.crtSceneOutroOn = false;
                                 root.crtLastSceneAt = 0;
                             }

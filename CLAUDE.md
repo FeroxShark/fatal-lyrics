@@ -138,6 +138,14 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   qué dibuja cada pantalla, desde cuándo y con qué semilla.
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
+- `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): 4 kinds
+  de motif, una familia de entrada (`typed`/`hard`/`burn`/`soft`, tabla `crtEntryFamilies`), un
+  scheme de color y una fuente, todo de una semilla atada a `crtTrackSeed` (se recalcula sólo al
+  cambiar de tema). `crtMotifBag`/`crtEntryBag` — mazos barajados con `crtHash` (uno por
+  pantalla) que reparten SIN repetir de los 4 kinds del set hasta agotarse y recién ahí
+  rebarajan (`crt: bag refill [...]` en el log); se vacían en el `clear` de tema. Con
+  `crt.set = "off"` vuelve el sorteo plano de siempre (`motifPool`/`crtEntryTable`). Una
+  palabra clave de `motifWords` sigue pudiendo forzar un motif de afuera del set.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de

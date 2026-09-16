@@ -494,6 +494,7 @@ because there is nothing to install.
 | `crt`      | `alarm_threshold`    | How rare the full-red "critical" screen is (rolled against a peak); higher = rarer, `1.0` = never | `0.87` |
 | `crt`      | `channel_switch`     | Chance a line lands like a channel being changed: static, a red frame, then the words (the first line of a track always does, and two of them never land less than 20 s apart) | `0.08` |
 | `crt`      | `pace`               | How much the tube is allowed to happen at once: `calm` (a drawing stays 20 s), `normal` (12 s, one break every 4 s at most), `wild` (a drawing per line, a break per beat — the old behaviour). A budget, not a speed | `"normal"` |
+| `crt`      | `set`                | Each track picks its own set of four drawings, one family of entrances, a colour scheme and a font — so a track keeps a visual identity instead of drawing from the whole pool every time (a lyric keyword can still force a drawing from outside the set). `off` = the old per-line pool | `"track"` |
 | `crt`      | `ghost_ms`           | Milliseconds the previous line stays burnt in behind the new one (`0` = no ghost) | `550` |
 | `crt`      | `iown`               | On a drop, a one-word line crosses the whole wall as one giant word travelling right to left | `true` |
 | `crt`      | `foreshadow`         | The screen the NEXT line will land on gives it away: it speeds up and takes the focus colour before the line arrives | `true` |

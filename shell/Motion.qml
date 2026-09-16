@@ -61,4 +61,11 @@ Singleton {
     // haz entero, no inventar un segundo encendido.
     readonly property int tubeOffMs: 260        // Easing.InQuad
     readonly property int tubeOnMs: 220         // Easing.OutExpo (haz de tubeon)
+
+    // ---- el intro de tema (tanda 6, corrida 5): estática antes de la
+    // tarjeta y la tarjeta sostenida. No son `holdMs`: ese es el piso entre
+    // eventos DENTRO de un tema; esto es la ceremonia del cambio de tema,
+    // que dura más porque no compite con nada (no hay letra sonando todavía).
+    readonly property int introStaticMs: 600
+    readonly property int introCardMs: 2400
 }

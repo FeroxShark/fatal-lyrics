@@ -1514,6 +1514,7 @@ PanelWindow {
                             emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
                             suppressEmphasis: !crt.emphasisGateOpen
                                 || crt.tubeDark || crt.ctl.crtIntroOn
+                                || crt.ctl.crtRare.screen === crt.idx
                             onOverburnHit: crt.burnFlash()
                         }
                     }
@@ -1565,6 +1566,7 @@ PanelWindow {
                             emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
                             suppressEmphasis: !crt.emphasisGateOpen
                                 || crt.tubeDark || crt.ctl.crtIntroOn
+                                || crt.ctl.crtRare.screen === crt.idx
                             onOverburnHit: crt.burnFlash()
                         }
                     }
@@ -1916,6 +1918,75 @@ PanelWindow {
                 font.pixelSize: Math.round(crt.shortSide * 0.032)
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
+            }
+        }
+
+        // ---- tanda 6, corrida 7: el raro `bsod`. Pantalla azul de Windows
+        // 95 dibujada de CERO — nada del modo Win95 (`pushDialog`,
+        // `dialogList`, los componentes del cartel): fondo y texto fijos,
+        // sólo la fuente sale del set del tema (`crt.lyricFont`), como la
+        // tarjeta del intro. Vive en `stage`, no en `camera`: reemplaza la
+        // pantalla entera, no es parte del plano que la sección acerca.
+        Item {
+            id: bsod
+            anchors.fill: parent
+            readonly property bool bsodOn: crt.ctl.crtRare.kind === "bsod"
+                && crt.ctl.crtRare.screen === crt.idx && !crt.tubeDark
+            opacity: bsodOn ? 1 : 0
+            visible: opacity > 0.001
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: bsod.bsodOn ? Motion.enterMs : Motion.exitMs
+                    easing.type: bsod.bsodOn ? Easing.OutExpo : Easing.InQuad
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#0000aa"
+            }
+
+            Column {
+                anchors.centerIn: parent
+                width: parent.width * 0.82
+                spacing: Math.round(crt.shortSide * 0.04)
+
+                Text {
+                    width: parent.width
+                    text: "A fatal exception 0E has occurred at 0028:C0011E36 in VXD LYRICS(01) + 00010E36."
+                    color: "#ffffff"
+                    font.family: crt.lyricFont
+                    font.bold: true
+                    font.pixelSize: Math.round(crt.shortSide * 0.032)
+                    fontSizeMode: Text.Fit
+                    minimumPixelSize: 10
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                // el verso que suena, en la fuente del set — es lo único
+                // que cambia entre un bsod y otro
+                Text {
+                    width: parent.width
+                    text: crt.lineText
+                    color: "#ffffff"
+                    font.family: crt.lyricFont
+                    font.bold: true
+                    font.pixelSize: Math.round(crt.shortSide * 0.045)
+                    fontSizeMode: Text.Fit
+                    minimumPixelSize: 12
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Text {
+                    width: parent.width
+                    text: "Press any key to continue _"
+                    color: "#ffffff"
+                    font.family: crt.lyricFont
+                    font.pixelSize: Math.round(crt.shortSide * 0.028)
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
         }
 

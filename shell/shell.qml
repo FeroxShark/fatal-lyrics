@@ -1315,6 +1315,55 @@ ShellRoot {
     })
     readonly property var crtSetFamilyKeys: Object.keys(crtEntryFamilies)
 
+    // tanda 6, corrida 2: cuatro fuentes OFL para la letra, una por tema (la
+    // elige `crtSetFor`, abajo). `Qt.resolvedUrl` es relativo a este archivo:
+    // funciona instalado (el paquete) o corriendo desde el repo (`qs -p`).
+    FontLoader { id: fontVt323; source: Qt.resolvedUrl("fonts/VT323-Regular.ttf") }
+    FontLoader { id: fontPress; source: Qt.resolvedUrl("fonts/PressStart2P-Regular.ttf") }
+    FontLoader { id: fontShare; source: Qt.resolvedUrl("fonts/ShareTechMono-Regular.ttf") }
+    FontLoader { id: fontDot; source: Qt.resolvedUrl("fonts/DotGothic16-Regular.ttf") }
+    readonly property var crtFontFamilies: ({
+        vt323: fontVt323.name, press: fontPress.name,
+        share: fontShare.name, dot: fontDot.name, system: "",
+    })
+    // El orden en que `crtSetFor` sortea: "dot" no entra, es sólo el camino
+    // de CJK (`crtFontFor`), nunca lo que el set elige para un tema.
+    readonly property var crtFontKeys: ["vt323", "share", "press", "system"]
+    // CJK grueso (hiragana/katakana/kanji/hangul). DotGothic16 no cubre
+    // hangul completo: para `가-힯` este regex igual matchea, pero
+    // `crtFontFor` ya cae a "" (sistema) ahí a propósito (ver abajo).
+    readonly property var crtCjkRe: /[぀-ヿ㐀-䶿一-鿿가-힯]/
+    readonly property var crtHangulRe: /[가-힯]/
+
+    // La CLAVE de la fuente de ESTA línea (`vt323|share|press|system|dot|
+    // override`). Separada de `crtFontFor` (que resuelve la clave a nombre
+    // de familia) para poder loguearla en `Crt.qml` sin repetir la lógica.
+    // Prioridad: `crtFont` (perilla `crt.font`, texto libre tipeado por
+    // Ferox) no vacío > CJK → DotGothic16 (salvo hangul, que DotGothic16 no
+    // cubre y cae a sistema) > la del set > sistema. Press Start 2P es
+    // pesada (glifos anchos a pantalla completa): con más de 3 palabras se
+    // cae a `share`, que sigue siendo monoespaciada retro pero no se sale
+    // del cuadro.
+    function crtFontKeyFor(text, wordCount) {
+        if (crtFont !== "")
+            return "override";
+        const t = text || "";
+        if (crtHangulRe.test(t))
+            return "system";
+        if (crtCjkRe.test(t))
+            return "dot";
+        if (!crtSet)
+            return "system";
+        if (crtSet.font === "press" && wordCount > 3)
+            return "share";
+        return crtFontFamilies[crtSet.font] !== undefined ? crtSet.font : "system";
+    }
+
+    function crtFontFor(text, wordCount) {
+        const key = crtFontKeyFor(text, wordCount);
+        return key === "override" ? crtFont : crtFontFamilies[key];
+    }
+
     // Elige UN kind de `group`, sin repetir lo que ya salió en este set.
     function crtSetPick(group, seed, k, chosen) {
         const opts = group.filter(m => chosen.indexOf(m) < 0);
@@ -1325,7 +1374,7 @@ ShellRoot {
     // PURA: mismo seed + mismo mood → mismo set siempre. No se guarda; se
     // re-evalúa sola como binding (`crtSet`, abajo) cada vez que cambia
     // `crtTrackSeed`. `mood` todavía no se usa (corrida 3, cuotas de
-    // `motifGroups`); `font` siempre "system" hasta la corrida 2.
+    // `motifGroups`).
     function crtSetFor(seed, mood) {
         const motifs = [];
         motifs.push(crtSetPick(motifGroups.calm, seed, 0, motifs));
@@ -1335,7 +1384,8 @@ ShellRoot {
         const families = crtSetFamilyKeys;
         const family = families[Math.floor(crtHash(seed * 7 + 4) * families.length)];
         const scheme = Math.floor(crtHash(seed * 7 + 5) * schemes.length);
-        return { motifs: motifs, family: family, scheme: scheme, font: "system" };
+        const font = crtFontKeys[Math.floor(crtHash(seed * 7 + 3) * crtFontKeys.length)];
+        return { motifs: motifs, family: family, scheme: scheme, font: font };
     }
     // null con `crt.set = "off"`: todo lo que lo consume cae al camino de
     // siempre (pool entero, `crtEntryTable`, el esquema de pitch/tapa).

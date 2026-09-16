@@ -965,6 +965,19 @@ PanelWindow {
     readonly property real shortSide: Math.min(width, height)
     readonly property real pad: Math.round(shortSide * 0.06)
     readonly property string fontFamily: ctl.crtFont
+    // tanda 6, corrida 2: SÓLO la letra usa la fuente del set (`crtSetFor`).
+    // Rótulos que no son la letra (instrumental, NO SIGNAL, sync, chrome,
+    // carta de ajuste) siguen con `fontFamily` de arriba.
+    readonly property string lyricFont: ctl.crtFontFor(lineText, myWords.length)
+    // Press Start 2P es un bitmap ancho: con `letterSpacing` normal (3) se
+    // pasa del cuadro. Sólo para esta fuente se aprieta a 1.
+    readonly property int lyricLetterSpacing: lyricFont === ctl.crtFontFamilies.press ? 1 : 3
+    // La CLAVE (no el nombre de familia) de `lyricFont`, sólo para loguear
+    // (mismo patrón que `motifKind`/`onMotifKindChanged`, más abajo): así un
+    // driver puede confirmar que una línea con CJK cae a `dot` sin tener que
+    // leer nombres de fuente de Qt.
+    readonly property string lyricFontKey: ctl.crtFontKeyFor(lineText, myWords.length)
+    onLyricFontKeyChanged: if (ctl.crtOn) console.log("crt: font s" + idx + " " + lyricFontKey)
 
     // Reloj del tubo, y el techo de cuadros del modo.
     //
@@ -1274,7 +1287,7 @@ PanelWindow {
                 opacity: crt.ghostFade
                 text: crt.ghostText.toUpperCase()
                 color: crt.pal.dim
-                font.family: crt.fontFamily
+                font.family: crt.lyricFont
                 font.bold: true
                 font.letterSpacing: 2
                 font.pixelSize: Math.round(crt.shortSide * 0.30)
@@ -1313,7 +1326,7 @@ PanelWindow {
                     horizontalAlignment: Text.AlignHCenter
                     text: crt.myText.toUpperCase()
                     color: crt.pal.ink
-                    font.family: crt.fontFamily
+                    font.family: crt.lyricFont
                     font.bold: true
                     font.letterSpacing: 6
                     font.pixelSize: Math.round(crt.shortSide * 0.7)
@@ -1379,9 +1392,9 @@ PanelWindow {
                     // se mide con una palabra por renglón, que es como se van a
                     // acomodar: centradas y grandes, como los monitores del clip
                     text: crt.myWords.join("\n").toUpperCase()
-                    font.family: crt.fontFamily
+                    font.family: crt.lyricFont
                     font.bold: true
-                    font.letterSpacing: 3
+                    font.letterSpacing: crt.lyricLetterSpacing
                     // una letra sola se merece la pantalla entera: es el golpe
                     // deletreado del estribillo, no una palabra más
                     font.pixelSize: Math.round(crt.shortSide
@@ -1409,9 +1422,9 @@ PanelWindow {
                         return out;
                     }
                     textFormat: Text.StyledText
-                    font.family: crt.fontFamily
+                    font.family: crt.lyricFont
                     font.bold: true
-                    font.letterSpacing: 3
+                    font.letterSpacing: crt.lyricLetterSpacing
                     font.pixelSize: measure.fontInfo.pixelSize
                     lineHeight: 0.94
                     wrapMode: Text.WordWrap
@@ -1483,9 +1496,9 @@ PanelWindow {
                                 // animaciones de entrada no pasan por acá: un
                                 // Behavior no intercepta lo que anima otro.)
                                 Behavior on color { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
-                                font.family: crt.fontFamily
+                                font.family: crt.lyricFont
                                 font.bold: true
-                                font.letterSpacing: 3
+                                font.letterSpacing: crt.lyricLetterSpacing
                                 font.pixelSize: measure.fontInfo.pixelSize
                             }
 

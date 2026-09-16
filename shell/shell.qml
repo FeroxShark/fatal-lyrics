@@ -501,9 +501,18 @@ ShellRoot {
                 return;
             const q = queue.slice();
             const i = q.shift();
+            if (root.crtDark[i] !== true) {
+                // bloqueada por ahora (la anticipación todavía no venció):
+                // vuelve al final de la cola en vez de perderse — si se
+                // descartaba acá derecho, esa pantalla se quedaba prendida
+                // para siempre en cuanto la ventana de `crtNextFocus`
+                // coincidía con el turno de apagarla.
+                if (root.crtNextFocusBlocks(i))
+                    q.push(i);
+                else
+                    root.crtSetDark(i, true);
+            }
             queue = q;
-            if (root.crtDark[i] !== true && i !== root.crtNextFocus)
-                root.crtSetDark(i, true);
             if (queue.length > 0)
                 restart();
         }
@@ -1225,6 +1234,16 @@ ShellRoot {
         return mask;
     }
 
+    // "la letra prende el tubo" acotado a la ventana de anticipación real:
+    // `i === crtNextFocus` solo protege MIENTRAS falta para que llegue ese
+    // `show` (`Date.now() < crtNextAt`). Encontrado con `scene-drive.py`
+    // caso 3: sin más líneas, la predicción vieja se queda pegada para
+    // siempre y bloqueaba el apagado de una pantalla que ya no iba a
+    // recibir nada — el outro nunca terminaba de converger al foco.
+    function crtNextFocusBlocks(i) {
+        return i === crtNextFocus && crtNextAt > 0 && Date.now() < crtNextAt;
+    }
+
     // último cambio de máscara de sección (portero `sceneGapMs`)
     property double crtLastSceneAt: 0
     // si el final del tema está apagando pantallas de a una ahora mismo
@@ -1253,7 +1272,7 @@ ShellRoot {
         for (let i = 0; i < n; i++) {
             if (mask[i] && crtDark[i] === true)
                 crtSetDark(i, false);
-            else if (!mask[i] && crtDark[i] !== true && i !== crtNextFocus)
+            else if (!mask[i] && crtDark[i] !== true && !crtNextFocusBlocks(i))
                 crtSetDark(i, true);
         }
         console.log("crt: scene " + section + " lit=" + JSON.stringify(mask.map(b => b ? 1 : 0)));

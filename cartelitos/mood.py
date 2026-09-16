@@ -5,7 +5,15 @@ corrida 1 + 3)."""
 import re
 import unicodedata
 
-from .audio import classify_level
+# Piso/techo de rms ABSOLUTOS (no percentil del propio tema) para mapear
+# `energy` a 0..1 comparable ENTRE temas. Calibrados contra los ~300 perfiles
+# reales en ~/.cache/cartelitos/audio: la media de rms por tema cae en
+# [0.0005, 0.209], con p10≈0.011 y p90≈0.131. 0.02 deja abajo del piso a los
+# temas más bajitos (baladas, lofi) y 0.15 arriba del techo sólo a los
+# masters más comprimidos (por encima del p90 real); un tema mediano
+# (mean≈0.09, la mediana real) cae cerca de 0.5.
+ENERGY_RMS_FLOOR = 0.02
+ENERGY_RMS_CEIL = 0.15
 
 # Léxico chico es/en, minúsculas y sin tildes (se normaliza lo que se mide
 # contra esto, no hace falta duplicar acentuado/sin acento acá).
@@ -67,15 +75,22 @@ def valence(lines):
 
 
 def energy(profile_summary, bpm):
-    """0..1. Con perfil `known`: fracción del tema en build+drop
-    (classify_level sobre profile.rms). Si no y hay bpm: clamp((bpm-70)/110).
-    Sin nada de eso: 0.5 (ni arriba ni abajo)."""
+    """0..1, comparable ENTRE temas. Con perfil `known`: rms medio de lo
+    escuchado mapeado linealmente entre ENERGY_RMS_FLOOR y ENERGY_RMS_CEIL
+    (no classify_level: ésa es un percentil DENTRO del propio tema y nunca
+    pasa de ~0.35-0.40 aunque el tema entero sea fuerte). Si no hay perfil y
+    hay bpm: clamp((bpm-70)/110). Sin nada de eso: 0.5 (ni arriba ni abajo).
+
+    No se mezcla con bpm cuando hay perfil: `profile_summary` no trae bpm/conf
+    (TrackProfile.summary() sólo copia rms/cen), así que no hay confianza de
+    bpm con la que ponderar acá adentro."""
     if profile_summary and profile_summary.get("known"):
         rms = profile_summary.get("rms") or []
         heard = [v for v in rms if v > 0.0]
         if heard:
-            hot = sum(1 for v in heard if classify_level(v, rms)[0] in ("build", "drop"))
-            return hot / len(heard)
+            mean_rms = sum(heard) / len(heard)
+            span = ENERGY_RMS_CEIL - ENERGY_RMS_FLOOR
+            return max(0.0, min(1.0, (mean_rms - ENERGY_RMS_FLOOR) / span))
     if bpm and bpm > 0:
         return max(0.0, min(1.0, (bpm - 70.0) / 110.0))
     return 0.5

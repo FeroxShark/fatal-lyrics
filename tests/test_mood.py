@@ -33,13 +33,21 @@ class TestEnergy(unittest.TestCase):
     def test_unknown_profile_with_slow_bpm_bottoms_out(self):
         self.assertEqual(mood.energy({"known": False}, 70), 0.0)
 
+    def test_known_profile_quiet_and_even_scores_low(self):
+        # rms bajo y parejo (balada/lofi): tiene que quedar bien abajo del
+        # piso ENERGY_RMS_FLOOR, no cerca de 0.35-0.40 como con el percentil
+        # autorreferencial viejo (ver docs/plans/2026-09-15-crt-tanda6-dinamismo.md).
+        quiet = {"known": True, "rms": [0.015] * 20}
+        self.assertLess(mood.energy(quiet, 0), 0.35)
+
+    def test_known_profile_loud_scores_high(self):
+        # rms alto y parejo (masterizado fuerte): tiene que superar el techo.
+        loud = {"known": True, "rms": [0.18] * 20}
+        self.assertGreater(mood.energy(loud, 0), 0.65)
+
     def test_known_profile_favors_the_loud_one_over_the_quiet_one(self):
-        # classify_level es un percentil DENTRO del propio tema (nunca hay un
-        # "todo alto ≈ 1" absoluto: es siempre relativo a su propia curva),
-        # así que la forma de verificarlo es comparando un perfil cargado de
-        # picos contra uno chato — el primero tiene que salir más energético.
-        loud = {"known": True, "rms": [0.9] * 3 + [0.91 + i * 0.001 for i in range(17)]}
-        flat = {"known": True, "rms": [0.5] * 20}
+        loud = {"known": True, "rms": [0.18] * 20}
+        flat = {"known": True, "rms": [0.05] * 20}
         self.assertGreater(mood.energy(loud, 0), mood.energy(flat, 0))
 
     def test_known_profile_with_no_samples_falls_back_to_neutral(self):

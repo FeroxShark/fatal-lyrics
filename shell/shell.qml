@@ -139,6 +139,7 @@ ShellRoot {
             camBeat: 0.010, camGrid: 0.006,
             motifScale: 0.012, motifOpaMin: 0.86, motifOpaSpan: 0.10,
             driveMin: 0.80, driveMax: 1.60, driveDrop: 2.20, surgeK: 0.35,
+            sceneGapMs: 20000,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -146,6 +147,7 @@ ShellRoot {
             camBeat: 0.015, camGrid: 0.008,
             motifScale: 0.020, motifOpaMin: 0.80, motifOpaSpan: 0.15,
             driveMin: 0.70, driveMax: 2.00, driveDrop: 3.00, surgeK: 0.50,
+            sceneGapMs: 12000,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -158,6 +160,9 @@ ShellRoot {
             camBeat: 0.035, camGrid: 0.020,
             motifScale: 0.050, motifOpaMin: 0.62, motifOpaSpan: 0.30,
             driveMin: 0.0, driveMax: 99, driveDrop: 99, surgeK: 1.60,
+            // sceneGapMs en 0 = la sección cambia la máscara apenas se
+            // mueve, como el resto de `wild` (sin portero)
+            sceneGapMs: 0,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal

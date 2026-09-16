@@ -3,6 +3,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -620,6 +621,113 @@ def _sink_node_id(name):
         # idem: sin id se cae a parec por nombre, pero que se sepa por qué
         log(f"couldn't list the sinks ({type(e).__name__}: {e})")
     return None
+
+
+def _linear_gain(pct):
+    """Volumen mostrado (0..100, lo que devuelven pactl y wpctl) a ganancia de
+    amplitud lineal real: la escala es CÚBICA, no lineal (medido: un sink al
+    76% da -7.15dB, que es 20*log10(0.76**3) exacto; 20*log10(0.76) sin cubo da
+    -2.38dB y no coincide con nada medido). No es sólo cosa de wpctl, pactl
+    muestra el mismo cubo — ver docs/TRAMPAS.md."""
+    return max(0.0, pct / 100.0) ** 3
+
+
+def sink_volume_pct(text):
+    """% de volumen de `pactl get-sink-volume <sink>` (primer canal: alcanza
+    para mono/estéreo balanceado, que es el caso normal)."""
+    m = re.search(r"(\d+)%", text or "")
+    return float(m.group(1)) if m else None
+
+
+def _sink_volume_pct(name):
+    try:
+        out = subprocess.run(["pactl", "get-sink-volume", name],
+                             capture_output=True, text=True, timeout=3)
+        if out.returncode == 0:
+            return sink_volume_pct(out.stdout)
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        log(f"couldn't read the sink volume ({type(e).__name__}: {e})")
+    return None
+
+
+def sink_has_hw_volume(listing, name):
+    """True/False si el sink `name` (en `pactl list sinks`) tiene
+    HW_VOLUME_CTRL; None si no se encontró el sink. Importa: MEDIDO que en un
+    sink así el volumen se aplica en el hardware, DESPUÉS de donde pw-record
+    engancha el monitor — cambiarlo no mueve el rms capturado nada (100% contra
+    30%, mismo tema: 0.410 contra 0.407 de rms). Ver docs/TRAMPAS.md."""
+    for block in listing.split("\nSink #"):
+        if re.search(rf"^\tName: {re.escape(name)}$", block, re.MULTILINE):
+            m = re.search(r"^\tFlags:\s*(.*)$", block, re.MULTILINE)
+            return bool(m and "HW_VOLUME_CTRL" in m.group(1))
+    return None
+
+
+def _sink_has_hw_volume(name):
+    try:
+        out = subprocess.run(["pactl", "list", "sinks"],
+                             capture_output=True, text=True, timeout=3)
+        if out.returncode == 0:
+            return sink_has_hw_volume(out.stdout, name)
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        log(f"couldn't list the sinks for their flags ({type(e).__name__}: {e})")
+    return None
+
+
+def stream_volume_pct(listing, player):
+    """% de volumen del stream de `player` (nombre configurado en
+    `[behavior] player`) dentro de `pactl list sink-inputs`, buscado contra
+    `application.name` o `node.name`, sin importar mayúsculas. None si el
+    reproductor no tiene un stream activo ahora (pausado, la mayoría cierra el
+    stream) o no se pudo leer nada."""
+    player_l = (player or "").strip().lower()
+    if not player_l:
+        return None
+    for block in listing.split("Sink Input #"):
+        names = re.findall(r'^\s*(?:application\.name|node\.name) = "(.*)"$',
+                            block, re.MULTILINE)
+        if any(n.strip().lower() == player_l for n in names):
+            m = re.search(r"(\d+)%", block)
+            if m:
+                return float(m.group(1))
+    return None
+
+
+def _stream_volume_pct(player):
+    try:
+        out = subprocess.run(["pactl", "list", "sink-inputs"],
+                             capture_output=True, text=True, timeout=3)
+        if out.returncode == 0:
+            return stream_volume_pct(out.stdout, player)
+    except (OSError, subprocess.SubprocessError, UnicodeDecodeError) as e:
+        log(f"couldn't list the sink-inputs for the stream volume "
+            f"({type(e).__name__}: {e})")
+    return None
+
+
+def _capture_gain(player):
+    """Ganancia efectiva de lo que graba pw-record, para poder normalizar el
+    rms del perfil por volumen (docs/PENDIENTES.md: "Mood sesgado por
+    volumen"). NO es sink% × stream% a ciegas: MEDIDO que en un sink
+    HW_VOLUME_CTRL (el caso común, volumen del sistema por hardware) el fader
+    del sink queda DESPUÉS de donde se engancha el monitor, así que su volumen
+    no entra acá — sólo el del stream de la app, que sí pasa por software antes
+    de mezclarse. Si no se puede leer el volumen del stream, se usa sólo el del
+    sink (y queda dicho en el log); sin sink por default, ganancia 1.0 (hoy)."""
+    sink = _default_sink()
+    if sink is None:
+        return 1.0
+    stream_pct = _stream_volume_pct(player)
+    if stream_pct is None:
+        log("gain: couldn't read the player's stream volume, using only the sink's")
+        stream_gain = 1.0
+    else:
+        stream_gain = _linear_gain(stream_pct)
+    if _sink_has_hw_volume(sink):
+        return stream_gain
+    sink_pct = _sink_volume_pct(sink)
+    sink_gain = _linear_gain(sink_pct) if sink_pct is not None else 1.0
+    return sink_gain * stream_gain
 
 
 def _audio_command():

@@ -1912,6 +1912,144 @@ class TestSinkChanged(unittest.TestCase):
     def test_a_different_sink_is_a_change(self):
         self.assertTrue(c.sink_changed("alsa_output.foo", lambda: "alsa_output.bar"))
 
+
+class TestLinearGain(unittest.TestCase):
+    """La escala de volumen de PipeWire/PulseAudio es CÚBICA, no lineal: medido
+    en vivo, un sink al 76% da -7.15dB (20*log10(0.76**3), exacto) y un stream
+    al 40% da -23.89dB (20*log10(0.40**3), exacto) -- 20*log10(0.76) solo, sin
+    cubo, da -2.38dB y no coincide con nada medido."""
+
+    def test_100_por_ciento_es_ganancia_1(self):
+        self.assertAlmostEqual(c._linear_gain(100.0), 1.0)
+
+    def test_0_por_ciento_es_ganancia_0(self):
+        self.assertAlmostEqual(c._linear_gain(0.0), 0.0)
+
+    def test_cubo_no_lineal(self):
+        self.assertAlmostEqual(c._linear_gain(76.0), 0.76 ** 3, places=6)
+        self.assertAlmostEqual(c._linear_gain(40.0), 0.40 ** 3, places=6)
+
+
+class TestSinkVolumePct(unittest.TestCase):
+    """Parsea la salida de `pactl get-sink-volume <sink>`."""
+
+    TEXT = ("Volume: front-left: 49807 /  76% / -7.15 dB,   "
+            "front-right: 49807 /  76% / -7.15 dB\n        balance 0.00\n")
+
+    def test_lee_el_porcentaje(self):
+        self.assertEqual(c.sink_volume_pct(self.TEXT), 76.0)
+
+    def test_texto_vacio_no_explota(self):
+        self.assertIsNone(c.sink_volume_pct(""))
+        self.assertIsNone(c.sink_volume_pct("nada que ver\n"))
+
+
+class TestSinkHasHwVolume(unittest.TestCase):
+    """MEDIDO (docs/TRAMPAS.md): en un sink HW_VOLUME_CTRL el volumen se aplica
+    en el hardware, DESPUÉS de donde pw-record engancha el monitor -- cambiar
+    el volumen del sink no mueve el rms capturado nada (100% contra 30%: 0.410
+    contra 0.407 de rms, mismo tema). Por eso hay que distinguirlo: si el sink
+    es de este tipo, su volumen no entra en la ganancia efectiva."""
+
+    LISTING = (
+        "Sink #33\n"
+        "\tState: SUSPENDED\n"
+        "\tName: audiorelay-virtual-mic-sink\n"
+        "\tFlags: HARDWARE DECIBEL_VOLUME LATENCY \n"
+        "\n"
+        "Sink #242724\n"
+        "\tState: RUNNING\n"
+        "\tName: alsa_output.usb-Kingston.analog-stereo\n"
+        "\tFlags: HARDWARE HW_MUTE_CTRL HW_VOLUME_CTRL DECIBEL_VOLUME LATENCY \n"
+        "\n"
+    )
+
+    def test_sink_con_volumen_por_hardware(self):
+        self.assertTrue(c.sink_has_hw_volume(
+            self.LISTING, "alsa_output.usb-Kingston.analog-stereo"))
+
+    def test_sink_con_volumen_por_software(self):
+        self.assertFalse(c.sink_has_hw_volume(
+            self.LISTING, "audiorelay-virtual-mic-sink"))
+
+    def test_sink_que_no_esta(self):
+        self.assertIsNone(c.sink_has_hw_volume(self.LISTING, "nope"))
+
+
+class TestStreamVolumePct(unittest.TestCase):
+    """El volumen propio del stream del reproductor (`pactl list sink-inputs`),
+    para poder normalizar el rms grabado por lo que realmente suena, no sólo
+    por el volumen del sink (que en un sink HW_VOLUME_CTRL ni siquiera llega
+    al monitor)."""
+
+    LISTING = (
+        "Sink Input #245998\n"
+        "\tDriver: PipeWire\n"
+        "\tSample Specification: float32le 2ch 48000Hz\n"
+        "\tVolume: aux0: 26205 /  40% / -23.89 dB,   aux1: 26205 /  40% / -23.89 dB\n"
+        "\t        balance 0.00\n"
+        "\tMute: no\n"
+        "\tProperties:\n"
+        "\t\tmedia.name = \"Spotify\"\n"
+        "\t\tnode.name = \"spotify\"\n"
+        "\t\tapplication.name = \"Spotify\"\n"
+        "\n"
+        "Sink Input #12\n"
+        "\tVolume: aux0: 65536 / 100% / 0.00 dB\n"
+        "\tProperties:\n"
+        "\t\tapplication.name = \"vesktop\"\n"
+        "\n"
+    )
+
+    def test_encuentra_el_stream_por_application_name_case_insensitive(self):
+        self.assertEqual(c.stream_volume_pct(self.LISTING, "spotify"), 40.0)
+
+    def test_no_confunde_con_otro_stream(self):
+        self.assertEqual(c.stream_volume_pct(self.LISTING, "vesktop"), 100.0)
+
+    def test_reproductor_sin_stream_activo(self):
+        self.assertIsNone(c.stream_volume_pct(self.LISTING, "firefox"))
+
+    def test_listing_vacio(self):
+        self.assertIsNone(c.stream_volume_pct("", "spotify"))
+
+
+class TestCaptureGain(unittest.TestCase):
+    """La ganancia efectiva combinada: sink (si no es HW_VOLUME_CTRL) por
+    stream. docs/PENDIENTES.md: "Mood sesgado por volumen"."""
+
+    def test_sink_hw_solo_cuenta_el_stream(self):
+        with mock.patch.object(audio, "_default_sink", return_value="s1"), \
+             mock.patch.object(audio, "_sink_has_hw_volume", return_value=True), \
+             mock.patch.object(audio, "_stream_volume_pct", return_value=40.0), \
+             mock.patch.object(audio, "_sink_volume_pct") as sink_pct:
+            gain = audio._capture_gain("spotify")
+            sink_pct.assert_not_called()
+        self.assertAlmostEqual(gain, 0.40 ** 3, places=6)
+
+    def test_sink_por_software_multiplica_los_dos(self):
+        with mock.patch.object(audio, "_default_sink", return_value="s1"), \
+             mock.patch.object(audio, "_sink_has_hw_volume", return_value=False), \
+             mock.patch.object(audio, "_sink_volume_pct", return_value=76.0), \
+             mock.patch.object(audio, "_stream_volume_pct", return_value=40.0):
+            gain = audio._capture_gain("spotify")
+        self.assertAlmostEqual(gain, (0.76 ** 3) * (0.40 ** 3), places=6)
+
+    def test_sin_stream_legible_usa_solo_el_sink_y_lo_avisa(self):
+        with mock.patch.object(audio, "_default_sink", return_value="s1"), \
+             mock.patch.object(audio, "_sink_has_hw_volume", return_value=False), \
+             mock.patch.object(audio, "_sink_volume_pct", return_value=76.0), \
+             mock.patch.object(audio, "_stream_volume_pct", return_value=None), \
+             mock.patch.object(audio, "log") as log:
+            gain = audio._capture_gain("spotify")
+            self.assertTrue(log.called)
+        self.assertAlmostEqual(gain, 0.76 ** 3, places=6)
+
+    def test_sin_sink_por_default_asume_ganancia_1(self):
+        with mock.patch.object(audio, "_default_sink", return_value=None):
+            gain = audio._capture_gain("spotify")
+        self.assertEqual(gain, 1.0)
+
     def test_a_transient_pactl_failure_does_not_count_as_a_change(self):
         # None es "no pude preguntar ahora", no "ya no hay salida por default"
         self.assertFalse(c.sink_changed("alsa_output.foo", lambda: None))

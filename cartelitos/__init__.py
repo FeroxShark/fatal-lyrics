@@ -63,10 +63,12 @@ from .audio import (
     PEAK_GAP, PEAK_HARD, PEAK_MAX, PEAK_PCT, PROFILE_DIR, PROFILE_STEP,
     PeakGate, SECTIONS, SECTION_HOLD, SECTION_SMOOTH, SINK_CHECK_EVERY,
     TrackProfile, VOICE_HOP, audio_loop, band_energy, classify_level,
-    profile_for, set_profile, set_voice_sink, sink_changed, sink_node_id,
-    voice_loop, voice_rms, _audio_command, _band_table,
-    _default_sink, _default_source, _fold_interval, _profile_lock,
-    _sink_node_id, _source_node_id, _voice_capture, _voice_command,
+    profile_for, set_profile, set_voice_sink, sink_changed, sink_has_hw_volume,
+    sink_node_id, sink_volume_pct, stream_volume_pct, voice_loop, voice_rms,
+    _audio_command, _band_table, _capture_gain,
+    _default_sink, _default_source, _fold_interval, _linear_gain,
+    _profile_lock, _sink_has_hw_volume, _sink_node_id, _sink_volume_pct,
+    _source_node_id, _stream_volume_pct, _voice_capture, _voice_command,
 )
 
 from .mood import NEGATIVE, POSITIVE, brightness, energy, mood_for, valence

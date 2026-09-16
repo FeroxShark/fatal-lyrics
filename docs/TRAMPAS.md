@@ -462,3 +462,15 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   suba es la trampa: eso fuerza el TECHO, no dispara el modo degradado (que sólo se activa con
   frame time real sostenido). Para probar la baja/recuperación de verdad hace falta carga real de
   GPU (`docs/plans/cpu-bench.py` o similar) con el daemon corriendo.
+- **El volumen del sink no siempre llega a lo que graba `pw-record`.** Para normalizar `mood.energy()`
+  por volumen (`docs/PENDIENTES.md`: "Mood sesgado por volumen") hacía falta saber si el sink
+  entra en la ganancia efectiva. MEDIDO con un tono generado y `paplay`/`pw-record --target=<id>`:
+  en un sink `HW_VOLUME_CTRL` (el auricular USB de Ferox) subir/bajar el volumen del SINK del 100%
+  al 30% no mueve el rms capturado casi nada (0.410 contra 0.407) — el fader es de hardware y
+  queda DESPUÉS de donde `pw-record` engancha el monitor. El volumen del STREAM de la app sí
+  entra (100% a 30% de stream: 0.420 a 0.011 de rms, proporción 0.027 ≈ 0.30³, la escala cúbica de
+  siempre) porque ese es software y se mezcla antes. Por eso `_capture_gain()`
+  (`cartelitos/audio.py`) sólo multiplica el volumen del sink si `sink_has_hw_volume()` dice que
+  NO es de hardware; si es de hardware, cuenta sólo el stream. Y la escala cúbica no es sólo cosa
+  de `wpctl`: `pactl` muestra el mismo cubo, tanto para el sink como para el sink-input (76% de
+  sink → -7.15dB = 20·log10(0.76³); 40% de stream → -23.89dB = 20·log10(0.40³)).

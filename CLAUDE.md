@@ -136,6 +136,17 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   tema (umbral de `posAbs/posLen`, no lo manda el daemon) apaga de a una hacia el foco, una
   cada `Motion.holdMs`, con un timer único reapuntado (mismo patrón que `crtRelightTimer`).
   Nunca apaga la pantalla que `crtPredict()` ya prendió por anticipación.
+- `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`crtIntroAdvance`/`crtIntroEnd`/
+  `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, tanda 6, corrida 5) — el cambio de tema es
+  un evento, no un channel-change disimulado: `clear` (why="track") apaga toda la pared,
+  `tubeOffMs` después prende estática (`Static.qml` reusado), `introStaticMs` después la
+  tarjeta (título/artista, fuente y esquema del set) en la pantalla del próximo foco. La
+  tarjeta NO tiene plazo propio: se queda puesta (intro instrumental, "el título acompaña")
+  hasta que `show()` la corta — de un golpe si el primer verso llega antes de la tarjeta
+  (`crtIntroSkip`) o cortándola si ya estaba puesta (`crtIntroEnd`, `Crt.qml` la anima afuera
+  con `Motion.exitMs`, nunca un corte seco). Si el `np` nunca llega, sólo estática
+  (`introStaticMs`) y sigue sin tarjeta. Mientras `crtIntroOn` los handlers de `sec`/`cue` no
+  tocan canal, escena ni motivo (se aplican una sola vez al terminar).
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

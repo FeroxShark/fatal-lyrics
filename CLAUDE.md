@@ -147,6 +147,16 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   con `Motion.exitMs`, nunca un corte seco). Si el `np` nunca llega, sólo estática
   (`introStaticMs`) y sigue sin tarjeta. Mientras `crtIntroOn` los handlers de `sec`/`cue` no
   tocan canal, escena ni motivo (se aplican una sola vez al terminar).
+- `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`, tanda 6, corrida 6) — la palabra que
+  suena pulsa con la familia de entrada del set (`typed`/`hard`/`burn`/`soft`), logueando
+  `crt: word <i> <emphasis>` al asentar. `wholeWordsOn` (`allMode && layout !== "split" &&
+  crtQuality >= 1`) gatea el `Flow` de `WordSlot` por palabra en allMode sin split — cuesta 4.4
+  puntos de CPU (`docs/NUMEROS-MEDIDOS.md`), por eso el corte en `crtQuality`. El mismo
+  componente se usa en director, con reparto por largo de palabra (no por tiempo real: sin
+  `words` confiable por pantalla, `docs/TRAMPAS.md`). `emphasisGateOpen` suprime el pulso de
+  una palabra si le toca dentro de `Motion.enterMs` de la entrada de la línea — la regla de no
+  superponer animaciones. El auto-drop de calidad en vivo (`FrameAnimation`, frame > 28ms por
+  3s → `crtQuality` a 0.75 sin recuperación en la sesión) apaga este `Flow` sin avisar.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

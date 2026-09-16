@@ -1095,10 +1095,11 @@ PanelWindow {
                 if (crt.healthySince < 0) {
                     crt.healthySince = crt.tubeTime;
                 } else if (crt.tubeTime - crt.healthySince > crt.qualityRecoverHoldS
-                           && crt.ctl.crtQuality < 1) {
-                    console.log("crt: quality " + crt.ctl.crtQuality + " -> 1 (frame sano " +
+                           && crt.ctl.crtQuality < crt.ctl.crtQualityCeiling) {
+                    console.log("crt: quality " + crt.ctl.crtQuality + " -> " +
+                                crt.ctl.crtQualityCeiling + " (frame sano " +
                                 crt.qualityRecoverHoldS + "s)");
-                    crt.ctl.crtQuality = 1;
+                    crt.ctl.crtQuality = crt.ctl.crtQualityCeiling;
                     crt.healthySince = crt.tubeTime;
                 }
             } else {

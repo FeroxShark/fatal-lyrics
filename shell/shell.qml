@@ -225,6 +225,14 @@ ShellRoot {
     // encima en el drop). Cuelga de `camera`: con la cámara quieta esto
     // tampoco se mueve.
     property bool crtSectionZoom: true
+    // `crtQualityCeiling` es lo que Ferox eligió en el TOML (o el default 1.0);
+    // `crtQuality` es el valor EN VIVO, que el modo degradado por GPU (Crt.qml)
+    // puede bajar solo. La recuperación automática nunca puede pasar del techo
+    // configurado — si Ferox puso 0.75 a propósito (GPU floja), la histéresis
+    // no se lo pisa. Un cambio de config en caliente resetea `crtQuality` al
+    // nuevo techo, como cualquier otra perilla con hot-reload.
+    property real crtQualityCeiling: 1.0
+    onCrtQualityCeilingChanged: crtQuality = crtQualityCeiling
     property real crtQuality: 1.0
     property real crtFlicker: 0.25
     // La perilla mueve el brillo al CUADRADO: medido, la respuesta lineal daba
@@ -2926,7 +2934,7 @@ ShellRoot {
         crt_ring_gap: "crtRingGap", crt_hop: "crtHopMode",
         crt_pace: "crtPace", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera",
-        crt_section_zoom: "crtSectionZoom", crt_quality: "crtQuality",
+        crt_section_zoom: "crtSectionZoom", crt_quality: "crtQualityCeiling",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",
     })

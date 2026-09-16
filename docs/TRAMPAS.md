@@ -452,3 +452,13 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   en `converge()`, en el cambio de tamaño y al nacer. Sin el de nacer no hay textura ninguna.
 - **`mock.patch.dict` COPIA los valores:** mutar el dict que se le pasó no toca `config.CFG`. Un
   test que apagaba `sing` así dejó la captura girando para siempre y colgó la suite entera.
+- **La recuperación automática de `crtQuality` no puede subir por encima del techo que Ferox
+  configuró.** El modo degradado por GPU (T0.12, `Crt.qml`) baja `crtQuality` a 0.75 solo y la
+  sube sola con histéresis (28 s de frames sanos). La primera versión subía siempre a `1`, a
+  pelo: si Ferox pone `crt_quality = 0.75` en el TOML a propósito (GPU floja), la recuperación se
+  lo pisaba en el primer respiro de CPU. Arreglado con `crtQualityCeiling` (`shell.qml`): lo que
+  pone el TOML, separado del valor EN VIVO que sube y baja; la recuperación siempre apunta al
+  techo, nunca a `1` fijo. Probarlo "forzando `crt_quality = 0.75` por config" y mirando que no
+  suba es la trampa: eso fuerza el TECHO, no dispara el modo degradado (que sólo se activa con
+  frame time real sostenido). Para probar la baja/recuperación de verdad hace falta carga real de
+  GPU (`docs/plans/cpu-bench.py` o similar) con el daemon corriendo.

@@ -156,6 +156,22 @@ stop() {
     echo "fatal OFF"
 }
 
+# `stop` apaga el archivo del CRT a propósito (no dejar el tubo prendido en un
+# fatal-lyrics completamente apagado). Pero `restart` es "estado limpio,
+# seguir andando", no "apagar funciones": sin esto, el autostart de
+# `execs.conf` (que hace `cartelitos restart` en cada boot) apagaba el modo
+# CRT en cada arranque aunque Ferox lo hubiera dejado prendido. El archivo
+# admite `watchChanges`, así que escribirlo después de `start` lo levanta en
+# caliente sin flash de "apagado".
+restart() {
+    local crt_prev
+    crt_prev=$(cat "$CRT" 2>/dev/null)
+    stop
+    sleep 0.5
+    start
+    [ -n "$crt_prev" ] && crt_set "$crt_prev" >/dev/null
+}
+
 tune() {
     if [ ! -f "$TUNE_QML" ]; then
         echo "can't find the sliders in $BASE" >&2
@@ -266,7 +282,7 @@ sync_lyrics() {
 case "${1:-toggle}" in
     on|start)  start ;;
     off|stop)  stop ;;
-    restart)   stop; sleep 0.5; start ;;
+    restart)   restart ;;
     status)    status_line ;;
     # medio muerto cuenta como apagado: así el toggle lo levanta entero en vez
     # de rematar la mitad que seguía viva

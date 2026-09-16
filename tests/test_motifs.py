@@ -8,6 +8,7 @@ import contextlib
 import io
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))  # noqa: E402
@@ -16,6 +17,7 @@ from cartelitos import motifs  # noqa: E402
 
 KINDS = ["eye", "dunes", "tunnel", "plasma"]
 SCREENS = ["HDMI-A-2", "DP-4", "DP-5"]
+RARE = ["bsod", "nosignal", "testcard"]
 
 
 class TestReadKinds(unittest.TestCase):
@@ -168,6 +170,124 @@ class TestParseDark(unittest.TestCase):
         ev, err = motifs.parse_dark([], screens=SCREENS)
         self.assertIsNone(ev)
         self.assertIn("usage:", err)
+
+
+class TestReadRareKinds(unittest.TestCase):
+    """Mismo patrón que `TestReadKinds`, pero contra un fixture: `crtRareKinds`
+    todavía no existe en el shell.qml real a esta altura del plan (llega en el
+    paso 3), así que la lectura del archivo real no tiene nada que probar."""
+
+    def test_reads_the_pool_from_a_shell_qml_fixture(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".qml", delete=False) as fh:
+            fh.write('property var crtRareKinds: ["bsod", "nosignal", "testcard"]\n')
+            path = fh.name
+        try:
+            self.assertEqual(motifs.read_rare_kinds(path), RARE)
+        finally:
+            os.unlink(path)
+
+    def test_a_shell_qml_that_is_not_there_gives_an_empty_list(self):
+        self.assertEqual(motifs.read_rare_kinds("/nope/shell.qml"), [])
+
+    def test_the_kinds_land_in_the_usage_text(self):
+        self.assertIn("bsod", motifs.usage_rare(RARE))
+
+
+class TestParseRare(unittest.TestCase):
+    def test_a_bare_kind_goes_to_all(self):
+        ev, err = motifs.parse_rare(["bsod"], kinds=RARE, screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev, {"cmd": "rare", "kind": "bsod", "screen": "all"})
+
+    def test_a_screen_name_travels_as_the_name(self):
+        ev, err = motifs.parse_rare(["bsod", "--screen", "DP-4"],
+                                     kinds=RARE, screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev["screen"], "DP-4")
+
+    def test_the_equals_form_of_the_flag_works_too(self):
+        ev, _ = motifs.parse_rare(["nosignal", "--screen=DP-5"],
+                                   kinds=RARE, screens=SCREENS)
+        self.assertEqual(ev["screen"], "DP-5")
+
+    def test_a_numeric_screen_travels_as_an_int(self):
+        ev, err = motifs.parse_rare(["testcard", "-s", "2"],
+                                     kinds=RARE, screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev["screen"], 2)
+        self.assertIsInstance(ev["screen"], int)
+
+    def test_an_unknown_kind_is_an_error_that_lists_the_valid_ones(self):
+        ev, err = motifs.parse_rare(["dialog"], kinds=RARE, screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("dialog", err)
+        self.assertIn("bsod", err)
+
+    def test_an_unknown_screen_name_is_an_error_that_lists_the_real_ones(self):
+        ev, err = motifs.parse_rare(["bsod", "--screen", "DP-9"],
+                                     kinds=RARE, screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("DP-9", err)
+        self.assertIn("DP-4", err)
+
+    def test_an_index_past_the_last_screen_is_an_error(self):
+        ev, err = motifs.parse_rare(["bsod", "--screen", "3"],
+                                     kinds=RARE, screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("out of range", err)
+
+    def test_the_word_all_is_not_read_as_a_screen_name(self):
+        ev, err = motifs.parse_rare(["bsod", "--screen", "all"],
+                                     kinds=RARE, screens=SCREENS)
+        self.assertIsNone(err)
+        self.assertEqual(ev["screen"], "all")
+
+    def test_the_flag_without_a_value_is_an_error(self):
+        ev, err = motifs.parse_rare(["bsod", "--screen"], kinds=RARE)
+        self.assertIsNone(ev)
+        self.assertIn("--screen", err)
+
+    def test_an_unknown_flag_is_an_error(self):
+        ev, err = motifs.parse_rare(["bsod", "--pantalla", "DP-4"], kinds=RARE)
+        self.assertIsNone(ev)
+        self.assertIn("--pantalla", err)
+
+    def test_no_arguments_prints_the_usage(self):
+        ev, err = motifs.parse_rare([], kinds=RARE)
+        self.assertIsNone(ev)
+        self.assertIn("usage:", err)
+
+    def test_help_prints_the_usage_with_the_kinds(self):
+        for flag in ("-h", "--help"):
+            ev, err = motifs.parse_rare([flag], kinds=RARE)
+            self.assertIsNone(ev)
+            self.assertIn("testcard", err)
+
+    def test_there_is_no_off_word_rare_expires_on_its_own(self):
+        # a diferencia de motif/dark, un raro no se apaga a mano: termina solo
+        ev, err = motifs.parse_rare(["off"], kinds=RARE, screens=SCREENS)
+        self.assertIsNone(ev)
+        self.assertIn("off", err)
+
+
+class TestRareCli(unittest.TestCase):
+    def cli(self, argv):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return motifs.rare_cli(argv, screens=SCREENS, kinds=RARE)
+
+    def test_help_exits_clean(self):
+        self.assertEqual(self.cli(["--help"]), 0)
+
+    def test_a_bad_kind_exits_with_an_error(self):
+        self.assertEqual(self.cli(["dialog"]), 1)
+
+    def test_a_dead_overlay_is_an_error_and_not_a_traceback(self):
+        real = motifs.SOCK_PATH
+        motifs.SOCK_PATH = "/nope/cartelitos.sock"
+        try:
+            self.assertEqual(self.cli(["bsod"]), 1)
+        finally:
+            motifs.SOCK_PATH = real
 
 
 class TestForceCli(unittest.TestCase):

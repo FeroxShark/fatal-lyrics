@@ -60,6 +60,8 @@ def run(argv=None):
         sys.exit(motifs.force_cli(argv[argv.index("--crt-motif") + 1:]))
     if "--crt-dark" in argv:
         sys.exit(motifs.dark_cli(argv[argv.index("--crt-dark") + 1:]))
+    if "--crt-rare" in argv:
+        sys.exit(motifs.rare_cli(argv[argv.index("--crt-rare") + 1:]))
     if "--setup" in argv:
         try:
             setup.setup()

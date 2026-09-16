@@ -200,8 +200,12 @@ crt() {
         # que lo decida una sección o un raro (tanda 6, corrida 0). Mismo
         # camino que `motif`: le habla al socket del overlay, no al daemon.
         dark)   shift; python3 "$DAEMON" --crt-dark "$@" ;;
+        # Forzar un evento raro (bsod/nosignal/testcard) en una pantalla, para
+        # MIRARLO sin esperar el sorteo de `crt.rare` (tanda 6, corrida 7).
+        # Mismo camino: le habla al socket del overlay, no al daemon.
+        rare)   shift; python3 "$DAEMON" --crt-rare "$@" ;;
         toggle) [ "$(crt_state)" = "on" ] && { rm -f "$CRT_SETUP"; crt_set 0; } || crt_set 1 ;;
-        *)      echo "usage: fatal crt [on|off|toggle|status|setup [off]|motif <kind> [--screen <name|idx|all>]|motif off|dark <screen|idx|all> on|off]" >&2; exit 1 ;;
+        *)      echo "usage: fatal crt [on|off|toggle|status|setup [off]|motif <kind> [--screen <name|idx|all>]|motif off|dark <screen|idx|all> on|off|rare <kind> [--screen <name|idx|all>]]" >&2; exit 1 ;;
     esac
 }
 
@@ -275,5 +279,5 @@ case "${1:-toggle}" in
     sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
 esac

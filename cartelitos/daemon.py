@@ -10,6 +10,7 @@ from . import art
 from . import config
 from . import ipc
 from . import lyrics as lyr
+from . import mood
 from . import offsets
 from . import system
 from . import tray
@@ -139,6 +140,13 @@ class DaemonLoop:
         self.lyrics_kind = None
         self.plain_shown = False
         self.idx = -1
+        self.profile = None
+        # cuántos `mood` van mandados en este tema (máx 2: al recoger la
+        # letra, y una vez más si el compás se estabiliza antes del segundo
+        # verso) y cuántos `show` de letra ya salieron (la segunda condición
+        # lo necesita para saber si "el segundo show" ya pasó).
+        self.mood_count = 0
+        self.show_count = 0
         self.paused_by_game = False
         self.crt_paused_by_game = False
         self.last_game_check = 0.0
@@ -196,6 +204,16 @@ class DaemonLoop:
         siempre. (La funda no aparece por esto: el overlay no la prende si el
         tubo está puesto.)"""
         return self._config.CFG["behavior"]["now_playing"] or self._config.crt_on()
+
+    def _send_mood(self):
+        """Manda el evento `mood` con lo que se sepa ahora mismo y cuenta el
+        envío (nunca más de dos por tema: lo hacen valer `mood_count` los dos
+        llamadores). Un overlay viejo que no conoce `cmd: mood` lo ignora."""
+        lines = [ln[1] for ln in self.lyrics] if self.lyrics else []
+        summary = self.profile.summary() if self.profile else {"known": False}
+        bpm = self.profile.bpm if self.profile else 0.0
+        self.mood_count += 1
+        self._ipc.send(mood.mood_for(lines, summary, bpm))
 
     def handle_track(self, t, now):
         """Procesa un tick con el estado del player (t puede ser None/parado).
@@ -257,7 +275,8 @@ class DaemonLoop:
             # guardarse (tanda 3, C: hacen falta dos temas del mismo artista
             # pidiendo lo mismo). Volver a un tema ya corregido lo recupera.
             self.session_offset = self._offsets.effective(t["artist"], t["id"])
-            self._audio.set_profile(self._audio.profile_for(t))
+            self.profile = self._audio.profile_for(t)
+            self._audio.set_profile(self.profile)
             self.idx = -1
             self._ipc.clear(why="track")
             self._log(f"track: {t['artist']} — {t['title']}")
@@ -270,6 +289,8 @@ class DaemonLoop:
             self.plain_shown = False
             self.hang_sent = False
             self.last_show_at = now
+            self.mood_count = 0
+            self.show_count = 0
             if t["title"]:
                 self._lyr.fetch_lyrics_async(t)
             else:
@@ -291,6 +312,9 @@ class DaemonLoop:
             # el reloj del "no responde" arranca cuando HAY letra: la búsqueda
             # va en otro hilo y puede tardar, y esa espera no es un silencio
             self.last_show_at = now
+            # mood (a): con lo que se sepa apenas llega la letra (o no llega:
+            # lines vacío deja valence en 0, ni arriba ni abajo)
+            self._send_mood()
 
         # progreso de la canción: barra de la funda + karaoke (1 evento por segundo)
         # el modo CRT los necesita SIEMPRE: el director reparte los pedazos en
@@ -302,6 +326,14 @@ class DaemonLoop:
             self.last_pos_sent = now
             self._ipc.send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
 
+        # mood (b): el compás se terminó de estabilizar antes del segundo
+        # verso — el set del tubo (tanda 6, corrida 1) todavía no se congeló,
+        # así que vale la pena mandar una lectura más precisa. Después de esto
+        # no se vuelve a mandar nunca más en este tema (mood_count llega a 2).
+        if (self.mood_count == 1 and self.show_count < 2
+                and self.profile is not None and self.profile.conf >= 0.6):
+            self._send_mood()
+
         if self.lyrics and t["status"] == "Playing":
             if self.lyrics_kind == "plain":
                 # lrclib no tiene la letra sincronizada para este tema, sólo el
@@ -310,6 +342,7 @@ class DaemonLoop:
                 if not self.plain_shown:
                     self.plain_shown = True
                     self.last_show_at = now
+                    self.show_count += 1
                     preview = "\n".join(self.lyrics[0][1].splitlines()[:6])
                     self._ipc.show(preview, "unsynced lyrics")
             else:
@@ -325,6 +358,7 @@ class DaemonLoop:
                         # el tercer campo (tiempos por palabra) es de T1.1: una
                         # letra que venga de dos campos sigue andando igual
                         self.last_show_at = now
+                        self.show_count += 1
                         words = line[2] if len(line) > 2 else None
                         # el offset viaja con la línea: el aro del tubo cuenta
                         # contra el instante en que ESTE daemon va a mandar el

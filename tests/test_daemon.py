@@ -444,6 +444,66 @@ class TestLyricsListIsSent(unittest.TestCase):
         loop._ipc.lyrics_list.assert_not_called()
 
 
+def mood_calls(loop):
+    return [c.args[0] for c in loop._ipc.send.call_args_list if c.args[0].get("cmd") == "mood"]
+
+
+class TestMoodEvent(unittest.TestCase):
+    """Corrida 3: el daemon manda `mood` al recoger la letra, y a lo sumo una
+    vez más si el compás se estabiliza antes del segundo `show`."""
+
+    def _loop_with_fetch(self, lyrics, status="ok", conf=0.0, bpm=0.0):
+        loop = make_loop()
+        loop.track_id = "t1"
+        profile = mock.MagicMock()
+        profile.summary.return_value = {"known": False, "rms": [], "cen": []}
+        profile.bpm = bpm
+        profile.conf = conf
+        loop.profile = profile
+        loop._lyr._fetch = {"id": "t1", "lyrics": lyrics, "done": True, "status": status}
+        loop._lyr.current_line_index.return_value = -1
+        return loop
+
+    def test_mood_goes_out_when_the_lyric_arrives(self):
+        loop = self._loop_with_fetch([(0.0, "te amo"), (10.0, "vida")])
+        loop.handle_track(track(id="t1"), now=0.0)
+        self.assertEqual(len(mood_calls(loop)), 1)
+
+    def test_a_track_without_lyrics_still_gets_a_mood(self):
+        # "con lo que se sepa": sin letra, valence queda en 0, no se cae
+        loop = self._loop_with_fetch(None, status="none")
+        loop.handle_track(track(id="t1"), now=0.0)
+        self.assertEqual(len(mood_calls(loop)), 1)
+
+    def test_a_second_mood_fires_once_the_beat_settles_before_the_second_show(self):
+        loop = self._loop_with_fetch([(0.0, "a"), (10.0, "b")], conf=0.0)
+        loop._lyr.current_line_index.return_value = 0
+        loop.handle_track(track(id="t1"), now=0.0)      # letra + primer show
+        self.assertEqual(len(mood_calls(loop)), 1)
+        self.assertEqual(loop.show_count, 1)
+        loop.profile.conf = 0.7                          # el compás recién ahora se asienta
+        loop.handle_track(track(id="t1", pos=1.0), now=1.0)
+        self.assertEqual(len(mood_calls(loop)), 2)
+
+    def test_no_second_mood_if_the_beat_never_settles(self):
+        loop = self._loop_with_fetch([(0.0, "a"), (10.0, "b")], conf=0.2)
+        loop._lyr.current_line_index.return_value = 0
+        loop.handle_track(track(id="t1"), now=0.0)
+        loop.handle_track(track(id="t1", pos=1.0), now=1.0)
+        self.assertEqual(len(mood_calls(loop)), 1)
+
+    def test_never_more_than_two_moods_even_with_a_late_confident_beat(self):
+        loop = self._loop_with_fetch([(0.0, "a"), (10.0, "b")], conf=0.0)
+        loop._lyr.current_line_index.return_value = 0
+        loop.handle_track(track(id="t1"), now=0.0)       # mood a + primer show
+        loop._lyr.current_line_index.return_value = 1
+        loop.handle_track(track(id="t1", pos=11.0), now=1.0)  # segundo show
+        self.assertEqual(loop.show_count, 2)
+        loop.profile.conf = 0.9                          # llega tarde, ya no cuenta
+        loop.handle_track(track(id="t1", pos=12.0), now=2.0)
+        self.assertEqual(len(mood_calls(loop)), 1)
+
+
 class TestPauseNearEnd(unittest.TestCase):
     def test_paused_near_end_clears_immediately(self):
         loop = make_loop()

@@ -875,7 +875,19 @@ PanelWindow {
     // el verso: en un relay el segundo pedazo arranca tiempos después de la
     // línea, y con el contador ya corriendo sus primeras palabras nacen puestas
     // (sin onLandedChanged, o sea sin quemadura)
-    onMyTextChanged: burnStep = 0
+    // T6 corrida 6, paso 2: el mismo arribo marca cuándo entró la línea a
+    // ESTA pantalla, para que el énfasis por palabra no compita con la
+    // entrada de la línea.
+    property double textArrivedAt: 0
+    onMyTextChanged: {
+        burnStep = 0;
+        textArrivedAt = Date.now();
+    }
+    // referenciar `reveal` fuerza la reevaluación con el mismo reloj de
+    // 80 ms de arriba (el Timer de `crt.reveal`), sin un Timer nuevo por
+    // pantalla — Date.now() por sí solo no dispara binding
+    readonly property bool emphasisGateOpen: reveal >= 0
+        && (Date.now() - textArrivedAt) >= Motion.enterMs
     readonly property bool burnMode: entryStyle === "overburn" && !lineWords
     Connections {
         target: crt.ctl
@@ -1485,6 +1497,13 @@ PanelWindow {
                             pixelSize: measure.fontInfo.pixelSize
                             flash: crt.ctl.crtWordFlash
                             entryStyle: crt.entryStyle
+                            // T6 corrida 6, paso 2: familia del set →
+                            // énfasis; `crt.set = "off"` (o `crtSet` sin
+                            // asentar todavía) cae en "hard", lo más
+                            // parecido a como se veía antes de esta corrida
+                            emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
+                            suppressEmphasis: !crt.emphasisGateOpen
+                                || crt.tubeDark || crt.ctl.crtIntroOn
                             onOverburnHit: crt.burnFlash()
                         }
                     }

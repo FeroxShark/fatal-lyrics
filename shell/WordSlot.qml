@@ -14,8 +14,12 @@ Item {
     // lo calcula quien instancia (necesita `reveal`/`dueFrac`/`burnStep`,
     // que viven en `crt` y no cruzan de archivo)
     property bool landed: false
-    // tanda 6, corrida 6, paso 2: "typed|hard|burn|soft|none". Sin uso todavía.
+    // tanda 6, corrida 6, paso 2: "typed|hard|burn|soft|none"
     property string emphasis: "none"
+    // reactivo, lo calcula quien instancia (`crt.emphasisGateOpen`,
+    // `tubeDark`, `crtIntroOn`): la entrada de línea, el tubo oscuro y el
+    // intro no compiten con el pulso de la palabra
+    property bool suppressEmphasis: false
     property var pal: ({ ink: "#e0e0e0", hot: "#ffffff" })
     property string fontFamily: ""
     property real letterSpacing: 3
@@ -50,14 +54,18 @@ Item {
 
     transform: [
         Scale { id: sc; origin.x: slot.width / 2; origin.y: slot.height / 2 },
-        Translate { id: tr }
+        Translate { id: tr },
+        // propio del pulso de énfasis: no pelea con el de `entry`, que ya
+        // asentó el suyo en 1/0 cuando el pulso arranca
+        Scale { id: emSc; origin.x: slot.width / 2; origin.y: slot.height / 2 },
+        Translate { id: emTr }
     ]
 
     Text {
         id: label
         anchors.horizontalCenter: parent.horizontalCenter
         text: slot.entryStyle !== "type"
-            ? slot.word.toUpperCase()
+            ? slot.word.toUpperCase() + (slot.cursorOn ? "▮" : "")
             : Array.from(slot.word.toUpperCase())
                 .slice(0, slot.typed).join("")
                 + (slot.typed < slot.chars ? "▮" : "")
@@ -73,27 +81,41 @@ Item {
         font.pixelSize: slot.pixelSize
     }
 
-    // fantasmas de canal desalineado: sólo mientras entra
+    // fantasmas de canal desalineado: mientras entra (`ghostOff`/`ghostFade`)
+    // o durante el pulso de énfasis `hard` (`emGhostOff`/`emGhostFade`) — se
+    // suman, nunca compiten porque el pulso arranca cuando `entry` ya bajó
+    // los suyos a 0
     Text {
-        x: label.x - slot.ghostOff
+        x: label.x - (slot.ghostOff + slot.emGhostOff)
         text: label.text
         font: label.font
         color: "#ff2d00"
-        opacity: slot.ghostFade * 0.55
+        opacity: Math.min(1, slot.ghostFade + slot.emGhostFade) * 0.55
     }
     Text {
-        x: label.x + slot.ghostOff
+        x: label.x + (slot.ghostOff + slot.emGhostOff)
         text: label.text
         font: label.font
         color: "#00c8ff"
-        opacity: slot.ghostFade * 0.55
+        opacity: Math.min(1, slot.ghostFade + slot.emGhostFade) * 0.55
     }
     property real ghostOff: 0
     property real ghostFade: 0
+    property real emGhostOff: 0
+    property real emGhostFade: 0
+    // "un cuadro" del cursor de `typed`: parpadeo único al aterrizar, no el
+    // avance de `entryStyle === "type"` (que tiene el suyo)
+    property bool cursorOn: false
+    property bool pendingEmphasis: false
 
     onLandedChanged: {
         if (landed) {
             typed = 0;
+            // la decisión se congela ACÁ, al aterrizar: `entry` tarda
+            // `Motion.enterMs` en terminar y el pulso arranca recién
+            // después — si se releyera `suppressEmphasis` en ese momento
+            // ya no describiría el instante del aterrizaje
+            pendingEmphasis = !slot.suppressEmphasis && slot.emphasis !== "none";
             entry.restart();
         }
     }
@@ -163,7 +185,57 @@ Item {
             script: label.color = Qt.binding(() => slot.pal.ink);
         }
         ScriptAction {
-            script: slot.settled();
+            script: {
+                if (slot.pendingEmphasis) {
+                    console.log("crt: word " + slot.index + " " + slot.emphasis);
+                    emphasisAnim.restart();
+                }
+                slot.settled();
+            }
         }
+    }
+
+    // T6 corrida 6, paso 2: el pulso de énfasis por familia — marca la
+    // palabra que suena, aparte de cómo entró (`entryStyle`, que es de la
+    // LÍNEA, no de la familia). Arranca cuando `entry` ya asentó todo en
+    // 1/0, así que el jump inicial de cada `PropertyAction` parte de un
+    // estado quieto conocido.
+    SequentialAnimation {
+        id: emphasisAnim
+        PropertyAction { target: slot; property: "cursorOn"; value: slot.emphasis === "typed" }
+        PauseAnimation { duration: 16 }
+        PropertyAction { target: slot; property: "cursorOn"; value: false }
+        PropertyAction {
+            target: emSc; property: "xScale"
+            value: slot.emphasis === "hard" ? 1.10 : slot.emphasis === "typed" ? 1.04 : 1
+        }
+        PropertyAction {
+            target: emSc; property: "yScale"
+            value: slot.emphasis === "hard" ? 1.10 : slot.emphasis === "typed" ? 1.04 : 1
+        }
+        PropertyAction { target: slot; property: "emGhostOff"; value: slot.emphasis === "hard" ? slot.pixelSize * 0.22 * slot.flash : 0 }
+        PropertyAction { target: slot; property: "emGhostFade"; value: slot.emphasis === "hard" ? 0.85 * slot.flash : 0 }
+        PropertyAction { target: emTr; property: "y"; value: slot.emphasis === "soft" ? -slot.pixelSize * 0.08 : 0 }
+        ScriptAction {
+            script: if (slot.emphasis === "burn") wordBurnAnim.restart();
+        }
+        ParallelAnimation {
+            NumberAnimation { target: emSc; property: "xScale"; to: 1; duration: Motion.enterFastMs; easing.type: Easing.OutExpo }
+            NumberAnimation { target: emSc; property: "yScale"; to: 1; duration: Motion.enterFastMs; easing.type: Easing.OutExpo }
+            NumberAnimation { target: emTr; property: "y"; to: 0; duration: Motion.enterFastMs; easing.type: Easing.OutExpo }
+            NumberAnimation { target: slot; property: "emGhostOff"; to: 0; duration: Motion.exitMs; easing.type: Easing.OutExpo }
+            NumberAnimation { target: slot; property: "emGhostFade"; to: 0; duration: Motion.exitMs; easing.type: Easing.InQuad }
+        }
+    }
+
+    // `burn`: la única familia que deja el color puesto (se "quema" a
+    // `hot` y no vuelve a `ink` — el burn-in del glosario, aplicado a una
+    // sola palabra). Tiempo propio (200 ms, no `enterFastMs`) porque el
+    // resto de familias no la usan.
+    ColorAnimation {
+        id: wordBurnAnim
+        target: label; property: "color"
+        from: "#ffffff"; to: slot.pal.hot
+        duration: 200; easing.type: Easing.OutQuad
     }
 }

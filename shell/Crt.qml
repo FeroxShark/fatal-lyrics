@@ -894,6 +894,14 @@ PanelWindow {
     readonly property bool emphasisGateOpen: reveal >= 0
         && (Date.now() - textArrivedAt) >= Motion.enterMs
     readonly property bool burnMode: entryStyle === "overburn" && !lineWords
+    // paso 2: el Flow de WordSlot en allMode sin split sólo con crtQuality
+    // >= 1 (medido +4.4 puntos de CPU media contra el Text de una pieza,
+    // docs/NUMEROS-MEDIDOS.md); abajo queda el StyledText. Property acá y no
+    // en `lyric` (el Item que la usa) porque sólo las properties del ROOT
+    // quedan sin calificar para los hijos — trampa de scope que qmllint no
+    // ve (era un ReferenceError en runtime, no un error estático).
+    readonly property bool wholeWordsOn: allMode && layout !== "split"
+        && ctl.crtQuality >= 1
     Connections {
         target: crt.ctl
         enabled: crt.visible && crt.burnMode
@@ -1438,13 +1446,16 @@ PanelWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                // modo viejo (split): la línea partida, coloreándose de a
-                // pedazo — acá el índice de `myWords` no es el de la línea,
-                // así que `crtLine.words`/`dueFrac` no cierran (docs/TRAMPAS.md).
+                // modo viejo (split, o allMode entero con crtQuality baja): la
+                // línea de una pieza, coloreándose de a pedazo — con `split`
+                // el índice de `myWords` no es el de la línea, así que
+                // `crtLine.words`/`dueFrac` no cierran (docs/TRAMPAS.md); con
+                // `crtQuality < 1` es el Flow de WordSlot (paso 2, medido +4.4
+                // puntos de CPU en docs/NUMEROS-MEDIDOS.md) el que se apaga.
                 Text {
                     id: wholeLine
                     anchors.fill: parent
-                    visible: crt.allMode && crt.layout === "split"
+                    visible: crt.allMode && !crt.wholeWordsOn
                     text: {
                         let out = "";
                         for (let i = 0; i < crt.myWords.length; i++) {
@@ -1471,16 +1482,21 @@ PanelWindow {
                 // que ya elige tiempos reales de `crtLine.words` cuando hay,
                 // y si no el reparto por largo — TRAMPAS.md) así que la
                 // palabra que suena queda igual de definida acá que allá.
+                // Sólo con `crtQuality >= 1` (paso 2, `crt.wholeWordsOn`):
+                // medido +4.4 puntos de CPU media contra el Text de una
+                // pieza (12 palabras, allMode, 3 pantallas —
+                // docs/NUMEROS-MEDIDOS.md), y `crtQuality` ya baja sola
+                // cuando una pantalla viene lenta (línea 1077).
                 Flow {
                     id: wholeWords
                     anchors.centerIn: parent
                     width: parent.width
-                    visible: crt.allMode && crt.layout !== "split"
+                    visible: crt.wholeWordsOn
                     spacing: Math.round(measure.fontInfo.pixelSize * 0.3)
 
                     Repeater {
                         id: wholeWordsRepeater
-                        model: (crt.allMode && crt.layout !== "split") ? crt.myWords : []
+                        model: crt.wholeWordsOn ? crt.myWords : []
 
                         WordSlot {
                             id: wholeSlot

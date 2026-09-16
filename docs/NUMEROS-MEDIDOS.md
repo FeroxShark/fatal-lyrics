@@ -36,3 +36,10 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 - El análisis de audio es Python puro sobre `pw-record` (sin cava, sin numpy): 0.79% de CPU.
   Arma el mapa del tema por percentil de energía dentro de la propia canción
   (quiet/verse/build/drop) y lo cachea: la segunda vez que suena, anticipa los golpes.
+- **Tanda 6, corrida 6, paso 2 — línea entera de 12 palabras en allMode, 3 pantallas**
+  (`docs/plans/cpu-bench.py` adaptado: `crt_focus: "all"` + línea fija de 12 palabras, ocho
+  muestras de 8 s). ANTES (Text de una pieza, commit `4825d55`): **11-14%, media 12.7%**.
+  DESPUÉS (Flow de `WordSlot` por palabra, commit `9971987`): **17-17%, media 17.1%**. Sube
+  **4.4 puntos**, más del tope de 3 del plan: el Flow quedó atrás de `crt.wholeWordsOn`
+  (`crtQuality >= 1`), con el Text de una pieza de fallback cuando la pantalla ya viene lenta
+  y `crtQuality` bajó sola (`Crt.qml` línea ~1077).

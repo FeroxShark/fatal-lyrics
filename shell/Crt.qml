@@ -1906,9 +1906,28 @@ PanelWindow {
         // la tarjeta: título arriba, artista abajo, en la fuente y el
         // esquema de color del set del tema (tanda 6, corrida 1/3) — la
         // misma regla que la letra, no la de los rótulos de chrome.
+        //
+        // El fade sale de la property `introCardOn`, no de `visible`
+        // directo: `visible` a secas cortaba la tarjeta de un cuadro al
+        // otro cuando el primer verso la interrumpía (el `Behavior on
+        // opacity` de abajo nunca llegaba a jugar, porque el Item ya
+        // estaba fuera del árbol de render). Ahora `visible` sigue a la
+        // opacidad, así la salida se ve — `exitMs`/InQuad, como toda
+        // salida (Motion.qml) — y sólo desaparece del todo cuando la
+        // animación terminó.
         Item {
+            id: introCard
             anchors.fill: parent
-            visible: crt.ctl.crtIntroPhase === "card" && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark
+            readonly property bool introCardOn: crt.ctl.crtIntroPhase === "card"
+                && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark
+            opacity: introCardOn ? 1 : 0
+            visible: opacity > 0.001
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: introCard.introCardOn ? Motion.enterMs : Motion.exitMs
+                    easing.type: introCard.introCardOn ? Easing.OutExpo : Easing.InQuad
+                }
+            }
 
             Text {
                 id: introTitle
@@ -1926,8 +1945,6 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
-                opacity: (crt.ctl.crtIntroPhase === "card" && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark) ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo } }
             }
 
             Text {
@@ -1945,8 +1962,6 @@ PanelWindow {
                 font.pixelSize: Math.round(crt.shortSide * 0.032)
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
-                opacity: (crt.ctl.crtIntroPhase === "card" && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark) ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo } }
             }
         }
 

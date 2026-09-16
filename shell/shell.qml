@@ -560,12 +560,13 @@ ShellRoot {
             crtIntroTimer.interval = Motion.introStaticMs;
             crtIntroTimer.restart();
         } else if (crtIntroPhase === "static") {
-            // el `np` todavía no llegó (raro: sólo si `now_playing` está
-            // apagado) — no hay título que poner en la tarjeta, se sigue
-            // esperando en vez de mostrar una tarjeta vacía
+            // el `np` no llegó a tiempo (raro: sólo si `now_playing` está
+            // apagado) — no hay título que poner en la tarjeta. La
+            // ceremonia queda en sólo la estática (`introStaticMs`) y
+            // sigue: sin tarjeta, `show()` arma la escena normal cuando
+            // llegue el primer verso.
             if (npTitle === "") {
-                crtIntroTimer.interval = Motion.introStaticMs;
-                crtIntroTimer.restart();
+                crtIntroEnd();
                 return;
             }
             crtIntroPhase = "card";
@@ -582,17 +583,20 @@ ShellRoot {
                 ? crtShot.focus : Math.floor((n - 1) / 2);
             crtIntroScreen = focus;
             console.log("crt: intro card \"" + npTitle + "\" screen=" + focus);
-            crtIntroTimer.interval = Motion.introCardMs;
-            crtIntroTimer.restart();
-        } else if (crtIntroPhase === "card") {
-            crtIntroEnd();
+            // Sin timer nuevo: la tarjeta se queda puesta (intro
+            // instrumental, el título acompaña) hasta que el primer verso
+            // la corte en `show()` (`crtIntroEnd`/`crtIntroSkip`).
+            // `introCardMs` no es un plazo que la cierre sola — es el piso
+            // natural que le da no tener nada más que la termine antes.
         }
     }
 
-    // fin natural (se agotó `introCardMs` sin que llegara el primer
-    // verso todavía): no hay `sec` real todavía, así que la máscara de
-    // la corrida 4 no tiene con qué decidir — todas las pantallas vivas,
-    // y el primer verso arma la escena de cero como siempre.
+    // fin natural: el `np` nunca llegó (sin tarjeta, sólo estática) o el
+    // primer verso cortó la tarjeta puesta (`show()` la llama con
+    // `crtIntroPhase === "card"`). No hay `sec` real todavía, así que la
+    // máscara de la corrida 4 no tiene con qué decidir — todas las
+    // pantallas vivas, y el primer verso arma la escena de cero como
+    // siempre.
     function crtIntroEnd() {
         crtIntroTimer.stop();
         crtIntroPhase = "";

@@ -695,14 +695,14 @@ PanelWindow {
             // propio: el tubo se queda donde estaba.
             if (crt.sectionZoomOn && crt.ctl.audSection === "drop") {
                 sectionKick.restart();
-                crt.hit(1);
+                crt.hit(1, "glass");
             }
             // llegó el golpe: se suelta el acercamiento y se rompe la pantalla
             if (crt.cueZoom <= 1.001)
                 return;
             cueAnim.stop();
             cueRelease.restart();
-            crt.hit(1);
+            crt.hit(1, "glass");
         }
     }
     Connections {

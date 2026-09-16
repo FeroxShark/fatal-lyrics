@@ -377,6 +377,17 @@ ShellRoot {
     // true mientras la línea que suena es la primera del tema (ver show())
     property bool crtTrackStart: false
 
+    // ---- tanda 6, corrida 3: el mood del tema (daemon, `cartelitos/mood.py`)
+    // `crtMood` se pisa con cada evento `mood` que llega (hasta dos por
+    // tema); `crtSetFor` NUNCA lo lee directo — lee `crtMoodLocked`, que se
+    // fija UNA sola vez, en el primer verso del tema (`show()`,
+    // `crtTrackStart`), con lo que `crtMood` tenga en ese instante. El mood
+    // que llegue después no re-sortea el set: el bag ya se llenó. Default
+    // (`known: false`) es lo que usa un tema sin perfil ni letra: energy
+    // 0.5, valence 0 — las cuotas "sin mood" de la corrida 1.
+    property var crtMood: ({ valence: 0, energy: 0.5, bright: 0.5, known: false })
+    property var crtMoodLocked: null
+
     // ---- el tubo apagado (tanda 6, corrida 0): primitivo que consumen las
     // secciones (corrida 4), el intro de tema (corrida 5) y los raros
     // (corrida 7). Bool por índice de `activeCrtScreens`; ausente = prendida.
@@ -1371,25 +1382,54 @@ ShellRoot {
         return pool[Math.floor(crtHash(seed * 7 + k) * pool.length)];
     }
 
+    // Cuotas de `motifGroups` según la energy del mood (corrida 3). Sin mood
+    // (`mood` null, `crt.set` recién arrancando antes del primer verso):
+    // 2 calm + 1 hot + 1 neutral, igual que la corrida 1.
+    function crtMotifQuota(mood) {
+        const e = mood ? mood.energy : 0.5;
+        if (e < 0.35)
+            return { calm: 3, hot: 0, neutral: 1 };
+        if (e > 0.65)
+            return { calm: 1, hot: 2, neutral: 1 };
+        return { calm: 2, hot: 1, neutral: 1 };
+    }
+
     // PURA: mismo seed + mismo mood → mismo set siempre. No se guarda; se
     // re-evalúa sola como binding (`crtSet`, abajo) cada vez que cambia
-    // `crtTrackSeed`. `mood` todavía no se usa (corrida 3, cuotas de
-    // `motifGroups`).
+    // `crtTrackSeed` o `crtMoodLocked`.
     function crtSetFor(seed, mood) {
+        const quota = crtMotifQuota(mood);
         const motifs = [];
-        motifs.push(crtSetPick(motifGroups.calm, seed, 0, motifs));
-        motifs.push(crtSetPick(motifGroups.calm, seed, 1, motifs));
-        motifs.push(crtSetPick(motifGroups.hot, seed, 2, motifs));
-        motifs.push(crtSetPick(motifGroups.neutral, seed, 3, motifs));
-        const families = crtSetFamilyKeys;
-        const family = families[Math.floor(crtHash(seed * 7 + 4) * families.length)];
-        const scheme = Math.floor(crtHash(seed * 7 + 5) * schemes.length);
+        let k = 0;
+        for (let i = 0; i < quota.calm; i++)
+            motifs.push(crtSetPick(motifGroups.calm, seed, k++, motifs));
+        for (let i = 0; i < quota.hot; i++)
+            motifs.push(crtSetPick(motifGroups.hot, seed, k++, motifs));
+        for (let i = 0; i < quota.neutral; i++)
+            motifs.push(crtSetPick(motifGroups.neutral, seed, k++, motifs));
+        // familia: energy alta → dura (hard/burn), baja → suave (soft/typed),
+        // media → cualquiera de las cuatro (comportamiento de la corrida 1)
+        const e = mood ? mood.energy : 0.5;
+        const familyPool = e > 0.65 ? ["hard", "burn"]
+            : e < 0.35 ? ["soft", "typed"]
+            : crtSetFamilyKeys;
+        const family = familyPool[Math.floor(crtHash(seed * 7 + 4) * familyPool.length)];
+        // esquema: sólo importa cuando NO manda la tapa (`currentScheme()`
+        // ya le da prioridad a `albumScheme` antes de mirar `crtSet.scheme`,
+        // así que el mood nunca pisa el color que eligió Ferox con la tapa)
+        const v = mood ? mood.valence : 0;
+        const schemeKeys = v < -0.3 ? ["ado", "vapor", "bone"]
+            : v > 0.3 ? ["dragons", "bloodline", "poison"]
+            : schemes.map(s => s.key);
+        const schemeKey = schemeKeys[Math.floor(crtHash(seed * 7 + 5) * schemeKeys.length)];
+        const scheme = schemes.findIndex(s => s.key === schemeKey);
         const font = crtFontKeys[Math.floor(crtHash(seed * 7 + 3) * crtFontKeys.length)];
         return { motifs: motifs, family: family, scheme: scheme, font: font };
     }
     // null con `crt.set = "off"`: todo lo que lo consume cae al camino de
-    // siempre (pool entero, `crtEntryTable`, el esquema de pitch/tapa).
-    readonly property var crtSet: crtSetOn ? crtSetFor(crtTrackSeed, null) : null
+    // siempre (pool entero, `crtEntryTable`, el esquema de pitch/tapa). Lee
+    // `crtMoodLocked`, no `crtMood`: el set se congela con el primer verso.
+    readonly property var crtSet: crtSetOn ? crtSetFor(crtTrackSeed, crtMoodLocked) : null
 
     readonly property var crtEntryTable: ({
         calm:   { type: 0.35, tubeon: 0.30, snap: 0.15, interlace: 0.10,
@@ -2148,6 +2188,13 @@ ShellRoot {
         // primer verso después de un clear = tema nuevo: ahí el cambio de canal
         // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
         crtTrackStart = (crtLine.text || "") === "";
+        // el set se congela con lo PRIMERO que haya de mood: el evento
+        // `mood` de este tema si ya llegó, o el default si todavía no (un
+        // `clear` de pausa/rebobinado puede volver a poner `crtTrackStart`
+        // en true sin que sea tema nuevo — `crtMoodLocked` ya está puesto
+        // desde la vez anterior y esto no lo vuelve a tocar)
+        if (crtTrackStart && crtMoodLocked === null)
+            crtMoodLocked = crtMood;
         // ¿Es la MISMA línea otra vez? El ajuste de sync (tanda 3, C) resetea
         // el índice del daemon a propósito, así que ~0.3 s después de cada
         // golpe vuelve el mismo verso. Sin esto ese reenvío consumía el reparto
@@ -2268,10 +2315,14 @@ ShellRoot {
         // tanda 6, corrida 1: el set se arma UNA vez por tema, al primer
         // verso — se loguea acá y no en el binding para que salga una vez
         // por tema y no una vez por evaluación
-        if (crtOn && crtTrackStart && crtSet)
+        if (crtOn && crtTrackStart && crtSet) {
+            const m = crtMoodLocked || crtMood;
             console.log("crt: set motifs=[" + crtSet.motifs.join(",") + "]"
                 + " family=" + crtSet.family + " scheme=" + crtSet.scheme
-                + " font=" + crtSet.font);
+                + " font=" + crtSet.font
+                + " mood=v" + m.valence.toFixed(2) + "/e" + m.energy.toFixed(2)
+                + "/b" + m.bright.toFixed(2));
+        }
         updatePitchPalette();
         if (crtOn)
             return;
@@ -2505,6 +2556,13 @@ ShellRoot {
                             root.syncArtist = ev.artist || "";
                             root.syncGen++;
                             root.syncNotice();
+                        } else if (ev.cmd === "mood") {
+                            // corrida 3: sólo actualiza `crtMood`; `crtSet`
+                            // lee `crtMoodLocked`, que se congela en show()
+                            root.crtMood = { valence: ev.valence || 0,
+                                energy: ev.energy !== undefined ? ev.energy : 0.5,
+                                bright: ev.bright !== undefined ? ev.bright : 0.5,
+                                known: ev.known === true };
                         } else if (ev.cmd === "sing") {
                             // T5.3: sólo llegan los cambios, no un nivel por
                             // bloque — el que decide es el daemon
@@ -2532,6 +2590,14 @@ ShellRoot {
                                 // mismo motivo: los mazos de entrada por
                                 // pantalla son de la familia del tema viejo
                                 root.crtEntryBag = ({});
+                                // corrida 3: entre este `clear` y el `mood`
+                                // del tema nuevo (la letra viaja por red,
+                                // tarda) `crtMood` sería el del tema
+                                // anterior — se vuelve al default acá, y se
+                                // destraba el candado para que el próximo
+                                // `show()` lo vuelva a fijar
+                                root.crtMood = { valence: 0, energy: 0.5, bright: 0.5, known: false };
+                                root.crtMoodLocked = null;
                             }
                             // otro tema: la letra y todo lo anticipado sobre la
                             // anterior no valen nada. Sin esto los pedazos del

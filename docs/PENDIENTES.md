@@ -3,8 +3,17 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
-**Tanda 6 (en curso):** `docs/plans/2026-09-15-crt-tanda6-dinamismo.md`. De la tanda 5 absorbe los
-puntos 3 y 5; 1, 2, 4 y 6 siguen abiertos.
+**Tanda 6 (hecha 2026-09-16, falta que Ferox la mire con música):** set por tema + mazos,
+fuente por tema, mood, secciones que apagan pantallas, intro de tema, palabra con énfasis,
+eventos raros. De la tanda 5 absorbió los puntos 3 y 5; **1 (`stars`), 2 (`dunes`), 4 (zooms)
+y 6 (círculo aburrido) siguen abiertos.**
+
+- **Mood sesgado por volumen:** `mood.energy()` usa el rms medido post-fader (`pw-record`
+  sobre el monitor del sink), así que un tema escuchado bajito da "tranquilo". Opciones:
+  compensar con el volumen del sink (no ve el volumen propio de la app) o medir dinámica
+  relativa dentro del tema.
+- **Calidad del CRT se queda baja:** en vivo `crtQuality` bajó sola a 0.75 y no se recuperó;
+  con eso la línea entera por palabra (`crt.wholeWordsOn`, necesita >= 1) casi nunca se ve.
 
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar

@@ -68,4 +68,12 @@ Singleton {
     // que dura más porque no compite con nada (no hay letra sonando todavía).
     readonly property int introStaticMs: 600
     readonly property int introCardMs: 2400
+
+    // ---- eventos raros (tanda 6, corrida 7): cuánto dura el CONTENIDO de
+    // un nosignal o testcard (la transición de entrada/salida reusa
+    // `tubeOffMs`/`tubeOnMs`, arriba — un raro no inventa un segundo
+    // encendido). El bsod no tiene constante propia: dura lo que falta de
+    // la línea que suena (`crtVEndAt`), con `holdMs` de piso.
+    readonly property int rareNoSignalMs: 3000
+    readonly property int rareTestcardMs: 6000
 }

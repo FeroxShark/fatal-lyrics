@@ -438,6 +438,19 @@ ShellRoot {
         console.log("crt: dark " + (on ? "on" : "off") + " screen=" + i);
     }
 
+    // ---- eventos raros (tanda 6, corrida 7): bsod / nosignal / testcard.
+    // `crtRareKinds` es la lista pública (CLI `--help`, `read_rare_kinds`);
+    // el estado vive en `crtRare` — UN raro a la vez en toda la pared, no
+    // uno por pantalla (la invariante sigue siendo una animación por
+    // pantalla, y acá además una sola pantalla rota por vez).
+    readonly property var crtRareKinds: ["bsod", "nosignal", "testcard"]
+    // "" = no hay raro corriendo. `screen` es el índice en `activeCrtScreens`.
+    property var crtRare: ({ kind: "", screen: -1, until: 0 })
+    // último raro NATURAL (sorteo), para el portero `rareGapMs`. Un raro
+    // forzado (`fatal crt rare`) no lo toca: probarlo a mano no le come el
+    // hueco al que puede salir solo.
+    property double crtLastRareAt: 0
+
     // ---- la línea que VIENE (T2.0)
     // El daemon manda una línea por vez: hasta acá el tubo no sabía nada de la
     // próxima, y sin eso no hay forma de avisar a dónde va a saltar la frase.
@@ -493,12 +506,31 @@ ShellRoot {
         property int targetScreen: -1
         repeat: false
         onTriggered: {
-            if (targetScreen >= 0 && root.crtDark[targetScreen] === true) {
+            // corrida 7: si la pantalla está oscura porque un raro la está
+            // transicionando (entrando o saliendo), no se la disputa — su
+            // propio timer (`crtRareTimer`) la va a encender cuando toque
+            if (targetScreen >= 0 && root.crtDark[targetScreen] === true
+                    && root.crtRare.screen !== targetScreen) {
                 root.crtSetDark(targetScreen, false);
                 console.log("crt: dark relight screen=" + targetScreen
                             + " in=" + Motion.tubeOnMs);
             }
         }
+    }
+
+    // tanda 6, corrida 7: UN timer del root reprogramado por fase (mismo
+    // patrón que `crtRelightTimer`/`crtSceneOutroTimer`/`crtIntroTimer`),
+    // nunca uno por pantalla. Tres fases: "in" (el fósforo se contrae,
+    // `Motion.tubeOffMs`), "hold" (el contenido del raro puesto, su
+    // duración propia) y "out" (se contrae de nuevo antes de volver).
+    Timer {
+        id: crtRareTimer
+        property string phase: ""
+        property int screenIdx: -1
+        property string kind: ""
+        property real holdMs: 0
+        repeat: false
+        onTriggered: root.crtRareAdvance()
     }
 
     // tanda 6, corrida 4: el apagado de a una del final del tema. UN timer
@@ -514,7 +546,11 @@ ShellRoot {
                 return;
             const q = queue.slice();
             const i = q.shift();
-            if (root.crtDark[i] !== true) {
+            if (root.crtRare.screen === i) {
+                // corrida 7: un raro está usando esta pantalla — se
+                // reintenta más tarde, mismo trato que `crtNextFocusBlocks`
+                q.push(i);
+            } else if (root.crtDark[i] !== true) {
                 // bloqueada por ahora (la anticipación todavía no venció):
                 // vuelve al final de la cola en vez de perderse — si se
                 // descartaba acá derecho, esa pantalla se quedaba prendida
@@ -627,6 +663,149 @@ ShellRoot {
         crtIntroPhase = "";
         crtIntroScreen = -1;
         console.log("crt: intro skipped (lyric first)");
+    }
+
+    // ---- eventos raros (tanda 6, corrida 7)
+
+    // cuánto dura el contenido del raro (sin contar las transiciones de
+    // `crtRareTimer`). nosignal/testcard son fijos; el bsod dura lo que
+    // falta de la línea que suena, con un piso — nunca un parpadeo
+    function crtRareDurationMs(kind) {
+        if (kind === "nosignal")
+            return Motion.rareNoSignalMs;
+        if (kind === "testcard")
+            return Motion.rareTestcardMs;
+        const left = crtVEndAt > 0 ? crtVEndAt - Date.now() : 0;
+        return Math.max(left, Motion.holdMs);
+    }
+
+    // en qué pantalla cae. El bsod es la línea que suena: siempre el foco.
+    // nosignal/testcard NUNCA le sacan la pantalla a la letra — se sortean
+    // entre las vivas, sin foco, sin la que ya espera la línea siguiente
+    // (`crtNextFocusBlocks`) y sin las apagadas a mano (`crtDark`). Sin
+    // candidatas, no pasa nada (lo dice el llamador).
+    function crtRarePickScreen(kind, focus) {
+        const n = activeCrtScreens.length;
+        if (n <= 0)
+            return -1;
+        if (kind === "bsod")
+            return (focus >= 0 && focus < n) ? focus : -1;
+        const cands = [];
+        for (let i = 0; i < n; i++)
+            if (i !== focus && crtDark[i] !== true && !crtNextFocusBlocks(i))
+                cands.push(i);
+        return cands.length > 0
+            ? cands[Math.floor(crtHash(crtSerial * 53 + focus * 5 + 7) * cands.length)]
+            : -1;
+    }
+
+    // el sorteo de un raro por línea. Determinístico (`crtHash` con el
+    // serial), nunca `Math.random`. Se llama desde `show()`, DESPUÉS de
+    // `crtPredict()` (el bsod necesita `crtVEndAt`, recién puesto ahí) y
+    // ANTES de `crtSceneApply`/`crtMotifRefresh`, para que sus guardas vean
+    // el `crtRare` recién sorteado y no le toquen la pantalla.
+    function crtRareRoll(serial, focus) {
+        if (!crtOn || crtRareMult <= 0 || crtRare.screen >= 0 || crtIntroOn)
+            return;
+        const now = Date.now();
+        if (pace.rareGapMs > 0 && now - crtLastRareAt < pace.rareGapMs)
+            return;
+        if (crtHash(serial * 71 + 5) >= pace.rarePerLine * crtRareMult)
+            return;
+        const kinds = crtRareKinds;
+        if (kinds.length === 0)
+            return;
+        const kind = kinds[Math.floor(crtHash(serial * 71 + 13) * kinds.length)];
+        const screen = crtRarePickScreen(kind, focus);
+        if (screen < 0)
+            return;
+        crtLastRareAt = now;
+        crtRareFire(screen, kind);
+    }
+
+    // arranca la máquina de tres fases (`crtRareTimer`): se contrae, aparece
+    // el contenido, se contrae de nuevo y vuelve — mismo primitivo que
+    // `crtDark`/`tubeDark`, no un efecto aparte por raro.
+    function crtRareFire(screen, kind) {
+        const ms = crtRareDurationMs(kind);
+        crtRare = { kind: kind, screen: screen, until: Date.now() + ms };
+        console.log("crt: rare " + kind + " screen=" + screen + " ms=" + Math.round(ms));
+        crtRareTimer.screenIdx = screen;
+        crtRareTimer.kind = kind;
+        crtRareTimer.holdMs = ms;
+        crtRareTimer.phase = "in";
+        crtSetDark(screen, true);
+        crtRareTimer.interval = Motion.tubeOffMs;
+        crtRareTimer.restart();
+    }
+
+    function crtRareAdvance() {
+        const t = crtRareTimer;
+        if (t.phase === "in") {
+            crtSetDark(t.screenIdx, false);
+            t.phase = "hold";
+            t.interval = t.holdMs;
+            t.restart();
+        } else if (t.phase === "hold") {
+            t.phase = "out";
+            crtSetDark(t.screenIdx, true);
+            t.interval = Motion.tubeOffMs;
+            t.restart();
+        } else if (t.phase === "out") {
+            const i = t.screenIdx;
+            crtRare = { kind: "", screen: -1, until: 0 };
+            t.phase = "";
+            t.screenIdx = -1;
+            console.log("crt: rare end screen=" + i);
+            // vuelve a lo que la ESCENA diga AHORA, no a "prendida a
+            // ciegas": un nosignal que arrancó en el drop y termina en la
+            // estrofa no tiene por qué reencender una pantalla que la
+            // escena mientras tanto apagó (salvo que la letra la esté por
+            // usar: "la letra prende el tubo" sigue arriba de la escena)
+            const n = activeCrtScreens.length;
+            const mask = (crtSceneOn && crtFocusMode !== "all" && n > 1)
+                ? crtSceneFor(audSection, false, n, crtShot.focus) : null;
+            if (!mask || mask[i] === true || crtNextFocusBlocks(i))
+                crtSetDark(i, false);
+            crtMotifRefresh(true);
+        }
+    }
+
+    // "la letra manda" (mismo principio que `crtIntroSkip`): un nosignal o
+    // testcard que le agarra el camino a la línea que llega se corta acá.
+    // El bsod es la excepción — es justo lo que se está mostrando.
+    function crtRareCut(i) {
+        if (crtRare.screen !== i || crtRare.kind === "bsod")
+            return;
+        crtRareTimer.stop();
+        crtRareTimer.phase = "";
+        crtRareTimer.screenIdx = -1;
+        crtRare = { kind: "", screen: -1, until: 0 };
+        console.log("crt: rare cut screen=" + i);
+    }
+
+    // `fatal crt rare <kind> [--screen ...]` / evento `rare` del socket:
+    // fuerza uno YA, sin pasar por el sorteo ni por el portero — no toca
+    // `crtLastRareAt`, así una prueba a mano no le come el hueco al que
+    // puede salir solo. `screen` usa el mismo resolvedor que el forzado de
+    // motivo (`crtForceScreenIdx`); sin pantalla u "all", elige `crtRarePickScreen`.
+    function crtForceRare(kind, screen) {
+        if (crtRareKinds.indexOf(kind) < 0) {
+            console.log("crt: rare unknown kind " + kind);
+            return;
+        }
+        const i = crtForceScreenIdx(screen);
+        if (i === -2) {
+            console.log("crt: rare unknown screen " + screen);
+            return;
+        }
+        const n = activeCrtScreens.length;
+        const target = (i >= 0 && i < n) ? i
+            : crtRarePickScreen(kind, crtShot ? crtShot.focus : -1);
+        if (target < 0 || target >= n)
+            return;
+        crtRareCut(target);
+        crtRareFire(target, kind);
     }
 
     // ---- el aro: en qué pantalla está, ahora mismo (-1 = en ninguna)
@@ -1283,7 +1462,7 @@ ShellRoot {
         // secciones/intro/raros de las corridas 4, 5 y 7 cuelgan de esta
         // misma regla.
         const focus = crtPendingShot.focus;
-        if (focus >= 0 && crtDark[focus] === true) {
+        if (focus >= 0 && crtDark[focus] === true && crtRare.screen !== focus) {
             crtRelightTimer.targetScreen = focus;
             crtRelightTimer.interval = Math.max(crtNextAt - Motion.tubeOnMs - Date.now(), 0);
             crtRelightTimer.restart();
@@ -1381,6 +1560,10 @@ ShellRoot {
         const f = (focus >= 0 && focus < n) ? focus : 0;
         const mask = crtSceneFor(section, false, n, f);
         for (let i = 0; i < n; i++) {
+            // corrida 7: la pantalla de un raro en curso no la toca la
+            // escena — la deja terminar su máquina de estados
+            if (crtRare.screen === i)
+                continue;
             if (mask[i] && crtDark[i] === true)
                 crtSetDark(i, false);
             else if (!mask[i] && crtDark[i] !== true && !crtNextFocusBlocks(i))
@@ -2053,6 +2236,10 @@ ShellRoot {
     }
 
     function crtMotifFor(i) {
+        // corrida 7: el raro manda incluso sobre el forzado de motivo — es
+        // la pantalla la que se rompe, no un dibujo más del sorteo
+        if (crtRare.screen === i && crtRare.kind === "testcard")
+            return "testcard";
         // el forzado gana incluso con los motivos apagados: es una herramienta
         // para mirar un dibujo, no una fuente más del sorteo
         if (crtMotifForced(i))
@@ -2135,8 +2322,9 @@ ShellRoot {
         for (let i = 0; i < n; i++) {
             // una pantalla apagada (tanda 6, corrida 0) no dibuja nada: no
             // gasta su hold (nunca "vence" mientras esté oscura) ni reserva
-            // el kind que tenía para las demás
-            if (crtDark[i] === true)
+            // el kind que tenía para las demás. Un raro en curso (corrida 7)
+            // tampoco: `crtMotifFor` ya la pisa (testcard) o no la muestra
+            if (crtDark[i] === true || crtRare.screen === i)
                 continue;
             // el filtro de validez SÍ es inmediato: un dibujo que ya no tiene
             // con qué dibujarse (los ojos sin letra, la marea sin lyrics, el
@@ -2547,8 +2735,13 @@ ShellRoot {
         // false y no se toca ni se loguea nada.
         const litNow = shot.mode === "all"
             ? activeCrtScreens.map((_, i) => i) : shot.chunks.map(c => c.screen);
+        // "la letra manda" (corrida 7): un nosignal/testcard que le agarra
+        // el camino a esta línea se corta acá, antes del relight de abajo —
+        // el bsod es la excepción, `crtRareCut` lo deja como está
+        for (const i of litNow)
+            crtRareCut(i);
         for (const i of litNow) {
-            if (crtDark[i] === true) {
+            if (crtDark[i] === true && crtRareTimer.screenIdx !== i) {
                 crtSetDark(i, false);
                 console.log("crt: dark relight screen=" + i + " in=0");
             }
@@ -2600,6 +2793,12 @@ ShellRoot {
         crtVEndAt = vEnd !== undefined && vEnd !== null
             ? Date.now() + (vEnd - songPos()) * 1000 : 0;
         crtPredict();
+        // tanda 6, corrida 7: el sorteo de un raro para ESTA línea — después
+        // de `crtPredict()` (el bsod necesita `crtVEndAt`, recién puesto
+        // arriba) y antes de `crtSceneApply`/`crtMotifRefresh`, para que sus
+        // guardas vean el `crtRare` recién sorteado y no le toquen la pantalla
+        if (crtOn)
+            crtRareRoll(serial, shot.focus);
         // tanda 6, corrida 4: el primer verso del tema también es un cambio
         // de escena para la máscara de pantallas vivas
         if (crtOn && crtTrackStart)
@@ -2926,6 +3125,17 @@ ShellRoot {
                                 crtSceneOutroTimer.queue = [];
                                 root.crtSceneOutroOn = false;
                                 root.crtLastSceneAt = 0;
+                                // corrida 7: tema nuevo corta cualquier raro
+                                // en curso — el bsod del tema anterior no
+                                // tiene sentido en el que empieza (a
+                                // diferencia de `crtRareCut`, éste SÍ corta
+                                // un bsod: no es "la letra manda", es "es
+                                // otro tema")
+                                crtRareTimer.stop();
+                                crtRareTimer.phase = "";
+                                crtRareTimer.screenIdx = -1;
+                                root.crtRare = { kind: "", screen: -1, until: 0 };
+                                root.crtLastRareAt = 0;
                                 // tanda 6, corrida 5: el cambio de tema es
                                 // un evento en sí mismo, no un channel-change
                                 // disimulado — ver `crtIntroStart`
@@ -2949,6 +3159,8 @@ ShellRoot {
                                 root.dialogList = [];
                         } else if (ev.cmd === "motif")
                             root.crtSetForceMotif(ev.kind, ev.screen);
+                        else if (ev.cmd === "rare")
+                            root.crtForceRare(ev.kind, ev.screen);
                         else if (ev.cmd === "dark") {
                             const di = root.crtForceScreenIdx(ev.screen);
                             if (di === -2)

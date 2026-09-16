@@ -721,7 +721,11 @@ ShellRoot {
             if (schemes[i].key === crtPalette)
                 return schemes[i];
         if (crtPalette === "album" || crtPalette === "auto") {
-            // sin tapa: la elige el registro de lo que suena, o el tema
+            // sin tapa (o "auto"): con el set puesto (tanda 6, corrida 1) el
+            // esquema es el que le tocó al tema en `crtSetFor`; sin set, el
+            // registro de lo que suena, o el tema.
+            if (crtSet)
+                return schemes[crtSet.scheme % schemes.length];
             const base = crtColorFromPitch && pitchPal >= 0 ? pitchPal : crtTrackSeed;
             return schemes[base % schemes.length];
         }

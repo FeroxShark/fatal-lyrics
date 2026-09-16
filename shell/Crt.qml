@@ -742,7 +742,7 @@ PanelWindow {
     // factor la tabla diría 4000 y la pared esperaría 8.9 s.
     readonly property int hitGap: Math.round(
         ctl.quantize(ctl.pace.hitGapMs * 0.45 / Math.max(ctl.crtIntensity, 0.25)))
-    function hit(amount) {
+    function hit(amount, src) {
         const now = Date.now();
         if (now - lastHitAt < hitGap && amount < glitchAmt * 1.5)
             return;
@@ -750,7 +750,12 @@ PanelWindow {
         // el presupuesto de eventos se MIDE, no se estima: cada glitch que
         // pasa el portero deja su marca, y con eso se cuentan las roturas por
         // minuto antes y después de tocar cualquier número (tanda 4, corrida 3)
-        console.log("crt: hit s" + idx + " " + amount.toFixed(2));
+        // `src` es opcional: sólo lo manda el fogonazo del tubo prendiéndose
+        // (`tubeOnAnim`, más abajo) para que se lo pueda distinguir de un
+        // glitch de contenido — el `col *= tubeLevel` de `crt.frag` va ANTES
+        // del ruido, así que ese fogonazo se ve aunque `tubeLevel` siga en 0.
+        console.log("crt: hit s" + idx + " " + amount.toFixed(2)
+                     + (src ? " src=" + src : ""));
         glitchDecay.stop();
         glitchAmt = Math.min(amount, 1);
         glitchDecay.start();
@@ -813,7 +818,7 @@ PanelWindow {
     property real beamFade: 0
     SequentialAnimation {
         id: tubeOnAnim
-        ScriptAction { script: crt.hit(0.35) }
+        ScriptAction { script: crt.hit(0.35, "tubeon") }
         PropertyAction { target: crt; property: "tubeOnY"; value: 0.02 }
         PropertyAction { target: crt; property: "beamFade"; value: 1 }
         // el punto se estira hasta ser una raya de lado a lado

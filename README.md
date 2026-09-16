@@ -573,6 +573,18 @@ rm ~/.local/bin/fatal && rm -rf ~/fatal-lyrics
 rm -rf ~/.config/cartelitos   # optional: delete config
 ```
 
+## Fonts
+
+The CRT lyric line ships with four bundled fonts, one per theme (`shell/fonts/`), each
+released under the SIL Open Font License 1.1 (full text alongside each font as
+`LICENSE-<name>.txt`), sourced from [Google Fonts](https://github.com/google/fonts):
+
+- [VT323](https://github.com/google/fonts/tree/main/ofl/vt323) by Peter Hull
+- [Press Start 2P](https://github.com/google/fonts/tree/main/ofl/pressstart2p) by CodeMan38
+- [Share Tech Mono](https://github.com/google/fonts/tree/main/ofl/sharetechmono) by Carrois Type Design
+- [DotGothic16](https://github.com/google/fonts/tree/main/ofl/dotgothic16) by JAPAN FONTWORKS,
+  used as the fallback for CJK lyrics that the other three can't render
+
 ## License
 
 MIT

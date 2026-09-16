@@ -1646,7 +1646,11 @@ PanelWindow {
                 clip: true
                 // en el instrumental corren TODAS: es la pared entera moviéndose
                 // con el tema, que es justo lo que "NO SIGNAL" mataba
-                visible: (crt.idle || crt.instrumental || crt.motifForced) && !crt.tubeDark
+                // tanda 6, corrida 5: con el intro corriendo esta pantalla
+                // no dibuja motivo — es la estática o la tarjeta, nunca
+                // las dos cosas a la vez ("una animación por pantalla")
+                visible: (crt.idle || crt.instrumental || crt.motifForced)
+                    && !crt.tubeDark && !crt.ctl.crtIntroOn
                 // con el dibujo forzado esta caja puede coexistir con la letra,
                 // y está declarada DESPUÉS del verso: sin bajarla, el motivo
                 // taparía justo lo que se quiere ver encima de él
@@ -1776,7 +1780,7 @@ PanelWindow {
                 }
                 width: parent.width * 0.8
                 visible: crt.instrumental && crt.idx === crt.ctl.crtShot.focus
-                    && crt.ctl.npTitle !== ""
+                    && crt.ctl.npTitle !== "" && !crt.ctl.crtIntroOn
                 text: (crt.ctl.npTitle + "  ·  " + crt.ctl.npInfo).toUpperCase()
                 color: crt.pal.dim
                 font.family: crt.fontFamily
@@ -1799,7 +1803,7 @@ PanelWindow {
                 // standby): estas barras están declaradas DESPUÉS del motivo,
                 // así que sin esto lo que se captura es "NO SIGNAL" y no el
                 // dibujo que se quería mirar
-                visible: crt.standby && !crt.motifForced && !crt.tubeDark
+                visible: crt.standby && !crt.motifForced && !crt.tubeDark && !crt.ctl.crtIntroOn
 
                 Row {
                     anchors.fill: parent
@@ -1873,6 +1877,80 @@ PanelWindow {
                     font.letterSpacing: 6
                     font.pixelSize: Math.round(crt.shortSide * 0.05)
                 }
+            }
+        }
+
+        // ---- tanda 6, corrida 5: el cambio de tema es un evento. Vive
+        // fuera de `camera`, igual que el rayo del salto y el rótulo del
+        // sync — es la pared reaccionando al cambio de disco, no parte
+        // del plano que la sección acerca y aleja.
+        readonly property bool introStaticHere: crt.ctl.crtIntroPhase === "static" && !crt.tubeDark
+        readonly property bool introCardHere: crt.ctl.crtIntroPhase === "card"
+            && crt.ctl.crtIntroScreen === crt.idx && !crt.tubeDark
+
+        // la estática antes de la tarjeta: reusa `Static.qml` (la misma
+        // pieza que arma el motivo `static`), no una segunda estática
+        // aparte — sin número ni palabra que anticipar, todavía no hay
+        // línea de la que anticipar nada.
+        Loader {
+            anchors.fill: parent
+            active: introStaticHere
+            visible: active
+            sourceComponent: Static {
+                colour: crt.pal.ink
+                hot: crt.pal.hot
+                fontFamily: crt.fontFamily
+                level: crt.pump
+                seed: crt.ctl.crtTrackSeed * 97 + crt.idx
+                lineNo: -1
+                nextWord: ""
+            }
+        }
+
+        // la tarjeta: título arriba, artista abajo, en la fuente y el
+        // esquema de color del set del tema (tanda 6, corrida 1/3) — la
+        // misma regla que la letra, no la de los rótulos de chrome.
+        Item {
+            anchors.fill: parent
+            visible: introCardHere
+
+            Text {
+                id: introTitle
+                anchors.centerIn: parent
+                width: parent.width * 0.82
+                text: crt.ctl.npTitle
+                color: crt.pal.ink
+                font.family: crt.ctl.crtFontFor(crt.ctl.npTitle,
+                    crt.ctl.npTitle.split(/\s+/).filter(w => w.length > 0).length)
+                font.bold: true
+                font.letterSpacing: 2
+                font.pixelSize: Math.round(crt.shortSide * 0.09)
+                fontSizeMode: Text.Fit
+                minimumPixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                opacity: introCardHere ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo } }
+            }
+
+            Text {
+                anchors {
+                    top: introTitle.bottom
+                    topMargin: Math.round(crt.shortSide * 0.03)
+                    horizontalCenter: parent.horizontalCenter
+                }
+                width: parent.width * 0.75
+                text: crt.ctl.npInfo
+                color: crt.pal.dim
+                font.family: crt.fontFamily
+                font.bold: true
+                font.letterSpacing: 3
+                font.pixelSize: Math.round(crt.shortSide * 0.032)
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                opacity: introCardHere ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutExpo } }
             }
         }
 

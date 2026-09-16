@@ -109,6 +109,9 @@ _CONFIG_COMMENTS = {
                     "the phrase continues on the next one, the rest go quiet",
         "focus": '"roam" = the focus moves around | "all" = every screen shows\n'
                  "the whole line at the same time (the old behaviour)",
+        "scene": "which screens stay lit: `sections` = the quiet parts keep one\n"
+                 "screen, the drop lights the wall, the end goes dark one by\n"
+                 "one; `all` = every screen always draws",
         "set": "each track picks its own set of four drawings, one family of\n"
                "entrances, a colour scheme and a font; `off` = the whole pool\n"
                "every time, as before",
@@ -308,7 +311,8 @@ DEFAULTS = {
     },
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
-        "split": "mixed", "director": True, "focus": "roam", "set": "track", "audio": True,
+        "split": "mixed", "director": True, "focus": "roam", "scene": "sections",
+        "set": "track", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "ghost_ms": 550,

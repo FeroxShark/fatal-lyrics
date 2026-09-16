@@ -222,6 +222,11 @@ SETTINGS = [
     ("focus", "crt", "Focus", lambda c: _pick("Where the lyric goes", [
         ("roam: one screen at a time, the focus moves", "roam"),
         ("all: every screen shows the whole line", "all")], c)),
+    ("scene", "crt", "Which screens stay lit", lambda c: _pick(
+        "Which screens stay lit", [
+        ("sections: the quiet parts keep one screen, the drop lights the "
+         "wall, the end goes dark one by one", "sections"),
+        ("all: every screen always draws", "all")], c)),
     ("set", "crt", "Each track picks its own set of drawings", lambda c: _pick(
         "Each track picks its own set of four drawings, one family of "
         "entrances, a colour scheme and a font", [

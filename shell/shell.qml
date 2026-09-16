@@ -105,6 +105,11 @@ ShellRoot {
     // "off" = el pool entero de siempre (ver `crtSetFor` más abajo)
     property string crtSetMode: "track"      // track | off
     readonly property bool crtSetOn: crtSetMode !== "off"
+    // tanda 6, corrida 4: "sections" = la sección decide qué pantallas viven
+    // (la estrofa una, el drop la pared entera, el final se apaga de a una);
+    // "all" = todas dibujan siempre, como antes de esta corrida.
+    property string crtSceneMode: "sections" // sections | all
+    readonly property bool crtSceneOn: crtSceneMode !== "all"
     property bool crtColorFromPitch: true
     property int crtColorHold: 10
     // segundos de anticipación con que el color infecta la pantalla siguiente
@@ -2415,7 +2420,8 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
-        crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_set: "crtSetMode",
+        crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
+        crt_set: "crtSetMode",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",

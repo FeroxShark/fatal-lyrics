@@ -1669,6 +1669,10 @@ ShellRoot {
         crtForceKind = kind;
         console.log("crt: force motif " + kind + " screen="
                     + (i < 0 ? "all" : activeCrtScreens[i].name));
+        const lo = i < 0 ? 0 : i;
+        const hi = i < 0 ? activeCrtScreens.length - 1 : i;
+        for (let j = lo; j <= hi; j++)
+            console.log("crt: motif screen=" + j + " kind=" + kind + " src=force");
     }
 
     function crtMotifForced(i) {
@@ -1687,7 +1691,9 @@ ShellRoot {
 
     // El sorteo de UNA pantalla, excluyendo lo que están mostrando las otras
     // (la invariante de siempre: dos pantallas apagadas nunca muestran el
-    // mismo dibujo) y lo que mostraba ella misma.
+    // mismo dibujo) y lo que mostraba ella misma. Devuelve `{kind, src}`:
+    // `src` es de dónde salió el pick (`crt: motif` lo loguea en
+    // `crtMotifRefresh`, tanda 6 corrida 2 paso 0).
     function crtMotifDraw(i, taken) {
         const calm = audSection === "quiet";
         // tanda 6, corrida 1: el pool chico de `quiet` (la sección decide, no
@@ -1699,7 +1705,8 @@ ShellRoot {
             const free = base.filter(k => taken.indexOf(k) < 0);
             const pool = free.length > 0 ? free : base;
             crtMotifRoll++;
-            return pool[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * pool.length)];
+            return { kind: pool[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * pool.length)],
+                      src: "pool" };
         }
         // shuffle-bag: con el set puesto el sorteo es SIN reemplazo, un mazo
         // que se agota antes de repetir kind.
@@ -1712,16 +1719,17 @@ ShellRoot {
             // se admite repetir con el set puesto antes de salir de él
             const base = motifPool(crtSet.motifs);
             if (base.length > 0)
-                return base[0];
+                return { kind: base[0], src: "set" };
             // defensivo: si ni eso hay, el pool entero de siempre
             const full = motifPool(motifKinds);
             crtMotifRoll++;
-            return full[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * full.length)];
+            return { kind: full[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * full.length)],
+                      src: "pool" };
         }
         const pick = bag[idx];
         bag.splice(idx, 1);
         crtMotifBag = bag;
-        return pick;
+        return { kind: pick, src: "bag" };
     }
 
     // Repartir de nuevo lo que VENCIÓ, y nada más. `force` es el cambio de
@@ -1768,14 +1776,22 @@ ShellRoot {
             // las que no se tocan también reservan su dibujo (salvo las
             // apagadas: ver arriba)
             const taken = kinds.filter((k, j) => j !== i && k !== "" && crtDark[j] !== true);
-            let pick = (i === chosen && wanted !== "" && taken.indexOf(wanted) < 0)
-                ? wanted : crtMotifDraw(i, taken.concat(kinds[i] ? [kinds[i]] : []));
+            let pick, src;
+            if (i === chosen && wanted !== "" && taken.indexOf(wanted) < 0) {
+                pick = wanted;
+                src = "word";
+            } else {
+                const drawn = crtMotifDraw(i, taken.concat(kinds[i] ? [kinds[i]] : []));
+                pick = drawn.kind;
+                src = drawn.src;
+            }
             if (pick === kinds[i] && !force)
                 continue;              // salió el mismo: se queda, y sin puente
             kinds[i] = pick;
             since[i] = now;
             seeds[i] = crtHash(crtMotifRoll * 31 + i * 7 + 13);
             changed = true;
+            console.log("crt: motif screen=" + i + " kind=" + pick + " src=" + src);
         }
         // arrays nuevos, no mutados: si no, el binding de Crt.qml no se entera
         if (changed || crtMotifKinds.length !== n) {

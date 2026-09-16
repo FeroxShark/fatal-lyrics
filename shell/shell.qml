@@ -1348,14 +1348,16 @@ ShellRoot {
     // mitad de lo más fuerte que sonó", y eso viaja igual en un tema bajito.
     readonly property real crtEntryLoud: 0.55
 
-    // Sorteo con pesos, puro: no mira nada del root, todo entra por argumento.
-    // `r` es 0..1.
-    function crtPickEntry(ctx, burnOk, last, r) {
-        const w = crtEntryTable[ctx] || crtEntryTable.calm;
+    // Sorteo con pesos, puro: no mira nada del root, todo entra por argumento
+    // (tanda 6, corrida 1: la tabla de pesos ahora la resuelve quien llama —
+    // `crtEntryTable[ctx]` sin set, una familia de `crtEntryFamilies` con
+    // set — así esta función no sabe ni le importa cuál de las dos es). `r`
+    // es 0..1.
+    function crtPickEntry(table, burnOk, last, r) {
         let keys = [];
         let total = 0;
-        for (const k in w) {
-            const v = (k === "overburn" && !burnOk) ? 0 : w[k];
+        for (const k in table) {
+            const v = (k === "overburn" && !burnOk) ? 0 : table[k];
             if (v <= 0)
                 continue;
             keys.push({ k: k, v: v });
@@ -1380,6 +1382,47 @@ ShellRoot {
         return keys[keys.length - 1].k;
     }
 
+    // Mazo de UNA pantalla, para la tabla de su familia (`calm`/`strong`).
+    // Multiplicidad = peso * 5 redondeado (0.6 → 3 copias, 0.4 → 2): más
+    // peso, más copias, pero el mazo igual se agota y obliga variedad.
+    // Barajado determinístico con `crtHash`, nunca `Math.random`.
+    function crtEntryBagFill(table, burnOk) {
+        const bag = [];
+        for (const k in table) {
+            const v = (k === "overburn" && !burnOk) ? 0 : table[k];
+            if (v <= 0)
+                continue;
+            const copies = Math.max(1, Math.round(v * 5));
+            for (let c = 0; c < copies; c++)
+                bag.push(k);
+        }
+        for (let k = bag.length - 1; k > 0; k--) {
+            crtEntryRoll++;
+            const j = Math.floor(crtHash(crtTrackSeed * 173 + crtEntryRoll) * (k + 1));
+            const tmp = bag[k]; bag[k] = bag[j]; bag[j] = tmp;
+        }
+        return bag;
+    }
+
+    // Saca UN estilo del mazo de la pantalla `i`, evitando repetir `last`.
+    // Si el mazo está vacío lo rellena antes; si el que queda es el único
+    // que hay (mazo de una sola clave), se admite repetir.
+    function crtEntryDraw(i, table, burnOk, last) {
+        let bag = crtEntryBag[i] || [];
+        if (bag.length === 0)
+            bag = crtEntryBagFill(table, burnOk);
+        let idx = bag.findIndex(k => k !== last);
+        if (idx < 0)
+            idx = 0;
+        const pick = bag[idx];
+        bag = bag.slice();
+        bag.splice(idx, 1);
+        const next = Object.assign({}, crtEntryBag);
+        next[i] = bag;
+        crtEntryBag = next;
+        return pick;
+    }
+
     // El estilo de entrada de cada pantalla en la línea que está llegando. Se
     // calcula UNA vez, al consumir (acá sí se lee el estado vivo: esto es la
     // línea que llega, no la que se anticipa — dentro de crtShotFor no podría).
@@ -1391,6 +1434,13 @@ ShellRoot {
     // línea: anotando también las que se quedaron vacías, "el anterior" deja de
     // ser el que se vio y la regla de no repetir no dice nada
     property var crtLastEntry: ({})
+    // Mazo de entradas por pantalla (tanda 6, corrida 1): con el set puesto,
+    // cada pantalla saca su estilo de un mazo de la familia sin reemplazo en
+    // vez de sorteo con reposición — así 5 líneas seguidas en la misma
+    // pantalla no repiten la misma entrada 3 veces. Se vacía en el `clear`
+    // de tema (misma condición que `crtMotifBag`, más abajo en el handler).
+    property var crtEntryBag: ({})
+    property int crtEntryRoll: 0
 
     function crtEntriesFor(shot, ringScreen) {
         const out = {};
@@ -1404,10 +1454,16 @@ ShellRoot {
             return out;
         const n = activeCrtScreens.length;
         const strong = audSection === "drop" || audLevel2s >= crtEntryLoud;
+        const ctx = strong ? "strong" : "calm";
         // overburn: sólo con el compás medido (cada palabra se quema en un
         // tiempo) y en un drop. Fuera de eso no sale nunca.
         const burnOk = bpmLive && (crtLine.section || "verse") === "drop";
         const seed = crtSeed(crtLine.serial || 0);
+        // tanda 6, corrida 1: con el set puesto, la tabla es la familia del
+        // tema y el sorteo es un mazo sin reemplazo por pantalla; sin set
+        // (`crt.set = "off"`), la tabla de siempre y el sorteo con pesos de
+        // siempre.
+        const table = crtSet ? crtEntryFamilies[crtSet.family][ctx] : crtEntryTable[ctx];
         for (let i = 0; i < n; i++) {
             if (shot.mode !== "all") {
                 let mine = false;
@@ -1419,8 +1475,10 @@ ShellRoot {
             }
             out[i] = (i === ringScreen && i === shot.focus)
                 ? "tubeon"
-                : crtPickEntry(strong ? "strong" : "calm", burnOk,
-                               crtLastEntry[i], crtHash(seed * 97 + i * 7 + 5));
+                : crtSet
+                    ? crtEntryDraw(i, table, burnOk, crtLastEntry[i])
+                    : crtPickEntry(table, burnOk, crtLastEntry[i],
+                                   crtHash(seed * 97 + i * 7 + 5));
         }
         return out;
     }
@@ -2401,6 +2459,9 @@ ShellRoot {
                                 // para el que viene (`crtMotifBagFill` lo
                                 // rellena solo, en el próximo `crtMotifDraw`)
                                 root.crtMotifBag = [];
+                                // mismo motivo: los mazos de entrada por
+                                // pantalla son de la familia del tema viejo
+                                root.crtEntryBag = ({});
                             }
                             // otro tema: la letra y todo lo anticipado sobre la
                             // anterior no valen nada. Sin esto los pedazos del

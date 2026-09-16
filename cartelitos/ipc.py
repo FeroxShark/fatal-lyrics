@@ -78,7 +78,7 @@ CONFIG_EVENT_MAP = (
     ("crt_foreshadow", "crt", "foreshadow"), ("crt_ring", "crt", "ring"),
     ("crt_ring_gap", "crt", "ring_gap"),
     ("crt_hop", "crt", "hop"),
-    ("crt_pace", "crt", "pace"), ("crt_ghost_ms", "crt", "ghost_ms"),
+    ("crt_pace", "crt", "pace"), ("crt_rare", "crt", "rare"), ("crt_ghost_ms", "crt", "ghost_ms"),
     ("crt_motifs", "crt", "motifs"),
     ("crt_water", "crt", "water"), ("crt_water_amp", "crt", "water_amp"),
     ("crt_camera", "crt", "camera"), ("crt_section_zoom", "crt", "section_zoom"), ("crt_quality", "crt", "quality"),

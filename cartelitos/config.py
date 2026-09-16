@@ -147,6 +147,12 @@ _CONFIG_COMMENTS = {
                 "           a drawing per line, a break per beat\n"
                 "It is a budget, not a speed: nothing gets slower, things just\n"
                 "stop happening on top of each other",
+        "rare": "how often a whole screen gets hijacked by something odd instead\n"
+                "of its usual drawing: a fake blue-screen crash with the playing\n"
+                "line inside it, a NO SIGNAL that returns on its own, or a test\n"
+                "card forced awake. Only ever one at a time, never the screen in\n"
+                "focus unless it is the crash. A multiplier on `pace`'s own rare\n"
+                "budget: 1 = normal, 2 = about twice as often, 0 = never",
         "ghost_ms": "milliseconds the previous line stays burnt on the screen\n"
                     "behind the new one. It drops fast and finishes soft, so the\n"
                     "old verse stops competing halfway through. 0 = no ghost",
@@ -318,7 +324,7 @@ DEFAULTS = {
         "set": "track", "intro": True, "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
-        "pace": "normal", "ghost_ms": 550,
+        "pace": "normal", "rare": 1, "ghost_ms": 550,
         "iown": True, "foreshadow": True, "ring": True, "ring_gap": 10,
         "hop": "both",
         "motifs": True,

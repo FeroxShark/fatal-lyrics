@@ -144,6 +144,9 @@ ShellRoot {
             motifScale: 0.012, motifOpaMin: 0.86, motifOpaSpan: 0.10,
             driveMin: 0.80, driveMax: 1.60, driveDrop: 2.20, surgeK: 0.35,
             sceneGapMs: 20000,
+            // corrida 7: chance por verso de un raro (bsod/nosignal/testcard)
+            // y el piso entre dos raros, en ms
+            rarePerLine: 1 / 600, rareGapMs: 180000,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -152,6 +155,7 @@ ShellRoot {
             motifScale: 0.020, motifOpaMin: 0.80, motifOpaSpan: 0.15,
             driveMin: 0.70, driveMax: 2.00, driveDrop: 3.00, surgeK: 0.50,
             sceneGapMs: 12000,
+            rarePerLine: 1 / 400, rareGapMs: 120000,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -167,9 +171,14 @@ ShellRoot {
             // sceneGapMs en 0 = la sección cambia la máscara apenas se
             // mueve, como el resto de `wild` (sin portero)
             sceneGapMs: 0,
+            rarePerLine: 1 / 150, rareGapMs: 30000,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
+    // multiplicador de `pace.rarePerLine` (perilla `crt.rare`, tanda 6,
+    // corrida 7): 0 = nunca, 1 = normal, 2 = el doble de seguido. El sorteo y
+    // el estado viven en `crtRare` más abajo (corrida 7, paso 3)
+    property real crtRareMult: 1
     // cuánto queda quemado el verso viejo detrás del nuevo (perilla `ghost_ms`)
     property int crtGhostMs: 550
 
@@ -2716,7 +2725,7 @@ ShellRoot {
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
         crt_ring_gap: "crtRingGap", crt_hop: "crtHopMode",
-        crt_pace: "crtPace", crt_ghost_ms: "crtGhostMs",
+        crt_pace: "crtPace", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
         crt_motifs: "crtMotifs", crt_camera: "crtCamera",
         crt_section_zoom: "crtSectionZoom", crt_quality: "crtQuality",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",

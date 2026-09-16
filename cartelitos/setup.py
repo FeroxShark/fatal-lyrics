@@ -294,6 +294,11 @@ SETTINGS = [
             ("calm: a drawing every 20 s, breaks are rare", "calm"),
             ("normal: a drawing every 12 s, a break every 4 s at most", "normal"),
             ("wild: a drawing per line, a break per beat (the old tube)", "wild")], c)),
+    ("rare", "crt", "How often a screen goes odd (crash/no signal/test card)",
+     lambda c: _ask_num("How often a screen gets hijacked by a fake crash, a "
+                        "NO SIGNAL or a test card instead of its usual drawing "
+                        "(0 = never, 1 = normal, 2 = about twice as often)",
+                        c, 0.0, 2.0)),
     ("ghost_ms", "crt", "Milliseconds the old line stays burnt",
      lambda c: _ask_int("Milliseconds the previous line stays burnt behind the "
                         "new one (0 = no ghost)", c, 0, 3000)),

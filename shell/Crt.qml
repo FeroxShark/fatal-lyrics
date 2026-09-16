@@ -534,7 +534,12 @@ PanelWindow {
 
     function dueFrac(i) {
         const lw = lineWords;
-        if (lw)
+        // T6 corrida 6, paso 3: con el Flow del allMode nuevo, `i` puede
+        // llegar de un delegate que todavía no se desmontó mientras
+        // `myWords`/`lineWords` ya cambiaron de largo (carrera Repeater vs
+        // binding) — antes nunca pasaba porque el director nunca tenía
+        // `lineWords` no nulo (exige `allMode`). `lw[i]` puede faltar.
+        if (lw && lw[i])
             return ctl.karaokeFracAt(ctl.crtLine.t0 || 0, ctl.crtLine.t1 || 0, lw[i][0]);
         const n = myWords.length;
         if (n <= 1)
@@ -1433,11 +1438,13 @@ PanelWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
 
-                // modo viejo (focus = "all"): la línea entera, iluminándose
+                // modo viejo (split): la línea partida, coloreándose de a
+                // pedazo — acá el índice de `myWords` no es el de la línea,
+                // así que `crtLine.words`/`dueFrac` no cierran (docs/TRAMPAS.md).
                 Text {
                     id: wholeLine
                     anchors.fill: parent
-                    visible: crt.allMode
+                    visible: crt.allMode && crt.layout === "split"
                     text: {
                         let out = "";
                         for (let i = 0; i < crt.myWords.length; i++) {
@@ -1456,6 +1463,44 @@ PanelWindow {
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                }
+
+                // T6 corrida 6, paso 3: allMode sin split — la línea entera,
+                // palabra por palabra, con el mismo `WordSlot` del director.
+                // `landed` usa la misma fórmula que el director (`dueFrac`,
+                // que ya elige tiempos reales de `crtLine.words` cuando hay,
+                // y si no el reparto por largo — TRAMPAS.md) así que la
+                // palabra que suena queda igual de definida acá que allá.
+                Flow {
+                    id: wholeWords
+                    anchors.centerIn: parent
+                    width: parent.width
+                    visible: crt.allMode && crt.layout !== "split"
+                    spacing: Math.round(measure.fontInfo.pixelSize * 0.3)
+
+                    Repeater {
+                        id: wholeWordsRepeater
+                        model: (crt.allMode && crt.layout !== "split") ? crt.myWords : []
+
+                        WordSlot {
+                            id: wholeSlot
+                            required property string modelData
+                            word: modelData
+                            landed: crt.burnMode
+                                ? (index < crt.burnStep || crt.reveal >= 1)
+                                : crt.reveal >= crt.dueFrac(index)
+                            pal: crt.pal
+                            fontFamily: crt.lyricFont
+                            letterSpacing: crt.lyricLetterSpacing
+                            pixelSize: measure.fontInfo.pixelSize
+                            flash: crt.ctl.crtWordFlash
+                            entryStyle: crt.entryStyle
+                            emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
+                            suppressEmphasis: !crt.emphasisGateOpen
+                                || crt.tubeDark || crt.ctl.crtIntroOn
+                            onOverburnHit: crt.burnFlash()
+                        }
+                    }
                 }
 
                 // modo director: una palabra por vez, apareciendo

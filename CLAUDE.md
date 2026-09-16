@@ -145,7 +145,15 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   pantalla) que reparten SIN repetir de los 4 kinds del set hasta agotarse y recién ahí
   rebarajan (`crt: bag refill [...]` en el log); se vacían en el `clear` de tema. Con
   `crt.set = "off"` vuelve el sorteo plano de siempre (`motifPool`/`crtEntryTable`). Una
-  palabra clave de `motifWords` sigue pudiendo forzar un motif de afuera del set.
+  palabra clave de `motifWords` sigue pudiendo forzar un motif de afuera del set. El `mood`
+  (corrida 3) mueve la cuota de `motifGroups` calm/hot/neutral y la familia de entrada según
+  energy/valence — se congela una sola vez por tema en `crtMoodLocked` (primer verso), y no
+  toca el esquema de color si la tapa ya lo puso (`crtPalette = "album"`).
+- `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright
+  determinísticos (léxico chico es/en para valence, rms absoluto calibrado contra `~/.cache/
+  cartelitos/audio` para energy, sin red ni IA — `feedback_ia_sin_creditos`). El daemon lo manda
+  por el socket como evento `mood`, hasta dos veces por tema (al juntar la letra, y de nuevo si
+  el compás se asienta después).
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de

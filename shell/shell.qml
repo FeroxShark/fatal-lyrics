@@ -522,6 +522,100 @@ ShellRoot {
         }
     }
 
+    // tanda 6, corrida 5: el cambio de tema es un evento propio, no un
+    // channel-change disimulado. "" = no hay intro en curso; "off" = los
+    // tubos recién se apagaron; "static" = ruido mientras se espera el
+    // `np` del tema nuevo; "card" = título/artista en UNA pantalla. UN
+    // timer del root reprogramado por fase (mismo patrón que
+    // `crtRelightTimer`/`crtSceneOutroTimer`), nunca uno por pantalla.
+    property string crtIntroPhase: ""
+    property int crtIntroScreen: -1
+    readonly property bool crtIntroOn: crtIntroPhase !== ""
+
+    Timer {
+        id: crtIntroTimer
+        repeat: false
+        onTriggered: root.crtIntroAdvance()
+    }
+
+    // arranca SÓLO con el `clear` de tema real (why === "track" o
+    // ausente); seek/pause no reinician nada acá, igual que no
+    // resortean `crtTrackSeed`.
+    function crtIntroStart() {
+        if (!crtOn || !crtIntro)
+            return;
+        crtIntroTimer.stop();
+        console.log("crt: intro start");
+        crtIntroPhase = "off";
+        crtIntroScreen = -1;
+        crtSetDark(-1, true);
+        crtIntroTimer.interval = Motion.tubeOffMs;
+        crtIntroTimer.restart();
+    }
+
+    function crtIntroAdvance() {
+        if (crtIntroPhase === "off") {
+            crtIntroPhase = "static";
+            crtSetDark(-1, false);
+            crtIntroTimer.interval = Motion.introStaticMs;
+            crtIntroTimer.restart();
+        } else if (crtIntroPhase === "static") {
+            // el `np` todavía no llegó (raro: sólo si `now_playing` está
+            // apagado) — no hay título que poner en la tarjeta, se sigue
+            // esperando en vez de mostrar una tarjeta vacía
+            if (npTitle === "") {
+                crtIntroTimer.interval = Motion.introStaticMs;
+                crtIntroTimer.restart();
+                return;
+            }
+            crtIntroPhase = "card";
+            // la tarjeta es uno de los TRES lugares que congelan el mood
+            // del tema (corrida 3): si ya se congeló (tema repetido tras
+            // pausa/seek) no lo toca, pero si es la primera vez que este
+            // tema muestra algo, la tarjeta fija el mood ANTES que el
+            // primer verso — así `crtSet` no le cambia el color/fuente
+            // por debajo cuando `show()` haga su propio freeze (no-op)
+            if (crtMoodLocked === null)
+                crtMoodLocked = crtMood;
+            const n = activeCrtScreens.length;
+            const focus = (crtShot && crtShot.focus >= 0 && crtShot.focus < n)
+                ? crtShot.focus : Math.floor((n - 1) / 2);
+            crtIntroScreen = focus;
+            console.log("crt: intro card \"" + npTitle + "\" screen=" + focus);
+            crtIntroTimer.interval = Motion.introCardMs;
+            crtIntroTimer.restart();
+        } else if (crtIntroPhase === "card") {
+            crtIntroEnd();
+        }
+    }
+
+    // fin natural (se agotó `introCardMs` sin que llegara el primer
+    // verso todavía): no hay `sec` real todavía, así que la máscara de
+    // la corrida 4 no tiene con qué decidir — todas las pantallas vivas,
+    // y el primer verso arma la escena de cero como siempre.
+    function crtIntroEnd() {
+        crtIntroTimer.stop();
+        crtIntroPhase = "";
+        crtIntroScreen = -1;
+        console.log("crt: intro end");
+        if (crtOn) {
+            crtSetDark(-1, false);
+            crtMotifRefresh(true);
+        }
+    }
+
+    // el primer verso llegó ANTES de que la tarjeta termine su tiempo:
+    // la letra manda, la ceremonia se corta. `show()` se encarga de
+    // prender lo que haga falta (la misma regla "la letra prende el
+    // tubo" de siempre) y de aplicar escena/motivo con los datos reales
+    // apenas termina esta función.
+    function crtIntroSkip() {
+        crtIntroTimer.stop();
+        crtIntroPhase = "";
+        crtIntroScreen = -1;
+        console.log("crt: intro skipped (lyric first)");
+    }
+
     // ---- el aro: en qué pantalla está, ahora mismo (-1 = en ninguna)
     //
     // El enganche vive ACÁ y no en Crt.qml por dos razones. Una: `show()` le
@@ -2364,6 +2458,19 @@ ShellRoot {
         // primer verso después de un clear = tema nuevo: ahí el cambio de canal
         // va siempre, no por sorteo. Se mira ANTES de pisar la línea vieja.
         crtTrackStart = (crtLine.text || "") === "";
+        // tanda 6, corrida 5: el intro (estática + tarjeta) del cambio de
+        // tema. Se captura ANTES de tocar `crtIntroPhase`: el `chan` de
+        // más abajo necesita saber si la ceremonia estaba corriendo para
+        // ESTE `show`, no si sigue corriendo después de que la termine.
+        const introWasOn = crtIntroOn;
+        if (crtTrackStart && (crtIntroPhase === "off" || crtIntroPhase === "static"))
+            // el primer verso llegó mientras todavía era estática (o ni
+            // eso): no hubo tiempo de mostrar título/artista, se lo salta
+            crtIntroSkip();
+        else if (crtTrackStart && crtIntroPhase === "card")
+            // la tarjeta ya estaba puesta: el verso la corta, no espera
+            // a que se cumpla `introCardMs`
+            crtIntroEnd();
         // el set se congela con lo PRIMERO que haya de mood: el evento
         // `mood` de este tema si ya llegó, o el default si todavía no (un
         // `clear` de pausa/rebobinado puede volver a poner `crtTrackStart`
@@ -2449,8 +2556,11 @@ ShellRoot {
         // pone el portero, que es lo único que sabe cuánto hace que la pared
         // no cambia de canal. El tema nuevo pasa siempre.
         crtRingWas = ringScreen;
+        // tanda 6, corrida 5: si la ceremonia del intro ya corrió para
+        // este tema, el channel-change forzado de siempre sería una
+        // segunda "llegó el tema nuevo" pisando la primera — se suprime
         if (shot.chan)
-            crtChanFire(crtTrackStart);
+            crtChanFire(crtTrackStart && !introWasOn);
         // el registro del "anterior" se acumula: una pantalla que esta vez no
         // mostró nada conserva el estilo con el que entró la última vez que sí
         const seen = {};
@@ -2657,12 +2767,16 @@ ShellRoot {
                             // canal, no lo hace otra vez.
                             const secMoved = root.audSection !== ev.kind;
                             root.audSection = ev.kind;
-                            if (root.crtOn && secMoved)
+                            // tanda 6, corrida 5: con el intro corriendo
+                            // ninguno de los dos toca canal ni máscara —
+                            // se encolan (al `intro end` se aplica UNA vez
+                            // la máscara vigente con la sección ya puesta)
+                            if (root.crtOn && secMoved && !root.crtIntroOn)
                                 root.crtChanFire(false);
                             // tanda 6, corrida 4: la sección también decide
                             // qué pantallas viven; el drop pasa el portero
                             // siempre (`force`), es cambio de escena
-                            if (root.crtOn && secMoved)
+                            if (root.crtOn && secMoved && !root.crtIntroOn)
                                 root.crtSceneApply(ev.kind, ev.kind === "drop", root.crtShot.focus);
                             root.audPct = ev.p;
                             // cambiar de parte cambia el dibujo y el reparto de
@@ -2683,7 +2797,7 @@ ShellRoot {
                             // puente y todo.
                             if (root.motifPreCued)
                                 root.motifPreCued = false;
-                            else
+                            else if (!root.crtIntroOn)
                                 root.crtMotifRefresh(ev.kind === "drop" && secMoved);
                         } else if (ev.cmd === "bpm") {
                             root.bpm = ev.v;
@@ -2702,7 +2816,10 @@ ShellRoot {
                             // de dibujo y la cámara empieza a acercarse ANTES.
                             if (ev.kind === "drop") {
                                 root.motifGen++;
-                                root.crtMotifRefresh(true);
+                                // tanda 6, corrida 5: se encola, igual que
+                                // `sec` — el intro no se pisa con un drop
+                                if (!root.crtIntroOn)
+                                    root.crtMotifRefresh(true);
                                 root.motifPreCued = true;
                                 root.cueGen++;
                             }
@@ -2796,6 +2913,10 @@ ShellRoot {
                                 crtSceneOutroTimer.queue = [];
                                 root.crtSceneOutroOn = false;
                                 root.crtLastSceneAt = 0;
+                                // tanda 6, corrida 5: el cambio de tema es
+                                // un evento en sí mismo, no un channel-change
+                                // disimulado — ver `crtIntroStart`
+                                root.crtIntroStart();
                             }
                             // otro tema: la letra y todo lo anticipado sobre la
                             // anterior no valen nada. Sin esto los pedazos del

@@ -2870,6 +2870,32 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertEqual(modes, picked,
                          "el menú y crtPaceTable no ofrecen los mismos modos")
 
+    def test_every_face_has_the_five_colour_keys(self):
+        # T7.0: ninguna cara traía `tint`, así que el uniform del shader quedaba
+        # en cero (halo del bloom, barra que rueda y tinte de la rotura muertos).
+        # Toda cara — scheme a/b, criticalFace y las dos ramas de faceFromColor —
+        # tiene que traer las cinco claves.
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        keys = {"bg", "ink", "hot", "dim", "tint"}
+
+        def faces(text):
+            return [set(re.findall(r"\b(bg|ink|hot|dim|tint):", body))
+                    for body in re.findall(r"\{([^{}]*)\}", text)]
+
+        schemes = re.search(r"readonly property var schemes: \[(.*?)\n    \]", qml, re.S)
+        self.assertIsNotNone(schemes, "no se encontró schemes en shell.qml")
+        found = re.findall(r"\b[ab]: (\{[^{}]*\})", schemes.group(1))
+        self.assertEqual(len(found), 12, "schemes: 6 esquemas x 2 caras")
+        critical = re.search(r"readonly property var criticalFace: \((\{[^{}]*\})\)", qml)
+        self.assertIsNotNone(critical, "no se encontró criticalFace en shell.qml")
+        fn = re.search(r"function faceFromColor\(.*?\n    \}\n", qml, re.S)
+        self.assertIsNotNone(fn, "no se encontró faceFromColor en shell.qml")
+        derived = re.findall(r"return (\{[^{}]*\});", fn.group(0))
+        self.assertEqual(len(derived), 2, "faceFromColor: cara prendida y oscura")
+        for face in found + [critical.group(1)] + derived:
+            self.assertEqual(faces(face), [keys], face)
+
     def test_a_channel_change_is_rare_by_default(self):
         # T4.3: 0.25 era un cambio de canal cada cuatro versos — con doce
         # versos por minuto, uno cada quince segundos. El presupuesto lo baja

@@ -77,6 +77,11 @@ What the tube does:
   screen, which is what thins the letters on a real tube), the raster is combed
   by scanlines that crawl, and an aperture-grille triad breaks every pixel into
   R/G/B — text never looks clean, exactly like a real tube.
+- **Pick your tube**: `crt.tube` swaps the whole glass for a different CRT — `trinitron`
+  (fine aperture grille), `pvm` (dot-mask broadcast monitor), `arcade` (coarse slot mask, saturated,
+  curved), or the monochrome `green` and `amber` phosphors (colour collapses to a single tint,
+  no RGB mask). `custom` (default) keeps the individual knobs below; every other tube ignores
+  them. `auto` picks a colour tube per song.
 - **The picture comes down a cable**: before the glass, a composite-video pass
   (`composite`) bleeds the colour sideways, rings and crawls on the edges, and at
   the top of its range turns into a worn VHS — colour lagging behind, snow at
@@ -522,6 +527,7 @@ because there is nothing to install.
 | `crt`      | `intensity`          | How restless the tube is: signal breaks, how hard beats shake it, static (`0` = dead still) | `0.45` |
 | `crt`      | `word_flash`         | How much each word jolts as it lands — flash, colour ghosts and size kick (`0` = word just appears, `1` = lands white and shaking) | `0.3` |
 | `crt`      | `flicker`            | How hard the picture beats with the music on peaks (`0` = nothing moves with the volume) | `0.25` |
+| `crt`      | `tube`               | Which CRT: `custom` (use the knobs below), `trinitron`, `pvm`, `arcade`, `green`, `amber`, or `auto` (a colour tube per song) | `"custom"` |
 | `crt`      | `curvature`          | Tube glass curvature (`0` = flat panel)                             | `1.0`       |
 | `crt`      | `scanlines`          | Depth of the horizontal comb                                        | `0.5`       |
 | `crt`      | `chroma`             | Steady RGB misalignment                                             | `0.6`       |

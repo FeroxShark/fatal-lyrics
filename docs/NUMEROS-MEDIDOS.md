@@ -33,6 +33,20 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   es que el túnel ahora evalúa la pared DOS veces (el barrido del drop), y es uno de los tres
   motivos que el aparejo fuerza. Es el número vigente; falta re-medirlo en frío sin el aparejo
   forzando motivos caros (pendiente, ver abajo).
+- **Base de la tanda 7 (corrida 0, 2026-09-25, con el `tint` ya conectado; Spotify PARADO,
+  tres monitores, `docs/plans/cpu-bench.py --scenario X`, ocho muestras de 8 s, `quality` 1.0):**
+  - `techo` (el aparejo de siempre: motivos forzados, `focus = all`, verso cada 2 s):
+    **25-28%, media 27.4%**.
+  - `normal` (verso cada 4 s, sin motivos forzados, `focus` y cámara de fábrica, `aud` a 15 Hz
+    y `pos` cada 1 s): **28-32%, media 29.8%**. Con `--quality 0.75`: 27-32%, media 28.9%
+    — el corte de calidad apenas mueve la aguja, así que el costo no está en la textura.
+  - `pausa` (letra puesta, sin `aud` ni `pos`): **24-25%, media 24.5%**. Es la mayor parte del
+    costo: en pausa el tubo sigue dibujando a pleno (`FrameAnimation` sin tope, timer `pump`
+    de 70 ms; ver el plan de la tanda 7, corrida 8).
+  - Ojo: `normal` sale MÁS caro que `techo`. No es error de la medición (dos corridas
+    coinciden dentro de un par de puntos): el `aud` a 15 Hz y el `focus = roam` cuestan más que
+    los motivos forzados. Estos tres son el número contra el que cada corrida de la tanda 7
+    puede sumar como máximo +3 puntos. Ruido de la máquina: ~±2 puntos entre corridas.
 - **`ENERGY_GAIN_REF` (mood.py), medido en vivo el 2026-09-16:** ganancia lineal real 0.064,
   de Spotify con el stream al 40% (`0.40**3` — la escala de PipeWire/pactl es CÚBICA, no
   lineal, ver docs/TRAMPAS.md) sobre el sink de Ferox (Kingston HyperX USB, `HW_VOLUME_CTRL`:

@@ -3104,6 +3104,11 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertRegex(qml, r"recursive:\s*crt\.trailOn")
         self.assertRegex(qml, r"property variant prev:\s*crt\.trailOn \? signalTex : stageTex")
         self.assertRegex(qml, r"property real dt:\s*crt\.trailDt")
+        # `dt` sale de los cuadros de la ventana, no del reloj de animaciones (16 ms para
+        # las tres pantallas aunque una vaya a 144 y otra a 60: la estela caía 3x más rápido)
+        self.assertRegex(qml, r"onFrameSwapped\(\)")
+        self.assertRegex(qml, r"crt\.trailDt\s*=\s*Math\.max\(")
+        self.assertNotRegex(qml, r"crt\.trailDt\s*=\s*Math\.min\(frameTime")
 
     @staticmethod
     def _trail_curve(persist, dt, channel, frag):

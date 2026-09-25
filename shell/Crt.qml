@@ -2256,12 +2256,28 @@ PanelWindow {
         && !deepSleep && ctl.crtQuality >= 0.999
     onTrailOnChanged: console.log("crt: trail " + idx + (trailOn ? " on " + ctl.tubePersistence : " off"))
     // el decay es por segundo, no por cuadro: el tiempo REAL desde el último
-    // cuadro (a 144 Hz un factor por cuadro duraría la mitad). `tubeTime` no
+    // cuadro de ESTA ventana (a 144 Hz un factor por cuadro duraría la mitad). `tubeTime` no
     // sirve, avanza a saltos fijos en el instrumental
     property real trailDt: 1 / 60
-    FrameAnimation {
-        running: crt.trailOn
-        onTriggered: crt.trailDt = Math.min(frameTime, 0.1)
+    // (Con la estela el source recursivo vuelve a dibujar en cada cuadro de ESTA ventana:
+    // 144, 120 y 60 por segundo en las tres pantallas de Ferox, mientras el reloj de las
+    // animaciones marca 16 ms para todas. Por eso `dt` sale de los `frameSwapped` de la
+    // ventana, promediados cada 250 ms, y no de un `FrameAnimation`.)
+    Connections {
+        target: crt.contentItem.Window.window
+        enabled: crt.trailOn
+        property int swaps: 0
+        property double since: 0
+        function onFrameSwapped() {
+            swaps++;
+            const now = Date.now();
+            if (since === 0 || now - since > 1000) {   // el primero, o volvió de una pausa
+                since = now; swaps = 0;
+            } else if (now - since >= 250) {
+                crt.trailDt = Math.max(0.002, Math.min((now - since) / 1000 / swaps, 0.1));
+                since = now; swaps = 0;
+            }
+        }
     }
     // cara clara = tinta más oscura que el fondo: la estela gira (min en vez de max)
     property color trailBgFace: crt.pal.bg

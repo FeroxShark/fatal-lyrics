@@ -23,9 +23,14 @@ layout(std140, binding = 0) uniform buf {
     vec2 res;         // surface size in pixels
     float glitch;     // 0..1 burst
     float quality;    // crtQuality: below 1 the chroma low-pass drops to 3 taps
+    float persist;    // phosphor persistence 0..1 (0 = no trail, `prev` is not read)
+    float dt;         // real seconds since the last time this pass drew
+    float light;      // 1 = dark ink on a light face, 0 = light ink on a dark one
+    vec4 bg;          // the face background, as it is right now
 };
 
 layout(binding = 1) uniform sampler2D src;
+layout(binding = 2) uniform sampler2D prev;   // this pass's own last frame
 
 float hash21(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -48,13 +53,11 @@ vec3 toRgb(vec3 q) {
                 q.x - 1.106 * q.y + 1.703 * q.z);
 }
 
-void main() {
-    vec2 uv = qt_TexCoord0;
+// The signal as it comes off the cable, before the phosphor remembers it.
+vec3 signalRgb(vec2 uv) {
     // clean RGB: the pass is a texel-for-texel copy
-    if (composite < 0.001) {
-        fragColor = texture(src, uv);
-        return;
-    }
+    if (composite < 0.001)
+        return texture(src, uv).rgb;
 
     // `composite` is 0..1; the TV half of the range is 0..0.6 (k goes 0..1)
     // and the worn-out tape is 0.6..1 (v goes 0..1, on top of a full k)
@@ -126,5 +129,41 @@ void main() {
     y += head * (hash21(pix + floor(t * 30.0)) - 0.5) * 0.7;
 
     vec3 rgb = toRgb(vec3(y, mix(q0.yz, iq, k)));
+    return clamp(rgb, 0.0, 1.0);
+}
+
+// Phosphor persistence. What glows keeps glowing for a moment after the signal
+// stops asking for it, and it fades per channel: green lasts longest, red and
+// blue two thirds of that. `out = max(signal, prev * decay)`, with three details
+// that are not optional:
+//  - decay is per SECOND (exp2(-dt / halfLife)), not per frame: at 144 Hz a
+//    per-frame factor would last half as long as at 60.
+//  - a linear step is subtracted on top of the exponential. The texture is 8
+//    bit: 1/255 * 0.9 rounds back to 1/255 and never leaves, so a pure
+//    exponential parks a permanent smudge on the glass; and the exponential
+//    alone needs ~8 half lives to reach 1/255 (700 ms at 90), which is longer
+//    than a Motion.enterMs. The step is sized so that a full-white trail is
+//    gone by TRAIL_KILL_S, and never under 1.5/255 per frame.
+//  - a light face (dark ink) is the same thing turned around: what "glows" is
+//    the ink, darker than the background, so the trail is min() and it decays
+//    toward the background. Plain max() there would keep the bright background
+//    on top of every new letter and fade it in.
+const float TRAIL_KILL_S = 0.28;   // < Motion.enterMs (0.32)
+const float TRAIL_HALF_S = 0.25;   // green half life at persistence = 1
+
+void main() {
+    vec2 uv = qt_TexCoord0;
+    vec3 rgb = signalRgb(uv);
+    if (persist > 0.001) {
+        vec3 half_life = vec3(2.0 / 3.0, 1.0, 2.0 / 3.0) * (persist * TRAIL_HALF_S);
+        vec3 d = exp2(-dt / half_life);
+        vec3 e = exp2(-TRAIL_KILL_S / half_life);
+        vec3 lin = max(e / (1.0 - e) * 0.6931 / half_life * dt, vec3(1.5 / 255.0));
+        // `prev` is read at the raw uv: the VHS tracking must not drag the trail
+        vec3 p = texture(prev, uv).rgb;
+        vec3 dark = max(rgb, p * d - lin);
+        vec3 lite = min(rgb, bg.rgb - (bg.rgb - p) * d + lin);
+        rgb = mix(dark, lite, light);
+    }
     fragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
 }

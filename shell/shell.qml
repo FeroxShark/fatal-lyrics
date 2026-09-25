@@ -96,6 +96,11 @@ ShellRoot {
     property real crtNoise: 0.5
     property real crtComposite: 0.5    // 0 = RGB limpio .. 1 = VHS gastado (signal.frag)
     onCrtCompositeChanged: console.log("crt: composite " + crtComposite)
+    // tanda 7, corrida 3: la estela del fósforo (`signal.frag`). 0 = ninguna. La
+    // vida media del verde es persistence * 250 ms (0.35 -> 87 ms) y nunca pasa
+    // de un `Motion.enterMs`; ver el comentario del shader
+    property real crtPersistence: 0.35
+    onCrtPersistenceChanged: console.log("crt: persistence " + crtPersistence)
     property real crtRoll: 1.0
     property real crtVignette: 0.9
     // tanda 7, corrida 2: el carácter del tubo en una sola perilla. `custom` =
@@ -189,7 +194,7 @@ ShellRoot {
     //   maskPitch: píxeles por tríada RGB — la de siempre es 3
     //   mono: 1 = un solo fósforo de color `monoTint` (verde P1, ámbar P3)
     //   composite: cuánto viaja por cable (`signal.frag`); persistence: la estela
-    //   del fósforo, que lee la corrida 3
+    //   del fósforo (`signal.frag`, corrida 3)
     // `null` = "leer la perilla suelta": sólo `custom` lo usa, y ahí es el
     // comportamiento de antes, bit a bit. Con cualquier otro tubo las perillas de
     // aspecto se ignoran; siguen mandando `intensity`, `quality` y `flicker`.
@@ -259,6 +264,7 @@ ShellRoot {
     readonly property real tubeRoll: crtTubeRow.roll !== null ? crtTubeRow.roll : crtRoll
     readonly property real tubeVignette: crtTubeRow.vignette !== null ? crtTubeRow.vignette : crtVignette
     readonly property real tubeComposite: crtTubeRow.composite !== null ? crtTubeRow.composite : crtComposite
+    readonly property real tubePersistence: crtTubeRow.persistence !== null ? crtTubeRow.persistence : crtPersistence
     readonly property real tubeMaskType: crtTubeRow.maskType
     readonly property real tubeMaskPitch: crtTubeRow.maskPitch
     readonly property real tubeMono: crtTubeRow.mono
@@ -3031,6 +3037,7 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
+        crt_persistence: "crtPersistence",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",

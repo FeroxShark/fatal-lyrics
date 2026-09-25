@@ -1213,6 +1213,7 @@ PanelWindow {
         // el vidrio (`crt.frag`).
 
         Rectangle {
+            id: stageBg
             anchors.fill: parent
             color: crt.pal.bg
             // El contagio se ve, pero no se dispara. Las dos caras de la paleta
@@ -2245,12 +2246,40 @@ PanelWindow {
                              Math.max(1, Math.round(crt.height * crt.ctl.crtQuality)))
     }
 
+    // La estela (corrida 3): `signalTex` es RECURSIVO y vuelve a `signalPass` como
+    // `prev`. Un source vivo y recursivo re-renderiza en CADA cuadro (no hay forma
+    // de que descanse), por eso sólo lo está mientras hay estela que dibujar: con
+    // persistence 0, en `deepSleep` y con `crtQuality < 1` (la pantalla ya va
+    // lenta) queda un source común y `prev` apunta a otra textura para no leerse
+    // a sí misma.
+    readonly property bool trailOn: visible && ctl.tubePersistence > 0.001
+        && !deepSleep && ctl.crtQuality >= 0.999
+    onTrailOnChanged: console.log("crt: trail " + idx + (trailOn ? " on " + ctl.tubePersistence : " off"))
+    // el decay es por segundo, no por cuadro: el tiempo REAL desde el último
+    // cuadro (a 144 Hz un factor por cuadro duraría la mitad). `tubeTime` no
+    // sirve, avanza a saltos fijos en el instrumental
+    property real trailDt: 1 / 60
+    FrameAnimation {
+        running: crt.trailOn
+        onTriggered: crt.trailDt = Math.min(frameTime, 0.1)
+    }
+    // cara clara = tinta más oscura que el fondo: la estela gira (min en vez de max)
+    property color trailBgFace: crt.pal.bg
+    property color trailInkFace: crt.pal.ink
+    readonly property real trailLight: (0.299 * trailBgFace.r + 0.587 * trailBgFace.g + 0.114 * trailBgFace.b)
+        - (0.299 * trailInkFace.r + 0.587 * trailInkFace.g + 0.114 * trailInkFace.b) > 0.1 ? 1 : 0
+
     ShaderEffect {
         id: signalPass
         anchors.fill: parent
         visible: false
         blending: false
         property variant src: stageTex
+        property variant prev: crt.trailOn ? signalTex : stageTex
+        property real persist: crt.trailOn ? crt.ctl.tubePersistence : 0
+        property real dt: crt.trailDt
+        property real light: crt.trailLight
+        property color bg: stageBg.color
         property real t: crt.tubeTime
         property real composite: crt.ctl.tubeComposite
         property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
@@ -2264,6 +2293,7 @@ PanelWindow {
         sourceItem: signalPass
         visible: false
         smooth: false
+        recursive: crt.trailOn
         live: crt.visible
         textureSize: stageTex.textureSize
     }

@@ -156,7 +156,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `words` confiable por pantalla, `docs/TRAMPAS.md`). `emphasisGateOpen` suprime el pulso de
   una palabra si le toca dentro de `Motion.enterMs` de la entrada de la línea — la regla de no
   superponer animaciones. El auto-drop de calidad en vivo (`FrameAnimation`, frame > 28ms por
-  3s → `crtQuality` a 0.75 sin recuperación en la sesión) apaga este `Flow` sin avisar.
+  3s → `crtQuality` a 0.75; sube de vuelta tras 28 s sanos, hasta el techo del TOML) apaga
+  este `Flow` mientras dura, sin avisar.
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
   `crt.rare`, tanda 6, corrida 7) — eventos raros: `bsod` (pantalla azul de cero en `Crt.qml`,
   sin nada del modo Win95, fondo `#0000aa` y el verso en la fuente del set), `nosignal`
@@ -164,7 +165,6 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   sorteo nunca cae en intro ni en pantalla oscura. `motifs.py` (`parse_rare`) + `fatal crt
   rare <kind> [--screen ...]` fuerza uno por socket.
   `dialog` (el raro sobre el modo Win95) queda fuera de esta tanda.
-  3s → `crtQuality` a 0.75 sin recuperación en la sesión) apaga este `Flow` sin avisar.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

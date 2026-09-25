@@ -94,6 +94,7 @@ ShellRoot {
     property real crtChroma: 1.0
     property real crtBloom: 1.0
     property real crtNoise: 0.5
+    property real crtComposite: 0.0    // 0 = RGB limpio .. 1 = VHS gastado (signal.frag)
     property real crtRoll: 1.0
     property real crtVignette: 0.9
     property real crtIntensity: 1.0

@@ -1207,73 +1207,9 @@ PanelWindow {
         id: stage
         anchors.fill: parent
 
-        // T5.3: modo karaoke. El tubo no se apaga (eso es el colapso, y deja la
-        // ventana muerta): se queda OSCURO, esperando. No es standby — standby
-        // dice "NO SIGNAL", que es la señal equivocada: acá hay señal, falta la
-        // voz. El shader ya multiplica todo por qt_Opacity, así que oscurecer
-        // el `stage` entero apaga también la estática y el fósforo.
-        opacity: crt.ctl.singGlow
-
-        // el FBO sólo existe mientras el tubo se ve, y se dibuja a menos
-        // resolución de la que sale: el shader después le pasa curvatura, bloom
-        // y grilla de fósforo por arriba, así que la diferencia no se ve — y sí
-        // se nota en lo que cuesta tener tres pantallas enteras corriendo
-        layer.enabled: crt.visible
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * crt.ctl.crtQuality)),
-                                   Math.max(1, Math.round(height * crt.ctl.crtQuality)))
-        layer.samplerName: "src"
-        layer.effect: ShaderEffect {
-            blending: false
-            property real t: crt.tubeTime
-            property real curvature: crt.ctl.crtCurvature
-            property real scanline: crt.ctl.crtScanlines
-            // `intensity` es la perilla única: mueve el ruido, la separación de
-            // canales y la barra que rueda, además de los golpes de glitch
-            // x4 los tres cuadros en que la franja del salto pasa por acá
-            property real chroma: crt.ctl.crtChroma * (0.45 + 0.55 * crt.rest)
-                * crt.hopChroma
-            // el fósforo late con la música; en la pantalla apagada se va a cero
-            // y el shader se saltea las ocho muestras del bloom
-            // el overburn multiplica el fósforo por tres mientras la palabra
-            // está blanca: es lo que hace que se lea como quemada y no como
-            // una palabra clara
-            property real bloom: crt.showsText
-                ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt)
-                    * (1 + 2 * crt.burnGlow) : 0
-            // el cambio de canal se lleva puesta la perilla: la estática de la
-            // transición no es "ruido de fondo", es la pantalla sin señal
-            // tubo apagado (tanda 6, corrida 0): un resto de ruido de fósforo
-            // al 3 %, no el negro absoluto — así se lee "tubo apagado" y no
-            // "monitor desenchufado". Pisa todo lo demás: no hay standby ni
-            // cambio de canal sobre una pantalla oscura.
-            property real noiseAmt: crt.tubeDark ? crt.ctl.crtNoise * 0.06
-                : crt.chanNoise > 0 ? 1
-                : crt.deepSleep ? 0
-                : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
-                * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
-            property real tubeLevel: crt.tubeLevel
-            property real glitch: Math.min(crt.glitchAmt, 1)
-            // La barra que rueda va atada al verso: arranca con el peso de
-            // siempre y llega al doble sobre el final de la línea, así el
-            // rodillo deja de ser un ciclo suelto del shader y acompaña a la
-            // letra. Se refresca con los eventos de posición (1/s), que es la
-            // velocidad a la que se percibe que la barra "carga".
-            property real roll: crt.ctl.crtRoll * (0.25 + 0.75 * crt.rest)
-                * (1 + crt.ctl.crtProgress())
-            property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
-            property real vignette: crt.ctl.crtVignette
-            // el titileo llega desde el audio, no del reloj del shader
-            // el latido tiene su propia perilla (`flicker`), aparte de la
-            // intensidad general: es lo primero que uno quiere bajar
-            property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
-                * (crt.focused ? 1 : 0.6) * crt.ctl.flickerAmt
-            property real blink: crt.beatBlink
-            // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
-            property real interlacePhase: crt.interlacePhase
-            property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
-            property variant tint: crt.pal.tint
-            fragmentShader: Qt.resolvedUrl("crt.frag.qsb")
-        }
+        // Sin `layer`: `stage` se dibuja a una textura con `stageTex` (abajo) y
+        // ya no sale a pantalla por su cuenta — pasa por `signalPass` y después por
+        // el vidrio (`crt.frag`).
 
         Rectangle {
             anchors.fill: parent
@@ -2283,6 +2219,114 @@ PanelWindow {
             opacity: crt.dotOpacity
             visible: crt.dotOpacity > 0.01
         }
+    }
+
+    // ---- el tubo en DOS pasadas (tanda 7, corrida 1)
+    // `stage` (la letra plana) -> `signal.frag` (la señal: lo que viaja por el
+    // cable, codificación compuesta) -> `crt.frag` (el vidrio: curvatura, máscara,
+    // scanlines, bloom). Las tres cosas nuevas de la tanda que actúan sobre la
+    // SEÑAL antes del vidrio cuelgan de `signal.frag`.
+    //
+    // El FBO sólo existe mientras el tubo se ve, y se dibuja a menos resolución
+    // de la que sale: el vidrio después le pasa curvatura, bloom y grilla de
+    // fósforo por arriba, así que la diferencia no se ve — y sí se nota en lo que
+    // cuesta tener tres pantallas enteras corriendo. Las dos texturas van a la
+    // misma resolución (texel a texel), así que con `composite = 0` la pasada
+    // del medio es un passthrough exacto.
+    ShaderEffectSource {
+        id: stageTex
+        sourceItem: stage
+        hideSource: true
+        visible: false
+        smooth: false   // como el `layer` de antes: sin filtro al muestrear
+        live: crt.visible
+        textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.ctl.crtQuality)),
+                             Math.max(1, Math.round(crt.height * crt.ctl.crtQuality)))
+    }
+
+    ShaderEffect {
+        id: signalPass
+        anchors.fill: parent
+        visible: false
+        blending: false
+        property variant src: stageTex
+        property real t: crt.tubeTime
+        property real composite: crt.ctl.crtComposite
+        property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
+        property real glitch: Math.min(crt.glitchAmt, 1)
+        fragmentShader: Qt.resolvedUrl("signal.frag.qsb")
+    }
+
+    ShaderEffectSource {
+        id: signalTex
+        sourceItem: signalPass
+        visible: false
+        smooth: false
+        live: crt.visible
+        textureSize: stageTex.textureSize
+    }
+
+    ShaderEffect {
+        id: glass
+        anchors.fill: parent
+        visible: crt.visible
+        property variant src: signalTex
+        // T5.3: modo karaoke. El tubo no se apaga (eso es el colapso, y deja la
+        // ventana muerta): se queda OSCURO, esperando. No es standby — standby
+        // dice "NO SIGNAL", que es la señal equivocada: acá hay señal, falta la
+        // voz. El shader multiplica todo por qt_Opacity, así que oscurecer el
+        // vidrio entero apaga también la estática y el fósforo.
+        opacity: crt.ctl.singGlow
+        blending: false
+        property real t: crt.tubeTime
+        property real curvature: crt.ctl.crtCurvature
+        property real scanline: crt.ctl.crtScanlines
+        // `intensity` es la perilla única: mueve el ruido, la separación de
+        // canales y la barra que rueda, además de los golpes de glitch
+        // x4 los tres cuadros en que la franja del salto pasa por acá
+        property real chroma: crt.ctl.crtChroma * (0.45 + 0.55 * crt.rest)
+            * crt.hopChroma
+        // el fósforo late con la música; en la pantalla apagada se va a cero
+        // y el shader se saltea las ocho muestras del bloom
+        // el overburn multiplica el fósforo por tres mientras la palabra
+        // está blanca: es lo que hace que se lea como quemada y no como
+        // una palabra clara
+        property real bloom: crt.showsText
+            ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt)
+                * (1 + 2 * crt.burnGlow) : 0
+        // el cambio de canal se lleva puesta la perilla: la estática de la
+        // transición no es "ruido de fondo", es la pantalla sin señal
+        // tubo apagado (tanda 6, corrida 0): un resto de ruido de fósforo
+        // al 3 %, no el negro absoluto — así se lee "tubo apagado" y no
+        // "monitor desenchufado". Pisa todo lo demás: no hay standby ni
+        // cambio de canal sobre una pantalla oscura.
+        property real noiseAmt: crt.tubeDark ? crt.ctl.crtNoise * 0.06
+            : crt.chanNoise > 0 ? 1
+            : crt.deepSleep ? 0
+            : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
+            * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
+        property real tubeLevel: crt.tubeLevel
+        property real glitch: Math.min(crt.glitchAmt, 1)
+        // La barra que rueda va atada al verso: arranca con el peso de
+        // siempre y llega al doble sobre el final de la línea, así el
+        // rodillo deja de ser un ciclo suelto del shader y acompaña a la
+        // letra. Se refresca con los eventos de posición (1/s), que es la
+        // velocidad a la que se percibe que la barra "carga".
+        property real roll: crt.ctl.crtRoll * (0.25 + 0.75 * crt.rest)
+            * (1 + crt.ctl.crtProgress())
+        property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
+        property real vignette: crt.ctl.crtVignette
+        // el titileo llega desde el audio, no del reloj del shader
+        // el latido tiene su propia perilla (`flicker`), aparte de la
+        // intensidad general: es lo primero que uno quiere bajar
+        property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
+            * (crt.focused ? 1 : 0.6) * crt.ctl.flickerAmt
+        property real blink: crt.beatBlink
+        // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
+        property real interlacePhase: crt.interlacePhase
+        property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
+        property variant tint: crt.pal.tint
+        fragmentShader: Qt.resolvedUrl("crt.frag.qsb")
     }
 
     // El mouse: puntero escondido mientras dura el tubo, y moverlo (o un click, o

@@ -88,7 +88,7 @@ CONFIG_EVENT_MAP = (
     ("crt_scanlines", "crt", "scanlines"), ("crt_chroma", "crt", "chroma"),
     ("crt_bloom", "crt", "bloom"), ("crt_noise", "crt", "noise"),
     ("crt_roll", "crt", "roll"), ("crt_vignette", "crt", "vignette"),
-    ("crt_composite", "crt", "composite"),
+    ("crt_composite", "crt", "composite"), ("crt_tube", "crt", "tube"),
 )
 
 

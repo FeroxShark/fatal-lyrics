@@ -239,6 +239,18 @@ _CONFIG_COMMENTS = {
                      "an old TV (the top of the TV range is 0.6), 1 = a worn-out\n"
                      "VHS (colour lags, snow at the bottom, the picture wobbles\n"
                      "while the tube glitches)",
+        "tube": "the character of the glass, in one knob. custom = the loose\n"
+                "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
+                "vignette, composite), exactly as before. Any other value picks\n"
+                "a whole tube and IGNORES those knobs (intensity, quality and\n"
+                "flicker still apply):\n"
+                "  trinitron = fine aperture grille, nearly flat, sharp and bright\n"
+                "  pvm       = pro monitor: clean RGB, dot mask, marked scanlines\n"
+                "  arcade    = fat glass, coarse slot mask, a bit worn\n"
+                "  green     = P1 terminal: one green phosphor, big halo\n"
+                "  amber     = P3 terminal: one amber phosphor\n"
+                "  auto      = one per track, among trinitron/pvm/arcade/custom\n"
+                "              (never green or amber: those override the palette)",
     },
 }
 
@@ -336,7 +348,7 @@ DEFAULTS = {
         "water": True, "water_amp": 0.55, "camera": 1.0, "section_zoom": True,
         "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
-        "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,
+        "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
         "composite": 0.5,
     },

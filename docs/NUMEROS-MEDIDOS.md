@@ -43,10 +43,10 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   - `pausa` (letra puesta, sin `aud` ni `pos`): **24-25%, media 24.5%**. Es la mayor parte del
     costo: en pausa el tubo sigue dibujando a pleno (`FrameAnimation` sin tope, timer `pump`
     de 70 ms; ver el plan de la tanda 7, corrida 8).
-  - Ojo: `normal` sale MÁS caro que `techo`. No es error de la medición (dos corridas
-    coinciden dentro de un par de puntos): el `aud` a 15 Hz y el `focus = roam` cuestan más que
-    los motivos forzados. Estos tres son el número contra el que cada corrida de la tanda 7
-    puede sumar como máximo +3 puntos. Ruido de la máquina: ~±2 puntos entre corridas.
+  - Ojo: `normal` sale MÁS caro que `techo`. Sospecha, NO medida: el `aud` a 15 Hz y el
+    `focus = roam` cuestan más que los motivos forzados (`normal` a 1.0 y a 0.75 dan lo mismo,
+    pero `techo` se midió una sola vez). Estos tres son el número contra el que cada corrida de
+    la tanda 7 puede sumar como máximo +3 puntos; el ruido entre corridas ronda ±2.
 - **`ENERGY_GAIN_REF` (mood.py), medido en vivo el 2026-09-16:** ganancia lineal real 0.064,
   de Spotify con el stream al 40% (`0.40**3` — la escala de PipeWire/pactl es CÚBICA, no
   lineal, ver docs/TRAMPAS.md) sobre el sink de Ferox (Kingston HyperX USB, `HW_VOLUME_CTRL`:

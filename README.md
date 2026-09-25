@@ -77,6 +77,10 @@ What the tube does:
   screen, which is what thins the letters on a real tube), the raster is combed
   by scanlines that crawl, and an aperture-grille triad breaks every pixel into
   R/G/B — text never looks clean, exactly like a real tube.
+- **The picture comes down a cable**: before the glass, a composite-video pass
+  (`composite`) bleeds the colour sideways, rings and crawls on the edges, and at
+  the top of its range turns into a worn VHS — colour lagging behind, snow at
+  the bottom of the frame, the picture wobbling while the tube glitches.
 - **Words arrive as they're sung**: each one lands with a kick of static and a
   flash of its own colour (the whole jolt — flash, colour ghosts and size kick —
   is `word_flash`; at `0` the word simply arrives, still, in its final colour),
@@ -525,6 +529,7 @@ because there is nothing to install.
 | `crt`      | `noise`              | Static                                                              | `0.22`      |
 | `crt`      | `roll`               | Brightness bar rolling down the tube                                | `0.5`       |
 | `crt`      | `vignette`           | Darkening towards the corners                                       | `0.9`       |
+| `crt`      | `composite`          | Analog signal before the glass: colour bleeds sideways, edges ring and crawl (`0` = clean RGB, `0.5` = old TV, `1` = worn-out VHS) | `0.5` |
 | `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |
 | `keys`     | `sync_back`          | ...and the ones that push it back 0.1 s                             | `"Super+Alt, Left"` |
 

@@ -239,6 +239,12 @@ _CONFIG_COMMENTS = {
                      "an old TV (the top of the TV range is 0.6), 1 = a worn-out\n"
                      "VHS (colour lags, snow at the bottom, the picture wobbles\n"
                      "while the tube glitches)",
+        "persistence": "the phosphor takes a moment to go out, so what moves or\n"
+                       "disappears leaves a very short trail. 0 = none. The green\n"
+                       "half life is persistence x 220 ms (0.35 = 77 ms; red and\n"
+                       "blue go out faster) and a trail never outlives ~0.3 s. It\n"
+                       "is invisible while the picture is still. A tube other than\n"
+                       "custom brings its own. Off on a slow screen (quality < 1)",
         "tube": "the character of the glass, in one knob. custom = the loose\n"
                 "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
                 "vignette, composite), exactly as before. Any other value picks\n"
@@ -350,7 +356,7 @@ DEFAULTS = {
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
-        "composite": 0.5,
+        "composite": 0.5, "persistence": 0.35,
     },
 }
 

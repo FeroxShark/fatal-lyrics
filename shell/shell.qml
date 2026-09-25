@@ -97,7 +97,7 @@ ShellRoot {
     property real crtComposite: 0.5    // 0 = RGB limpio .. 1 = VHS gastado (signal.frag)
     onCrtCompositeChanged: console.log("crt: composite " + crtComposite)
     // tanda 7, corrida 3: la estela del fósforo (`signal.frag`). 0 = ninguna. La
-    // vida media del verde es persistence * 250 ms (0.35 -> 87 ms) y nunca pasa
+    // vida media del verde es persistence * 220 ms (0.35 -> 77 ms) y nunca pasa
     // de un `Motion.enterMs`; ver el comentario del shader
     property real crtPersistence: 0.35
     onCrtPersistenceChanged: console.log("crt: persistence " + crtPersistence)

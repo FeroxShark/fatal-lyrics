@@ -3080,6 +3080,71 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertFalse({"green", "amber"} & set(keys))
         self.assertIn("tube: tube", qml)   # `crtSetFor` lo devuelve en el set
 
+    def test_persistence_knob_is_wired_end_to_end(self):
+        # corrida 3 de la tanda 7: la estela, en los cuatro lugares
+        self.assertEqual(c.DEFAULTS["crt"]["persistence"], 0.35)
+        self.assertIn("persistence", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_persistence", "crt", "persistence"), ipc.CONFIG_EVENT_MAP)
+        qml, rows = self._tube_table()
+        self.assertRegex(qml, r"property real crtPersistence:\s*0\.35\b")
+        self.assertIn('crt_persistence: "crtPersistence"', qml)
+        self.assertIn("persistence", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        # `custom` lee la perilla suelta; los demás traen su número
+        self.assertRegex(qml, r"tubePersistence:\s*crtTubeRow\.persistence !== null \? crtTubeRow\.persistence : crtPersistence")
+        self.assertEqual(rows["custom"]["persistence"], "null")
+
+    def test_trail_is_off_when_the_screen_is_slow_or_asleep(self):
+        # un source vivo y recursivo re-renderiza en cada cuadro (TRAMPAS.md): sólo
+        # lo está mientras hay estela, y `prev` no se lee a sí mismo si no
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        gate = re.search(r"readonly property bool trailOn:(.*?)\n    on", qml, re.S).group(1)
+        for term in ("deepSleep", "crtQuality >= 0.999", "tubePersistence > 0.001", "visible"):
+            self.assertIn(term, gate)
+        self.assertRegex(qml, r"recursive:\s*crt\.trailOn")
+        self.assertRegex(qml, r"property variant prev:\s*crt\.trailOn \? signalTex : stageTex")
+        self.assertRegex(qml, r"property real dt:\s*crt\.trailDt")
+
+    @staticmethod
+    def _trail_curve(persist, dt, channel, frag):
+        """El decay de signal.frag con la cuantización de una textura RGBA8: un
+        blanco que se apaga. Devuelve [(t, valor 0..255)]."""
+        import math
+        kill = float(re.search(r"TRAIL_KILL_S\s*=\s*([\d.]+)", frag).group(1))
+        base = float(re.search(r"TRAIL_HALF_S\s*=\s*([\d.]+)", frag).group(1))
+        floor = float(re.search(r"vec3\(([\d.]+) / 255\.0\)\);", frag).group(1))
+        hl = base * persist * (1.0 if channel == "g" else 2.0 / 3.0)
+        d = 2 ** (-dt / hl)
+        e = 2 ** (-kill / hl)
+        lin = max(e / (1 - e) * 0.6931 / hl * dt, floor / 255.0)
+        v, t, out = 255, 0.0, []
+        while v > 0 and t < 5:
+            v = max(0, round((v / 255.0 * d - lin) * 255))   # el GPU redondea al escribir
+            t += dt
+            out.append((t, v))
+        return out
+
+    def test_trail_is_short_and_never_outlives_an_enter(self):
+        # los umbrales que Ferox pidió ("que no sea molesta"), sobre la fórmula real
+        with open(os.path.join(self.SHELL, "signal.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        with open(os.path.join(self.SHELL, "Motion.qml"), encoding="utf-8") as f:
+            enter_ms = int(re.search(r"enterMs:\s*(\d+)", f.read()).group(1))
+        for dt in (1 / 30, 1 / 60, 1 / 144, 1 / 200):
+            for persist in (0.35, 0.7, 1.0):
+                for ch in "rg":
+                    curve = self._trail_curve(persist, dt, ch, frag)
+                    gone = curve[-1][0]
+                    self.assertLess(curve[-1][1] + 1, 2, "la estela quedó pegada en la textura")
+                    self.assertLess(gone * 1000, enter_ms, f"dt={dt:.4f} p={persist} {ch}: sobrevive un enterMs")
+            # la vida media (cuándo cae a la mitad) con la perilla por defecto
+            for ch, limit in (("g", 0.090), ("r", 0.060)):
+                curve = self._trail_curve(0.35, dt, ch, frag)
+                i = next(i for i, (t, v) in enumerate(curve) if v <= 127.5)
+                (t0, v0), (t1, v1) = ((0.0, 255), curve[0]) if i == 0 else (curve[i - 1], curve[i])
+                half = t0 + (t1 - t0) * (v0 - 127.5) / max(v0 - v1, 1)   # el cruce, interpolado
+                self.assertLessEqual(half, limit, f"dt={dt:.4f} {ch}: vida media {half * 1000:.0f} ms")
+
     def test_every_glass_uniform_has_a_property_and_is_in_the_qsb(self):
         with open(os.path.join(self.SHELL, "crt.frag"), encoding="utf-8") as f:
             frag = f.read()

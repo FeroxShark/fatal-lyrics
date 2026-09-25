@@ -326,6 +326,9 @@ SETTINGS = [
     ("composite", "crt", "Analog signal (0 = clean RGB, 0.5 = old TV, 1 = worn VHS)",
      lambda c: _ask_num("Analog signal: colour bleed, ringing, dot crawl "
                         "(0 = clean RGB, 0.5 = old TV, 1 = worn-out VHS)", c, 0.0, 1.0)),
+    ("persistence", "crt", "Phosphor trail (0 = none)",
+     lambda c: _ask_num("Phosphor trail: what moves or goes out lingers a moment "
+                        "(0 = none, 0.35 = default, 1 = long)", c, 0.0, 1.0)),
 
     ("— behavior —", None, None, None),
     ("player", "behavior", "Player to follow", _ask_player),

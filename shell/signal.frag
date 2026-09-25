@@ -149,7 +149,7 @@ vec3 signalRgb(vec2 uv) {
 //    toward the background. Plain max() there would keep the bright background
 //    on top of every new letter and fade it in.
 const float TRAIL_KILL_S = 0.28;   // < Motion.enterMs (0.32)
-const float TRAIL_HALF_S = 0.25;   // green half life at persistence = 1
+const float TRAIL_HALF_S = 0.22;   // green half life at persistence = 1
 
 void main() {
     vec2 uv = qt_TexCoord0;

@@ -26,6 +26,12 @@ layout(std140, binding = 0) uniform buf {
 
 layout(binding = 1) uniform sampler2D src;
 
+float hash21(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
 const vec3 LUMA = vec3(0.299, 0.587, 0.114);
 
 // RGB <-> YIQ, the NTSC colour space: what travels down the cable is a luma
@@ -50,7 +56,9 @@ void main() {
     }
 
     // `composite` is 0..1; the TV half of the range is 0..0.6 (k goes 0..1)
+    // and the worn-out tape is 0.6..1 (v goes 0..1, on top of a full k)
     float k = clamp(composite / 0.6, 0.0, 1.0);
+    float v = clamp((composite - 0.6) / 0.4, 0.0, 1.0);
 
     // one screen pixel, in uv. The kernels are laid out in screen pixels so the
     // look does not change with crtQuality.
@@ -59,20 +67,38 @@ void main() {
     // more the colour bleeds to the side of the thing that carries it
     float sp = (1.0 + 1.5 * k) * px;
 
+    // VHS: the tape does not hold the line still. Head-switching noise at the
+    // bottom 3 % (a strip of static and lines that get shoved sideways, worse
+    // toward the edge), and tracking that wobbles the whole picture — but only
+    // while the tube is glitching: a steady wobble would read as a bad LCD.
+    float dx = 0.0;
+    float head = 0.0;
+    if (v > 0.001) {
+        float row = floor(uv.y * res.y);
+        float frame = floor(t * 30.0);
+        head = smoothstep(0.97, 1.0, uv.y) * v;
+        dx += head * ((hash21(vec2(row, frame)) - 0.5) * 0.05 + head * 0.03);
+        dx += glitch * v * ((hash21(vec2(floor(row * 0.5), frame * 3.1)) - 0.5) * 0.012
+                            + sin(uv.y * 40.0 + t * 50.0) * 0.004);
+    }
+    vec2 base = vec2(uv.x + dx, uv.y);
+    // the colour lags behind the picture by a few pixels
+    vec2 cbase = base - vec2(4.0 * v * px, 0.0);
+
     // luma taps at +-1 px, five chroma taps at +-2 * spread (unrolled: GLSL ES
     // 100 needs a constant loop bound)
-    vec3 c0 = texture(src, uv).rgb;
-    vec3 cl = texture(src, uv - vec2(px, 0.0)).rgb;
-    vec3 cr = texture(src, uv + vec2(px, 0.0)).rgb;
+    vec3 c0 = texture(src, base).rgb;
+    vec3 cl = texture(src, base - vec2(px, 0.0)).rgb;
+    vec3 cr = texture(src, base + vec2(px, 0.0)).rgb;
     vec3 q0 = toYiq(c0);
     float yl = dot(cl, LUMA);
     float yr = dot(cr, LUMA);
 
-    vec2 iq = 0.4 * q0.yz;
-    iq += 0.2 * toYiq(texture(src, uv - vec2(sp, 0.0)).rgb).yz;
-    iq += 0.2 * toYiq(texture(src, uv + vec2(sp, 0.0)).rgb).yz;
-    iq += 0.1 * toYiq(texture(src, uv - vec2(2.0 * sp, 0.0)).rgb).yz;
-    iq += 0.1 * toYiq(texture(src, uv + vec2(2.0 * sp, 0.0)).rgb).yz;
+    vec2 iq = 0.4 * toYiq(texture(src, cbase).rgb).yz;
+    iq += 0.2 * toYiq(texture(src, cbase - vec2(sp, 0.0)).rgb).yz;
+    iq += 0.2 * toYiq(texture(src, cbase + vec2(sp, 0.0)).rgb).yz;
+    iq += 0.1 * toYiq(texture(src, cbase - vec2(2.0 * sp, 0.0)).rgb).yz;
+    iq += 0.1 * toYiq(texture(src, cbase + vec2(2.0 * sp, 0.0)).rgb).yz;
 
     // luma with a little ringing: an unsharp kernel overshoots on both sides of
     // an edge, which is what a band-limited signal does
@@ -84,6 +110,8 @@ void main() {
     vec2 pix = floor(uv * res);
     float chk = mod(pix.x + pix.y + floor(t * 15.0), 2.0) * 2.0 - 1.0;
     y += chk * edge * 0.14 * k;
+    // and the strip at the bottom is mostly snow
+    y += head * (hash21(pix + floor(t * 30.0)) - 0.5) * 0.7;
 
     vec3 rgb = toRgb(vec3(y, mix(q0.yz, iq, k)));
     fragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);

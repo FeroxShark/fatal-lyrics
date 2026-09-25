@@ -1,7 +1,8 @@
 #version 440
 // fatal-lyrics — CRT mode.
 //
-// Takes the flat lyric layer rendered by Crt.qml and puts it inside a dying
+// Second pass of the tube: takes the picture that signal.frag left (the flat
+// lyric layer after its trip down the cable) and puts it inside a dying
 // cathode ray tube: barrel glass, phosphor bloom, aperture grille, scanlines
 // with a rolling bar, RGB misalignment, torn signal bands and static.
 //

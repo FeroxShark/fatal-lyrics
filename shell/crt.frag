@@ -36,8 +36,15 @@ layout(std140, binding = 0) uniform buf {
     // ANTES del ruido estático: el resto de fósforo (`noiseAmt` al 3 %) tiene
     // que quedar visible aunque esto llegue a 0, o se lee "desenchufado".
     float tubeLevel;
+    // el tubo elegido (tanda 7, corrida 2): qué máscara lleva el vidrio y si la
+    // señal se vuelve fósforo de un solo color. Con tube=custom valen 0 / 3 / 0 y
+    // esto da EXACTAMENTE lo de antes.
+    float maskType;   // 0 = rejilla de apertura, 1 = slot mask, 2 = puntos (shadow mask)
+    float maskPitch;  // píxeles por tríada RGB (3 = la de siempre)
+    float mono;       // 0..1: luminancia x monoTint (P1 verde, P3 ámbar)
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
+    vec3 monoTint;    // color del fósforo del tubo monocromo
 };
 
 layout(binding = 1) uniform sampler2D src;
@@ -118,18 +125,55 @@ void main() {
         col += tint * edge * bloom * (0.22 + 0.85 * bright);
     }
 
+    // fósforo de un solo color (tanda 7, corrida 2): P1 verde, P3 ámbar. La
+    // señal pasa a luminancia y sale del color del fósforo; va después del
+    // bloom (que sangra con el `tint`, que acá ya es el color del fósforo).
+    col = mix(col, vec3(dot(col, vec3(0.299, 0.587, 0.114))) * monoTint, mono);
+
     vec2 fc = uv * res;
 
     // scanlines: the comb crawls slowly so it never looks like a static texture
     float sl = 0.5 + 0.5 * cos(fc.y * 3.14159 + t * 1.6);
     col *= 1.0 - scanline * 0.55 * sl;
 
-    // aperture grille: RGB triads, the reason CRT text never looks clean
-    float tri = mod(fc.x, 3.0);
-    vec3 mask = vec3(1.16, 0.86, 0.86);
-    if (tri > 1.0 && tri <= 2.0) mask = vec3(0.86, 1.16, 0.86);
-    else if (tri > 2.0) mask = vec3(0.86, 0.86, 1.16);
-    col *= mix(vec3(1.0), mask, 0.55);
+    // La máscara del vidrio: RGB triads, the reason CRT text never looks clean.
+    // Tres tubos distintos (`maskType`): la rejilla de apertura de siempre
+    // (Trinitron: franjas verticales continuas), la slot mask de las arcade
+    // (franjas cortadas en ranuras, ladrilladas) y la shadow mask de puntos de
+    // un PVM (tríadas en delta, círculos). El tipo 0 con pitch 3 es la de antes,
+    // píxel por píxel: `p3` vale 1.0 y los umbrales son los mismos.
+    float p3 = maskPitch / 3.0;
+    vec3 mask;
+    if (maskType < 0.5) {
+        float tri = mod(fc.x, maskPitch);
+        mask = vec3(1.16, 0.86, 0.86);
+        if (tri > p3 && tri <= 2.0 * p3) mask = vec3(0.86, 1.16, 0.86);
+        else if (tri > 2.0 * p3) mask = vec3(0.86, 0.86, 1.16);
+    } else if (maskType < 1.5) {
+        // slot: cada fila de ranuras mide tres tríadas de alto y se corre media
+        // tríada respecto de la de arriba; el puente oscuro entre ranuras
+        float cy = fc.y / (maskPitch * 2.0);
+        float row = floor(cy);
+        float tri = mod(fc.x + mod(row, 2.0) * maskPitch * 0.5, maskPitch);
+        mask = vec3(1.16, 0.86, 0.86);
+        if (tri > p3 && tri <= 2.0 * p3) mask = vec3(0.86, 1.16, 0.86);
+        else if (tri > 2.0 * p3) mask = vec3(0.86, 0.86, 1.16);
+        mask *= mix(1.0, 0.62, smoothstep(0.78, 0.92, fract(cy)));
+    } else {
+        // puntos: filas de altura 0.866 de tríada, las impares corridas media
+        // tríada; cada canal es un punto redondo con centro en su tercio
+        float rh = maskPitch * 0.866;
+        float row = floor(fc.y / rh);
+        float x = fc.x + mod(row, 2.0) * maskPitch * 0.5;
+        float tri = mod(x, maskPitch);
+        float ch = floor(tri / p3);                 // 0 = R, 1 = G, 2 = B
+        vec2 c = vec2(tri - (ch + 0.5) * p3, fract(fc.y / rh) - 0.5) * vec2(1.0 / p3, 1.0);
+        float dot_ = smoothstep(0.62, 0.30, length(c * vec2(1.0, 1.15)));
+        vec3 lit = ch < 0.5 ? vec3(1.0, 0.0, 0.0) : (ch < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+        mask = mix(vec3(0.70), vec3(0.70) + lit * 0.62, dot_);
+    }
+    // un tubo monocromo tiene un solo fósforo: no hay tríadas
+    col *= mix(vec3(1.0), mask, 0.55 * (1.0 - mono));
 
     // The interlaced entrance (T3.1): a tube fed a half frame draws every
     // other scanline and leaves the rest dark, and the picture only settles

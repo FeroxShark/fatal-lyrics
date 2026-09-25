@@ -98,6 +98,10 @@ ShellRoot {
     onCrtCompositeChanged: console.log("crt: composite " + crtComposite)
     property real crtRoll: 1.0
     property real crtVignette: 0.9
+    // tanda 7, corrida 2: el carácter del tubo en una sola perilla. `custom` =
+    // las perillas sueltas de arriba, el tubo de siempre; los demás salen de
+    // `crtTubeTable` (más abajo) y las ignoran. `auto` = uno por tema (`crtSetFor`).
+    property string crtTube: "custom"
     property real crtIntensity: 1.0
     property bool crtChrome: true
     property bool crtDirector: true
@@ -177,6 +181,88 @@ ShellRoot {
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
+
+    // ---- tanda 7, corrida 2: los TUBOS. Una perilla (`crt.tube`) en vez de quince
+    // sliders: cada fila es un carácter de vidrio completo. Los números están en
+    // la escala de las perillas sueltas (curvature 1 = tubo gordo de los 90, etc.).
+    //   maskType: 0 = rejilla de apertura, 1 = slot mask (arcade), 2 = puntos (PVM)
+    //   maskPitch: píxeles por tríada RGB — la de siempre es 3
+    //   mono: 1 = un solo fósforo de color `monoTint` (verde P1, ámbar P3)
+    //   composite: cuánto viaja por cable (`signal.frag`); persistence: la estela
+    //   del fósforo, que lee la corrida 3
+    // `null` = "leer la perilla suelta": sólo `custom` lo usa, y ahí es el
+    // comportamiento de antes, bit a bit. Con cualquier otro tubo las perillas de
+    // aspecto se ignoran; siguen mandando `intensity`, `quality` y `flicker`.
+    // Todas las filas traen TODAS las columnas (lo controla un test).
+    readonly property var crtTubeTable: ({
+        custom: {
+            curvature: null, scanlines: null, chroma: null, bloom: null,
+            noise: null, roll: null, vignette: null, composite: null,
+            persistence: null,
+            maskType: 0, maskPitch: 3.0, mono: 0, monoTint: "#ffffff",
+        },
+        // Sony Trinitron: rejilla de apertura fina, casi plana, nítido y brillante
+        trinitron: {
+            curvature: 0.35, scanlines: 0.40, chroma: 0.30, bloom: 1.10,
+            noise: 0.12, roll: 0.15, vignette: 0.55, composite: 0.35,
+            persistence: 0.30,
+            maskType: 0, maskPitch: 2.4, mono: 0, monoTint: "#ffffff",
+        },
+        // monitor de video profesional: RGB limpio, puntos finos, scanlines marcadas
+        pvm: {
+            curvature: 0.50, scanlines: 0.65, chroma: 0.15, bloom: 0.60,
+            noise: 0.05, roll: 0.0, vignette: 0.50, composite: 0.0,
+            persistence: 0.25,
+            maskType: 2, maskPitch: 3.0, mono: 0, monoTint: "#ffffff",
+        },
+        // gabinete de arcade: vidrio gordo, slot mask gruesa, todo un poco gastado
+        arcade: {
+            curvature: 1.20, scanlines: 0.75, chroma: 0.80, bloom: 1.40,
+            noise: 0.25, roll: 0.60, vignette: 1.0, composite: 0.15,
+            persistence: 0.40,
+            maskType: 1, maskPitch: 4.0, mono: 0, monoTint: "#ffffff",
+        },
+        // terminal de fósforo verde (P1): un solo color, halo grande, estela larga
+        green: {
+            curvature: 0.90, scanlines: 0.55, chroma: 0.0, bloom: 1.50,
+            noise: 0.35, roll: 0.60, vignette: 0.90, composite: 0.15,
+            persistence: 0.70,
+            maskType: 0, maskPitch: 3.0, mono: 1, monoTint: "#33ff66",
+        },
+        // fósforo ámbar (P3)
+        amber: {
+            curvature: 0.90, scanlines: 0.55, chroma: 0.0, bloom: 1.30,
+            noise: 0.30, roll: 0.50, vignette: 0.90, composite: 0.15,
+            persistence: 0.50,
+            maskType: 0, maskPitch: 3.0, mono: 1, monoTint: "#ffb000",
+        },
+    })
+    // `auto` sortea sólo entre los de color y `custom`: green/amber pisan la
+    // paleta a propósito y nadie las pidió sin elegirlas (`crtSetFor`)
+    readonly property var crtTubeAutoKeys: ["trinitron", "pvm", "arcade", "custom"]
+    // El tubo que manda AHORA: la perilla, o el que le tocó al tema con `auto`
+    // (sin set, `auto` cae en `custom`). Una clave desconocida cae en `custom`.
+    readonly property string crtTubeKey: {
+        const k = crtTube === "auto" ? (crtSet ? crtSet.tube : "custom") : crtTube;
+        return crtTubeTable[k] !== undefined ? k : "custom";
+    }
+    onCrtTubeKeyChanged: console.log("crt: tube " + crtTubeKey
+        + (crtTube === "auto" ? " (auto)" : ""))
+    readonly property var crtTubeRow: crtTubeTable[crtTubeKey]
+    // El valor efectivo de cada columna: la de la fila, o la perilla suelta si
+    // la fila trae `null` (sólo `custom`). Crt.qml lee estas, no las perillas.
+    readonly property real tubeCurvature: crtTubeRow.curvature !== null ? crtTubeRow.curvature : crtCurvature
+    readonly property real tubeScanlines: crtTubeRow.scanlines !== null ? crtTubeRow.scanlines : crtScanlines
+    readonly property real tubeChroma: crtTubeRow.chroma !== null ? crtTubeRow.chroma : crtChroma
+    readonly property real tubeBloom: crtTubeRow.bloom !== null ? crtTubeRow.bloom : crtBloom
+    readonly property real tubeNoise: crtTubeRow.noise !== null ? crtTubeRow.noise : crtNoise
+    readonly property real tubeRoll: crtTubeRow.roll !== null ? crtTubeRow.roll : crtRoll
+    readonly property real tubeVignette: crtTubeRow.vignette !== null ? crtTubeRow.vignette : crtVignette
+    readonly property real tubeComposite: crtTubeRow.composite !== null ? crtTubeRow.composite : crtComposite
+    readonly property real tubeMaskType: crtTubeRow.maskType
+    readonly property real tubeMaskPitch: crtTubeRow.maskPitch
+    readonly property real tubeMono: crtTubeRow.mono
+    readonly property var tubeMonoTint: phosphor(crtTubeRow.monoTint)
     // multiplicador de `pace.rarePerLine` (perilla `crt.rare`, tanda 6,
     // corrida 7): 0 = nunca, 1 = normal, 2 = el doble de seguido. El sorteo y
     // el estado viven en `crtRare` más abajo (corrida 7, paso 3)
@@ -1916,7 +2002,9 @@ ShellRoot {
         const schemeKey = schemeKeys[Math.floor(crtHash(seed * 7 + 5) * schemeKeys.length)];
         const scheme = schemes.findIndex(s => s.key === schemeKey);
         const font = crtFontKeys[Math.floor(crtHash(seed * 7 + 3) * crtFontKeys.length)];
-        return { motifs: motifs, family: family, scheme: scheme, font: font };
+        // el tubo del tema, para `crt.tube = auto`: sólo los de color
+        const tube = crtTubeAutoKeys[Math.floor(crtHash(seed * 7 + 6) * crtTubeAutoKeys.length)];
+        return { motifs: motifs, family: family, scheme: scheme, font: font, tube: tube };
     }
     // null con `crt.set = "off"`: todo lo que lo consume cae al camino de
     // siempre (pool entero, `crtEntryTable`, el esquema de pitch/tapa). Lee
@@ -2847,7 +2935,7 @@ ShellRoot {
             const m = crtMoodLocked || crtMood;
             console.log("crt: set motifs=[" + crtSet.motifs.join(",") + "]"
                 + " family=" + crtSet.family + " scheme=" + crtSet.scheme
-                + " font=" + crtSet.font
+                + " font=" + crtSet.font + " tube=" + crtSet.tube
                 + " mood=v" + m.valence.toFixed(2) + "/e" + m.energy.toFixed(2)
                 + "/b" + m.bright.toFixed(2));
         }
@@ -2942,7 +3030,7 @@ ShellRoot {
         crt_palette: "crtPalette", crt_split: "crtSplit", crt_font: "crtFont",
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
-        crt_composite: "crtComposite",
+        crt_composite: "crtComposite", crt_tube: "crtTube",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",

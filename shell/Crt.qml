@@ -2252,7 +2252,7 @@ PanelWindow {
         blending: false
         property variant src: stageTex
         property real t: crt.tubeTime
-        property real composite: crt.ctl.crtComposite
+        property real composite: crt.ctl.tubeComposite
         property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
         property real glitch: Math.min(crt.glitchAmt, 1)
         property real quality: crt.ctl.crtQuality
@@ -2281,12 +2281,12 @@ PanelWindow {
         opacity: crt.ctl.singGlow
         blending: false
         property real t: crt.tubeTime
-        property real curvature: crt.ctl.crtCurvature
-        property real scanline: crt.ctl.crtScanlines
+        property real curvature: crt.ctl.tubeCurvature
+        property real scanline: crt.ctl.tubeScanlines
         // `intensity` es la perilla única: mueve el ruido, la separación de
         // canales y la barra que rueda, además de los golpes de glitch
         // x4 los tres cuadros en que la franja del salto pasa por acá
-        property real chroma: crt.ctl.crtChroma * (0.45 + 0.55 * crt.rest)
+        property real chroma: crt.ctl.tubeChroma * (0.45 + 0.55 * crt.rest)
             * crt.hopChroma
         // el fósforo late con la música; en la pantalla apagada se va a cero
         // y el shader se saltea las ocho muestras del bloom
@@ -2294,7 +2294,7 @@ PanelWindow {
         // está blanca: es lo que hace que se lea como quemada y no como
         // una palabra clara
         property real bloom: crt.showsText
-            ? crt.ctl.crtBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt)
+            ? crt.ctl.tubeBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt)
                 * (1 + 2 * crt.burnGlow) : 0
         // el cambio de canal se lleva puesta la perilla: la estática de la
         // transición no es "ruido de fondo", es la pantalla sin señal
@@ -2302,10 +2302,10 @@ PanelWindow {
         // al 3 %, no el negro absoluto — así se lee "tubo apagado" y no
         // "monitor desenchufado". Pisa todo lo demás: no hay standby ni
         // cambio de canal sobre una pantalla oscura.
-        property real noiseAmt: crt.tubeDark ? crt.ctl.crtNoise * 0.06
+        property real noiseAmt: crt.tubeDark ? crt.ctl.tubeNoise * 0.06
             : crt.chanNoise > 0 ? 1
             : crt.deepSleep ? 0
-            : crt.ctl.crtNoise * (0.35 + 0.65 * crt.rest)
+            : crt.ctl.tubeNoise * (0.35 + 0.65 * crt.rest)
             * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
         property real tubeLevel: crt.tubeLevel
         property real glitch: Math.min(crt.glitchAmt, 1)
@@ -2314,10 +2314,10 @@ PanelWindow {
         // rodillo deja de ser un ciclo suelto del shader y acompaña a la
         // letra. Se refresca con los eventos de posición (1/s), que es la
         // velocidad a la que se percibe que la barra "carga".
-        property real roll: crt.ctl.crtRoll * (0.25 + 0.75 * crt.rest)
+        property real roll: crt.ctl.tubeRoll * (0.25 + 0.75 * crt.rest)
             * (1 + crt.ctl.crtProgress())
         property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
-        property real vignette: crt.ctl.crtVignette
+        property real vignette: crt.ctl.tubeVignette
         // el titileo llega desde el audio, no del reloj del shader
         // el latido tiene su propia perilla (`flicker`), aparte de la
         // intensidad general: es lo primero que uno quiere bajar
@@ -2327,7 +2327,13 @@ PanelWindow {
         // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
         property real interlacePhase: crt.interlacePhase
         property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
-        property variant tint: crt.pal.tint
+        // el tubo elegido (`crt.tube`, tanda 7 corrida 2): máscara y fósforo mono.
+        // Un tubo monocromo pisa el `tint` de la paleta con el color de su fósforo.
+        property real maskType: crt.ctl.tubeMaskType
+        property real maskPitch: crt.ctl.tubeMaskPitch
+        property real mono: crt.ctl.tubeMono
+        property variant monoTint: crt.ctl.tubeMonoTint
+        property variant tint: crt.ctl.tubeMono > 0.5 ? crt.ctl.tubeMonoTint : crt.pal.tint
         fragmentShader: Qt.resolvedUrl("crt.frag.qsb")
     }
 

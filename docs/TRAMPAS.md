@@ -474,3 +474,17 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   NO es de hardware; si es de hardware, cuenta sólo el stream. Y la escala cúbica no es sólo cosa
   de `wpctl`: `pactl` muestra el mismo cubo, tanto para el sink como para el sink-input (76% de
   sink → -7.15dB = 20·log10(0.76³); 40% de stream → -23.89dB = 20·log10(0.40³)).
+- **El tubo son dos pasadas y los `ShaderEffectSource` van con `smooth: false`** (tanda 7,
+  corrida 1). `stage` → `stageTex` → `signalPass` (`signal.frag`) → `signalTex` → `glass`
+  (`crt.frag`). El `layer` de antes muestreaba sin filtro; un `ShaderEffectSource` viene con
+  `smooth: true`, y con eso los bordes del glifo cambian aunque `composite = 0` sea un
+  passthrough. Los dos van a la misma resolución (texel a texel) o el passthrough deja de serlo.
+  `stage.opacity` (el oscurecido del karaoke) se movió a `glass.opacity`: si no, el shader del
+  vidrio le sumaría estática a una señal ya apagada.
+- **Comparar capturas del tubo de a píxel exige congelar `t` y esperar ≥ 6 s.** `crt.frag` y
+  `signal.frag` leen `crt.tubeTime`: para un antes/después se parchea temporalmente
+  `property real t: 1.234` en las dos ShaderEffect, se manda un `show` con `t1` largo (12 s) y se
+  captura recién a los 6 s (la entrada de la línea todavía se asienta a los ~3.5 s). El primer
+  `show` tras un restart cae en el intro (estática o un motif): calentar con uno de descarte.
+  Ruido viejo contra viejo: máx. 1/255; el passthrough contra el viejo: máx. 3/255 en ~60
+  píxeles de borde de glifo (empate de redondeo del muestreo).

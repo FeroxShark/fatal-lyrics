@@ -234,6 +234,11 @@ _CONFIG_COMMENTS = {
         "noise": "static",
         "roll": "brightness bar rolling down the tube",
         "vignette": "darkening towards the corners",
+        "composite": "the signal comes down a cable instead of being painted: colour\n"
+                     "bleeds sideways, edges ring and crawl. 0 = clean RGB, 0.5 =\n"
+                     "an old TV (the top of the TV range is 0.6), 1 = a worn-out\n"
+                     "VHS (colour lags, snow at the bottom, the picture wobbles\n"
+                     "while the tube glitches)",
     },
 }
 
@@ -333,6 +338,7 @@ DEFAULTS = {
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
+        "composite": 0.5,
     },
 }
 

@@ -94,7 +94,7 @@ ShellRoot {
     property real crtChroma: 1.0
     property real crtBloom: 1.0
     property real crtNoise: 0.5
-    property real crtComposite: 0.0    // 0 = RGB limpio .. 1 = VHS gastado (signal.frag)
+    property real crtComposite: 0.5    // 0 = RGB limpio .. 1 = VHS gastado (signal.frag)
     property real crtRoll: 1.0
     property real crtVignette: 0.9
     property real crtIntensity: 1.0
@@ -2941,6 +2941,7 @@ ShellRoot {
         crt_palette: "crtPalette", crt_split: "crtSplit", crt_font: "crtFont",
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
+        crt_composite: "crtComposite",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",

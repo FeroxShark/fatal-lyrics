@@ -314,6 +314,9 @@ SETTINGS = [
      lambda c: _ask_num("Scanline depth", c, 0.0, 1.0)),
     ("bloom", "crt", "Phosphor glow",
      lambda c: _ask_num("Phosphor glow around the letters", c, 0.0, 3.0)),
+    ("composite", "crt", "Analog signal (0 = clean RGB, 0.5 = old TV, 1 = worn VHS)",
+     lambda c: _ask_num("Analog signal: colour bleed, ringing, dot crawl "
+                        "(0 = clean RGB, 0.5 = old TV, 1 = worn-out VHS)", c, 0.0, 1.0)),
 
     ("— behavior —", None, None, None),
     ("player", "behavior", "Player to follow", _ask_player),

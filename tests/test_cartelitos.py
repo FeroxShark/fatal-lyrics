@@ -2972,6 +2972,50 @@ class TestKnobsAreReachable(unittest.TestCase):
             self.assertIsInstance(c.DEFAULTS["crt"][key], (int, float))
             self.assertEqual(c.parse_tune(f"{key}=0.5"), {key: 0.5})
 
+    def test_composite_knob_is_wired_end_to_end(self):
+        # corrida 1 de la tanda 7: la perilla viaja daemon -> overlay -> shader.
+        # Los cuatro lugares de una perilla nueva ya los cubren los tests
+        # genéricos de arriba; esto agrega lo propio de `composite`.
+        self.assertEqual(c.DEFAULTS["crt"]["composite"], 0.5)
+        self.assertIn(("crt_composite", "crt", "composite"), ipc.CONFIG_EVENT_MAP)
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        # el default del overlay y el del daemon son el mismo número
+        self.assertRegex(qml, r"property real crtComposite:\s*0\.5\b")
+        self.assertIn('crt_composite: "crtComposite"', qml)
+
+    def test_every_signal_uniform_has_a_property_in_signalpass(self):
+        # un uniform que el shader declara y `signalPass` no ata queda en cero
+        # sin un warning (docs/TRAMPAS.md: qsb / ShaderEffect)
+        with open(os.path.join(self.SHELL, "signal.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        block = re.search(r"uniform buf \{(.*?)\};", frag, re.S).group(1)
+        block = re.sub(r"//[^\n]*", "", block)
+        uniforms = set(re.findall(r"\b(?:float|vec[234])\s+(\w+)\s*;", block)) - {"qt_Opacity"}
+        self.assertTrue({"t", "composite", "res", "glitch"} <= uniforms)
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        effect = re.search(r"id: signalPass(.*?)fragmentShader: Qt\.resolvedUrl\(\"signal\.frag\.qsb\"\)",
+                           qml, re.S)
+        self.assertIsNotNone(effect, "signalPass no usa signal.frag.qsb")
+        for u in uniforms:
+            self.assertRegex(effect.group(1), rf"property \w+ {u}:", f"signalPass no ata `{u}`")
+
+    QSB = "/usr/lib/qt6/bin/qsb"
+
+    @unittest.skipUnless(os.path.exists(QSB), "qsb no está instalado")
+    def test_signal_qsb_is_in_sync_with_its_source(self):
+        # el .qsb compilado tiene que traer todos los uniforms del .frag
+        import subprocess
+        with open(os.path.join(self.SHELL, "signal.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        block = re.sub(r"//[^\n]*", "", re.search(r"uniform buf \{(.*?)\};", frag, re.S).group(1))
+        uniforms = set(re.findall(r"\b(?:float|vec[234]|mat4)\s+(\w+)\s*;", block))
+        dump = subprocess.run([self.QSB, "--dump", os.path.join(self.SHELL, "signal.frag.qsb")],
+                              capture_output=True, text=True, check=True).stdout
+        for u in uniforms:
+            self.assertIn(f'"name": "{u}"', dump, f"signal.frag.qsb no trae `{u}`: recompilar")
+
     def test_the_water_knobs_are_saved_in_their_own_section(self):
         # el agua tiene interruptor (bool) y cantidad (número): los dos van a [crt]
         with tempfile.TemporaryDirectory() as tmp:

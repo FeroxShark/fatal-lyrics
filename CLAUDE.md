@@ -108,10 +108,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 
 - `bin/fatal` — CLI: `on|off|restart|status|config|demo|crt on|off|toggle|sing on|off`,
   `crt motif <kind> [--screen <nombre|idx|all>]|off` y `sync +|-|show|reset [<artista>|all]`
-  (`sync show|reset` y `crt motif` NO necesitan el daemon: el último le habla al socket del
-  overlay, que es el que escucha).
+  (`sync show|reset` y `crt motif` NO necesitan el daemon; `crt motif` habla con el overlay).
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
-- `shell/Crt.qml` + `shell/crt.frag(.qsb)` — el tubo: vidrio, fósforo, scanlines, rotura.
+- `shell/Crt.qml` — el tubo, en DOS pasadas (tanda 7): `stage` → `signal.frag` (la señal: compuesta,
+  perilla `crt.composite`) → `crt.frag` (el vidrio: fósforo, scanlines, rotura). Un `.qsb` c/u.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
   elige cuál dibuja. Las dieciséis son un `Component` cada una y las pone **UN solo `Loader`**
   (`sourceComponent` según `kind`): dos motivos no pueden estar vivos a la vez. Las que tienen
@@ -199,8 +199,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `docs/demo-dialogs.gif`, `docs/crt-mode.jpg` — para el README.
-- `tests/` — 522 tests, stdlib puro.
+- `docs/*.gif|jpg` — para el README.
+- `tests/` — 597 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

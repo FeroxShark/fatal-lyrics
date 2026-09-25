@@ -986,30 +986,41 @@ ShellRoot {
 
 
     // --------------------------------------------------------------- paletas
+    // `tint` es el color del fósforo de la cara, como vec3 0..1 (lo lee el uniform
+    // `tint` de crt.frag: halo del bloom, barra que rueda, tinte de la rotura).
+    // En la cara oscura es su `ink` (lo que brilla); en la prendida, su `dim`
+    // saturado (el borde de color sobre el fondo quemado). Sin clave `tint` el
+    // uniform quedaba en cero y esos tres efectos estaban muertos.
+    function phosphor(colour) {
+        const c = Qt.color(colour);
+        return Qt.vector3d(c.r, c.g, c.b);
+    }
+
     // Una paleta = DOS caras que combinan entre sí: una pantalla prendida (fondo
     // quemado, letra oscura) y una de tubo apagado (fondo hondo, letra encendida).
     // Las pantallas alternan entre esas dos y nunca hay tres colores peleándose.
     readonly property var schemes: [
         { key: "dragons",
-          a: { bg: "#f7d21f", ink: "#a51405", hot: "#5e0700", dim: "#c05010" },
-          b: { bg: "#170604", ink: "#ff8a2b", hot: "#ffe0b0", dim: "#8a4110" } },
+          a: { bg: "#f7d21f", ink: "#a51405", hot: "#5e0700", dim: "#c05010", tint: phosphor("#c05010") },
+          b: { bg: "#170604", ink: "#ff8a2b", hot: "#ffe0b0", dim: "#8a4110", tint: phosphor("#ff8a2b") } },
         { key: "ado",
-          a: { bg: "#68d6f2", ink: "#062247", hot: "#010d24", dim: "#1f5c8a" },
-          b: { bg: "#04162e", ink: "#7fe4ff", hot: "#ffffff", dim: "#2d6f96" } },
+          a: { bg: "#68d6f2", ink: "#062247", hot: "#010d24", dim: "#1f5c8a", tint: phosphor("#1f5c8a") },
+          b: { bg: "#04162e", ink: "#7fe4ff", hot: "#ffffff", dim: "#2d6f96", tint: phosphor("#7fe4ff") } },
         { key: "poison",
-          a: { bg: "#c8f224", ink: "#123a06", hot: "#061c02", dim: "#3f7a1a" },
-          b: { bg: "#04120a", ink: "#9dff3d", hot: "#e8ffc4", dim: "#3f7a1a" } },
+          a: { bg: "#c8f224", ink: "#123a06", hot: "#061c02", dim: "#3f7a1a", tint: phosphor("#3f7a1a") },
+          b: { bg: "#04120a", ink: "#9dff3d", hot: "#e8ffc4", dim: "#3f7a1a", tint: phosphor("#9dff3d") } },
         { key: "bloodline",
-          a: { bg: "#ff2f14", ink: "#2b0600", hot: "#5e0f00", dim: "#8a2c14" },
-          b: { bg: "#12030a", ink: "#ff5c7a", hot: "#ffd6de", dim: "#8a2540" } },
+          a: { bg: "#ff2f14", ink: "#2b0600", hot: "#5e0f00", dim: "#8a2c14", tint: phosphor("#8a2c14") },
+          b: { bg: "#12030a", ink: "#ff5c7a", hot: "#ffd6de", dim: "#8a2540", tint: phosphor("#ff5c7a") } },
         { key: "vapor",
-          a: { bg: "#f74fc3", ink: "#2b0126", hot: "#12000f", dim: "#8a1670" },
-          b: { bg: "#0d0a2b", ink: "#6ff2ff", hot: "#e6ffff", dim: "#2f5a8a" } },
+          a: { bg: "#f74fc3", ink: "#2b0126", hot: "#12000f", dim: "#8a1670", tint: phosphor("#8a1670") },
+          b: { bg: "#0d0a2b", ink: "#6ff2ff", hot: "#e6ffff", dim: "#2f5a8a", tint: phosphor("#6ff2ff") } },
         { key: "bone",
-          a: { bg: "#f2e2bc", ink: "#7a2a05", hot: "#3d1302", dim: "#a8642a" },
-          b: { bg: "#150c05", ink: "#ffb457", hot: "#ffe6c2", dim: "#8a5a20" } },
+          a: { bg: "#f2e2bc", ink: "#7a2a05", hot: "#3d1302", dim: "#a8642a", tint: phosphor("#a8642a") },
+          b: { bg: "#150c05", ink: "#ffb457", hot: "#ffe6c2", dim: "#8a5a20", tint: phosphor("#ffb457") } },
     ]
-    readonly property var criticalFace: ({ bg: "#ff2a0a", ink: "#26030a", hot: "#5e0500", dim: "#7d1a08" })
+    readonly property var criticalFace: ({ bg: "#ff2a0a", ink: "#26030a", hot: "#5e0500", dim: "#7d1a08",
+                                           tint: phosphor("#7d1a08") })
 
     // colores de la tapa del disco (evento "art" del daemon)
     property var artColors: []
@@ -1018,18 +1029,23 @@ ShellRoot {
         const c = Qt.color(hex);
         const h = c.hslHue;
         const sat = Math.min(Math.max(c.hslSaturation, 0.6), 1);
-        if (lit)
+        if (lit) {
+            const dim = Qt.hsla(h, sat, 0.34, 1);
             return {
                 bg: Qt.hsla(h, sat, 0.58, 1),
                 ink: Qt.hsla(h, Math.min(sat + 0.15, 1), 0.15, 1),
                 hot: Qt.hsla(h, 1, 0.07, 1),
-                dim: Qt.hsla(h, sat, 0.34, 1),
+                dim: dim,
+                tint: phosphor(dim),
             };
+        }
+        const ink = Qt.hsla(h, sat, 0.66, 1);
         return {
             bg: Qt.hsla(h, sat * 0.9, 0.07, 1),
-            ink: Qt.hsla(h, sat, 0.66, 1),
+            ink: ink,
             hot: Qt.hsla(h, 0.4, 0.92, 1),
             dim: Qt.hsla(h, sat, 0.40, 1),
+            tint: phosphor(ink),
         };
     }
 

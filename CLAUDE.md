@@ -112,6 +112,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` — el tubo, en DOS pasadas (tanda 7): `stage` → `signal.frag` (la señal: compuesta,
   perilla `crt.composite`) → `crt.frag` (el vidrio: fósforo, scanlines, rotura). Un `.qsb` c/u.
+  `crtTubeTable` (`shell.qml`, perilla `crt.tube`, corrida 2): cada tubo es una fila con las perillas
+  sueltas + `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); `custom` = look de
+  siempre y es el único que obedece las sueltas. `auto` (en `crtSetFor`) sortea sólo tubos de color.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
   elige cuál dibuja. Las dieciséis son un `Component` cada una y las pone **UN solo `Loader`**
   (`sourceComponent` según `kind`): dos motivos no pueden estar vivos a la vez. Las que tienen
@@ -150,21 +153,17 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`, tanda 6, corrida 6) — la palabra que
   suena pulsa con la familia de entrada del set (`typed`/`hard`/`burn`/`soft`), logueando
   `crt: word <i> <emphasis>` al asentar. `wholeWordsOn` (`allMode && layout !== "split" &&
-  crtQuality >= 1`) gatea el `Flow` de `WordSlot` por palabra en allMode sin split — cuesta 4.4
-  puntos de CPU (`docs/NUMEROS-MEDIDOS.md`), por eso el corte en `crtQuality`. El mismo
-  componente se usa en director, con reparto por largo de palabra (no por tiempo real: sin
-  `words` confiable por pantalla, `docs/TRAMPAS.md`). `emphasisGateOpen` suprime el pulso de
-  una palabra si le toca dentro de `Motion.enterMs` de la entrada de la línea — la regla de no
-  superponer animaciones. El auto-drop de calidad en vivo (`FrameAnimation`, frame > 28ms por
-  3s → `crtQuality` a 0.75; sube de vuelta tras 28 s sanos, hasta el techo del TOML) apaga
-  este `Flow` mientras dura, sin avisar.
+  crtQuality >= 1`) gatea el `Flow` de `WordSlot` por palabra — cuesta 4.4 puntos de CPU
+  (`docs/NUMEROS-MEDIDOS.md`). En director reparte por largo de palabra (sin `words` confiable
+  por pantalla, `docs/TRAMPAS.md`). `emphasisGateOpen` suprime el pulso si cae dentro de
+  `Motion.enterMs` de la entrada de la línea. El auto-drop de calidad en vivo (`FrameAnimation`,
+  frame > 28ms por 3s → `crtQuality` 0.75; sube tras 28 s sanos) apaga este `Flow`, sin avisar.
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
   `crt.rare`, tanda 6, corrida 7) — eventos raros: `bsod` (pantalla azul de cero en `Crt.qml`,
   sin nada del modo Win95, fondo `#0000aa` y el verso en la fuente del set), `nosignal`
   (reusa `standbyLayer`, 3 s, vuelve sola) y `testcard` (motivo `testcard` forzado, 6 s). El
   sorteo nunca cae en intro ni en pantalla oscura. `motifs.py` (`parse_rare`) + `fatal crt
   rare <kind> [--screen ...]` fuerza uno por socket.
-  `dialog` (el raro sobre el modo Win95) queda fuera de esta tanda.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
@@ -199,7 +198,6 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `docs/*.gif|jpg` — para el README.
 - `tests/` — 597 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por

@@ -22,6 +22,7 @@ layout(std140, binding = 0) uniform buf {
     float composite;  // 0 = clean RGB, 0.5 = old TV, 1 = worn-out VHS
     vec2 res;         // surface size in pixels
     float glitch;     // 0..1 burst
+    float quality;    // crtQuality: below 1 the chroma low-pass drops to 3 taps
 };
 
 layout(binding = 1) uniform sampler2D src;
@@ -94,11 +95,20 @@ void main() {
     float yl = dot(cl, LUMA);
     float yr = dot(cr, LUMA);
 
-    vec2 iq = 0.4 * toYiq(texture(src, cbase).rgb).yz;
-    iq += 0.2 * toYiq(texture(src, cbase - vec2(sp, 0.0)).rgb).yz;
-    iq += 0.2 * toYiq(texture(src, cbase + vec2(sp, 0.0)).rgb).yz;
-    iq += 0.1 * toYiq(texture(src, cbase - vec2(2.0 * sp, 0.0)).rgb).yz;
-    iq += 0.1 * toYiq(texture(src, cbase + vec2(2.0 * sp, 0.0)).rgb).yz;
+    vec2 iq;
+    if (quality < 0.999) {
+        // a slow screen (crtQuality has dropped) gets three taps, and the
+        // spread widens a bit to keep the same amount of bleed
+        iq = 0.5 * toYiq(texture(src, cbase).rgb).yz;
+        iq += 0.25 * toYiq(texture(src, cbase - vec2(1.5 * sp, 0.0)).rgb).yz;
+        iq += 0.25 * toYiq(texture(src, cbase + vec2(1.5 * sp, 0.0)).rgb).yz;
+    } else {
+        iq = 0.4 * toYiq(texture(src, cbase).rgb).yz;
+        iq += 0.2 * toYiq(texture(src, cbase - vec2(sp, 0.0)).rgb).yz;
+        iq += 0.2 * toYiq(texture(src, cbase + vec2(sp, 0.0)).rgb).yz;
+        iq += 0.1 * toYiq(texture(src, cbase - vec2(2.0 * sp, 0.0)).rgb).yz;
+        iq += 0.1 * toYiq(texture(src, cbase + vec2(2.0 * sp, 0.0)).rgb).yz;
+    }
 
     // luma with a little ringing: an unsharp kernel overshoots on both sides of
     // an edge, which is what a band-limited signal does
@@ -107,7 +117,9 @@ void main() {
     // dot crawl: the colour subcarrier leaks into luma on the edges as a
     // checker that changes phase every frame, so it crawls
     float edge = abs(yr - yl);
-    vec2 pix = floor(uv * res);
+    // (on the texel grid of the signal texture, so it stays a checker at any
+    // crtQuality)
+    vec2 pix = floor(uv * res * quality);
     float chk = mod(pix.x + pix.y + floor(t * 15.0), 2.0) * 2.0 - 1.0;
     y += chk * edge * 0.14 * k;
     // and the strip at the bottom is mostly snow

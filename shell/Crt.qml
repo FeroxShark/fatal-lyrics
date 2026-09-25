@@ -2254,6 +2254,7 @@ PanelWindow {
         property real composite: crt.ctl.crtComposite
         property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
         property real glitch: Math.min(crt.glitchAmt, 1)
+        property real quality: crt.ctl.crtQuality
         fragmentShader: Qt.resolvedUrl("signal.frag.qsb")
     }
 

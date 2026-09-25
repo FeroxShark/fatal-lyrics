@@ -47,6 +47,21 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
     `focus = roam` cuestan más que los motivos forzados (`normal` a 1.0 y a 0.75 dan lo mismo,
     pero `techo` se midió una sola vez). Estos tres son el número contra el que cada corrida de
     la tanda 7 puede sumar como máximo +3 puntos; el ruido entre corridas ronda ±2.
+- **Tanda 7, corrida 1 — dos pasadas + señal compuesta** (`cpu-bench.py`, 8×8 s, Spotify en
+  pausa, misma sesión). Base re-medida con el commit anterior (una pasada): `techo` **29.3%**,
+  `normal` **29.6%** (la base de la corrida 0 dio 27.4 y 29.8: el ruido entre sesiones es de
+  ±2, así que la comparación buena es la de la misma sesión).
+  | `crt.composite` | `techo` | `normal` |
+  |---|---|---|
+  | 0 (pasada vacía, passthrough) | 30.4% | 30.7% |
+  | 0.5 (TV vieja, el default) | 30.5% | 29.6% |
+  | 1 (VHS) | 30.2% | 30.0% |
+
+  La pasada vacía cuesta ~**+1.1** (techo) y ~+1.1 (normal) sobre la base de la misma sesión;
+  contra la base de la corrida 0 el techo sube +3.0 (justo el tope, pero con ese ruido). Los
+  niveles de `composite` no se distinguen entre sí (±1): lo que cuesta es tener la segunda
+  textura, no las 8 muestras. No se puso detrás de `crtQuality >= 1`. NO medido: `--quality 0.75`
+  (con `crtQuality < 1` el paso bajo de chroma baja a 3 muestras).
 - **`ENERGY_GAIN_REF` (mood.py), medido en vivo el 2026-09-16:** ganancia lineal real 0.064,
   de Spotify con el stream al 40% (`0.40**3` — la escala de PipeWire/pactl es CÚBICA, no
   lineal, ver docs/TRAMPAS.md) sobre el sink de Ferox (Kingston HyperX USB, `HW_VOLUME_CTRL`:

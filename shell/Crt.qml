@@ -1,8 +1,9 @@
 // fatal-lyrics — CRT mode: one full-bleed cathode ray tube per monitor.
 //
 // The lyric is laid out flat inside `stage`, which is drawn into a texture and
-// pushed through crt.frag: glass curvature, phosphor bloom, aperture grille,
-// scanlines, RGB split, torn bands and static.
+// pushed through TWO passes: signal.frag (composite video: colour bleed, ringing,
+// dot crawl, VHS) and then crt.frag: glass curvature, phosphor bloom, aperture
+// grille, scanlines, RGB split, torn bands and static.
 //
 // With the director on, the screens are not clones: one is in focus, the phrase
 // continues on the next one, and the quiet ones run an animation instead. What

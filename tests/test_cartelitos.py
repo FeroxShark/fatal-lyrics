@@ -3016,6 +3016,89 @@ class TestKnobsAreReachable(unittest.TestCase):
         for u in uniforms:
             self.assertIn(f'"name": "{u}"', dump, f"signal.frag.qsb no trae `{u}`: recompilar")
 
+    TUBE_COLUMNS = {"curvature", "scanlines", "chroma", "bloom", "noise", "roll",
+                    "vignette", "composite", "persistence", "maskType", "maskPitch",
+                    "mono", "monoTint"}
+
+    def _tube_table(self):
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        block = re.search(r"crtTubeTable:\s*\(\{(.*?)\n    \}\)", qml, re.S)
+        self.assertIsNotNone(block, "no se encontró crtTubeTable en shell.qml")
+        rows = {}
+        for name, body in re.findall(r"^\s{8}(\w+):\s*\{(.*?)\n\s{8}\},", block.group(1), re.S | re.M):
+            body = re.sub(r"//[^\n]*", "", body)
+            rows[name] = dict(re.findall(r"(\w+):\s*([^,\s]+)", body))
+        return qml, rows
+
+    def test_tube_knob_is_wired_end_to_end(self):
+        # corrida 2 de la tanda 7: los cuatro lugares de `crt.tube`
+        self.assertEqual(c.DEFAULTS["crt"]["tube"], "custom")
+        self.assertIn("tube", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_tube", "crt", "tube"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r'property string crtTube:\s*"custom"')
+        self.assertIn('crt_tube: "crtTube"', qml)
+        self.assertIn("tube", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+
+    def test_every_tube_has_every_column(self):
+        _, rows = self._tube_table()
+        self.assertEqual(set(rows), {"custom", "trinitron", "pvm", "arcade", "green", "amber"})
+        for name, row in rows.items():
+            self.assertEqual(set(row), self.TUBE_COLUMNS, f"el tubo `{name}` no trae todas las columnas")
+        # `null` = "leer la perilla suelta": sólo `custom`, y sólo en las columnas
+        # que tienen perilla suelta; los otros tubos traen números
+        loose = self.TUBE_COLUMNS - {"maskType", "maskPitch", "mono", "monoTint"}
+        for name, row in rows.items():
+            for col in loose:
+                self.assertEqual(row[col] == "null", name == "custom", f"{name}.{col}")
+        # `custom` es el tubo de antes: máscara de apertura de 3 px, a color
+        self.assertEqual((rows["custom"]["maskType"], rows["custom"]["maskPitch"],
+                          rows["custom"]["mono"]), ("0", "3.0", "0"))
+        # los monocromos traen su fósforo; los de color, no
+        for name, row in rows.items():
+            self.assertEqual(row["mono"] == "1", name in ("green", "amber"))
+
+    def test_tube_menu_comes_from_the_table(self):
+        _, rows = self._tube_table()
+        editor = next(fn for key, section, _, fn in setup.SETTINGS
+                      if key == "tube" and section == "crt")
+        picked = []
+        for n in range(1, len(rows) + 2):
+            _FakeInput(self, str(n))
+            picked.append(editor("custom"))
+        self.assertEqual(set(picked), set(rows) | {"auto"},
+                         "el menú de `tube` no coincide con crtTubeTable (+ auto)")
+        self.assertEqual(len(picked), len(set(picked)))
+        self.assertIn(c.DEFAULTS["crt"]["tube"], picked)
+
+    def test_auto_tube_never_picks_a_mono_tube(self):
+        qml, rows = self._tube_table()
+        keys = re.search(r"crtTubeAutoKeys:\s*\[(.*?)\]", qml).group(1)
+        keys = re.findall(r'"(\w+)"', keys)
+        self.assertTrue(set(keys) <= set(rows))
+        self.assertFalse({"green", "amber"} & set(keys))
+        self.assertIn("tube: tube", qml)   # `crtSetFor` lo devuelve en el set
+
+    def test_every_glass_uniform_has_a_property_and_is_in_the_qsb(self):
+        with open(os.path.join(self.SHELL, "crt.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        block = re.sub(r"//[^\n]*", "", re.search(r"uniform buf \{(.*?)\};", frag, re.S).group(1))
+        uniforms = set(re.findall(r"\b(?:float|vec[234])\s+(\w+)\s*;", block)) - {"qt_Opacity"}
+        self.assertTrue({"maskType", "maskPitch", "mono", "monoTint"} <= uniforms)
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        effect = re.search(r"id: glass(.*?)fragmentShader: Qt\.resolvedUrl\(\"crt\.frag\.qsb\"\)", qml, re.S)
+        self.assertIsNotNone(effect)
+        for u in uniforms:
+            self.assertRegex(effect.group(1), rf"property \w+ {u}:", f"`glass` no ata `{u}`")
+        if os.path.exists(self.QSB):
+            import subprocess
+            dump = subprocess.run([self.QSB, "--dump", os.path.join(self.SHELL, "crt.frag.qsb")],
+                                  capture_output=True, text=True, check=True).stdout
+            for u in uniforms:
+                self.assertIn(f'"name": "{u}"', dump, f"crt.frag.qsb no trae `{u}`: recompilar")
+
     def test_the_water_knobs_are_saved_in_their_own_section(self):
         # el agua tiene interruptor (bool) y cantidad (número): los dos van a [crt]
         with tempfile.TemporaryDirectory() as tmp:

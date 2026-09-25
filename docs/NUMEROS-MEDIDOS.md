@@ -62,6 +62,19 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   niveles de `composite` no se distinguen entre sí (±1): lo que cuesta es tener la segunda
   textura, no las 8 muestras. No se puso detrás de `crtQuality >= 1`. NO medido: `--quality 0.75`
   (con `crtQuality < 1` el paso bajo de chroma baja a 3 muestras).
+- **Tanda 7, corrida 2 (tubos), CPU total de qs, cpu-bench:** el tubo no cuesta nada medible (±1).
+
+  | tubo   | techo | normal |
+  |--------|-------|--------|
+  | custom | 29.3  | 30.4   |
+  | pvm    | 29.7  | 29.3   |
+  | arcade | 29.8  | 30.2   |
+  | green  | 29.9  | 29.6   |
+
+  La base de la corrida 1 era 29.3 / 29.6. Cambiar de tubo es un `case` de uniforms (máscara,
+  mono) sobre la misma pasada de vidrio: no hay textura ni muestras nuevas. Ojo con medir con la
+  máquina cargada (salieron ~45% descartados) y con que el daemon se muere solo tras una pausa
+  larga de Spotify: `fatal on` antes de cada corrida o `cpu-bench` falla con `qs.pid` faltante.
 - **`ENERGY_GAIN_REF` (mood.py), medido en vivo el 2026-09-16:** ganancia lineal real 0.064,
   de Spotify con el stream al 40% (`0.40**3` — la escala de PipeWire/pactl es CÚBICA, no
   lineal, ver docs/TRAMPAS.md) sobre el sink de Ferox (Kingston HyperX USB, `HW_VOLUME_CTRL`:

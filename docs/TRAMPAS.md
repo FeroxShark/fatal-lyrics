@@ -522,3 +522,22 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   evento `lyrics` cada 2 s por eso. Cualquier driver que pause el player tiene que hacer lo mismo.
 - `fatal restart` deja el CRT apagado (el archivo `cartelitos-crt` se resetea): un driver que
   reinicia para releer el log tiene que volver a hacer `fatal crt on`.
+
+## Detalle movido desde CLAUDE.md (intro, palabras, raros)
+
+- **Intro (`crt.intro`):** `clear` (why="track") apaga toda la pared, `tubeOffMs` después prende
+  estática (`Static.qml` reusado), `introStaticMs` después la tarjeta (título/artista, fuente y
+  esquema del set) en la pantalla del próximo foco. La tarjeta NO tiene plazo propio: se queda
+  puesta (intro instrumental, "el título acompaña") hasta que `show()` la corta — de un golpe si
+  el primer verso llega antes de la tarjeta (`crtIntroSkip`) o cortándola si ya estaba puesta
+  (`crtIntroEnd`, `Crt.qml` la anima afuera con `Motion.exitMs`, nunca un corte seco). Si el
+  `np` nunca llega, sólo estática (`introStaticMs`) y sigue sin tarjeta. Mientras `crtIntroOn` los
+  handlers de `sec`/`cue` no tocan canal, escena ni motivo (se aplican una sola vez al terminar).
+- **Palabras (`wholeWordsOn`):** es `allMode && layout !== "split" && crtQuality >= 1`; cuesta 4.4
+  puntos de CPU (`docs/NUMEROS-MEDIDOS.md`; en director reparte por largo). `emphasisGateOpen`
+  suprime el pulso dentro de `Motion.enterMs` de la entrada. El auto-drop de calidad
+  (`FrameAnimation`, frame > 28 ms por 3 s → `crtQuality` 0.75; sube tras 28 s) lo apaga.
+- **Raros (`crt.rare`):** `bsod` es una pantalla azul de cero en `Crt.qml` (nada del modo Win95,
+  fondo `#0000aa`, el verso en la fuente del set), `nosignal` reusa `standbyLayer` (3 s, vuelve
+  sola) y `testcard` fuerza el motivo `testcard` 6 s. `motifs.py` (`parse_rare`) los fuerza por
+  socket.

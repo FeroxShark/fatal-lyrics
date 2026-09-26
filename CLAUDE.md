@@ -147,27 +147,15 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   Nunca apaga la pantalla que `crtPredict()` ya prendió por anticipación.
 - `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`crtIntroAdvance`/`crtIntroEnd`/
   `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, tanda 6, corrida 5) — el cambio de tema es
-  un evento, no un channel-change disimulado: `clear` (why="track") apaga toda la pared,
-  `tubeOffMs` después prende estática (`Static.qml` reusado), `introStaticMs` después la
-  tarjeta (título/artista, fuente y esquema del set) en la pantalla del próximo foco. La
-  tarjeta NO tiene plazo propio: se queda puesta (intro instrumental, "el título acompaña")
-  hasta que `show()` la corta — de un golpe si el primer verso llega antes de la tarjeta
-  (`crtIntroSkip`) o cortándola si ya estaba puesta (`crtIntroEnd`, `Crt.qml` la anima afuera
-  con `Motion.exitMs`, nunca un corte seco). Si el `np` nunca llega, sólo estática
-  (`introStaticMs`) y sigue sin tarjeta. Mientras `crtIntroOn` los handlers de `sec`/`cue` no
-  tocan canal, escena ni motivo (se aplican una sola vez al terminar).
+  un evento: `clear` (why="track") apaga la pared, estática (`Static.qml`) y la tarjeta
+  título/artista en la pantalla del próximo foco. La tarjeta NO tiene plazo: la corta
+  `show()`. Detalle del orden y los cortes en `docs/TRAMPAS.md` ("Detalle movido").
 - `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`, tanda 6, corrida 6) — la palabra que
-  suena pulsa con la familia de entrada del set, logueando `crt: word <i> <emphasis>`.
-  `wholeWordsOn` (`allMode && layout !== "split" && crtQuality >= 1`) gatea el `Flow` por palabra
-  (4.4 puntos de CPU, `docs/NUMEROS-MEDIDOS.md`; en director reparte por largo, `docs/TRAMPAS.md`).
-  `emphasisGateOpen` suprime el pulso dentro de `Motion.enterMs` de la entrada. El auto-drop de
-  calidad (`FrameAnimation`, frame > 28 ms por 3 s → `crtQuality` 0.75; sube tras 28 s) lo apaga.
+  suena pulsa con la familia de entrada del set (`crt: word <i> <emphasis>`). `wholeWordsOn`
+  gatea el `Flow` por palabra (4.4 puntos de CPU); el auto-drop de calidad lo apaga.
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
-  `crt.rare`, tanda 6, corrida 7) — eventos raros: `bsod` (pantalla azul de cero en `Crt.qml`,
-  sin nada del modo Win95, fondo `#0000aa` y el verso en la fuente del set), `nosignal`
-  (reusa `standbyLayer`, 3 s, vuelve sola) y `testcard` (motivo `testcard` forzado, 6 s). El
-  sorteo nunca cae en intro ni en pantalla oscura. `motifs.py` (`parse_rare`) + `fatal crt
-  rare <kind> [--screen ...]` fuerza uno por socket.
+  `crt.rare`, tanda 6, corrida 7) — eventos raros `bsod`, `nosignal` y `testcard`; el sorteo
+  nunca cae en intro ni en pantalla oscura. `fatal crt rare <kind> [--screen ...]` fuerza uno.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

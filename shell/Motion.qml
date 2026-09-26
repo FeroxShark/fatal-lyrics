@@ -66,7 +66,12 @@ Singleton {
     // tarjeta y la tarjeta sostenida. No son `holdMs`: ese es el piso entre
     // eventos DENTRO de un tema; esto es la ceremonia del cambio de tema,
     // que dura más porque no compite con nada (no hay letra sonando todavía).
-    readonly property int introStaticMs: 600
+    // 300, no 600 (corrida 6b): con el degauss (700) la ceremonia hasta la tarjeta duraba 1560 ms
+    // (260 off + 700 + 600) y la estática ya no es el momento, es el paso: el degauss es la
+    // ceremonia, así que acá sólo queda lo justo para que la onda se asiente en estática pura antes
+    // de que la carta la tape. Una constante más corta que ésta se lee como un salto, no como
+    // un paso.
+    readonly property int introStaticMs: 300
     // el degauss (tanda 7, corrida 6): el reencendido del intro. Un degauss real (la bobina que
     // desmagnetiza el vidrio al prender) dura eso: unos 700 ms de onda que se amortigua. Es parte
     // de la ceremonia, no un puente; NO es `bridgeMs`. Un tubo que ondula menos se lee como un

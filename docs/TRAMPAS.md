@@ -529,7 +529,7 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   prende con el DEGAUSS (fase `degauss`, `Motion.degaussMs` 700: uniform `degauss` de `crt.frag`,
   onda radial + anillos de pureza + destello; `Crt.qml` la anima 1→0 y NO corre el haz de `tubeon`
   en esa fase: el reencendido es UN movimiento; la fase se pone ANTES de `crtSetDark(-1,false)`
-  justamente para eso; la estática ya se dibuja debajo, es lo que la onda ondula), `introStaticMs`
+  justamente para eso; la estática ya se dibuja debajo, es lo que la onda ondula), `introStaticMs` (300)
   después la tarjeta (`crt.intro_card`: `testcard` = el dibujo del motivo `testcard` de `Motif.qml`
   con `title`=título en la banda de identificación e `info`=artista bajo el círculo, en un Loader
   que sólo existe mientras se ve; `plain` = título grande y artista de antes; fuente y esquema del

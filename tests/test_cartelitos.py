@@ -3505,6 +3505,15 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertEqual(rest[6], 0.4)               # sin estribillo: el progreso del tema
         self.assertEqual(rest[7], 0)                 # sin duración no hay curva
 
+    def test_intro_reaches_the_card_in_about_a_second(self):
+        # corrida 6b: off + degauss + estática hasta la carta no pasa de ~1.3 s (eran 1560 ms)
+        with open(os.path.join(self.SHELL, "Motion.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        ms = {k: int(v) for k, v in re.findall(r"readonly property int (\w+):\s*(\d+)", qml)}
+        total = ms["tubeOffMs"] + ms["degaussMs"] + ms["introStaticMs"]
+        self.assertLessEqual(total, 1300)
+        self.assertGreater(ms["introStaticMs"], 0)
+
     def test_trail_is_off_when_the_screen_is_slow_or_asleep(self):
         # un source vivo y recursivo re-renderiza en cada cuadro (TRAMPAS.md): sólo
         # lo está mientras hay estela, y `prev` no se lee a sí mismo si no

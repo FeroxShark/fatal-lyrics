@@ -245,6 +245,12 @@ _CONFIG_COMMENTS = {
                        "blue go out faster) and a trail never outlives ~0.3 s. It\n"
                        "is invisible while the picture is still. A tube other than\n"
                        "custom brings its own. Off on a slow screen (quality < 1)",
+        "tension": "how much the tube breaks up towards the last chorus. The\n"
+                   "daemon finds the lines a song repeats; the noise, the colour\n"
+                   "fringing, the rolling bar and how often the picture glitches\n"
+                   "creep up until that chorus (and a notch more while one plays)\n"
+                   "and ease off in the outro. 0 = flat, always as before, 1 =\n"
+                   "the whole range of the pace preset (calm is narrow, wild wide)",
         "tube": "the character of the glass, in one knob. custom = the loose\n"
                 "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
                 "vignette, composite), exactly as before. Any other value picks\n"
@@ -356,7 +362,7 @@ DEFAULTS = {
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
-        "composite": 0.5, "persistence": 0.35,
+        "composite": 0.5, "persistence": 0.35, "tension": 1.0,
     },
 }
 

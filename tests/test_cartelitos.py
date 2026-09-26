@@ -11,6 +11,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -3157,6 +3158,95 @@ class TestKnobsAreReachable(unittest.TestCase):
         # `custom` lee la perilla suelta; los demás traen su número
         self.assertRegex(qml, r"tubePersistence:\s*crtTubeRow\.persistence !== null \? crtTubeRow\.persistence : crtPersistence")
         self.assertEqual(rows["custom"]["persistence"], "null")
+
+    def test_tension_knob_is_wired_end_to_end(self):
+        # corrida 4a de la tanda 7: la curva de tensión, en los cuatro lugares
+        self.assertEqual(c.DEFAULTS["crt"]["tension"], 1.0)
+        self.assertIn("tension", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_tension", "crt", "tension"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"property real crtTensionAmount:\s*1\.0\b")
+        self.assertIn('crt_tension: "crtTensionAmount"', qml)
+        self.assertIn("tension", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+
+    def test_tension_ranges_live_in_the_pace_table(self):
+        # amplitudes en `crtPaceTable`, las tres filas: calm angosto, wild ancho
+        qml, _ = self._tube_table()
+        table = re.search(r"crtPaceTable:\s*\(\{(.*?)\n    \}\)", qml, re.S).group(1)
+        table = re.sub(r"//[^\n]*", "", table)
+        span = {}
+        for name, body in re.findall(r"^\s{8}(\w+):\s*\{(.*?)\n\s{8}\},", table, re.S | re.M):
+            lo = float(re.search(r"tensionMin:\s*([\d.]+)", body).group(1))
+            hi = float(re.search(r"tensionMax:\s*([\d.]+)", body).group(1))
+            self.assertLess(lo, 1.0, name)
+            self.assertGreater(hi, 1.0, name)
+            span[name] = hi - lo
+        self.assertEqual(set(span), {"calm", "normal", "wild"})
+        self.assertLess(span["calm"], span["normal"])
+        self.assertLess(span["normal"], span["wild"])
+
+    def test_tension_multiplies_one_path_only(self):
+        # UN solo camino: el `rest` y el `hitGap` de Crt.qml; ningún cuarto
+        # multiplicador que pelee con `sectionEnergy`
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            crt = f.read()
+        self.assertRegex(crt, r"readonly property real rest:\s*ctl\.crtIntensity \* ctl\.crtTensionMult")
+        hit_gap = re.search(r"readonly property int hitGap:(.*?)\n    function hit", crt, re.S).group(1)
+        self.assertIn("ctl.crtTensionMult", hit_gap)
+        self.assertEqual(len(re.findall(r"crtTensionMult", crt)), 2)
+        qml, _ = self._tube_table()
+        self.assertNotIn("crtTensionMult", qml.split("readonly property real crtTensionMult")[0])
+        # el knob en 0 deja el multiplicador en 1 (plano) y en 1 el rango entero
+        self.assertRegex(qml, r"crtTensionMult:\s*1 \+ \(pace\.tensionMin\s*\+ \(pace\.tensionMax - pace\.tensionMin\) \* crtTension - 1\) \* crtTensionAmount")
+
+    def test_tension_curve_is_built_from_the_repeat_map(self):
+        qml, _ = self._tube_table()
+        self.assertIn("ev.v_end, ev.rep", qml)         # el `show` guarda `rep`
+        self.assertRegex(qml, r"trackStart: crtTrackStart, rep: rep \|\| null")
+        climax = re.search(r"readonly property real crtClimaxT:(.*?)\n    \}", qml, re.S).group(1)
+        self.assertIn("r.chorus", climax)
+        self.assertIn("r.k !== r.n", climax)           # la ÚLTIMA ocurrencia
+        raw = re.search(r"readonly property real crtTensionRaw:(.*?)\n    \}", qml, re.S).group(1)
+        for term in ("crtClimaxT", "crtLine.rep.chorus", "crtOutroAt", "posAbs"):
+            self.assertIn(term, raw)
+        self.assertRegex(qml, r"Behavior on crtTension\s*\{ NumberAnimation \{ duration: Motion\.holdMs")
+        self.assertIn('console.log("crt: tension "', qml)
+
+    @unittest.skipUnless(shutil.which("node"), "needs node to evaluate the QML binding")
+    def test_tension_curve_values(self):
+        # los dos bindings de verdad, evaluados con node sobre una letra con
+        # estribillo x3 (t0 = 10, 40, 70; el último es el clímax) y sin estribillo
+        qml, _ = self._tube_table()
+        climax = re.search(r"readonly property real crtClimaxT:(.*?)\n    \}", qml, re.S).group(1)
+        raw = re.search(r"readonly property real crtTensionRaw:(.*?)\n    \}", qml, re.S).group(1)
+        js = ("const crtLinesSynced = true, crtOutroAt = 0.92, crtTensionStep = 0.2,"
+              " crtTensionOutroDrop = 0.7;\n"
+              "function climax(crtLines)%s}\n"
+              "function raw(posAbs, posLen, crtClimaxT, crtLine)%s}\n"
+              "const chorus = [{t0: 10, rep: {n: 3, k: 1, chorus: true}},"
+              " {t0: 20, rep: {n: 1, k: 1, chorus: false}},"
+              " {t0: 40, rep: {n: 3, k: 2, chorus: true}},"
+              " {t0: 70, rep: {n: 3, k: 3, chorus: true}}];\n"
+              "const plain = [{t0: 10, rep: {n: 1, k: 1, chorus: false}}];\n"
+              "const cT = climax(chorus), quiet = {rep: null},"
+              " sing = {rep: {n: 3, k: 1, chorus: true}};\n"
+              "console.log(JSON.stringify([cT, climax(plain), climax([]),"
+              " raw(0, 100, cT, quiet), raw(35, 100, cT, quiet), raw(70, 100, cT, quiet),"
+              " raw(70, 100, cT, sing), raw(35, 100, cT, sing), raw(99, 100, cT, quiet),"
+              " raw(50, 100, -1, quiet), raw(0, 0, -1, quiet)]));\n") % (
+                  climax, raw)
+        out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True)
+        vals = json.loads(out.stdout)
+        self.assertEqual(vals[:3], [70, -1, -1])
+        rest = [round(v, 3) for v in vals[3:]]
+        self.assertEqual(rest[0], 0)                 # arranque del tema
+        self.assertEqual(rest[1], 0.4)               # 35/70 * 0.8: sube hacia el clímax
+        self.assertEqual(rest[2], 0.8)               # en el clímax, sin línea de estribillo
+        self.assertEqual(rest[3], 1.0)               # ...y con una sonando, el escalón
+        self.assertGreater(rest[4], rest[1])         # cantando estribillo pesa más
+        self.assertLess(rest[5], 0.5)                # el outro la baja
+        self.assertEqual(rest[6], 0.4)               # sin estribillo: el progreso del tema
+        self.assertEqual(rest[7], 0)                 # sin duración no hay curva
 
     def test_trail_is_off_when_the_screen_is_slow_or_asleep(self):
         # un source vivo y recursivo re-renderiza en cada cuadro (TRAMPAS.md): sólo

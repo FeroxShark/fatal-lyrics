@@ -550,7 +550,10 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   caídas en `fatal crt off`. Con los items siempre presentes: ~1 de cada 10 ciclos on/off (0 de 45 sin
   ellos). Hoy: el fade es una cuenta sobre `posAbs`, los items viven en un `Loader` (`active:
   burnHave`) y se destruyen con `burnWipe()` (cambio de tema Y `crtOn` en false). 40/40 ciclos on/off
-  sin quemado, 6/6 con quemado armado. Diagnóstico: `coredumpctl info <pid>`; el que sale primero en la
+  sin quemado, 6/6 con quemado armado. Validado en la corrida 5a con `docs/plans/cycle-drive.py`
+  (quemado armado con `crt: burn k>=2` en CADA ciclo, carga externa 3–14): 0 caídas en 43 ciclos
+  on/off y 0 en 32 con un `clear why=track` en el medio (el PID del overlay no cambió y `coredumpctl`
+  no sumó ningún SIGSEGV). Diagnóstico: `coredumpctl info <pid>`; el que sale primero en la
   lista suele ser el REPORTER del crash handler, no el proceso (mirar `Command Line`/timestamp).
 - Medir contraste: UNA pasada, alternando sólo `crt_burnin` en vivo (`chorus-drive.py burn`); dos
   `clear` distintos re-siembran el set y cambian cara clara/oscura.

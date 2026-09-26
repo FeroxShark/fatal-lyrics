@@ -43,6 +43,9 @@ layout(std140, binding = 0) uniform buf {
     float maskType;   // 0 = rejilla de apertura, 1 = slot mask, 2 = puntos (shadow mask)
     float maskPitch;  // píxeles por tríada RGB (3 = la de siempre)
     float mono;       // 0..1: luminancia x monoTint (P1 verde, P3 ámbar)
+    // el degauss (tanda 7, corrida 6): 1 = recién arranca, 0 = terminó. Sólo lo mueve el intro de
+    // tema; en 0 el shader da EXACTAMENTE lo de antes.
+    float degauss;
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
     vec3 monoTint;    // color del fósforo del tubo monocromo
@@ -70,8 +73,25 @@ vec2 curve(vec2 uv) {
     return uv * 0.5 + 0.5;
 }
 
+// gira el color alrededor del eje gris (los anillos de pureza del degauss)
+vec3 hueTurn(vec3 c, float a) {
+    const vec3 k = vec3(0.57735);
+    float ca = cos(a);
+    return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
+}
+
 void main() {
     vec2 uv = curve(qt_TexCoord0);
+
+    // degauss: la bobina desmagnetiza el vidrio y la imagen ondula desde el centro hacia
+    // afuera, cada vez menos. Se aplica sobre la geometría (después de la curvatura), así
+    // la onda sigue la cara del tubo y no un rectángulo.
+    vec2 dgc = uv - 0.5;
+    float dgd = length(dgc * vec2(res.x / res.y, 1.0));
+    if (degauss > 0.001) {
+        float dgw = sin(dgd * 26.0 - t * 20.0);
+        uv += normalize(dgc + 1e-5) * dgw * degauss * degauss * 0.028;
+    }
 
     // signal interference: the picture breaks into horizontal bands that jump
     // sideways, and the whole raster snakes a little
@@ -124,6 +144,13 @@ void main() {
         float bright = step(glum, lum);
         col = mix(col, glow, 0.22 * bloom * bright);
         col += tint * edge * bloom * (0.22 + 0.85 * bright);
+    }
+
+    // degauss: los anillos de pureza (el tinte rota según la distancia al centro, como el
+    // arcoíris de una bobina que todavía no se calmó) y un destello chico al arrancar
+    if (degauss > 0.001) {
+        col = hueTurn(col, degauss * 2.4 * sin(dgd * 15.0 - t * 9.0));
+        col += tint * pow(degauss, 6.0) * 0.55 * smoothstep(1.1, 0.0, dgd);
     }
 
     // fósforo de un solo color (tanda 7, corrida 2): P1 verde, P3 ámbar. La

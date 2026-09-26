@@ -16,6 +16,8 @@ D_PID="$RUN/daemon.pid"
 # proceso, así que se suelta solo cuando muere — no hay lock viejo que limpiar)
 QS_LOCK="$RUN/qs.lock"
 D_LOCK="$RUN/daemon.lock"
+# el daemon lo crea cuando ya escribió el flag del CRT de arranque (util.mark_ready)
+D_READY="$RUN/daemon.ready"
 QS_LOG="$RUN/qs.log"
 D_LOG="$RUN/daemon.log"
 # de dónde salió la letra del tema que suena: lo escribe el daemon (ver
@@ -244,7 +246,16 @@ start() {
             return 1
         fi
         rotate_log "$D_LOG"
+        rm -f "$D_READY" "$D_PID"   # sin pidfile viejo: el spawn lo escribe recién en su subshell
         spawn "$D_PID" "$D_LOG" python3 "$DAEMON"
+        # el daemon escribe el flag del CRT al arrancar: si volvemos antes, un
+        # `fatal crt on` inmediato se pisa con el valor de la config. Espera
+        # acotada (10 s) y corta si el daemon murió.
+        for _ in $(seq 1 50); do
+            [ -e "$D_READY" ] && break
+            [ -f "$D_PID" ] && ! running "$D_PID" "$DAEMON" && break
+            sleep 0.2
+        done
     fi
     echo "fatal ON"
 }
@@ -256,7 +267,7 @@ stop() {
     # relanzó el crash handler, su reporter, un daemon de otra copia del repo
     lock_kill "$QS_LOCK" "shell.qml"
     lock_kill "$D_LOCK" "cartelitos.py"
-    rm -f "$D_PID" "$QS_PID"
+    rm -f "$D_PID" "$QS_PID" "$D_READY"
     # una instancia levantada por la versión anterior dejó el PID en /tmp:
     # sin esto quedaba corriendo para siempre, invisible para el nuevo status
     # ojo: por el mismo camino que los de ahora, con confirmación de cmdline —

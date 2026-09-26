@@ -63,6 +63,13 @@ class InstanceLockTests(unittest.TestCase):
         self.assertTrue(f)  # el kernel soltó el lock: nada que limpiar a mano
         f.close()
 
+    def test_mark_ready_writes_the_pid(self):
+        ready = os.path.join(self.tmp, "run", "daemon.ready")
+        os.makedirs(os.path.dirname(ready))
+        util.mark_ready(ready)
+        with open(ready) as f:
+            self.assertEqual(f.read().strip(), str(os.getpid()))
+
     def test_daemon_main_refuses_a_second_instance(self):
         holder = util.acquire_instance_lock(self.path)
         self.addCleanup(holder.close)
@@ -95,7 +102,7 @@ time.sleep(120)
 """
 
 FAKE_DAEMON = """#!/usr/bin/env python3
-import sys, time
+import os, sys, time
 if "--check" in sys.argv:
     sys.exit(0)
 sys.path.insert(0, %r)
@@ -103,6 +110,12 @@ from cartelitos import util
 lock = util.acquire_instance_lock()
 if lock is None:
     sys.exit(1)
+# como el real: escribe el flag del CRT de la config un rato DESPUÉS de arrancar
+# y recién ahí avisa que está listo
+time.sleep(float(os.environ.get("FAKE_DAEMON_DELAY", "0")))
+with open(os.path.join(os.environ["XDG_RUNTIME_DIR"], "cartelitos-crt"), "w") as f:
+    f.write("0")
+util.mark_ready()
 time.sleep(120)
 """ % ROOT
 
@@ -210,6 +223,34 @@ class FatalGuardTests(unittest.TestCase):
         while time.time() < end and self.alive(pid):
             time.sleep(0.1)
         return not self.alive(pid)
+
+    def crt_flag(self):
+        with open(os.path.join(self.run_dir, "cartelitos-crt")) as f:
+            return f.read()
+
+    def test_crt_on_right_after_restart_is_not_clobbered_by_the_daemon(self):
+        # TRAMPAS corrida 8: el daemon escribe el flag al arrancar; `restart`
+        # tiene que volver recién cuando lo hizo
+        slow = dict(FAKE_DAEMON_DELAY="1.5")
+        self.assertEqual(self.fatal("on", **slow).returncode, 0)
+        self.fatal("crt", "on")
+        self.assertEqual(self.crt_flag(), "1")
+        r = self.fatal("restart", **slow)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.crt_flag(), "1")   # restart lo conserva
+        self.fatal("crt", "off")
+        self.fatal("restart", **slow)
+        self.fatal("crt", "on")
+        self.assertEqual(self.crt_flag(), "1")
+        time.sleep(2)   # el daemon ya había escrito: nada lo pisa después
+        self.assertEqual(self.crt_flag(), "1")
+
+    def test_start_does_not_hang_if_the_daemon_dies_before_ready(self):
+        with open(os.path.join(self.home, "cartelitos.py"), "w") as f:
+            f.write("#!/usr/bin/env python3\nimport sys\nsys.exit(0 if '--check' in sys.argv else 1)\n")
+        t0 = time.time()
+        self.fatal("on")
+        self.assertLess(time.time() - t0, 8)
 
     def test_second_start_is_a_noop_and_keeps_the_pids(self):
         r = self.fatal("on")

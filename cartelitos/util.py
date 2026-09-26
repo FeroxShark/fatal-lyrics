@@ -18,6 +18,8 @@ QS_PID_PATH = os.path.join(RUN_DIR, "qs.pid")
 LOG_PATH = os.path.join(RUN_DIR, "daemon.log")
 QS_LOG_PATH = os.path.join(RUN_DIR, "qs.log")
 DAEMON_LOCK_PATH = os.path.join(RUN_DIR, "daemon.lock")
+# "ya escribí el flag del CRT": lo espera `fatal start` (ver mark_ready)
+DAEMON_READY_PATH = os.path.join(RUN_DIR, "daemon.ready")
 
 # El daemon corre semanas seguidas: sin tope, el log crece hasta donde aguante
 # el tmpfs (que es RAM).
@@ -63,6 +65,19 @@ def acquire_instance_lock(path=None):
     f.write(f"{os.getpid()}\n")
     f.flush()
     return f
+
+
+def mark_ready(path=None):
+    """El daemon avisa que terminó de escribir el estado inicial (el flag del CRT).
+
+    `fatal start` espera este archivo antes de volver: sin eso, un `fatal crt on`
+    tipeado justo después de `fatal restart` llegaba ANTES del `set_crt` del
+    arranque y se pisaba con el valor de la config (TRAMPAS, corrida 8)."""
+    try:
+        with open(path or DAEMON_READY_PATH, "w") as f:
+            f.write(f"{os.getpid()}\n")
+    except OSError:
+        pass
 
 
 class _NoGuard:

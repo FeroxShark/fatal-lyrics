@@ -696,10 +696,12 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
 
 ## Medir el reposo o el CRT: dos cosas que invalidan la medición sin avisar (tanda 7, corrida 8)
 
-- **`fatal restart` y después `fatal crt on` pierde la carrera.** El daemon escribe el interruptor al ARRANCAR
-  (`set_crt(CFG["crt"]["enabled"])`), unos segundos después de que `restart` vuelve: si el `crt on` llega antes, se
-  pisa con `0` y se mide con el tubo apagado. Esperar ~8 s tras el `restart`, prender y VERIFICAR el archivo
-  (`cartelitos-crt` = `1`), como hace `restart_crt_on()` de `docs/plans/cold-measure.py`.
+- **`fatal restart` y después `fatal crt on` perdía la carrera (resuelta, tanda 7 cierre).** El daemon escribe el
+  interruptor al ARRANCAR (`set_crt(CFG["crt"]["enabled"])`), unos segundos después de que `restart` volvía: un
+  `crt on` que llegaba antes se pisaba con `0`. Ahora el daemon crea `$XDG_RUNTIME_DIR/cartelitos/daemon.ready`
+  (`util.mark_ready`) justo después de ese `set_crt`, y `fatal start` espera el archivo (máx. 10 s, corta si el daemon
+  murió) antes de volver; `stop` y `start` lo borran. Ya no hace falta dormir tras el `restart`. Test:
+  `tests/test_guard.py` (`test_crt_on_right_after_restart_...`, con un daemon de mentira que tarda 1,5 s).
 - **El reposo (`crt: rest N on`) no entra mientras suene CUALQUIER cosa en el sistema.** El daemon real captura el
   audio del sistema y manda `aud` (un video, otra app), así que `musicLive` no baja aunque Spotify esté en pausa.
   Para medir o mirar la pausa hay que bajar el daemon (`kill $(cat $XDG_RUNTIME_DIR/cartelitos/daemon.pid)`; el

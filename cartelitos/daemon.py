@@ -15,7 +15,7 @@ from . import mood
 from . import offsets
 from . import system
 from . import tray
-from .util import acquire_instance_lock, instance_lock_holder, log
+from .util import acquire_instance_lock, instance_lock_holder, log, mark_ready
 
 POLL = 0.3
 POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
@@ -493,6 +493,7 @@ class DaemonLoop:
         # el modo CRT arranca como diga la config: un `fatal crt on` de la sesión
         # anterior no se hereda (tapa las tres pantallas, mejor que sea deliberado)
         self._config.set_crt(self._config.CFG["crt"]["enabled"])
+        mark_ready()   # a partir de acá un `fatal crt on` ya no se pisa
         # las teclas del sync (tanda 3, C). `None` = arranque: lo que valga el
         # default no se toca, porque ese bind ya vive en la config de Hyprland
         # y escribirlo de nuevo sería tener el mismo atajo dos veces.

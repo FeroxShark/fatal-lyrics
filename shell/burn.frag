@@ -4,7 +4,7 @@
 // Runs ONCE per event, never per frame: Crt.qml keeps `burnTex` as a
 // non-live, recursive ShaderEffectSource and calls scheduleUpdate() when a
 // chorus line (second occurrence or later) has settled on this screen. This
-// pass reads the flat lyric layer (`src`, the same texture signal.frag gets),
+// pass reads the lyric layer alone (`lyr`: the verse text, nothing else),
 // turns it into an ink silhouette, and folds it into what was already burnt:
 //
 //     burn = max(burn * 0.85 - step, silhouette * w(k))
@@ -25,23 +25,25 @@ layout(std140, binding = 0) uniform buf {
     vec2 res;      // size of the burn texture in pixels
     float weight;  // w(k): how hard this occurrence burns, 0..1
     float fresh;   // 1 = ignore `prev` (nothing burnt yet, or wiped by a new track)
-    vec4 bg;       // the face background, as it is right now
+    vec2 sc;       // screen uv -> lyric-texture uv:  (uv - 0.5) * sc + off
+    vec2 off;
 };
 
-layout(binding = 1) uniform sampler2D src;
+layout(binding = 1) uniform sampler2D lyr;    // ONLY the verse text, transparent elsewhere
 layout(binding = 2) uniform sampler2D prev;   // this pass's own last result
 
-const vec3 LUMA = vec3(0.299, 0.587, 0.114);
-
-// how far a pixel is from the background, as ink coverage 0..1
+// ink coverage 0..1 at a screen uv: the alpha of the lyric layer. Nothing else
+// (ghost of the last verse, next line, motif, background) is ever in `lyr`.
 float ink(vec2 uv) {
-    float d = abs(dot(texture(src, uv).rgb - bg.rgb, LUMA));
-    return smoothstep(0.12, 0.45, d);
+    vec2 l = (uv - 0.5) * sc + off;
+    if (l.x < 0.0 || l.y < 0.0 || l.x > 1.0 || l.y > 1.0)
+        return 0.0;
+    return smoothstep(0.05, 0.35, texture(lyr, l).a);
 }
 
 void main() {
     vec2 uv = qt_TexCoord0;
-    // `src` is bigger than this texture: five taps so a thin stroke does not
+    // `lyr` is remapped and resampled: five taps so a thin stroke does not
     // vanish between samples, and the edge comes out soft (a glow, not a stamp)
     vec2 px = 0.5 / max(res, vec2(1.0));
     float s = ink(uv) * 0.4

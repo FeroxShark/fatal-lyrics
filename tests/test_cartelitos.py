@@ -3500,8 +3500,12 @@ class TestKnobsAreReachable(unittest.TestCase):
         # un solo scheduleUpdate, en burnSnap: el borrado DESTRUYE los items (Loader),
         # no redibuja en cero
         self.assertEqual(len(re.findall(r"tex\.scheduleUpdate\(\)", crt)), 1)
-        body = re.search(r"function burnSnap\(.*?\n    \}", crt, re.S).group(0)
+        body = re.search(r"function burnGo\(.*?\n    \}", crt, re.S).group(0)
         self.assertIn("tex.scheduleUpdate()", body)
+        # y burnGo sólo lo dispara el Timer que arma burnSnap (la letra se congela un momento antes)
+        self.assertEqual(len(re.findall(r"crt\.burnGo\(\)", crt)), 1)
+        self.assertRegex(re.search(r"function burnSnap\(.*?\n    \}", crt, re.S).group(0),
+                         r"lyricTex\.scheduleUpdate\(\);\s*burnGoTimer\.restart\(\)")
         wipe = re.search(r"function burnWipe\(.*?\n    \}", crt, re.S).group(0)
         self.assertNotIn("scheduleUpdate", wipe)
         # sin quemado no hay items: el pase y el source viven en un Loader
@@ -3546,6 +3550,41 @@ class TestKnobsAreReachable(unittest.TestCase):
             self.assertGreaterEqual(os.path.getmtime(os.path.join(self.SHELL, name + ".qsb")) + 5,
                                     os.path.getmtime(os.path.join(self.SHELL, name)), name)
 
+    def test_burn_only_burns_the_verse_that_is_there(self):
+        # bug de Ferox (post tanda 7): el quemado dejaba letras que NO estaban (del verso anterior
+        # o del que viene). La fuente era el escenario entero (`stageTex`): fantasma del verso
+        # previo al 0.45, `next`, motivo. Ahora la fuente es SOLO el texto del verso y el disparo
+        # se cancela si la línea cambió antes del snapshot.
+        crt = self._crt_qml()
+        loader = re.search(r"id: burnLoader(.*?)\n    \}\n", crt, re.S).group(1)
+        self.assertRegex(loader, r"ShaderEffectSource \{\s*id: lyricTex\s*sourceItem: lyric\b")
+        self.assertRegex(loader, r"property variant lyr: lyricTex")
+        self.assertNotIn("stageTex", loader)
+        self.assertNotIn("stageBg", loader)
+        lyr = re.search(r"id: lyricTex(.*?)\n            \}", loader, re.S).group(1)
+        self.assertRegex(lyr, r"live:\s*false")
+        # el quemado deshace el encuadre de la cámara (mismo `camS` que su Scale)
+        self.assertRegex(crt, r"xScale: crt\.camS\s*yScale: crt\.camS")
+        self.assertIn("crt.camS * crt.textPlane", loader)
+        with open(os.path.join(self.SHELL, "burn.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        self.assertRegex(frag, r"sampler2D lyr;")
+        self.assertNotRegex(frag, r"sampler2D src;")
+        self.assertRegex(frag, r"texture\(lyr, l\)\.a")
+        # fuera de la caja de la letra no hay tinta
+        self.assertRegex(frag, r"l\.x < 0\.0 \|\| l\.y < 0\.0 \|\| l\.x > 1\.0 \|\| l\.y > 1\.0")
+        # la línea cambió antes del snapshot: mismo serial, mismo texto en esta pantalla, sin
+        # salto ni tubo abriéndose, si no el Timer no llama a burnSnap
+        timer = re.search(r"id: burnTimer(.*?)\n    \}\n", crt, re.S).group(1)
+        self.assertRegex(timer, r"property string text")
+        self.assertRegex(timer, r"ln\.serial !== serial \|\| crt\.myText !== text")
+        self.assertRegex(timer, r"crt\.tubeOnY < 0\.99 \|\| Math\.abs\(crt\.hopShift\) >= 1\)\s*return;\s*crt\.burnSnap")
+        self.assertRegex(crt, r"burnTimer\.text = crt\.myText")
+        # un nuevo show cancela el que estaba armado (restart), y fade/wipe lo paran
+        self.assertRegex(crt, r"burnTimer\.restart\(\)")
+        self.assertIn("burnGoTimer.stop()", re.search(r"function burnFade\(.*?\n    \}", crt, re.S).group(0))
+        self.assertIn("burnGoTimer.stop()", re.search(r"function burnWipe\(.*?\n    \}", crt, re.S).group(0))
+
     def test_burn_lifecycle_on_hold_fade_clear(self):
         # el quemado dura UNA tanda de estribillo (ajuste post tanda 7): sube en k>=2, se sostiene
         # mientras asientan líneas chorus, se desvanece al salir del estribillo y se limpia
@@ -3588,7 +3627,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         crt = self._crt_qml()
         effect = re.search(r"id: burnPass(.*?)fragmentShader: Qt\.resolvedUrl\(\"burn\.frag\.qsb\"\)", crt, re.S)
         self.assertIsNotNone(effect, "burnPass no usa burn.frag.qsb")
-        for u in ("res", "weight", "fresh", "bg"):
+        for u in ("res", "weight", "fresh", "sc", "off"):
             self.assertIn(f'"name": "{u}"', dump, f"burn.frag.qsb no trae `{u}`: recompilar")
             self.assertRegex(effect.group(1), rf"property \w+ {u}:", f"burnPass no ata `{u}`")
 

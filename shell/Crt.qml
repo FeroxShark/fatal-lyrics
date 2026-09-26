@@ -1430,6 +1430,10 @@ PanelWindow {
     // 0.85 de la estrofa se le queda a la letra, como una constante: el verso
     // mide exactamente lo que medía antes, y la cámara no tiene que alejarse
     // para conseguirlo — que es lo que dejaba el marco alrededor del motivo.
+    // el encuadre de la cámara completo (deriva + golpe + latido): lo usa el Scale
+    // de `camera` y el quemado, que tiene que deshacerlo para ubicar la letra
+    readonly property real camS: camZoom * cueZoom * sectionZoom
+        * (1 + ctl.pace.camBeat * beatPulse + ctl.pace.camGrid * gridPulse * ctl.crtFlicker)
     readonly property real textPlane: sectionZoomOn
         ? Math.max(1 - 0.15 * cam, 0.5) : 1
 
@@ -1505,12 +1509,8 @@ PanelWindow {
                     // que hace que se sienta líquido es movimiento de velocidad
                     // uniforme, no acelerones. La amplitud sale de `pace`, así
                     // que `wild` devuelve los números de la tanda 3.
-                    xScale: crt.camZoom * crt.cueZoom * crt.sectionZoom
-                        * (1 + crt.ctl.pace.camBeat * crt.beatPulse
-                           + crt.ctl.pace.camGrid * crt.gridPulse * crt.ctl.crtFlicker)
-                    yScale: crt.camZoom * crt.cueZoom * crt.sectionZoom
-                        * (1 + crt.ctl.pace.camBeat * crt.beatPulse
-                           + crt.ctl.pace.camGrid * crt.gridPulse * crt.ctl.crtFlicker)
+                    xScale: crt.camS
+                    yScale: crt.camS
                 },
                 // el colapso del apagado: va aparte del encuadre para no pisarle
                 // el binding a la cámara mientras el tubo se muere
@@ -2646,11 +2646,25 @@ PanelWindow {
         burnFading = false;
         burnClearTimer.stop();
         burnHoldTimer.restart();
-        if (burnLoader.item) {
-            burnLoader.item.tex.scheduleUpdate();
-            burnLoader.item.animateTo(1, Motion.enterMs, Easing.OutExpo);
-        }
+        // en dos tiempos: primero se congela la LETRA sola (`lyricTex`) y unos
+        // cuadros después se pliega al acumulador (`burnGo`): así la textura de la
+        // letra ya está lista cuando `burnPass` la lee, sin depender del orden en
+        // que el grafo renderiza dos sources no vivos.
+        if (burnLoader.item)
+            burnLoader.item.lyricTex.scheduleUpdate();
+        burnGoTimer.restart();
         console.log("crt: burn " + idx + (was ? " hold" : " on") + " k=" + k + " n=" + n + " w=" + w.toFixed(2));
+    }
+    function burnGo() {
+        if (!burnLoader.item || burnFading)
+            return;
+        burnLoader.item.tex.scheduleUpdate();
+        burnLoader.item.animateTo(1, Motion.enterMs, Easing.OutExpo);
+    }
+    Timer {
+        id: burnGoTimer
+        interval: 60
+        onTriggered: crt.burnGo()
     }
     // sale del estribillo: se desvanece a 0 y, cuando llega, se limpia
     function burnFade(why) {
@@ -2659,6 +2673,7 @@ PanelWindow {
         burnFading = true;
         burnHoldTimer.stop();
         burnTimer.stop();
+        burnGoTimer.stop();
         if (burnLoader.item)
             burnLoader.item.animateTo(0, Motion.burnFadeMs, Easing.InOutQuad);
         burnClearTimer.restart();
@@ -2669,6 +2684,7 @@ PanelWindow {
     // tubo que nunca quemó nada no lleva ni el source ni el pase (docs/TRAMPAS.md).
     function burnWipe(why) {
         burnHoldTimer.stop();
+        burnGoTimer.stop();
         burnClearTimer.stop();
         burnFading = false;
         if (!burnHave)
@@ -2697,13 +2713,17 @@ PanelWindow {
         id: burnTimer
         interval: Motion.cameraMs + Motion.bridgeMs
         property int serial: -1
+        property string text: ""
         property int k: 0
         property int n: 0
         onTriggered: {
             const ln = crt.ctl.crtLine;
-            // la línea sigue siendo la misma y sigue en ESTA pantalla
-            if (ln.serial !== serial || !crt.showsText || crt.myText === ""
-                || crt.tubeDark || crt.ctl.crtBurnin <= 0)
+            // la línea sigue siendo la misma (mismo `serial` y mismo pedazo en
+            // ESTA pantalla), sigue en ella y ya asentó: sin salto ni tubo abriéndose
+            // (la letra se congela en su lugar de reposo, `burnPass` deshace el encuadre)
+            if (ln.serial !== serial || crt.myText !== text || !crt.showsText
+                || crt.myText === "" || crt.tubeDark || crt.ctl.crtBurnin <= 0
+                || crt.tubeOnY < 0.99 || Math.abs(crt.hopShift) >= 1)
                 return;
             crt.burnSnap(k, n);
         }
@@ -2727,6 +2747,7 @@ PanelWindow {
             if (r.k < 2 || crt.ctl.crtBurnin <= 0)
                 return;
             burnTimer.serial = ln.serial;
+            burnTimer.text = crt.myText;
             burnTimer.k = r.k;
             burnTimer.n = r.n;
             burnTimer.restart();
@@ -2746,7 +2767,9 @@ PanelWindow {
         id: burnLoader
         active: crt.burnHave
         sourceComponent: Item {
+            id: burnItem
             property alias tex: burnTex
+            property alias lyricTex: lyricTex
             // intensidad 0..1 que lee `signal.frag` (burnL). La única animación del quemado
             property real level: 0
             function animateTo(v, ms, easing) {
@@ -2758,7 +2781,7 @@ PanelWindow {
             }
             NumberAnimation {
                 id: levelAnim
-                target: parent
+                target: burnItem
                 property: "level"
             }
             ShaderEffect {
@@ -2767,14 +2790,33 @@ PanelWindow {
                 height: crt.height
                 visible: false
                 blending: false
-                property variant src: stageTex
+                property variant lyr: lyricTex
                 property variant prev: burnTex
                 property real weight: crt.burnW
                 property real fresh: crt.burnFresh
-                property color bg: stageBg.color
+                // pantalla -> textura de la letra: deshace la cámara (`camS`, sobre el
+                // centro), el plano de la letra y el salto. uvL = (uv - 0.5) * sc + off
+                property real lyrSx: Math.max(crt.camS * crt.textPlane, 0.05)
+                property real lyrSy: Math.max(crt.camS * crt.textPlane * crt.tubeOnY, 0.05)
+                property variant sc: Qt.vector2d(crt.width / (lyrSx * Math.max(lyric.width, 1)),
+                                                 crt.height / (lyrSy * Math.max(lyric.height, 1)))
+                property variant off: Qt.vector2d(0.5 - crt.hopShift
+                    / (Math.max(crt.textPlane, 0.05) * Math.max(lyric.width, 1)), 0.5)
                 property variant res: Qt.vector2d(Math.max(1, Math.round(crt.width / 2)),
                                                   Math.max(1, Math.round(crt.height / 2)))
                 fragmentShader: Qt.resolvedUrl("burn.frag.qsb")
+            }
+            // SOLO el texto del verso (sin el fantasma del anterior, el `next`, el motivo ni
+            // el fondo): lo que se quema es lo que está en pantalla, nada más. No vivo:
+            // se renderiza una vez por `burnSnap()`.
+            ShaderEffectSource {
+                id: lyricTex
+                sourceItem: lyric
+                visible: false
+                smooth: true
+                live: false
+                textureSize: Qt.size(Math.max(1, Math.round(lyric.width / 2)),
+                                     Math.max(1, Math.round(lyric.height / 2)))
             }
             ShaderEffectSource {
                 id: burnTex

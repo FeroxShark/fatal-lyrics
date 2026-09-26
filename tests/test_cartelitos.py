@@ -157,7 +157,8 @@ class TestNextLine(unittest.TestCase):
     def test_the_next_line_travels_with_its_window(self):
         self.assertEqual(c.next_line(self.LINES, 0),
                           {"text": "take take take", "t0": 4.0, "t1": 9.0,
-                           "due": 4.0, "segs": ["take", "take", "take"]})
+                           "due": 4.0, "segs": ["take", "take", "take"],
+                           "rep": {"n": 1, "k": 1, "chorus": False}})
 
     def test_the_last_line_has_no_next(self):
         self.assertIsNone(c.next_line(self.LINES, 2))
@@ -165,7 +166,8 @@ class TestNextLine(unittest.TestCase):
     def test_the_one_before_the_last_closes_five_seconds_later(self):
         # mismo criterio que la línea actual: sin una línea después, se queda 5 s
         self.assertEqual(c.next_line(self.LINES, 1),
-                          {"text": "three", "t0": 9.0, "t1": 14.0, "due": 9.0})
+                          {"text": "three", "t0": 9.0, "t1": 14.0, "due": 9.0,
+                           "rep": {"n": 1, "k": 1, "chorus": False}})
 
     def test_segs_only_when_the_line_repeats(self):
         self.assertNotIn("segs", c.next_line(self.LINES, 1))
@@ -315,9 +317,29 @@ class TestLyricsEvent(unittest.TestCase):
         out = self.sent()
         c.lyrics_list(self.LINES)
         self.assertEqual(out[0], {"cmd": "lyrics", "synced": True, "lines": [
-            {"t0": 0.0, "t1": 4.0, "text": "one"},
-            {"t0": 4.0, "t1": 9.0, "text": "two"},
-            {"t0": 9.0, "t1": 14.0, "text": "three"}]})
+            {"t0": 0.0, "t1": 4.0, "text": "one", "rep": {"n": 1, "k": 1, "chorus": False}},
+            {"t0": 4.0, "t1": 9.0, "text": "two", "rep": {"n": 1, "k": 1, "chorus": False}},
+            {"t0": 9.0, "t1": 14.0, "text": "three", "rep": {"n": 1, "k": 1, "chorus": False}}]})
+
+    def test_a_repeated_chorus_carries_its_occurrence(self):
+        out = self.sent()
+        c.lyrics_list([(0.0, "la la la la"), (2.0, "verse"), (4.0, "La la, la la!")])
+        reps = [ln["rep"] for ln in out[0]["lines"]]
+        self.assertEqual(reps, [{"n": 2, "k": 1, "chorus": True}, {"n": 1, "k": 1, "chorus": False},
+                                {"n": 2, "k": 2, "chorus": True}])
+        json.dumps(out[0])
+
+    def test_next_carries_the_occurrence_of_the_next_line(self):
+        lines = [(0.0, "a b c"), (2.0, "x y z"), (4.0, "a b c")]
+        self.assertEqual(c.next_line(lines, 1)["rep"], {"n": 2, "k": 2, "chorus": True})
+
+    def test_show_carries_rep_only_when_given(self):
+        out = self.sent()
+        c.show("a b c", "t", 0.0, 2.0, rep={"n": 2, "k": 1, "chorus": True})
+        c.show("a b c", "t", 0.0, 2.0)
+        self.assertEqual(out[0]["rep"], {"n": 2, "k": 1, "chorus": True})
+        self.assertNotIn("rep", out[1])
+        json.dumps(out[0])
 
     def test_the_event_is_json(self):
         out = self.sent()

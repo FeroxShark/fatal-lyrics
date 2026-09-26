@@ -260,7 +260,7 @@ class TestSeekBack(unittest.TestCase):
         loop._log.assert_any_call("seek back: reset")
         loop._ipc.show.assert_called_with("a", "Song", 0.0, 10.0, None,
                                           nxt=loop._ipc.next_line.return_value,
-                                          v_end=mock.ANY)
+                                          v_end=mock.ANY, rep=mock.ANY)
 
     def test_small_backward_jitter_does_not_reset(self):
         loop = make_loop()
@@ -306,7 +306,7 @@ class TestWordTimes(unittest.TestCase):
         loop._ipc.show.assert_called_with("one two", "Song", 0.0, 10.0,
                                           [(0.0, "one"), (0.5, "two")],
                                           nxt=loop._ipc.next_line.return_value,
-                                          v_end=mock.ANY)
+                                          v_end=mock.ANY, rep=mock.ANY)
 
     def test_a_two_field_line_still_works(self):
         loop = make_loop()
@@ -318,7 +318,22 @@ class TestWordTimes(unittest.TestCase):
 
         loop._ipc.show.assert_called_with("a", "Song", 0.0, 5.0, None,
                                           nxt=loop._ipc.next_line.return_value,
-                                          v_end=mock.ANY)
+                                          v_end=mock.ANY, rep=mock.ANY)
+
+
+class TestRepIsWired(unittest.TestCase):
+    """El `show` lleva la ocurrencia de SU línea (`repeat_map[i]`), no la de otra."""
+
+    def test_the_show_carries_the_map_entry_of_the_current_line(self):
+        loop = make_loop()
+        loop._lyr.current_line_index.return_value = 2
+        loop._lyr.repeat_map.return_value = ["r0", "r1", "r2"]
+        loop.lyrics = [(0.0, "a"), (5.0, "b"), (10.0, "c")]
+        loop.track_id = "t1"
+
+        loop.handle_track(track(id="t1", pos=11.0), now=0.0)
+
+        self.assertEqual(loop._ipc.show.call_args.kwargs["rep"], "r2")
 
 
 class TestNextLineIsWired(unittest.TestCase):

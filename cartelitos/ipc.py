@@ -206,6 +206,9 @@ def next_line(lines, i, offset=0.0):
     segs = lyrics.split_repeats(nxt[1])
     if len(segs) > 1:
         out["segs"] = segs
+    # ocurrencia de la línea en la letra (`repeat_map`): la curva de tensión
+    # del tubo sabe que viene un estribillo antes de que suene
+    out["rep"] = lyrics.repeat_map(lines)[i + 1]
     return out
 
 
@@ -218,10 +221,11 @@ def lyrics_list(lines):
     overlay reconecta (el overlay muerto con el daemon vivo es un estado
     frecuente): si no, el tema entero se queda sin letra hasta el siguiente."""
     global _last_lyrics
+    reps = lyrics.repeat_map(lines)
     ev = {"cmd": "lyrics", "synced": True, "lines": [
         {"t0": round(ln[0], 2),
          "t1": round(lines[k + 1][0] if k + 1 < len(lines) else ln[0] + 5, 2),
-         "text": ln[1]}
+         "text": ln[1], "rep": reps[k]}
         for k, ln in enumerate(lines)]}
     _last_lyrics = ev
     send(ev)
@@ -244,7 +248,7 @@ def lyrics_plain(text):
 
 
 def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None,
-         v_end=None):
+         v_end=None, rep=None):
     # t0/t1: comienzo y fin estimado de la línea, para el karaoke del overlay
     ev = {"cmd": "show", "text": text, "title": title,
           "t0": round(t0, 2), "t1": round(t1, 2)}
@@ -272,6 +276,10 @@ def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None,
     # `show` con su `v_end`.
     if v_end is not None:
         ev["v_end"] = round(v_end, 2)
+    # `repeat_map` de esta línea (`{n, k, chorus}`): sólo cuando la letra la
+    # tiene; ausente = "no sé" y el tubo no escala nada por estribillo
+    if rep is not None:
+        ev["rep"] = rep
     # explícito, incluso vacío: `null` significa "no hay próxima línea", y el
     # overlay tiene que poder distinguirlo de "el daemon es viejo y no lo manda"
     ev["next"] = nxt

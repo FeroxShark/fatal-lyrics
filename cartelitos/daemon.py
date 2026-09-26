@@ -369,7 +369,8 @@ class DaemonLoop:
                         self._ipc.show(line[1], t["title"], line[0], t1, words,
                                        nxt=self._ipc.next_line(self.lyrics, i,
                                                                pos_offset),
-                                       v_end=v_end)
+                                       v_end=v_end,
+                                       rep=self._lyr.repeat_map(self.lyrics)[i])
 
             # silencio largo con la letra cargada: el programa se cuelga solo.
             # Con la letra sin sincronizar no aplica: ahí no viene ninguna línea

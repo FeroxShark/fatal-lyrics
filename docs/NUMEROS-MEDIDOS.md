@@ -137,3 +137,14 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   +1.8 puntos. Carga externa 2.4–5.9 (alta: ruido de ±2 puntos entre rondas iguales, 29.7–32.5 con la perilla
   apagada). En uso normal (`fxGapMs` 6000, palabras clave raras) el costo es cero salvo el instante del efecto.
 - `rollPhase` por compases (corrida 5b) no cambia el costo: la cuenta es la misma, un módulo más.
+
+## Intro v2: degauss + carta de ajuste (tanda 7, corrida 6, `crt.intro_card`)
+
+- CPU A/B de la tarjeta sostenida (`intro2-drive.py cpu`, `intro_card` plain/testcard intercalado, con la
+  tarjeta en pantalla): plain 27.4 % contra testcard 22.3 % de un núcleo, −5.1 puntos (la carta de ajuste no
+  es más cara que los textos planos; el orden intercalado y el ruido explican el signo). Carga externa 2.4–4.1.
+- El degauss (700 ms, sólo dentro de la intro) es un `if (degauss > 0.001)` uniforme-coherente en `crt.frag`:
+  no se pudo A/B en el mismo momento (el shader viejo no se puede alternar). `cpu-bench --scenario normal`
+  con el shader nuevo: 38.6 % (rango 29–58) y 35.1 % (rango 29–44); vesktop sostenía 47 % y la carga externa
+  era 2.2–3.8, contra la base de 29.6–30.7 % de las corridas 0–2. Ruido de la máquina, no atribuible.
+- Estrés on/off: `cycle-drive.py plain 30` y `track 25` (intro con degauss + quemado armado): 0 caídas en 55 ciclos.

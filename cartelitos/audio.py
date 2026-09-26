@@ -5,6 +5,7 @@ import math
 import os
 import re
 import shutil
+import struct
 import subprocess
 import threading
 import time
@@ -234,6 +235,9 @@ AUDIO_RATE = 16000
 AUDIO_HOP = 512                                   # 32 ms por análisis
 AUDIO_BANDS = (60.0, 150.0, 400.0, 1000.0, 2500.0, 5000.0)
 AUDIO_MIN_SEND = 0.04                             # ~25 eventos por segundo
+AUDIO_CHANNELS = 2        # se graba estéreo (el scope necesita L/R) y se pasa a mono
+                          # ANTES de AudioAnalyzer.feed: ver downmix_stereo
+AUDIO_FRAME = AUDIO_HOP * 2 * AUDIO_CHANNELS      # bytes de un hop estéreo s16
 
 # Captura muda un rato largo: casi siempre es que la salida por default no es la
 # que suena. Se avisa una vez y se sigue (no se corta: puede ser una pausa).
@@ -315,6 +319,55 @@ def band_energy(samples, rate, freq):
         re += x * cos_t[i]
         im += x * sin_t[i]
     return (re * re + im * im) / (n * n)
+
+
+def downmix_stereo(pcm):
+    """s16le estéreo intercalado -> (mono s16le, L, R) con L/R como enteros.
+
+    Es EL lugar donde se pasa a mono: todo lo que analiza el sonido (rms, bandas,
+    golpes, la planitud de la 7b) lee este mono y no toca canales. El mono es
+    (L+R)>>1, así que con L == R sale idéntico al mono de antes de grabar en
+    estéreo (mismo rms, mismos perfiles, mismo `ENERGY_GAIN_REF`). Un byte
+    suelto de más se tira: un cuadro estéreo son 4 bytes."""
+    n = len(pcm) // 4
+    if n == 0:
+        return b"", [], []
+    vals = struct.unpack(f"<{n * 2}h", pcm[:n * 4])
+    left, right = vals[0::2], vals[1::2]
+    mono = struct.pack(f"<{n}h", *[(a + b) >> 1 for a, b in zip(left, right)])
+    return mono, left, right
+
+
+# ---- el osciloscopio: la forma de onda real, para el scope del CRT
+WAVE_HZ = 20              # eventos `wave` por segundo (uno cada 50 ms)
+WAVE_N = 64               # puntos por canal
+WAVE_SILENCE = 0.003      # pico (0..1) debajo del cual no se manda: el overlay vuelve al sintético
+
+
+def wave_points(left, right, peak):
+    """L/R de un hop -> dos listas de WAVE_N enteros en [-127, 127].
+
+    Cada punto es el promedio de un bloque (len/WAVE_N muestras): un pasabajos
+    barato que evita que lo agudo se pliegue en garabatos a 64 puntos. UNA sola
+    ganancia para los dos canales (1/`peak`, el pico de rms que ya sigue el
+    analizador), no una por canal: la relación L/R ES la figura. Silencio
+    (pico de muestra < WAVE_SILENCE) devuelve None."""
+    n = len(left)
+    if n < WAVE_N or not peak > 0:
+        return None
+    if max(max(map(abs, left)), max(map(abs, right))) / 32768.0 < WAVE_SILENCE:
+        return None
+    step = n // WAVE_N
+    k = 127.0 / (32768.0 * peak * 2.5)     # 2.5: cresta típica de la música sobre el rms
+
+    def block(ch):
+        out = []
+        for i in range(WAVE_N):
+            seg = ch[i * step:(i + 1) * step]
+            out.append(max(-127, min(127, round(sum(seg) / len(seg) * k))))
+        return out
+
+    return block(left), block(right)
 
 
 class AudioAnalyzer:
@@ -756,10 +809,11 @@ def _audio_command():
         node = _sink_node_id(name)
         if node:
             return ["pw-record", "--format=s16", f"--rate={AUDIO_RATE}",
-                    "--channels=1", "--latency=20ms", f"--target={node}", "-"]
+                    f"--channels={AUDIO_CHANNELS}", "--latency=20ms",
+                    f"--target={node}", "-"]
     if shutil.which("parec"):
         return ["parec", "--format=s16le", f"--rate={AUDIO_RATE}",
-                "--channels=1", "-d", name + ".monitor"]
+                f"--channels={AUDIO_CHANNELS}", "-d", name + ".monitor"]
     return None
 
 
@@ -938,6 +992,7 @@ def _capture_loop():
         log("audio: reacting to what's playing")
         an = AudioAnalyzer()
         last = 0.0
+        last_wave = 0.0
         last_sec = 0.0
         last_cue = 0.0
         # el pico se decide acá, no en la pantalla: es la única parte que sabe
@@ -957,8 +1012,8 @@ def _capture_loop():
         warned = False
         try:
             while config.CFG["crt"]["audio"] and config.crt_on():
-                chunk = proc.stdout.read(AUDIO_HOP * 2)
-                if not chunk or len(chunk) < AUDIO_HOP * 2:
+                chunk = proc.stdout.read(AUDIO_FRAME)
+                if not chunk or len(chunk) < AUDIO_FRAME:
                     break     # se cayó la captura (cambio de salida, sink muerto)
                 now = time.monotonic()
                 if now - last_sink_check > SINK_CHECK_EVERY:
@@ -967,9 +1022,17 @@ def _capture_loop():
                         log("audio: default sink changed, reopening the capture")
                         break
                     cur_gain = _capture_gain(config.CFG["behavior"]["player"])
-                ev = an.feed(chunk, now)
+                # estéreo -> mono ANTES de analizar (downmix_stereo): el analizador
+                # sólo ve el mono de siempre. L/R quedan para el evento `wave`.
+                mono, left, right = downmix_stereo(chunk)
+                ev = an.feed(mono, now)
                 if not ev:
                     continue
+                if now - last_wave >= 1.0 / WAVE_HZ:
+                    last_wave = now
+                    wave = wave_points(left, right, an.peak)
+                    if wave:
+                        ipc.send_soft({"cmd": "wave", "l": wave[0], "r": wave[1]})
                 # captura muda un rato largo: casi siempre es que la salida por
                 # default no es la que suena. Se avisa una vez y se sigue.
                 if ev["l"] > QUIET_LEVEL:

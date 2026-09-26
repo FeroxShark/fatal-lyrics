@@ -12,6 +12,7 @@ import os
 import random
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -1690,6 +1691,91 @@ class TestBandEnergy(unittest.TestCase):
         s = self.samples(4000)
         self.assertGreater(c.band_energy(s, 16000, 5000),
                            c.band_energy(s, 16000, 60) * 20)
+
+
+def stereo(left, right):
+    """Intercala dos PCM s16 mono (bytes) en uno estéreo, para probar el downmix."""
+    out = bytearray()
+    for i in range(0, len(left), 2):
+        out += left[i:i + 2] + right[i:i + 2]
+    return bytes(out)
+
+
+class TestDownmixStereo(unittest.TestCase):
+    """Corrida 7: se graba en estéreo pero el análisis tiene que ver EXACTAMENTE
+    el mono de antes, o se descalibran los perfiles cacheados y ENERGY_GAIN_REF."""
+
+    def test_the_same_signal_on_both_channels_is_the_old_mono_byte_for_byte(self):
+        for freq, amp in ((80, 0.5), (440, 0.02), (4000, 0.9)):
+            mono = tone(freq, amp=amp)
+            got, left, right = c.downmix_stereo(stereo(mono, mono))
+            self.assertEqual(got, mono)
+            self.assertEqual(left, right)
+
+    def test_feed_gives_exactly_what_it_gave_with_mono_capture(self):
+        old, new = c.AudioAnalyzer(), c.AudioAnalyzer()
+        for i, (freq, amp) in enumerate(((60, 0.9), (440, 0.05), (2500, 0.3), (60, 0.9))):
+            mono = tone(freq, amp=amp)
+            got, _l, _r = c.downmix_stereo(stereo(mono, mono))
+            self.assertEqual(new.feed(got, i * 0.032), old.feed(mono, i * 0.032))
+        self.assertEqual(new.peak, old.peak)
+
+    def test_different_channels_average(self):
+        left = (1000).to_bytes(2, "little", signed=True) + (-3).to_bytes(2, "little", signed=True)
+        right = (3000).to_bytes(2, "little", signed=True) + (-6).to_bytes(2, "little", signed=True)
+        mono, l, r = c.downmix_stereo(stereo(left, right))
+        self.assertEqual(l, (1000, -3))
+        self.assertEqual(r, (3000, -6))
+        self.assertEqual(list(struct.unpack("<2h", mono)), [2000, -5])   # >>1 redondea hacia abajo
+
+    def test_a_dangling_byte_or_nothing_does_not_break(self):
+        self.assertEqual(c.downmix_stereo(b""), (b"", [], []))
+        mono, l, r = c.downmix_stereo(stereo(tone(440), tone(440)) + b"\x01")
+        self.assertEqual(len(mono), len(tone(440)))
+
+    def test_capture_asks_for_stereo(self):
+        self.assertEqual(c.AUDIO_FRAME, c.AUDIO_HOP * 4)
+        with mock.patch.object(c.audio, "_default_sink", return_value="s"), \
+                mock.patch.object(c.audio, "_sink_node_id", return_value="42"), \
+                mock.patch.object(c.audio.shutil, "which", return_value="/bin/x"):
+            self.assertIn("--channels=2", c._audio_command())
+
+
+class TestWavePoints(unittest.TestCase):
+    def pair(self, left_amp, right_amp, freq=200):
+        import math
+        n = c.AUDIO_HOP
+        return ([int(left_amp * 32767 * math.sin(2 * math.pi * freq * i / 16000)) for i in range(n)],
+                [int(right_amp * 32767 * math.sin(2 * math.pi * freq * i / 16000)) for i in range(n)])
+
+    def test_shape_and_range(self):
+        left, right = self.pair(0.5, 0.5)
+        wl, wr = c.wave_points(left, right, 0.35)
+        self.assertEqual((len(wl), len(wr)), (c.WAVE_N, c.WAVE_N))
+        for v in wl + wr:
+            self.assertIsInstance(v, int)
+            self.assertLessEqual(abs(v), 127)
+
+    def test_one_gain_for_both_channels_keeps_the_stereo_image(self):
+        left, right = self.pair(0.5, 0.25)
+        wl, wr = c.wave_points(left, right, 0.5)
+        self.assertAlmostEqual(max(map(abs, wl)) / max(map(abs, wr)), 2.0, delta=0.15)
+
+    def test_silence_sends_nothing_so_the_overlay_falls_back(self):
+        self.assertIsNone(c.wave_points([0] * 512, [0] * 512, 0.35))
+        left, right = self.pair(0.0005, 0.0005)
+        self.assertIsNone(c.wave_points(left, right, 0.35))
+
+    def test_short_or_bad_input_is_none(self):
+        self.assertIsNone(c.wave_points([1] * 10, [1] * 10, 0.3))
+        left, right = self.pair(0.5, 0.5)
+        self.assertIsNone(c.wave_points(left, right, 0.0))
+
+    def test_json_size_is_small(self):
+        import json
+        left, right = self.pair(0.9, 0.9)
+        wl, wr = c.wave_points(left, right, 0.1)
+        self.assertLess(len(json.dumps({"cmd": "wave", "l": wl, "r": wr})), 900)
 
 
 class TestAudioAnalyzer(unittest.TestCase):

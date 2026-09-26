@@ -57,12 +57,12 @@ from .ipc import (
 )
 
 from .audio import (
-    AUDIO_BANDS, AUDIO_HOP, AUDIO_MIN_SEND, AUDIO_RATE, AudioAnalyzer,
+    AUDIO_BANDS, AUDIO_CHANNELS, AUDIO_FRAME, AUDIO_HOP, AUDIO_MIN_SEND, AUDIO_RATE, AudioAnalyzer,
     BPM_HISTORY, BPM_MAX_GAP, BPM_MAX_MS, BPM_MIN_INTERVALS, BPM_MIN_MS,
     BPM_SEND_DELTA, BPM_SEND_EVERY, BPM_TOL, BpmTracker,
     PEAK_GAP, PEAK_HARD, PEAK_MAX, PEAK_PCT, PROFILE_DIR, PROFILE_STEP,
     PeakGate, SECTIONS, SECTION_HOLD, SECTION_SMOOTH, SINK_CHECK_EVERY,
-    TrackProfile, VOICE_HOP, audio_loop, band_energy, classify_level,
+    TrackProfile, VOICE_HOP, WAVE_HZ, WAVE_N, WAVE_SILENCE, downmix_stereo, wave_points, audio_loop, band_energy, classify_level,
     profile_for, set_profile, set_voice_sink, sink_changed, sink_has_hw_volume,
     sink_node_id, sink_volume_pct, stream_volume_pct, voice_loop, voice_rms,
     _audio_command, _band_table, _capture_gain,

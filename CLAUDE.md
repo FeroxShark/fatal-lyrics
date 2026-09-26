@@ -53,9 +53,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   PUENTE de dos o tres cuadros entre escena y escena (`bridgeMs`), nunca un efecto que dura. Un
   `Behavior` que quiera otra duración tiene que justificar por qué su movimiento no es ninguno
   de ésos. Sale del video que pasó Ferox
-  (`docs/plans/2026-09-04-fluidez-referencia.md`): lo fluido no es tener más cuadros, es que
-  todo se mueva con la misma gramática, con holds largos entre evento y evento y una deriva de
-  velocidad uniforme por debajo que nunca para.
+  (`docs/plans/2026-09-04-fluidez-referencia.md`): lo fluido no son más cuadros: es una sola
+  gramática, holds largos entre eventos y una deriva uniforme por debajo que nunca para.
 - **REGLA: los eventos tienen PRESUPUESTO, y es la perilla `pace`** (`calm | normal | wild`,
   default `normal`, tabla `crtPaceTable` en `shell.qml`). No es una velocidad: nada se mueve más
   despacio. Es cuántas cosas tienen permiso de pasar por minuto — cuánto dura el dibujo de una
@@ -157,14 +156,17 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `crt.rare`, tanda 6, corrida 7) — eventos raros `bsod`, `nosignal` y `testcard`; el sorteo
   nunca cae en intro ni en pantalla oscura. `fatal crt rare <kind> [--screen ...]` fuerza uno.
 - `burn.frag` + `burnLoader` (`Crt.qml`, perilla `crt.burnin`, tanda 7, corrida 4b) — quemado del
-  estribillo: desde la 2da ocurrencia (`rep.chorus`, k>=2) la silueta de la línea queda tenue en la
-  pantalla donde cae, hasta el `clear why=track`. Es ESTADO: `burnTex` recursivo, no vivo, se redibuja
+  estribillo: desde la 2da ocurrencia (`rep.chorus`, k>=2) la silueta de la línea queda tenue en su
+  pantalla hasta el `clear why=track`. Es ESTADO: `burnTex` recursivo, no vivo, se redibuja
   sólo en `burnSnap()` (640 ms después de asentar); `signal.frag` lo suma bajo la señal. Techo de
-  contraste 0.10×burnin (medido 4.1% a 0.5, 8.3% a 1). Fade en el outro por cuenta sobre `posAbs`
-  (`crtBurnFade`), nunca un Behavior. Los items viven en un Loader (ver TRAMPAS).
+  contraste 0.10×burnin. Fade en el outro por cuenta sobre `posAbs` (`crtBurnFade`), nunca un
+  Behavior. Los items viven en un Loader (ver TRAMPAS).
 - `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`, tanda 7, corrida 5a) — con `bpmLive`, el glitch sin
   animación propia (`line`, `interf`) espera al próximo tiempo, máx uno (`beatStep`; log `beat+<ms>`);
-  aro, salto, tubeon, canal y cámara son `urgent`. La barra rueda 1 vuelta/4 tiempos (`rollPhaseFor`).
+  aro, salto, tubeon, canal y cámara son `urgent`. Barra: N compases (`rollPhaseFor`).
+- `motifWords` `{re, kind?, fx?}` + `fxCheck`/`fxFire` (`Crt.qml`, `crt.word_fx`, tanda 7, corrida 5b) — fuego/
+  morir/romper/oscuro pegan al tubo de la pantalla con la palabra, 1 vez por línea, vía `hit()` y `fxGapMs`.
+  Trampas: `docs/TRAMPAS.md`.
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
@@ -199,7 +201,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `tests/` — 629 tests, stdlib puro.
+- `tests/` — 633 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

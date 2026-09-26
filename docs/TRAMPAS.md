@@ -574,3 +574,24 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   pisa la grilla sintética). Un show cada múltiplo exacto de un tiempo no sirve: los glitches caen
   siempre en la misma fase (el control da un pico falso) — el driver usa 2.63 s.
 
+
+## Efectos por palabra (tanda 7, corrida 5b, `crt.word_fx`)
+
+- **Tabla:** `motifWords` es `{re, kind?, fx?}` (regex anclada `^..$`, es + en); `fx` = `alarm` (fuego, sangre,
+  quemar: uniform `alarm` rojo vía `fxAlarmAmt`), `blink` (morir/muerte: `tubeLevel` a 0.12, largo), `glitch`
+  (romper/caer: `hit(0.9)`) o `dark` (oscuro/apagar: `tubeLevel` a 0, corto). Los hold viven en `Motion.qml`
+  (`fxAlarmHoldMs`/`fxBlinkHoldMs`/`fxDarkHoldMs`). Una sola vez por línea (`fxFired`, se rearma en `myText`
+  y en `crtSerial`), la primera palabra clave del pedazo. Siempre `hit(…, urgent)` y `fxGapMs` (calm 12000,
+  normal 6000, wild 0); si el portero `hitGap` se lo come el visual sale igual (log `hit=held`).
+- **Con el director la frase se parte entre pantallas: el índice de `myWords` NO es el de la línea.** El
+  tiempo de la palabra se busca en `crtLine.words` POR PALABRA (`crtWordKey`: sin puntuación, minúscula), no
+  por índice. Con `f.t`, el efecto sale cuando `songPos() >= t` en el pedazo que tiene la palabra: si el
+  pedazo llega tarde, sale al llegar (el lag medido contra el `show` es de ~1.4 s en el driver por eso).
+- **No usar `emphasisGateOpen` para el disparo:** es un binding sobre `Date.now()` y sólo se reevalúa cuando
+  `reveal` cambia; una línea quieta lo deja congelado en `false`. Se lee la condición directo
+  (`Date.now() - textArrivedAt >= Motion.enterMs`).
+- **Manejar con `fx-drive.py`:** el `show` NO debe traer `next` (el tubo consume el `next` a su `due` y pisa la
+  línea de prueba) y hay que mandar `pos` cada ~100 ms (sin ellos `songPos` se clava a posAbs+1.5 s y el
+  pedazo con la palabra, que arranca más tarde, nunca llega).
+- **rollPhase:** con compás la vuelta dura el múltiplo de 4 tiempos más cercano a 1/`rollFreeRate` (0.085 laps/s
+  ≈ 11.8 s; 6 compases a 120 bpm), fase desde la grilla absoluta `lastBeatAt mod beatMs`. No hardcodear.

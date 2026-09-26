@@ -3,6 +3,26 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
+**Tanda 8 — lo que vio Ferox con música real (2026-09-26), próxima tanda.** Capturas en `docs/plans/tanda8/`
+(gitignored). Regla de pantalla: todos los cambios primero, UNA sola corrida visual al final.
+
+- **Bug del túnel:** el motif túnel/tubo tiene un corte mal hecho, una franja horizontal donde la geometría no
+  empalma (`docs/plans/tanda8/bug-tunel-corte.png`, a la izquierda, a media altura).
+- **Máscara/scanlines estáticas demasiado marcadas:** se notan mucho, y hacen moiré, con círculos en cada esquina y
+  una estrella marcada en el centro. Sospecha: interferencia entre la máscara (`maskPitch`/tipo del tubo) y las
+  scanlines con la curvatura, o el pitch contra la resolución real del monitor. Bajarla o filtrarla (sin
+  aliasing) hasta que se sienta la textura sin dibujar figuras.
+- **Sacar la fuente pixel/bitmap** de bloques gruesos (`docs/plans/tanda8/font-pixel-no-gusta.png`, "WHEN I'M AWAY")
+  y buscar otras fuentes libres (licencia OK para repo público) para tener variedad en los sets.
+- **Reaccionar al silencio seco**, aunque sea breve (un corte o un stop): por ejemplo bajar la luz de los monitores
+  y volver con el golpe. Distinguirlo del `quiet` de sección, que es por energía y lento.
+- **La estática por suciedad (`dirt`) funciona bien pero se siente estática:** que el grano tenga movimiento propio
+  o que responda más rápido o con más matices.
+- **Algo que muestre que la música se mueve más allá del bajo:** hoy la reacción se siente como un parpadeo de los
+  bajos. Falta algo que siga la melodía, la armonía, el brillo o los cambios de la canción (por ejemplo centroide
+  espectral, onsets de agudos o cambios de acorde) con una respuesta visual propia. Sin romper "una animación por
+  pantalla".
+
 **Tanda 7 (hecha 2026-09-26, estado en `docs/plans/2026-09-25-estado-tras-tanda7.md`):** señal compuesta,
 tubos, estela, tensión, quemado del estribillo, glitch al beat, efectos por palabra, intro v2 con carta, osciloscopio
 real, estática por suciedad, reposo en pausa. Todo medido con aparejo sintético; **nada visto con música real.** Abierto:

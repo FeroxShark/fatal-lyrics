@@ -2333,9 +2333,13 @@ ShellRoot {
         { re: /^(romper|rompo|rompe|roto|rota|break|breaks|broke|broken|crash|caer|caigo|cae|caí|fall|falls|fell|falling)$/i, fx: "glitch" },
         { re: /^(oscuro|oscura|oscuridad|dark|darkness|apagar|apago|apaga|apagado)$/i, fx: "dark" },
     ]
-    // qué efecto dispara UNA palabra (`""` = ninguno). Le saca la puntuación de los bordes.
+    // `crtWordKey`: la palabra sin puntuación de los bordes y en minúscula. `crtFxOf`: qué efecto
+    // dispara UNA palabra (`""` = ninguno).
+    function crtWordKey(word) {
+        return (word || "").replace(/^[^A-Za-zÀ-ÿ]+|[^A-Za-zÀ-ÿ]+$/g, "").toLowerCase();
+    }
     function crtFxOf(word) {
-        const w = (word || "").replace(/^[^A-Za-zÀ-ÿ]+|[^A-Za-zÀ-ÿ]+$/g, "");
+        const w = crtWordKey(word);
         if (w === "")
             return "";
         for (let k = 0; k < motifWords.length; k++)

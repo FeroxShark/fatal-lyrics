@@ -862,11 +862,15 @@ PanelWindow {
 
     // ------------------------------------------------- efectos por palabra
     // tanda 7, corrida 5b (`crt.word_fx`): una palabra de `motifWords` con `fx` (fuego, morir,
-    // romper, oscuro) le pega al tubo de LA PANTALLA que la muestra, una vez por línea. Cuándo:
-    // con tiempos por palabra (LRC enhanced), cuando esa palabra empieza a sonar (el mismo
-    // reloj de 80 ms que la pinta, así que cae con ella); sin ellos, al asentar la entrada
-    // (`Motion.enterMs`, `emphasisGateOpen`). Pasa por `fxGapMs` (piso por pantalla, tabla de
-    // `pace`) y nunca se pisa con otro efecto de la misma pantalla (`fxBusy`).
+    // romper, oscuro) le pega al tubo de LA PANTALLA que la muestra (con el director, el pedazo
+    // que la tiene), una vez por línea. Cuándo: con tiempos por palabra (LRC enhanced), cuando
+    // esa palabra empieza a sonar (`f.t`, el mismo reloj de 80 ms que pinta el karaoke, así que
+    // cae con ella); sin ellos, al asentar la entrada (`Motion.enterMs`: la condición de
+    // `emphasisGateOpen`, leída acá directo porque esa property sólo se reevalúa cuando `reveal`
+    // cambia y una línea quieta no la despertaría). Pasa por `fxGapMs` (piso por pantalla, tabla
+    // de `pace`) y nunca se pisa con otro efecto de la misma pantalla (`fxBusy`).
+    // Los tiempos se buscan en la línea entera por la palabra, no por índice: con un pedazo de
+    // la frase (`layout` split, director) el índice de `myWords` no es el de la línea.
     // Siempre llama a `hit()` y siempre `urgent`: el efecto YA está atado a la palabra, diferirlo
     // al próximo tiempo lo sacaría de ella.
     readonly property var fxHit: {
@@ -874,8 +878,14 @@ PanelWindow {
             return null;
         for (let i = 0; i < myWords.length; i++) {
             const k = ctl.crtFxOf(myWords[i]);
-            if (k !== "")
-                return { i: i, kind: k, word: myWords[i] };
+            if (k === "")
+                continue;
+            const lw = ctl.crtLine.words || [];
+            let t = -1;
+            for (let j = 0; j < lw.length && t < 0; j++)
+                if (lw[j] && ctl.crtWordKey(lw[j][1]) === ctl.crtWordKey(myWords[i]))
+                    t = lw[j][0];
+            return { kind: k, word: myWords[i], t: t };
         }
         return null;
     }
@@ -955,10 +965,10 @@ PanelWindow {
         if (!visible || !showsText || tubeDark || fxBusy || ctl.crtIntroOn
                 || rareNoSignalOn || ctl.crtRare.screen === idx)
             return;
-        if (lineWords) {
-            if (reveal < dueFrac(f.i))
+        if (f.t >= 0) {
+            if (ctl.songPos() < f.t)
                 return;
-        } else if (!emphasisGateOpen) {
+        } else if (Date.now() - textArrivedAt < Motion.enterMs) {
             return;
         }
         if (Date.now() - lastFxAt < ctl.pace.fxGapMs)

@@ -3244,8 +3244,9 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('hit(0.9, "fx", true)', crt)
         self.assertIn("ctl.pace.fxGapMs", crt)
         self.assertIn("crt.fxCheck();", crt)
-        self.assertRegex(crt, r"if \(lineWords\) \{\s*if \(reveal < dueFrac\(f\.i\)\)\s*return;\s*\} "
-                              r"else if \(!emphasisGateOpen\)")
+        # con tiempo de la palabra: al sonar (`songPos`); sin él: al asentar la entrada
+        self.assertRegex(crt, r"if \(f\.t >= 0\) \{\s*if \(ctl\.songPos\(\) < f\.t\)\s*return;\s*\} "
+                              r"else if \(Date\.now\(\) - textArrivedAt < Motion\.enterMs\)")
         # apagado por la perilla
         self.assertIn("if (!ctl.crtWordFx)", crt)
 

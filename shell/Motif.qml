@@ -423,14 +423,17 @@ Item {
                         c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
                         c.lineJoin = "round";
                         c.beginPath();
-                        for (let i = 0; i < tr.pts.length; i += 2) {
-                            const x = cx + tr.pts[i] * rx * k;
-                            const y = cy - tr.pts[i + 1] * ry * k;
-                            if (i === 0)
-                                c.moveTo(x, y);
-                            else
-                                c.lineTo(x, y);
+                        // 64 puntos de un tono agudo se ven como un polígono:
+                        // curvas por los puntos medios, que cuestan lo mismo
+                        const P = tr.pts, np = P.length / 2;
+                        c.moveTo(cx + P[0] * rx * k, cy - P[1] * ry * k);
+                        for (let i = 1; i < np - 1; i++) {
+                            const x = cx + P[i * 2] * rx * k, y = cy - P[i * 2 + 1] * ry * k;
+                            const mx = cx + (P[i * 2] + P[i * 2 + 2]) / 2 * rx * k;
+                            const my = cy - (P[i * 2 + 1] + P[i * 2 + 3]) / 2 * ry * k;
+                            c.quadraticCurveTo(x, y, mx, my);
                         }
+                        c.lineTo(cx + P[np * 2 - 2] * rx * k, cy - P[np * 2 - 1] * ry * k);
                         c.stroke();
                         // el punto del haz: donde termina la traza
                         const e = tr.pts.length - 2;

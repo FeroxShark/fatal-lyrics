@@ -683,7 +683,7 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   todo el que sostenga el lock (`fuser -k`, TERM → KILL a los 2 s), esté o no en el pidfile. El kernel suelta el
   lock al morir el proceso: nunca hay lock viejo que limpiar. Tests: `tests/test_guard.py`.
 - **Drivers:** ninguno de `docs/plans/*.py` levanta su propio daemon u overlay (todos hablan con `fatal`);
-  los helpers que sí lanzan (`aud-feed.py`, `pw-play`) se bajan en un `finally`. Si un worker necesita una
+  los helpers que sí lanzan (`aud-feed.py`, `pw-play`) tienen que bajarse en un `finally`. Si un worker necesita una
   instancia aparte, tiene que ser con otro `XDG_RUNTIME_DIR` (otro lock, otro socket, otro flag).
 - **Ver a mano:** `pgrep -af 'quickshell|cartelitos.py'` — tiene que haber un overlay y un daemon (más, a lo
   sumo, `/usr/bin/quickshell` de otras cosas de Ferox que NO abren `shell.qml`).

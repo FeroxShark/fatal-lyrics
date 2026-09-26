@@ -656,6 +656,17 @@ Item {
             // barras salían siete azules y no se distinguían de la escalera de
             // grises de abajo, que es justo lo que la escalera ya hace.
 
+            // El marco negro es lo que las hace legibles en CUALQUIER cara: la barra blanca
+            // sobre una cara clara (fondo cian o crema) se comía con el fondo.
+            Rectangle {
+                x: card.mx - card.barsH * 0.06
+                y: card.my - card.barsH * 0.06
+                width: card.cw + card.barsH * 0.12
+                height: card.barsH * 1.12
+                color: "#0b0b0b"
+                opacity: 0.9
+            }
+
             Row {
                 x: card.mx
                 y: card.my

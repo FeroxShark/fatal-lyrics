@@ -562,6 +562,23 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   on/off y 0 en 32 con un `clear why=track` en el medio (el PID del overlay no cambió y `coredumpctl`
   no sumó ningún SIGSEGV). Diagnóstico: `coredumpctl info <pid>`; el que sale primero en la
   lista suele ser el REPORTER del crash handler, no el proceso (mirar `Command Line`/timestamp).
+- **Cambio de calidad: SIGSEGV dentro del driver nvidia, en `QRhi::beginFrame` (corrida 6, 2 casos;
+  arreglado en corrida 6b, sin reproducir a demanda).** Firma distinta a la de arriba: pila
+  `libnvidia-eglcore.so` (#4-#6) ← `libQt6Gui` (#7-#8) ← `QRhi::beginFrame` ← `QQuickWindow::event`
+  (UpdateRequest), sin ningún frame de Quickshell/QML ni `addToDirtyList`. `beginFrame` de QRhiGles2 corre
+  `executeDeferredReleases`: cae al liberar una textura/FBO vieja, o sea, algo que se destruyó o
+  redimensionó el cuadro anterior. Los dos casos (00:06 tras cpu-bench, 00:12 en un `fatal crt off`
+  posterior; `coredumpctl info <pid>`, `~/.cache/quickshell/crashes/<id>/log.qslog.log`) tienen la MISMA
+  última línea de log: `crt: quality 0.75 -> 1 (frame sano 28s)` + `crt: trail N on` — el cambio de
+  calidad redimensionaba `stageTex`/`signalTex` Y conmutaba `recursive` de `signalTex` en el mismo cuadro.
+  Hoy va en dos tiempos (`texQuality`/`trailQ` + `qualityStepTimer`, `qualityStepMs` 150): al BAJAR la
+  estela se apaga ya y la textura achica después; al SUBIR la textura crece ya y la estela vuelve después.
+  Sin repro: `docs/plans/quality-drive.py` (`quality|intro|mixed`, alterna `crt_quality` 0.75/1.0 por config
+  con esperas al azar, `clear why=track` durante el intro y `fatal crt off/on`) con el código VIEJO: 0
+  caídas en 60 ciclos `quality` + 40 `mixed` + 80 `quality` con `cpu-bench techo` en paralelo (360
+  cambios); con el fix: 0 en 60 `mixed`. Se dispara sólo con la GPU pisada (frames de 33 ms) y algo de
+  suerte, así que "0 caídas" no prueba el arreglo: si vuelve, mirar primero qué más redimensiona un
+  source (`burnTex` es de tamaño fijo) y probar liberar la textura con `visible: false` un cuadro antes.
 - Medir contraste: UNA pasada, alternando sólo `crt_burnin` en vivo (`chorus-drive.py burn`); dos
   `clear` distintos re-siembran el set y cambian cara clara/oscura.
 

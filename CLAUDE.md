@@ -102,7 +102,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   sueltas + `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); `custom` = look de
   siempre y es el único que obedece las sueltas. `auto` (en `crtSetFor`) sortea sólo tubos de color.
   **Estela** (corrida 3, `crt.persistence`): `signalTex` es `recursive`, `signal.frag` guarda
-  `max(señal, prev*decay - piso)`; `trailOn` exige `crtQuality >= 1`, el `dt` sale de `frameSwapped`
+  `max(señal, prev*decay - piso)`; `trailOn` exige `trailQ` (= `crtQuality >= 1` con 150 ms de retraso: el
+  resize y `recursive` nunca cambian en el mismo cuadro, TRAMPAS), el `dt` sale de `frameSwapped`
   (`docs/TRAMPAS.md`). Vida media = persistence × 220 ms.
 - `crtTension`/`crtClimaxT` (`shell.qml`, `crt.tension`, corrida 4a) — `rep` `{n,k,chorus}`
   (`lyrics.repeat_map`) viaja en `lyrics.lines[i]`, `show` y `next`. La tensión sube con `posAbs`

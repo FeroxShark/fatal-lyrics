@@ -3195,8 +3195,12 @@ class TestKnobsAreReachable(unittest.TestCase):
         crt = self._crt_qml()
         self.assertIn("function hit(amount, src, urgent)", crt)
         self.assertIn("readonly property bool beatLocked: ctl.crtBeatLock && ctl.bpmLive", crt)
-        self.assertRegex(crt, r"function onBeatTickChanged\(\) \{ crt\.releaseHit\(true\); \}")
-        self.assertIn('" beat+"', crt)
+        # el tiempo se calcula contra la grilla, NO se espera al beatTick (un re-anclaje del
+        # compás lo dispara de más y el glitch caía fuera de tiempo)
+        self.assertIn("function beatStep()", crt)
+        self.assertIn("onTriggered: crt.beatStep()", crt)
+        self.assertNotIn("onBeatTickChanged() { crt.releaseHit", crt)
+        self.assertIn('" beat" + (late >= 0 ? "+" : "")', crt)
         for call in ('crt.hit(0.4, "hop", true)', 'crt.hit(1, "glass", true)',
                      'crt.hit(1.0, "chan", true)', 'crt.hit(0.35, "tubeon", true)',
                      'crt.hit(0.5, "ring", true)'):

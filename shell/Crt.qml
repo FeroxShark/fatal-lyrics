@@ -759,11 +759,11 @@ PanelWindow {
         ctl.quantize(ctl.pace.hitGapMs * 0.45 / Math.max(ctl.crtIntensity, 0.25)
                      / ctl.crtTensionMult))
     // tanda 7, corrida 5a (`crt.beat_lock`): con el compás medido, un glitch que NO está atado a
-    // otra animación espera al próximo `beatTick` (como mucho un tiempo) y entra en el pulso del
-    // tema. El portero (`hitGap`) se mira al PEDIR, no al soltar: el que pasa queda pendiente, y
-    // los que llegan mientras espera se fusionan en uno (gana el más fuerte). Un `urgent` entra
-    // ya y borra al pendiente: es un golpe de otra animación (aro, salto, tubeon, cambio de
-    // canal, cámara) y su glitch tiene que caer con ella, no un tiempo después.
+    // otra animación espera al próximo tiempo (como mucho uno, contra la grilla del `beatTick`) y
+    // entra en el pulso del tema. El portero (`hitGap`) se mira al PEDIR, no al soltar: el que
+    // pasa queda pendiente, y los que llegan mientras espera se fusionan en uno (gana el más
+    // fuerte). Un `urgent` entra ya y borra al pendiente: es un golpe de otra animación (aro,
+    // salto, tubeon, cambio de canal, cámara) y su glitch tiene que caer con ella.
     readonly property bool beatLocked: ctl.crtBeatLock && ctl.bpmLive
     property bool hitPending: false
     property real hitPendingAmt: 0
@@ -774,6 +774,7 @@ PanelWindow {
             return;
         if (urgent || !beatLocked) {
             hitPending = false;
+            hitOnBeat.stop();
             hitFallback.stop();
             fireHit(amount, src, "");
             return;
@@ -788,21 +789,48 @@ PanelWindow {
         hitPending = true;
         hitPendingAmt = amount;
         hitPendingSrc = src || "";
-        // red: si el compás se pierde a mitad de la espera no llega ningún beatTick
-        hitFallback.interval = Math.round(ctl.beatMs) + 40;
+        // el tiempo se calcula EXACTO contra la grilla del daemon, no se espera al `beatTick`:
+        // sale de un poll de 25 ms (+ la carga de la máquina) y el glitch entraba ~45 ms tarde; y
+        // cada re-anclaje de la grilla (evento `bpm`) lo dispara una vez de más, en cualquier
+        // momento, así que soltar el pendiente ahí lo ponía FUERA de tiempo. `hitFallback` es la
+        // red por si el compás se pierde a mitad de la espera.
+        const b = ctl.beatMs;
+        hitDueAt = now + b - (((now - ctl.lastBeatAt) % b) + b) % b;
+        beatStep();
+        hitFallback.interval = Math.round(b) + 40;
         hitFallback.restart();
+    }
+    // Un Timer de QML es de los GRUESOS (Qt::CoarseTimer, ±5 % del intervalo): en un tiempo de
+    // 500 ms se pasa hasta 25 ms para cada lado, y el glitch caía 10 ms ANTES del tiempo. Se
+    // acerca en pasos que nunca se pasan (85 % de lo que falta) y sólo el último, corto (< 40 ms,
+    // donde Qt es preciso), llega a la marca.
+    property double hitDueAt: 0
+    function beatStep() {
+        if (!hitPending)
+            return;
+        const left = hitDueAt - Date.now();
+        if (left <= 1) {
+            releaseHit(true);
+            return;
+        }
+        hitOnBeat.interval = Math.max(1, Math.round(left > 40 ? left * 0.85 : left));
+        hitOnBeat.restart();
     }
     function releaseHit(onBeat) {
         if (!hitPending)
             return;
         hitPending = false;
+        hitOnBeat.stop();
         hitFallback.stop();
         if (tubeDark || !visible)
             return;
         // `beat+<ms>`: cuánto después del tiempo (contra la grilla del daemon) entró de verdad
         const b = ctl.beatMs;
-        const late = b > 0 ? ((Date.now() - ctl.lastBeatAt) % b + b) % b : 0;
-        fireHit(hitPendingAmt, hitPendingSrc, onBeat ? " beat+" + Math.round(late) : " beat+fallback");
+        let late = b > 0 ? ((Date.now() - ctl.lastBeatAt) % b + b) % b : 0;
+        if (late > b / 2)
+            late -= b;      // unos ms ANTES del tiempo: negativo
+        fireHit(hitPendingAmt, hitPendingSrc, onBeat
+            ? " beat" + (late >= 0 ? "+" : "") + Math.round(late) : " beat+fallback");
     }
     function fireHit(amount, src, beat) {
         lastHitAt = Date.now();
@@ -820,14 +848,14 @@ PanelWindow {
         glitchDecay.start();
     }
     Timer {
+        id: hitOnBeat
+        repeat: false
+        onTriggered: crt.beatStep()
+    }
+    Timer {
         id: hitFallback
         repeat: false
         onTriggered: crt.releaseHit(false)
-    }
-    Connections {
-        target: crt.ctl
-        enabled: crt.visible && crt.hitPending
-        function onBeatTickChanged() { crt.releaseHit(true); }
     }
 
     // ------------------------------------------------------ cambio de canal

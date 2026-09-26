@@ -2298,10 +2298,8 @@ PanelWindow {
     // (`burn.frag`); cuán visible se ve (tint, perilla, techo de contraste) lo
     // decide `signal.frag`, así que la perilla se mueve en vivo.
     property bool burnHave: false
-    // se desvanece en el outro con `Motion.holdMs`: es lo más lento que tiene el
-    // tubo, y una marca que se va no debe llamar la atención al irse
-    property real burnFade: ctl.crtInOutro ? 0 : 1
-    Behavior on burnFade { NumberAnimation { duration: Motion.holdMs } }
+    // se desvanece en el outro (`ctl.crtBurnFade`, `Motion.holdMs`): es lo más lento que tiene
+    // el tubo, y una marca que se va no debe llamar la atención al irse
     // el peso de la ocurrencia k: la 2da marca poco, y llega al tope en la 4ta.
     // (Nunca hay quemado con k = 1: `burnSnap()` sólo se llama desde k >= 2.)
     function burnWeight(k) {
@@ -2399,7 +2397,7 @@ PanelWindow {
         // techo de contraste del quemado (luminancia de la cara): 0.10 con la
         // perilla en 1, 0.05 con 0.5. 0 = el shader se saltea la muestra.
         property real burnL: (crt.burnHave && !crt.tubeDark && crt.visible)
-            ? 0.10 * crt.ctl.crtBurnin * crt.burnFade : 0
+            ? 0.10 * crt.ctl.crtBurnin * crt.ctl.crtBurnFade : 0
         property variant tint: crt.ctl.tubeMono > 0.5 ? crt.ctl.tubeMonoTint : crt.pal.tint
         property real persist: crt.trailOn ? crt.ctl.tubePersistence : 0
         property real dt: crt.trailDt

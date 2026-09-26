@@ -3220,7 +3220,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         # techo de contraste que pidió Ferox ("que no sea molesto"): <= 5 % con la perilla en
         # 0.5 y <= 10 % en 1, así que el uniform vale a lo sumo 0.10 * perilla
         crt = self._crt_qml()
-        self.assertRegex(crt, r"(?s)property real burnL:.*?\?\s*0\.10 \* crt\.ctl\.crtBurnin \* crt\.burnFade : 0")
+        self.assertRegex(crt, r"(?s)property real burnL:.*?\?\s*0\.10 \* crt\.ctl\.crtBurnin \* crt\.ctl\.crtBurnFade : 0")
         self.assertIn("!crt.tubeDark", crt)
         with open(os.path.join(self.SHELL, "burn.frag"), encoding="utf-8") as f:
             burn = f.read()

@@ -63,21 +63,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   del motivo. `wild` devuelve exactamente los números de la tanda 3. Un número de amplitud o de
   frecuencia nuevo va a la TABLA: repartido en ternarios por los archivos, `wild` deja de ser
   verificable.
-- **Una pantalla sin letra no dibuja cualquier cosa: dibuja algo del tema.** Los motivos de la
-  tanda 2 leen lo que el tubo ya sabe — `dunes` es el único paisaje (el paisaje está quieto y lo
-  que se mueve es la cámara, re-sembrada en cada aparición), `static` forma una vez por compás la
-  primera palabra de la línea que VIENE, `textsea` hace correr la letra entera con el verso que
-  suena encendido, y `eyes` es UN ojo grande mirando a la pantalla que tiene la frase — pupila
-  estirada hacia allá, párpado entrecerrado en calma — con dos o tres ojos chicos yendo y
-  viniendo por los bordes (a los costados si la pantalla es apaisada, arriba y abajo si es
-  vertical), y gira hacia el destino durante el aviso del salto. Los cuatro de la segunda mitad leen el
-  ritmo: `ekg` escribe un QRS por tiempo (del `tick` cuantizado, no del bombo crudo),
-  `rorschach` abre la mancha bajando el umbral con el volumen, `plasma` deja que los graves
-  abran y estiren la burbuja —el golpe la parte en dos o tres gotas y el resorte las vuelve a
-  fundir— y `tunnel` viaja a velocidad CONSTANTE (sólo el drop lo acelera) con una luz que
-  corre pared adentro en cada tiempo. Y `scope`
-  cierra la figura de Lissajous cuando el compás es confiable (la relación entre los ejes sale
-  de la parte del tema); `stars` salta al hiperespacio en el drop.
+- **Una pantalla sin letra no dibuja cualquier cosa: dibuja algo del tema.** Los motivos leen lo
+  que el tubo ya sabe (la letra que viene, el ritmo, el drop, el compás). `dunes` es el único paisaje:
+  quieto, la cámara se mueve. `eyes` es UN ojo mirando a la pantalla que tiene la frase. Qué lee cada
+  uno: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
 - **Cómo entra la línea lo decide la música, no un sorteo parejo.** `crtEntriesFor` reparte UN
   estilo de entrada por pantalla al consumir la línea, pesado por el nivel de los últimos ~2 s y
   por la parte del tema (tabla `crtEntryTable` en `shell.qml`, con el comentario de cómo tunearla).
@@ -178,16 +167,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): 4 kinds
-  de motif, una familia de entrada (`typed`/`hard`/`burn`/`soft`, tabla `crtEntryFamilies`), un
-  scheme de color y una fuente, todo de una semilla atada a `crtTrackSeed` (se recalcula sólo al
-  cambiar de tema). `crtMotifBag`/`crtEntryBag` — mazos barajados con `crtHash` (uno por
-  pantalla) que reparten SIN repetir de los 4 kinds del set hasta agotarse y recién ahí
-  rebarajan (`crt: bag refill [...]` en el log); se vacían en el `clear` de tema. Con
-  `crt.set = "off"` vuelve el sorteo plano de siempre (`motifPool`/`crtEntryTable`). Una
-  palabra clave de `motifWords` sigue pudiendo forzar un motif de afuera del set. El `mood`
-  (corrida 3) mueve la cuota de `motifGroups` calm/hot/neutral y la familia de entrada según
-  energy/valence — se congela una sola vez por tema en `crtMoodLocked` (primer verso), y no
-  toca el esquema de color si la tapa ya lo puso (`crtPalette = "album"`).
+  de motif, familia de entrada (`crtEntryFamilies`), scheme y fuente, de una semilla atada a
+  `crtTrackSeed`. `crtMotifBag`/`crtEntryBag`: mazos barajados con `crtHash`, sin repetir hasta
+  agotarse. `crt.set = "off"` vuelve al sorteo plano. El `mood` (corrida 3) se congela una vez por
+  tema (`crtMoodLocked`). Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
 - `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright
   determinísticos (léxico chico es/en para valence, rms absoluto calibrado contra `~/.cache/
   cartelitos/audio` para energy, sin red ni IA — `feedback_ia_sin_creditos`). El daemon lo manda

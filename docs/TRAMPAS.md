@@ -595,3 +595,33 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   pedazo con la palabra, que arranca más tarde, nunca llega).
 - **rollPhase:** con compás la vuelta dura el múltiplo de 4 tiempos más cercano a 1/`rollFreeRate` (0.085 laps/s
   ≈ 11.8 s; 6 compases a 120 bpm), fase desde la grilla absoluta `lastBeatAt mod beatMs`. No hardcodear.
+
+## Detalle movido: motivos y set (desde CLAUDE.md)
+
+- **Una pantalla sin letra no dibuja cualquier cosa: dibuja algo del tema.** Los motivos de la
+  tanda 2 leen lo que el tubo ya sabe — `dunes` es el único paisaje (el paisaje está quieto y lo
+  que se mueve es la cámara, re-sembrada en cada aparición), `static` forma una vez por compás la
+  primera palabra de la línea que VIENE, `textsea` hace correr la letra entera con el verso que
+  suena encendido, y `eyes` es UN ojo grande mirando a la pantalla que tiene la frase — pupila
+  estirada hacia allá, párpado entrecerrado en calma — con dos o tres ojos chicos yendo y
+  viniendo por los bordes (a los costados si la pantalla es apaisada, arriba y abajo si es
+  vertical), y gira hacia el destino durante el aviso del salto. Los cuatro de la segunda mitad leen el
+  ritmo: `ekg` escribe un QRS por tiempo (del `tick` cuantizado, no del bombo crudo),
+  `rorschach` abre la mancha bajando el umbral con el volumen, `plasma` deja que los graves
+  abran y estiren la burbuja —el golpe la parte en dos o tres gotas y el resorte las vuelve a
+  fundir— y `tunnel` viaja a velocidad CONSTANTE (sólo el drop lo acelera) con una luz que
+  corre pared adentro en cada tiempo. Y `scope`
+  cierra la figura de Lissajous cuando el compás es confiable (la relación entre los ejes sale
+  de la parte del tema); `stars` salta al hiperespacio en el drop.
+
+- `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): 4 kinds
+  de motif, una familia de entrada (`typed`/`hard`/`burn`/`soft`, tabla `crtEntryFamilies`), un
+  scheme de color y una fuente, todo de una semilla atada a `crtTrackSeed` (se recalcula sólo al
+  cambiar de tema). `crtMotifBag`/`crtEntryBag` — mazos barajados con `crtHash` (uno por
+  pantalla) que reparten SIN repetir de los 4 kinds del set hasta agotarse y recién ahí
+  rebarajan (`crt: bag refill [...]` en el log); se vacían en el `clear` de tema. Con
+  `crt.set = "off"` vuelve el sorteo plano de siempre (`motifPool`/`crtEntryTable`). Una
+  palabra clave de `motifWords` sigue pudiendo forzar un motif de afuera del set. El `mood`
+  (corrida 3) mueve la cuota de `motifGroups` calm/hot/neutral y la familia de entrada según
+  energy/valence — se congela una sola vez por tema en `crtMoodLocked` (primer verso), y no
+  toca el esquema de color si la tapa ya lo puso (`crtPalette = "album"`).

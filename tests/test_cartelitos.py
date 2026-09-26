@@ -3169,6 +3169,16 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_tension: "crtTensionAmount"', qml)
         self.assertIn("tension", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def test_burnin_knob_is_wired_end_to_end(self):
+        # corrida 4b de la tanda 7: el quemado del estribillo, en los cuatro lugares
+        self.assertEqual(c.DEFAULTS["crt"]["burnin"], 0.5)
+        self.assertIn("burnin", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_burnin", "crt", "burnin"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"property real crtBurnin:\s*0\.5\b")
+        self.assertIn('crt_burnin: "crtBurnin"', qml)
+        self.assertIn("burnin", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+
     def test_tension_ranges_live_in_the_pace_table(self):
         # amplitudes en `crtPaceTable`, las tres filas: calm angosto, wild ancho
         qml, _ = self._tube_table()

@@ -332,6 +332,9 @@ SETTINGS = [
     ("tension", "crt", "Tension towards the last chorus (0 = flat)",
      lambda c: _ask_num("Tension: the tube breaks up more towards the last chorus "
                         "(0 = flat, 1 = the whole range of the pace preset)", c, 0.0, 1.0)),
+    ("burnin", "crt", "Chorus burn-in (0 = none)",
+     lambda c: _ask_num("Burn-in: the chorus leaves a faint silhouette on its screen "
+                        "(0 = none, 0.5 = default, 1 = strongest, still under 10%)", c, 0.0, 1.0)),
 
     ("— behavior —", None, None, None),
     ("player", "behavior", "Player to follow", _ask_player),

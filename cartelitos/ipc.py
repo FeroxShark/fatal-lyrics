@@ -90,6 +90,7 @@ CONFIG_EVENT_MAP = (
     ("crt_roll", "crt", "roll"), ("crt_vignette", "crt", "vignette"),
     ("crt_composite", "crt", "composite"), ("crt_tube", "crt", "tube"),
     ("crt_persistence", "crt", "persistence"), ("crt_tension", "crt", "tension"),
+    ("crt_burnin", "crt", "burnin"),
 )
 
 

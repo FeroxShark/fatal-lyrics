@@ -251,6 +251,13 @@ _CONFIG_COMMENTS = {
                    "creep up until that chorus (and a notch more while one plays)\n"
                    "and ease off in the outro. 0 = flat, always as before, 1 =\n"
                    "the whole range of the pace preset (calm is narrow, wild wide)",
+        "burnin": "the chorus leaves its silhouette burnt into the glass. From\n"
+                  "the second time a chorus line plays, the screen it lands on\n"
+                  "keeps a faint mark of it (a glow of the phosphor colour on a\n"
+                  "dark face, a slightly darker patch on a light one), until the\n"
+                  "song changes or ends. Never brighter than 5% of the screen's\n"
+                  "luminance at 0.5 and 10% at 1. 0 = none. It is drawn once per\n"
+                  "chorus line, not every frame: it costs nothing while it sits",
         "tube": "the character of the glass, in one knob. custom = the loose\n"
                 "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
                 "vignette, composite), exactly as before. Any other value picks\n"
@@ -362,7 +369,7 @@ DEFAULTS = {
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
-        "composite": 0.5, "persistence": 0.35, "tension": 1.0,
+        "composite": 0.5, "persistence": 0.35, "tension": 1.0, "burnin": 0.5,
     },
 }
 

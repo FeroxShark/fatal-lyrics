@@ -106,6 +106,12 @@ ShellRoot {
     // el rango entero de la fila de `pace` (`tensionMin`..`tensionMax`)
     property real crtTensionAmount: 1.0
     onCrtTensionAmountChanged: console.log("crt: tension_amount " + crtTensionAmount)
+    // tanda 7, corrida 4b: el quemado del estribillo (`Crt.qml`, `burn*`). 0 = no
+    // se dibuja ni se acumula; 1 = el techo de contraste (10 % de luminancia,
+    // 5 % con el default 0.5). Es un multiplicador del shader, así que la perilla
+    // se mueve en vivo sin rehacer lo ya quemado.
+    property real crtBurnin: 0.5
+    onCrtBurninChanged: console.log("crt: burnin " + crtBurnin)
     property real crtRoll: 1.0
     property real crtVignette: 0.9
     // tanda 7, corrida 2: el carácter del tubo en una sola perilla. `custom` =
@@ -3106,7 +3112,7 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
-        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount",
+        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_burnin: "crtBurnin",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",

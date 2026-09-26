@@ -88,6 +88,9 @@ Item {
     // el nombre del tema, para el rótulo de la carta de ajuste. Vacío = el
     // tubo no sabe qué suena y la carta dice el nombre del programa.
     property string title: ""
+    // tanda 7, corrida 6: el artista/álbum de la carta del intro. Con texto, reemplaza la
+    // hora bajo el círculo (la aguja sigue caminando); vacío = la hora, como siempre.
+    property string info: ""
     // Hacia dónde miran los ojos: -1 a la izquierda, 0 al frente, 1 a la
     // derecha. Lo decide Crt.qml, que es el único que sabe dónde está la frase.
     property real gaze: 0
@@ -828,12 +831,14 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: card.midY + (card.midH + card.dia) / 2 + card.gap * 0.2
-                text: card.stamp
+                text: motif.info !== "" ? motif.info.toUpperCase() : card.stamp
                 color: motif.colour
                 opacity: 0.8
                 font.family: motif.fontFamily
-                font.pixelSize: Math.max(8, card.sp * 0.046)
+                font.pixelSize: Math.max(8, card.sp * (motif.info !== "" ? 0.034 : 0.046))
                 font.letterSpacing: card.sp * 0.010
+                width: card.cw
+                elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }
         }

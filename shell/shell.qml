@@ -163,6 +163,10 @@ ShellRoot {
     // tarjeta con título/artista, primer verso) en vez de un simple cambio
     // de canal. false = el cambio de canal de siempre.
     property bool crtIntro: true
+    // tanda 7, corrida 6: "testcard" = la tarjeta del intro es la carta de ajuste
+    // (`Motif.qml` testcard) con el título en la banda de identificación; "plain" =
+    // la tarjeta de siempre (título grande y artista, sin dibujo)
+    property string crtIntroCard: "testcard"     // testcard | plain
     property bool crtColorFromPitch: true
     property int crtColorHold: 10
     // segundos de anticipación con que el color infecta la pantalla siguiente
@@ -721,7 +725,8 @@ ShellRoot {
 
     // tanda 6, corrida 5: el cambio de tema es un evento propio, no un
     // channel-change disimulado. "" = no hay intro en curso; "off" = los
-    // tubos recién se apagaron; "static" = ruido mientras se espera el
+    // tubos recién se apagaron; "degauss" = el reencendido: vuelven con la
+    // onda (tanda 7, corrida 6); "static" = ruido mientras se espera el
     // `np` del tema nuevo; "card" = título/artista en UNA pantalla. UN
     // timer del root reprogramado por fase (mismo patrón que
     // `crtRelightTimer`/`crtSceneOutroTimer`), nunca uno por pantalla.
@@ -752,8 +757,15 @@ ShellRoot {
 
     function crtIntroAdvance() {
         if (crtIntroPhase === "off") {
-            crtIntroPhase = "static";
+            // la fase se pone ANTES de prender: `Crt.qml` mira `crtIntroPhase` al
+            // reencender para no sumarle el haz de `tubeon` a la onda del degauss
+            crtIntroPhase = "degauss";
+            console.log("crt: intro degauss");
             crtSetDark(-1, false);
+            crtIntroTimer.interval = Motion.degaussMs;
+            crtIntroTimer.restart();
+        } else if (crtIntroPhase === "degauss") {
+            crtIntroPhase = "static";
             crtIntroTimer.interval = Motion.introStaticMs;
             crtIntroTimer.restart();
         } else if (crtIntroPhase === "static") {
@@ -779,7 +791,7 @@ ShellRoot {
             const focus = (crtShot && crtShot.focus >= 0 && crtShot.focus < n)
                 ? crtShot.focus : Math.floor((n - 1) / 2);
             crtIntroScreen = focus;
-            console.log("crt: intro card \"" + npTitle + "\" screen=" + focus);
+            console.log("crt: intro card \"" + npTitle + "\" screen=" + focus + " style=" + crtIntroCard);
             // Sin timer nuevo: la tarjeta se queda puesta (intro
             // instrumental, el título acompaña) hasta que el primer verso
             // la corte en `show()` (`crtIntroEnd`/`crtIntroSkip`).
@@ -2922,7 +2934,8 @@ ShellRoot {
         // más abajo necesita saber si la ceremonia estaba corriendo para
         // ESTE `show`, no si sigue corriendo después de que la termine.
         const introWasOn = crtIntroOn;
-        if (crtTrackStart && (crtIntroPhase === "off" || crtIntroPhase === "static"))
+        if (crtTrackStart && (crtIntroPhase === "off" || crtIntroPhase === "degauss"
+                              || crtIntroPhase === "static"))
             // el primer verso llegó mientras todavía era estática (o ni
             // eso): no hubo tiempo de mostrar título/artista, se lo salta
             crtIntroSkip();
@@ -3179,7 +3192,7 @@ ShellRoot {
         crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
-        crt_set: "crtSetMode", crt_intro: "crtIntro",
+        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_intro_card: "crtIntroCard",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",

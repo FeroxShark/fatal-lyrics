@@ -166,6 +166,34 @@ PanelWindow {
         target: crt; property: "tubeLevel"; to: 1
         duration: Motion.tubeOnMs; easing.type: Easing.OutExpo
     }
+    // ---- el degauss (tanda 7, corrida 6): el reencendido del intro de tema. El tubo vuelve
+    // con la onda de la bobina, que se amortigua en `Motion.degaussMs`. Es UN movimiento, no
+    // dos: en la fase `degauss` el haz de `tubeon` no corre (sólo `tubeLevel` sube, tapado por
+    // el destello). `degauss` llega al uniform de `crt.frag`; 1 = arranca, 0 = terminó.
+    readonly property bool degaussOn: ctl.crtIntroPhase === "degauss"
+    property real degauss: 0
+    NumberAnimation {
+        id: degaussAnim
+        target: crt; property: "degauss"; from: 1; to: 0
+        duration: Motion.degaussMs; easing.type: Easing.OutQuad
+    }
+    // el primer verso cortó el degauss a la mitad: la letra manda, la onda se va como todo lo
+    // que se va (`exitMs`), no de un corte (sería un salto visible de geometría)
+    NumberAnimation {
+        id: degaussCutAnim
+        target: crt; property: "degauss"; to: 0
+        duration: Motion.exitMs; easing.type: Easing.InQuad
+    }
+    onDegaussOnChanged: {
+        if (degaussOn) {
+            degaussCutAnim.stop();
+            degaussAnim.restart();
+            console.log("crt: degauss s" + idx);
+        } else if (degauss > 0.001) {
+            degaussAnim.stop();
+            degaussCutAnim.restart();
+        }
+    }
     onTubeDarkChanged: {
         fxStop();
         if (tubeDark) {
@@ -173,7 +201,8 @@ PanelWindow {
             tubeDarkOffAnim.restart();
         } else {
             tubeDarkOffAnim.stop();
-            tubeOnAnim.restart();
+            if (!degaussOn)
+                tubeOnAnim.restart();
             tubeLevelOnAnim.restart();
         }
     }
@@ -2019,7 +2048,8 @@ PanelWindow {
         // línea de la que anticipar nada.
         Loader {
             anchors.fill: parent
-            active: crt.ctl.crtIntroPhase === "static" && !crt.tubeDark
+            // debajo de la onda del degauss también: es lo que la onda ondula
+            active: (crt.ctl.crtIntroPhase === "static" || crt.degaussOn) && !crt.tubeDark
             visible: active
             sourceComponent: Static {
                 colour: crt.pal.ink
@@ -2058,8 +2088,33 @@ PanelWindow {
                 }
             }
 
+            // tanda 7, corrida 6 (`crt.intro_card`): la tarjeta es la carta de ajuste de
+            // `Motif.qml` (el mismo dibujo del motivo/raro `testcard`), con el título en la
+            // banda de identificación y el artista bajo el círculo, en la fuente y el
+            // esquema del set. `plain` = la tarjeta de siempre (los dos Text de abajo).
+            // El Loader existe sólo mientras la tarjeta se ve: la aguja y el Canvas del
+            // círculo no cuestan nada el resto del tema.
+            readonly property bool asTestcard: crt.ctl.crtIntroCard !== "plain"
+            Loader {
+                anchors.fill: parent
+                active: introCard.asTestcard && introCard.visible
+                sourceComponent: Motif {
+                    kind: "testcard"
+                    title: crt.ctl.npTitle
+                    info: crt.ctl.npInfo
+                    fontFamily: crt.fontFamily
+                    colour: crt.pal.ink
+                    hot: crt.pal.hot
+                    low: 0.4
+                    opaMin: 1
+                    opaSpan: 0
+                    spinning: introCard.visible
+                }
+            }
+
             Text {
                 id: introTitle
+                visible: !introCard.asTestcard
                 anchors.centerIn: parent
                 width: parent.width * 0.82
                 text: crt.ctl.npTitle
@@ -2077,6 +2132,7 @@ PanelWindow {
             }
 
             Text {
+                visible: !introCard.asTestcard
                 anchors {
                     top: introTitle.bottom
                     topMargin: Math.round(crt.shortSide * 0.03)
@@ -2678,6 +2734,7 @@ PanelWindow {
             : crt.ctl.tubeNoise * (0.35 + 0.65 * crt.rest)
             * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
         property real tubeLevel: crt.tubeLevel
+        property real degauss: crt.degauss
         property real glitch: Math.min(crt.glitchAmt, 1)
         // La barra que rueda va atada al verso: arranca con el peso de
         // siempre y llega al doble sobre el final de la línea, así el

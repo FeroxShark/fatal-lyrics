@@ -67,6 +67,11 @@ Singleton {
     // eventos DENTRO de un tema; esto es la ceremonia del cambio de tema,
     // que dura más porque no compite con nada (no hay letra sonando todavía).
     readonly property int introStaticMs: 600
+    // el degauss (tanda 7, corrida 6): el reencendido del intro. Un degauss real (la bobina que
+    // desmagnetiza el vidrio al prender) dura eso: unos 700 ms de onda que se amortigua. Es parte
+    // de la ceremonia, no un puente; NO es `bridgeMs`. Un tubo que ondula menos se lee como un
+    // glitch, más como un tubo roto. Corre sobre `Easing.OutQuad` (amplitud 1 → 0).
+    readonly property int degaussMs: 700
     readonly property int introCardMs: 2400
 
     // ---- eventos raros (tanda 6, corrida 7): cuánto dura el CONTENIDO de

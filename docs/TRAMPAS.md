@@ -649,3 +649,13 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   (corrida 3) mueve la cuota de `motifGroups` calm/hot/neutral y la familia de entrada según
   energy/valence — se congela una sola vez por tema en `crtMoodLocked` (primer verso), y no
   toca el esquema de color si la tapa ya lo puso (`crtPalette = "album"`).
+
+## Capturas/medidas con NO SIGNAL encima: un overlay viejo del mismo repo (tanda 7, corrida 7)
+
+- Síntoma: con el CRT prendido y `fatal crt motif scope --screen all`, el log decía `crt: scope lissajous` pero
+  `grim` capturaba barras + NO SIGNAL en las tres pantallas, y el A/B de CPU medía dos overlays.
+- Causa: quedó un `quickshell` de una sesión anterior (mismo cwd, otro pid, daemon viejo) y el flag del CRT
+  es UN archivo compartido: ambos overlays prenden y el viejo, sin música ni forzado, pinta el standby por encima.
+  `fatal restart` no lo mata.
+- Cómo verlo: `hyprctl layers | grep cartelitos-crt` con el CRT prendido: debe haber UN solo pid por pantalla.
+  Se cerró con `kill <pid>` del sobrante.

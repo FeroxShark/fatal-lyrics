@@ -117,7 +117,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `Static.qml`, `Rorschach.qml`, `Plasma.qml` y `Tunnel.qml` (con su `.frag` + `.qsb`), más
   `Ekg.qml` (Canvas), `TextSea.qml`, `Eyes.qml` y `Eye.qml` (el dibujo del ojo, que usan el
   motivo `eye` y la grilla `eyes`). Lo que se dibuja con items sueltos (el radar, la lluvia, el
-  hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`.
+  hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`. El osciloscopio
+  dibuja el audio REAL (tanda 7, corrida 7): ver `wave` abajo.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
 - `cartelitos/motifs.py` + `crtSetForceMotif` / `crtMotifForced` (`shell.qml`) — el forzado de
@@ -186,7 +187,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `tests/` — 637 tests, stdlib puro.
+- `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`, tanda 7, corrida 7) —
+  la captura es estéreo pero se baja a mono `(L+R)>>1` ANTES de `AudioAnalyzer.feed` (test: idéntico al mono
+  de antes; no descalibra perfiles ni `ENERGY_GAIN_REF`; la 7b reusa `downmix_stereo`). A `WAVE_HZ`=20
+  van 64+64 enteros por `send_soft`; el scope hace Lissajous L/R, retrato de fase si |corr|>0.98 y vuelve al
+  sintético sin `wave` >300 ms (`waveStaleMs`). Driver: `docs/plans/scope-drive.py`.
+- `tests/` — 650 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

@@ -148,3 +148,18 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   con el shader nuevo: 38.6 % (rango 29–58) y 35.1 % (rango 29–44); vesktop sostenía 47 % y la carga externa
   era 2.2–3.8, contra la base de 29.6–30.7 % de las corridas 0–2. Ruido de la máquina, no atribuible.
 - Estrés on/off: `cycle-drive.py plain 30` y `track 25` (intro con degauss + quemado armado): 0 caídas en 55 ciclos.
+
+## Osciloscopio con el audio real (tanda 7, corrida 7, evento `wave`)
+
+- Fuente: tonos/ruido sintéticos (ffmpeg `aevalsrc` + `pw-play --volume=0.35`), Spotify en pausa. Evento
+  `wave` = 64+64 enteros, ~730 bytes de JSON, 20 Hz (~15 KB/s por el socket).
+- CPU A/B `scope-drive.py cpu` (`cpu-bench --scenario normal`, 5 muestras x 6 s, 4 condiciones intercaladas,
+  2 rondas), % de un núcleo del overlay, media por condición: sin wave/silencio 33.0 y 54.6; wave fluyendo
+  (Lissajous, CRT normal) 26.7 y 45.7; scope forzado CON wave 50.0 y 52.4; scope forzado SIN wave (sintético)
+  50.3 y 46.5. Carga externa 1.8–2.6 (loadavg), pero el ruido entre rondas iguales es de ±10 puntos: la
+  ronda 2 arrancó 20 puntos arriba en las 4 condiciones. Con el scope forzado, real vs sintético da
+  +0.0/+5.9 puntos, dentro del ruido: el costo del parseo del evento (20 Hz, 128 enteros) y del trazo
+  real no se distingue de cero con esta herramienta.
+- Trampa de la medición: un overlay viejo (otro proceso `quickshell` del mismo repo) seguía vivo y pintaba
+  NO SIGNAL encima del propio con el CRT prendido; hay que mirar `hyprctl layers | grep cartelitos-crt` y
+  que haya UN solo pid antes de medir o capturar.

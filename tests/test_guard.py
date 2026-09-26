@@ -82,9 +82,15 @@ FAKE_QS = """#!/usr/bin/env python3
 import os, socket, subprocess, sys, time
 s = socket.socket(socket.AF_UNIX)
 s.bind(os.path.join(os.environ["XDG_RUNTIME_DIR"], "cartelitos.sock"))
+kids = []
 if os.environ.get("FAKE_QS_CHILD"):
-    # el "relanzado por el crash handler": un hijo que sobrevive al padre
-    subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", "shell.qml"], close_fds=False)
+    # el "relanzado por el crash handler": un `quickshell` que sobrevive al padre
+    kids.append(subprocess.Popen([os.environ["FAKE_QS_CHILD"], "120"], close_fds=False).pid)
+if os.environ.get("FAKE_QS_BYSTANDER"):
+    # una app cualquiera que qs lanzó (un navegador): NO es quickshell
+    kids.append(subprocess.Popen(["sleep", "120"], close_fds=False).pid)
+with open(os.path.join(os.environ["XDG_RUNTIME_DIR"], "kids"), "w") as f:
+    f.write(" ".join(map(str, kids)))
 time.sleep(120)
 """
 
@@ -118,6 +124,9 @@ class FatalGuardTests(unittest.TestCase):
         with open(qs, "w") as f:
             f.write(FAKE_QS)
         os.chmod(qs, 0o755)
+        # un "quickshell" (el relanzado/reporter del crash handler): comm quickshell
+        self.fake_quickshell = os.path.join(self.tmp, "bin", "quickshell")
+        os.symlink(shutil.which("sleep"), self.fake_quickshell)
         self.env = dict(os.environ, CARTELITOS_HOME=self.home, XDG_RUNTIME_DIR=self.run_dir,
                         PATH=os.path.join(self.tmp, "bin") + os.pathsep + os.environ["PATH"],
                         HOME=self.tmp, XDG_CONFIG_HOME=os.path.join(self.tmp, "cfg"))
@@ -162,6 +171,40 @@ class FatalGuardTests(unittest.TestCase):
             time.sleep(0.1)
         self.fail("the fake daemon never took its lock")
 
+    def kids(self):
+        end = time.time() + 5
+        path = os.path.join(self.run_dir, "kids")
+        while time.time() < end:
+            try:
+                with open(path) as f:
+                    got = [int(x) for x in f.read().split()]
+                if got:
+                    return got
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.1)
+        self.fail("the fake qs never reported its children")
+
+    @staticmethod
+    def kill_quiet(pid):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+    def wait_lock_free(self, path, secs=5):
+        import fcntl
+        end = time.time() + secs
+        while time.time() < end:
+            with open(path, "a+") as f:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    return
+                except BlockingIOError:
+                    pass
+            time.sleep(0.1)
+        self.fail("%s never got released" % path)
+
     def wait_gone(self, pid, secs=5):
         end = time.time() + secs
         while time.time() < end and self.alive(pid):
@@ -192,19 +235,55 @@ class FatalGuardTests(unittest.TestCase):
         self.assertEqual(self.fatal("on").returncode, 0)
 
     def test_stop_takes_down_a_child_that_outlived_the_overlay(self):
-        # el crash handler relanza el shell fuera del pidfile: el lock heredado
-        # lo delata y `stop` lo baja también
-        r = self.fatal("on", FAKE_QS_CHILD="1")
+        # el crash handler relanza el shell fuera del pidfile: vive en la sesión
+        # del wrapper que tiene el lock, lo delata y `stop` lo baja también
+        r = self.fatal("on", FAKE_QS_CHILD=self.fake_quickshell)
         self.assertEqual(r.returncode, 0, r.stderr)
         qs = self.pidfile("qs.pid")
-        time.sleep(0.5)
-        os.kill(qs, signal.SIGKILL)  # el padre cae, el hijo queda con el lock
+        kid = self.kids()[0]
+        os.kill(qs, signal.SIGKILL)  # el padre cae, el hijo queda
         self.assertTrue(self.wait_gone(qs))
         r = self.fatal("on")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("already running", r.stderr)
         self.fatal("stop")
+        self.assertTrue(self.wait_gone(kid))
         self.assertEqual(self.fatal("on").returncode, 0)
+
+    def test_stop_spares_a_bystander_and_it_never_holds_the_lock(self):
+        # lo que qs lanza (un navegador, xdg-open) no hereda el lock: ni frena un
+        # `on` cuando qs cae ni se lo lleva puesto un `stop`
+        r = self.fatal("on", FAKE_QS_BYSTANDER="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        qs = self.pidfile("qs.pid")
+        bystander = self.kids()[0]
+        self.addCleanup(self.kill_quiet, bystander)
+        lock = os.path.join(self.run_dir, "cartelitos", "qs.lock")
+        held = [os.readlink("/proc/%d/fd/%s" % (bystander, fd)) for fd in os.listdir("/proc/%d/fd" % bystander)]
+        self.assertFalse([h for h in held if h.endswith(".lock")], held)
+        os.kill(qs, signal.SIGKILL)
+        self.assertTrue(self.wait_gone(qs))
+        self.wait_lock_free(lock)
+        r = self.fatal("on", FAKE_QS_BYSTANDER="1")
+        self.assertEqual(r.returncode, 0, r.stderr)   # el bystander vivo no cuenta como instancia
+        self.assertTrue(self.alive(bystander))
+        self.fatal("stop")
+        self.wait_lock_free(lock)
+        self.assertTrue(self.alive(bystander))        # stop no lo tocó
+        for pid in self.kids():
+            self.kill_quiet(pid)
+
+    def test_the_lock_records_the_owner_pid(self):
+        self.assertEqual(self.fatal("on").returncode, 0)
+        self.wait_daemon_locked()
+        for name, pid_name in (("qs.lock", "qs.pid"), ("daemon.lock", "daemon.pid")):
+            with open(os.path.join(self.run_dir, "cartelitos", name)) as f:
+                owner = int(f.read().strip())
+            self.assertTrue(self.alive(owner), name)
+        with open(os.path.join(self.run_dir, "cartelitos", "qs.lock")) as f:
+            wrapper = int(f.read().strip())
+        # qs cuelga del dueño del lock, que no es el mismo proceso
+        self.assertNotEqual(wrapper, self.pidfile("qs.pid"))
 
     def test_second_daemon_exits_while_the_first_lives(self):
         self.assertEqual(self.fatal("on").returncode, 0)

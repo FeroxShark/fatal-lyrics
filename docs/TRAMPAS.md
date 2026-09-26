@@ -676,12 +676,17 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   `~/.cache/quickshell/crashes/<id>/`; `QS_DISABLE_CRASH_HANDLER=1` apagaría el respawn pero también el
   `report.txt`/`log.qslog.log` que usamos para diagnosticar: no se apagó.
 - **Arreglo (guardia de instancia única):** el daemon toma un `flock` sobre `$XDG_RUNTIME_DIR/cartelitos/
-  daemon.lock` (`util.acquire_instance_lock`, el segundo sale con "already running (pid N)"); el overlay lo
-  toma `bin/fatal` (`qs.lock`, fd 9) ANTES de escribir el pidfile y lo deja abierto a través del exec. Los hijos
-  de qs lo heredan a propósito: el relanzado y el reporter del crash handler cuentan como instancia.
-  `fatal on/restart` con un lock ajeno tomado rechaza con mensaje y NO pisa el pidfile; `fatal stop` baja a
-  todo el que sostenga el lock (`fuser -k`, TERM → KILL a los 2 s), esté o no en el pidfile. El kernel suelta el
-  lock al morir el proceso: nunca hay lock viejo que limpiar. Tests: `tests/test_guard.py`.
+  daemon.lock` (`util.acquire_instance_lock`, el segundo sale con "already running (pid N)", y anota su pid en
+  el archivo); el overlay lo toma un wrapper `sh` de `bin/fatal` (`qs.lock`, fd 9) que anota SU pid y corre `qs`
+  con `9>&-`: el fd NO se hereda. La primera versión lo dejaba pasar a los hijos (para que el relanzado del
+  crash handler contara como instancia) y `fatal stop` con `fuser -k` se llevaba puesto cualquier proceso que
+  qs lanzara — un navegador, un xdg-open —, aunque fuera una app de Ferox. Ahora el wrapper queda vivo mientras
+  haya un `qs|quickshell` en su sesión (`setsid`: el relanzado y el reporter nacen ahí) y `stop` baja el pid del
+  lock (confirmando cmdline) más esos `qs|quickshell` de la sesión — nunca por fd. Si el wrapper cae y quedan
+  huérfanos, `on` los ve por el número de sesión (el wrapper ya no existe, así que el número no puede ser de
+  otro). `fatal on/restart` con una instancia ajena rechaza con mensaje y NO pisa el pidfile. El kernel suelta el
+  flock al morir el dueño: nunca hay lock viejo que limpiar. `qs.pid` guarda el pid de qs, no el del wrapper.
+  Tests: `tests/test_guard.py` (incluye un bystander que no hereda el lock y sobrevive al `stop`).
 - **Drivers:** ninguno de `docs/plans/*.py` levanta su propio daemon u overlay (todos hablan con `fatal`);
   los helpers que sí lanzan (`aud-feed.py`, `pw-play`) tienen que bajarse en un `finally`. Si un worker necesita una
   instancia aparte, tiene que ser con otro `XDG_RUNTIME_DIR` (otro lock, otro socket, otro flag).

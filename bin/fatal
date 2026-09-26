@@ -85,13 +85,17 @@ rotate_log() {
 # ese árbol; el PID lo escribe el propio hijo antes del exec porque setsid puede
 # forkear y ahí `$!` apunta al padre equivocado.
 #
-# Con LOCKFILE (sólo el overlay), además toma un flock ANTES de escribir el PID
-# y lo deja abierto en el fd 9 a través del exec: un segundo overlay sale con
-# mensaje sin pisar el pidfile del primero. El fd lo heredan los hijos de qs, y
-# eso es a propósito: el crash handler de Quickshell (ver TRAMPAS, "Procesos
-# huérfanos") relanza el shell tras un SIGSEGV con un `quickshell` que no figura
-# en qs.pid; con el lock heredado ese relanzado cuenta como INSTANCIA y `stop` lo
-# encuentra por acá. El daemon toma su lock él mismo (cartelitos/util.py).
+# Con LOCKFILE (sólo el overlay) lo lanza un wrapper que toma un flock en el fd 9,
+# anota su PID en el archivo del lock y corre qs SIN ese fd (`9>&-`): el lock
+# pertenece al wrapper, no a lo que cuelgue de qs. Antes el fd se heredaba a todos
+# los hijos y `fatal stop` (fuser -k sobre el lock) se llevaba puesto cualquier
+# proceso que qs lanzara — un navegador, un xdg-open — aunque fuera una app de
+# Ferox. El wrapper queda vivo mientras haya un `qs|quickshell` en su sesión: el
+# crash handler de Quickshell (ver TRAMPAS, "Procesos huérfanos") relanza el
+# shell tras un SIGSEGV con un `quickshell` que no figura en qs.pid, y ese
+# relanzado (y el reporter del crash) nacen en la sesión del wrapper. Así siguen
+# contando como INSTANCIA sin que nadie herede un fd. qs.pid guarda el PID de qs
+# (el wrapper primero, hasta que lo lanza).
 spawn() {
     local pidfile="$1" logfile="$2"
     shift 2
@@ -99,6 +103,17 @@ spawn() {
         if [ -n "$LOCKFILE" ]; then
             exec 9>>"$LOCKFILE"
             flock -n 9 || { echo "another instance holds $LOCKFILE, not starting" >&2; exit 75; }
+            # el wrapper vive tanto como el shell: que no retenga el stdout de quien lo lanzó
+            exec >>"$LOGFILE" 2>&1
+            echo $$ > "$LOCKFILE"; echo $$ > "$PIDFILE"
+            stopping=
+            trap "stopping=1; kill \$c 2>/dev/null" TERM INT HUP
+            "$@" 9>&- &
+            c=$!
+            echo $c > "$PIDFILE"
+            while kill -0 $c 2>/dev/null; do wait $c; done
+            while [ -z "$stopping" ] && pgrep -s $$ -x "qs|quickshell" >/dev/null 2>&1; do sleep 1; done
+            exit 0
         fi
         echo $$ > "$PIDFILE"; exec "$@" >>"$LOGFILE" 2>&1' sh "$@" &
 }
@@ -109,32 +124,71 @@ lock_held() {
     ! ( flock -n 8 ) 8>>"$1" 2>/dev/null
 }
 
-# Los PIDs que tienen abierto el archivo del lock: no sólo el que está en el
-# pidfile, también un relanzado por el crash handler o un daemon que arrancó
-# otra copia del repo (un worktree).
-lock_pids() {
-    fuser "$1" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true
+# El PID que anotó el dueño del lock (vacío si no hay).
+lock_holder() {
+    local pid
+    pid=$(cat "$1" 2>/dev/null)
+    case "$pid" in ''|*[!0-9]*) return 0 ;; esac
+    echo "$pid"
 }
 
-# Baja a todo el que sostiene el lock: TERM, hasta 2 s de gracia, después KILL.
+# Los `qs|quickshell` que sobreviven en la sesión de un wrapper que ya murió (su
+# PID ya no existe, así que el número de sesión no puede ser de otro).
+lock_orphans() {
+    local pid
+    [ "$1" = "$QS_LOCK" ] || return 0
+    pid=$(lock_holder "$1")
+    [ -n "$pid" ] || return 0
+    kill -0 "$pid" 2>/dev/null && return 0
+    pgrep -s "$pid" -x "qs|quickshell" 2>/dev/null || true
+}
+
+# ¿hay una instancia que cuente? El lock tomado, o huérfanos de un wrapper caído.
+instance_busy() {
+    lock_held "$1" || [ -n "$(lock_orphans "$1")" ]
+}
+
+# Los PIDs a bajar de una instancia: el dueño del lock (si el cmdline confirma que
+# es lo que esperamos, contra PIDs reciclados) y, si es el overlay, los
+# `qs|quickshell` de su sesión. Nada por fd: lo que qs lance y no sea quickshell
+# (un navegador, una app) no se toca.
+lock_targets() {
+    local lock="$1" want="$2" pid cmd
+    pid=$(lock_holder "$lock")
+    [ -n "$pid" ] || return 0
+    if kill -0 "$pid" 2>/dev/null; then
+        cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
+        if [ -n "$cmd" ] && ! printf '%s' "$cmd" | grep -qF -- "$want"; then
+            return 0    # PID reciclado: no es de nadie nuestro
+        fi
+        echo "$pid"
+    fi
+    # vivo y confirmado, o muerto (y entonces el número de sesión no es de otro)
+    [ "$lock" = "$QS_LOCK" ] && pgrep -s "$pid" -x "qs|quickshell" 2>/dev/null
+    return 0
+}
+
+# Baja a la instancia: TERM, hasta 2 s de gracia, después KILL.
 lock_kill() {
-    local lock="$1" _
-    lock_held "$lock" || return 0
-    fuser -k -TERM "$lock" >/dev/null 2>&1
+    local lock="$1" want="$2" pids _
+    instance_busy "$lock" || return 0
+    pids=$(lock_targets "$lock" "$want")
+    [ -n "$pids" ] && kill -TERM $pids 2>/dev/null
     for _ in $(seq 1 10); do
-        lock_held "$lock" || return 0
+        instance_busy "$lock" || return 0
         sleep 0.2
     done
-    fuser -k -KILL "$lock" >/dev/null 2>&1
+    pids=$(lock_targets "$lock" "$want")
+    [ -n "$pids" ] && kill -KILL $pids 2>/dev/null
     sleep 0.2
     return 0
 }
 
 # Rechazo de `start`: dice quién lo tiene y qué hacer, y NO toca el pidfile.
 refuse() {
-    local what="$1" lock="$2" pids
-    pids=$(lock_pids "$lock" | tr '\n' ' ')
-    echo "fatal: another $what is already running (pid ${pids:-?}) and it is not the one in the pidfile." >&2
+    local what="$1" lock="$2" pid
+    pid=$(lock_holder "$lock")
+    echo "fatal: another $what is already running (pid ${pid:-?}) and it is not the one in the pidfile." >&2
     echo "       run 'fatal stop' (or 'fatal restart') to take it down first." >&2
 }
 
@@ -171,7 +225,7 @@ start() {
         exit 1
     fi
     if ! running "$QS_PID" "$QML"; then
-        if lock_held "$QS_LOCK"; then
+        if instance_busy "$QS_LOCK"; then
             refuse "overlay" "$QS_LOCK"
             return 1
         fi
@@ -184,7 +238,7 @@ start() {
         sleep 0.2
     done
     if ! running "$D_PID" "$DAEMON"; then
-        if lock_held "$D_LOCK"; then
+        if instance_busy "$D_LOCK"; then
             refuse "daemon" "$D_LOCK"
             return 1
         fi
@@ -197,10 +251,10 @@ start() {
 stop() {
     running "$D_PID" "$DAEMON" && kill "$(cat "$D_PID")" 2>/dev/null
     running "$QS_PID" "$QML" && kill "$(cat "$QS_PID")" 2>/dev/null
-    # lo que el pidfile no conoce pero tiene el lock: el `quickshell` que relanzó
-    # el crash handler, su reporter, un daemon de otra copia del repo
-    lock_kill "$QS_LOCK"
-    lock_kill "$D_LOCK"
+    # lo que el pidfile no conoce pero figura en el lock: el `quickshell` que
+    # relanzó el crash handler, su reporter, un daemon de otra copia del repo
+    lock_kill "$QS_LOCK" "$QML"
+    lock_kill "$D_LOCK" "$DAEMON"
     rm -f "$D_PID" "$QS_PID"
     # una instancia levantada por la versión anterior dejó el PID en /tmp:
     # sin esto quedaba corriendo para siempre, invisible para el nuevo status

@@ -132,3 +132,8 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   hilo gráfico. Sin beat_lock las fases se reparten en ±250 ms. Objetivo pedido: < 30 ms.
 - CPU A/B `beat-drive.py cpu 4 12` (beat_lock false/true intercalado, compás vivo, una línea cada
   4 s): 26.6 % contra 27.1 % de un núcleo, +0.56 puntos (ruido). Carga externa 2.1–2.3.
+- CPU A/B `fx-drive.py cpu 3 12` (corrida 5b, `crt.word_fx` false/true intercalado; PEOR caso: `pace = wild`,
+  un verso con `fire` cada 2 s, o sea un efecto por verso, 6 por ronda): 30.8 % contra 32.6 % de un núcleo,
+  +1.8 puntos. Carga externa 2.4–5.9 (alta: ruido de ±2 puntos entre rondas iguales, 29.7–32.5 con la perilla
+  apagada). En uso normal (`fxGapMs` 6000, palabras clave raras) el costo es cero salvo el instante del efecto.
+- `rollPhase` por compases (corrida 5b) no cambia el costo: la cuenta es la misma, un módulo más.

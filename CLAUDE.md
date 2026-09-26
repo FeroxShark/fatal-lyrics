@@ -162,6 +162,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   sólo en `burnSnap()` (640 ms después de asentar); `signal.frag` lo suma bajo la señal. Techo de
   contraste 0.10×burnin (medido 4.1% a 0.5, 8.3% a 1). Fade en el outro por cuenta sobre `posAbs`
   (`crtBurnFade`), nunca un Behavior. Los items viven en un Loader (ver TRAMPAS).
+- `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`, tanda 7, corrida 5a) — con `bpmLive`, el glitch sin
+  animación propia (`line`, `interf`) espera al próximo tiempo, máx uno (`beatStep`; log `beat+<ms>`);
+  aro, salto, tubeon, canal y cámara son `urgent`. La barra rueda 1 vuelta/4 tiempos (`rollPhaseFor`).
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
@@ -196,7 +199,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `tests/` — 621 tests, stdlib puro.
+- `tests/` — 629 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

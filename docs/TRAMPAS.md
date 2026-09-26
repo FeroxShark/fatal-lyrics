@@ -557,3 +557,20 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   lista suele ser el REPORTER del crash handler, no el proceso (mirar `Command Line`/timestamp).
 - Medir contraste: UNA pasada, alternando sólo `crt_burnin` en vivo (`chorus-drive.py burn`); dos
   `clear` distintos re-siembran el set y cambian cara clara/oscura.
+
+## Glitches en el tiempo (tanda 7, corrida 5a)
+
+- **No soltar el glitch diferido con el `beatTick`.** Sale de un poll de 25 ms (más la carga de la
+  máquina: 40–70 ms tarde con load 14) y, además, cada re-anclaje de la grilla (evento `bpm`, que
+  llega seguido) cambia el índice de tiempo y dispara un `beatTick` de más en CUALQUIER momento:
+  el pendiente salía fuera de tiempo. `hit()` calcula la marca contra `lastBeatAt` (`hitDueAt`).
+- **El `Timer` de QML es grueso (`Qt::CoarseTimer`, ±5 % del intervalo).** Un solo `Timer` al
+  tiempo caía 10 ms ANTES (en 500 ms, hasta 25 ms para cada lado). `beatStep()` se acerca en pasos
+  del 85 % de lo que falta y sólo el último, de menos de 40 ms (donde Qt es preciso), llega a la marca.
+- La barra que rueda usa `rollPhase` (QML, doble precisión, anclada a `lastBeatAt`), no `t` del
+  shader: con `beat_lock = false` o sin compás vale `tubeTime * 0.085` = lo de siempre. Un salto de
+  fase al re-anclar es esperable y no se ve (la barra vale 0.05 de tinte).
+- Medir: `beat-drive.py` necesita el reproductor PAUSADO (si no, el daemon manda su propio `bpm` y
+  pisa la grilla sintética). Un show cada múltiplo exacto de un tiempo no sirve: los glitches caen
+  siempre en la misma fase (el control da un pico falso) — el driver usa 2.63 s.
+

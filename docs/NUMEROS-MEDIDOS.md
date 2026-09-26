@@ -122,3 +122,13 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 - Contraste máx. sobre cara oscura (captura, zona 86% del recorte): burnin 0.5 = 4.1–4.5 %, burnin 1 =
   8.2–8.3 %; piso de ruido (0 vs 0 bis) < 0.65 %. Techo pedido: 5 % / 10 %.
 - CPU A/B burnin 0 vs 0.5: +1.9 / −0.5 puntos, ruido. Carga externa 14–20 (load average).
+
+## Glitches en el tiempo (tanda 7, corrida 5a, `crt.beat_lock`)
+
+- `beat-drive.py 40 120` (bpm sintético 120, `pace = wild`, un verso cada 2.63 s): desfase entre el
+  glitch `src=line` y el tiempo, medido por el log del overlay (`beat+<ms>`) y por el reloj del
+  driver (lee el log cada 2 ms): mediana 7–10 ms, ~80 % bajo 30 ms, peor 33 ms (log) / 55 ms
+  (driver, suma la latencia del socket del `bpm`). Los que pasan de 30 son cuadros colgados del
+  hilo gráfico. Sin beat_lock las fases se reparten en ±250 ms. Objetivo pedido: < 30 ms.
+- CPU A/B `beat-drive.py cpu 4 12` (beat_lock false/true intercalado, compás vivo, una línea cada
+  4 s): 26.6 % contra 27.1 % de un núcleo, +0.56 puntos (ruido). Carga externa 2.1–2.3.

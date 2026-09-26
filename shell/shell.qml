@@ -425,6 +425,14 @@ ShellRoot {
     property int cueGen: 0
     property bool motifPreCued: false
     property int sectionGen: 0
+    // ---- la forma de onda real (eventos "wave", corrida 7): 64 enteros -127..127
+    // por canal, ~20 Hz, sólo con el tubo y `crt.audio` prendidos. Sólo la lee el
+    // scope. `waveAt` es la hora de ESTE lado (Date.now): sin evento por más de
+    // `waveStaleMs` el scope vuelve al dibujo sintético de siempre.
+    property var waveL: []
+    property var waveR: []
+    property double waveAt: 0
+    readonly property int waveStaleMs: 300
     // si la captura se cae o está apagada, todo vuelve a moverse con la letra
     readonly property bool audLive: crtOn && (Date.now() - audAt) < 1500
 
@@ -3331,6 +3339,10 @@ ShellRoot {
                                 root.lastPeakAt = Date.now();
                                 root.audPeak++;
                             }
+                        } else if (ev.cmd === "wave") {
+                            root.waveL = ev.l || [];
+                            root.waveR = ev.r || [];
+                            root.waveAt = Date.now();
                         } else if (ev.cmd === "sync") {
                             // tanda 3, C: el ajuste a ojo. Con el tubo prendido
                             // lo dibuja la pantalla ENFOCADA (un rótulo chico,

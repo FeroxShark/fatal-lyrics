@@ -75,6 +75,11 @@ Item {
     property int tick: 0
     property real beatMs: 500
     property bool bpmLive: false
+    // la forma de onda real (`wave`, corrida 7): la lee sólo el scope
+    property var waveL: []
+    property var waveR: []
+    property double waveAt: 0
+    property int waveStaleMs: 300
     // en qué verso va el tema (índice dentro de la letra entera; -1 = no se
     // sabe) y la primera palabra de la línea que VIENE. Los usa la estática
     // para formar algo que signifique alguna cosa.
@@ -284,6 +289,14 @@ Item {
     // frecuencias — si es un número redondo la figura se cierra y queda quieta,
     // y si no, gira y no cierra nunca.
     //
+    // CORRIDA 7: cuando llega `wave` (el audio real, L/R de la placa) el scope deja de
+    // ser sintético: X = canal izquierdo, Y = derecho, un Lissajous de verdad. Si los
+    // canales son casi lo mismo (|correlación| > 0.98: mono, o casi) L/R da una
+    // diagonal y no una figura, así que pasa a retrato de fase: X = muestra, Y = la
+    // misma muestra atrasada `d` (la que deja más descorrelacionados los ejes, la
+    // cuarta parte del período del tono de turno). Sin `wave` por más de
+    // `waveStaleMs` (captura caída, pausa, silencio) vuelve al dibujo de abajo.
+    //
     // Con tempo confiable la relación sale de la parte del tema (1 en el
     // silencio, 3/2 en la estrofa, 4/3 en el puente, 2 en el drop) y la figura
     // CIERRA: es una figura estable que da una vuelta por compás. Sin tempo la
@@ -321,6 +334,54 @@ Item {
                 readonly property int turns: !motif.bpmLive ? 3
                     : (Math.abs(ratio - 1.5) < 0.02 ? 2 : (Math.abs(ratio - 4 / 3) < 0.02 ? 3 : 1))
 
+                // de dónde sale lo que se dibuja: "synthetic" | "lissajous" | "phase"
+                // (sólo para el log `crt: scope ...` al cambiar)
+                property string source: "synthetic"
+                readonly property real phaseMono: 0.98
+
+                // la traza real, o null si no hay `wave` fresco. Devuelve los puntos
+                // ya en -1..1 como [x0, y0, x1, y1, ...] y el modo.
+                function waveTrace() {
+                    const l = motif.waveL, r = motif.waveR;
+                    const n = l ? l.length : 0;
+                    if (n < 16 || !r || r.length !== n
+                            || Date.now() - motif.waveAt > motif.waveStaleMs)
+                        return null;
+                    let ll = 0, rr = 0, lr = 0;
+                    for (let i = 0; i < n; i++) {
+                        ll += l[i] * l[i];
+                        rr += r[i] * r[i];
+                        lr += l[i] * r[i];
+                    }
+                    const corr = (ll > 0 && rr > 0) ? lr / Math.sqrt(ll * rr) : 1;
+                    const pts = [];
+                    if (Math.abs(corr) <= phaseMono) {
+                        for (let i = 0; i < n; i++)
+                            pts.push(l[i] / 127, r[i] / 127);
+                        return { mode: "lissajous", pts: pts };
+                    }
+                    const s = new Array(n);
+                    let ss = 0;
+                    for (let i = 0; i < n; i++) {
+                        s[i] = (l[i] + r[i]) / 2;
+                        ss += s[i] * s[i];
+                    }
+                    let d = 1, best = 2;
+                    for (let k = 1; k <= 8; k++) {
+                        let a = 0;
+                        for (let i = k; i < n; i++)
+                            a += s[i] * s[i - k];
+                        const c = ss > 0 ? Math.abs(a) / ss : 1;
+                        if (c < best) {
+                            best = c;
+                            d = k;
+                        }
+                    }
+                    for (let i = d; i < n; i++)
+                        pts.push(s[i] / 127, s[i - d] / 127);
+                    return { mode: "phase", pts: pts };
+                }
+
                 property real phase: 0        // el giro de la figura: una vuelta por compás
                 property real wobble: 0       // la deriva de la relación cuando no hay tempo
 
@@ -348,6 +409,38 @@ Item {
                         return;
                     const cx = w / 2, cy = h / 2;
                     const rx = w * 0.42, ry = h * 0.42;
+                    const tr = waveTrace();
+                    const src = tr ? tr.mode : "synthetic";
+                    if (src !== source) {
+                        source = src;
+                        console.log("crt: scope " + src);
+                    }
+                    if (tr) {
+                        // el audio ya viene normalizado contra el pico (audio.py:
+                        // wave_points): acá sólo se deja un margen dentro de la caja
+                        const k = 0.95;
+                        c.strokeStyle = motif.colour;
+                        c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
+                        c.lineJoin = "round";
+                        c.beginPath();
+                        for (let i = 0; i < tr.pts.length; i += 2) {
+                            const x = cx + tr.pts[i] * rx * k;
+                            const y = cy - tr.pts[i + 1] * ry * k;
+                            if (i === 0)
+                                c.moveTo(x, y);
+                            else
+                                c.lineTo(x, y);
+                        }
+                        c.stroke();
+                        // el punto del haz: donde termina la traza
+                        const e = tr.pts.length - 2;
+                        c.fillStyle = motif.hot;
+                        c.beginPath();
+                        c.ellipse(cx + tr.pts[e] * rx * k - w * 0.012, cy - tr.pts[e + 1] * ry * k - w * 0.012,
+                                  w * 0.024, w * 0.024);
+                        c.fill();
+                        return;
+                    }
                     // T4.3b: la amplitud de REPOSO también tiene que llenar la
                     // caja. Con 0.55 y el player parado (`level` en el piso) la
                     // figura quedaba a la mitad de su propio marco.

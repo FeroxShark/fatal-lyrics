@@ -1855,6 +1855,10 @@ PanelWindow {
                     tick: crt.ctl.beatTick
                     beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
                     bpmLive: crt.ctl.bpmLive
+                    waveL: crt.ctl.waveL
+                    waveR: crt.ctl.waveR
+                    waveAt: crt.ctl.waveAt
+                    waveStaleMs: crt.ctl.waveStaleMs
                     lineNo: crt.ctl.crtLineNo
                     nextWord: crt.ctl.crtNextWord
                     lines: crt.ctl.crtLines

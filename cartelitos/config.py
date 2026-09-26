@@ -261,10 +261,17 @@ _CONFIG_COMMENTS = {
         "beat_lock": "with the tempo known, the glitches that belong to no other\n"
                      "animation (the tube breaking up on a new line, the random\n"
                      "interference) wait for the next beat, at most one beat, and\n"
-                     "land on the pulse of the song; the rolling bar makes one lap\n"
-                     "every 4 beats. Glitches tied to something else (the jump ray,\n"
-                     "the ring, the channel change, the camera) still land at once.\n"
+                     "land on the pulse of the song; the rolling bar keeps its slow\n"
+                     "lap but rounds it to whole bars, so it stays in phase with the\n"
+                     "beat. Glitches tied to something else (the jump ray, the ring,\n"
+                     "the channel change, the camera) still land at once.\n"
                      "Without a tempo nothing changes. false = as before",
+        "word_fx": "a few words fire a one-off effect on the screen that shows\n"
+                   "them: fire / blood / burn set the alarm, die / dead / death blink\n"
+                   "the tube, break / crash / fall glitch it, dark / apagar go dark\n"
+                   "for a beat (es/en tables in shell.qml). With per-word timing it\n"
+                   "fires as the word is sung, otherwise once the line has settled;\n"
+                   "never more often than the pace preset allows. false = never",
         "tube": "the character of the glass, in one knob. custom = the loose\n"
                 "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
                 "vignette, composite), exactly as before. Any other value picks\n"
@@ -377,7 +384,7 @@ DEFAULTS = {
         "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
         "composite": 0.5, "persistence": 0.35, "tension": 1.0, "burnin": 0.5,
-        "beat_lock": True,
+        "beat_lock": True, "word_fx": True,
     },
 }
 

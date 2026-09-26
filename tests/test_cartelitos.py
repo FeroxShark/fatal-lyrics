@@ -3189,6 +3189,66 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_beat_lock: "crtBeatLock"', qml)
         self.assertIn("beat_lock", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def test_word_fx_knob_is_wired_end_to_end(self):
+        # corrida 5b de la tanda 7: los efectos por palabra, en los cuatro lugares
+        self.assertIs(c.DEFAULTS["crt"]["word_fx"], True)
+        self.assertIn("word_fx", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_word_fx", "crt", "word_fx"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"property bool crtWordFx:\s*true\b")
+        self.assertIn('crt_word_fx: "crtWordFx"', qml)
+        self.assertIn("word_fx", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+
+    def _pace_rows(self):
+        with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        block = re.search(r"crtPaceTable:\s*\(\{(.*?)\n    \}\)", qml, re.S).group(1)
+        return dict(re.findall(r"^\s{8}(\w+):\s*\{(.*?)\n\s{8}\},", block, re.S | re.M))
+
+    def test_fx_gap_is_in_the_three_pace_rows(self):
+        rows = self._pace_rows()
+        self.assertEqual(set(rows), {"calm", "normal", "wild"})
+        gaps = {}
+        for name, body in rows.items():
+            body = re.sub(r"//[^\n]*", "", body)
+            m = re.search(r"\bfxGapMs:\s*(\d+)", body)
+            self.assertIsNotNone(m, "falta fxGapMs en la fila %s de crtPaceTable" % name)
+            gaps[name] = int(m.group(1))
+        # calm da más aire que normal; wild = sin portero (lo de la tanda 3)
+        self.assertGreater(gaps["calm"], gaps["normal"])
+        self.assertGreater(gaps["normal"], gaps["wild"])
+        self.assertEqual(gaps["wild"], 0)
+
+    def test_word_fx_table_and_trigger(self):
+        qml, _ = self._tube_table()
+        crt = self._crt_qml()
+        entries = re.findall(r"\{ re: /(.*?)/i(?:, kind: \"(\w+)\")?(?:, fx: \"(\w+)\")? \},",
+                             qml.split("readonly property var motifWords", 1)[1].split("function crtFxOf", 1)[0])
+        fx = {}
+        for pat, kind, effect in entries:
+            self.assertTrue(kind or effect, "entrada sin kind ni fx: %s" % pat)
+            if effect:
+                self.assertEqual(kind, "", "una entrada de fx no elige dibujo: %s" % pat)
+                fx[effect] = pat
+        self.assertEqual(set(fx), {"alarm", "blink", "glitch", "dark"})
+        for effect, words in {"alarm": ("fuego", "fire", "sangre", "blood", "burn", "quemar"),
+                              "blink": ("morir", "muerte", "die", "dead"),
+                              "glitch": ("romper", "break", "crash", "caer", "fall"),
+                              "dark": ("oscuro", "dark", "apagar")}.items():
+            rx = re.compile(fx[effect], re.I)
+            for w in words:
+                self.assertTrue(rx.search(w), "%s no dispara %s" % (w, effect))
+        # el kind-loop de crtMotifRefresh ignora las de fx (no tienen kind)
+        self.assertIn("motifWords[k].kind && motifWords[k].re.test(text)", qml)
+        # el disparo: por hit() y urgente, con el portero fxGapMs, sólo en esta pantalla
+        self.assertIn('hit(0.9, "fx", true)', crt)
+        self.assertIn("ctl.pace.fxGapMs", crt)
+        self.assertIn("crt.fxCheck();", crt)
+        self.assertRegex(crt, r"if \(lineWords\) \{\s*if \(reveal < dueFrac\(f\.i\)\)\s*return;\s*\} "
+                              r"else if \(!emphasisGateOpen\)")
+        # apagado por la perilla
+        self.assertIn("if (!ctl.crtWordFx)", crt)
+
     def test_hit_defers_to_the_beat_unless_urgent(self):
         # el único portero de glitches difiere al próximo beatTick (con red de un tiempo) lo que
         # no es de otra animación; aro, salto, tubeon, cambio de canal y cámara entran ya

@@ -91,6 +91,7 @@ CONFIG_EVENT_MAP = (
     ("crt_composite", "crt", "composite"), ("crt_tube", "crt", "tube"),
     ("crt_persistence", "crt", "persistence"), ("crt_tension", "crt", "tension"),
     ("crt_burnin", "crt", "burnin"), ("crt_beat_lock", "crt", "beat_lock"),
+    ("crt_word_fx", "crt", "word_fx"),
 )
 
 

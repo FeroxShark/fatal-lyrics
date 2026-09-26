@@ -76,4 +76,13 @@ Singleton {
     // la línea que suena (`crtVEndAt`), con `holdMs` de piso.
     readonly property int rareNoSignalMs: 3000
     readonly property int rareTestcardMs: 6000
+
+    // ---- efectos por palabra (tanda 7, corrida 5b, `Crt.qml` `fxAnim*`). Reusan la
+    // gramática de arriba: se apagan con `exitMs`, vuelven con `levelMs` (alarm/blink) o con
+    // `tubeOnMs` (dark, que es el tubo prendiéndose). Lo único nuevo es cuánto SE QUEDAN
+    // apagados: es lo que distingue un parpadeo LARGO (blink) de uno CORTO (dark) y un
+    // fogonazo de alarma de un apagón. Son holds, no movimientos.
+    readonly property int fxBlinkHoldMs: 260
+    readonly property int fxDarkHoldMs: 90
+    readonly property int fxAlarmHoldMs: 140
 }

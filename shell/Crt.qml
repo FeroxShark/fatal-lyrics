@@ -167,6 +167,7 @@ PanelWindow {
         duration: Motion.tubeOnMs; easing.type: Easing.OutExpo
     }
     onTubeDarkChanged: {
+        fxStop();
         if (tubeDark) {
             tubeLevelOnAnim.stop();
             tubeDarkOffAnim.restart();
@@ -573,6 +574,7 @@ PanelWindow {
             const st = crt.ctl.crtChunkState(crt.idx);
             crt.shot = st;
             crt.reveal = st.reveal;
+            crt.fxCheck();
             // la rampa del aviso sale del mismo reloj: no necesita animación
             // propia, el avance de la línea YA es la rampa
             // el último 25 % del verso, con snap: la rampa lineal subía a
@@ -858,6 +860,112 @@ PanelWindow {
         onTriggered: crt.releaseHit(false)
     }
 
+    // ------------------------------------------------- efectos por palabra
+    // tanda 7, corrida 5b (`crt.word_fx`): una palabra de `motifWords` con `fx` (fuego, morir,
+    // romper, oscuro) le pega al tubo de LA PANTALLA que la muestra, una vez por línea. Cuándo:
+    // con tiempos por palabra (LRC enhanced), cuando esa palabra empieza a sonar (el mismo
+    // reloj de 80 ms que la pinta, así que cae con ella); sin ellos, al asentar la entrada
+    // (`Motion.enterMs`, `emphasisGateOpen`). Pasa por `fxGapMs` (piso por pantalla, tabla de
+    // `pace`) y nunca se pisa con otro efecto de la misma pantalla (`fxBusy`).
+    // Siempre llama a `hit()` y siempre `urgent`: el efecto YA está atado a la palabra, diferirlo
+    // al próximo tiempo lo sacaría de ella.
+    readonly property var fxHit: {
+        if (!ctl.crtWordFx)
+            return null;
+        for (let i = 0; i < myWords.length; i++) {
+            const k = ctl.crtFxOf(myWords[i]);
+            if (k !== "")
+                return { i: i, kind: k, word: myWords[i] };
+        }
+        return null;
+    }
+    property bool fxFired: false
+    property double lastFxAt: 0
+    // el rojo de la alarma (0..1): entra de golpe y se va con `levelMs`
+    property real fxAlarmAmt: 0
+    readonly property bool fxBusy: fxAlarmAnim.running || fxBlinkAnim.running || fxDarkAnim.running
+    SequentialAnimation {
+        id: fxAlarmAnim
+        PropertyAction { target: crt; property: "fxAlarmAmt"; value: 1 }
+        PauseAnimation { duration: Motion.fxAlarmHoldMs }
+        NumberAnimation {
+            target: crt; property: "fxAlarmAmt"; to: 0
+            duration: Motion.levelMs; easing.type: Easing.OutQuad
+        }
+    }
+    // blink largo: el fósforo casi se apaga, se queda, vuelve. Es `tubeLevel` (el mismo del
+    // tubo apagado y de `tubeon`), no un uniform nuevo
+    SequentialAnimation {
+        id: fxBlinkAnim
+        NumberAnimation {
+            target: crt; property: "tubeLevel"; to: 0.12
+            duration: Motion.exitMs; easing.type: Easing.InQuad
+        }
+        PauseAnimation { duration: Motion.fxBlinkHoldMs }
+        NumberAnimation {
+            target: crt; property: "tubeLevel"; to: 1
+            duration: Motion.levelMs; easing.type: Easing.OutQuad
+        }
+    }
+    // dark corto: se va del todo y vuelve con el encendido del tubo
+    SequentialAnimation {
+        id: fxDarkAnim
+        NumberAnimation {
+            target: crt; property: "tubeLevel"; to: 0
+            duration: Motion.exitMs; easing.type: Easing.InQuad
+        }
+        PauseAnimation { duration: Motion.fxDarkHoldMs }
+        NumberAnimation {
+            target: crt; property: "tubeLevel"; to: 1
+            duration: Motion.tubeOnMs; easing.type: Easing.OutExpo
+        }
+    }
+    function fxStop() {
+        fxAlarmAnim.stop();
+        fxBlinkAnim.stop();
+        fxDarkAnim.stop();
+        fxAlarmAmt = 0;
+    }
+    function fxFire(kind, word) {
+        const now = Date.now();
+        fxFired = true;
+        lastFxAt = now;
+        const before = lastHitAt;
+        if (kind === "alarm") {
+            hit(0.45, "fx", true);
+            fxAlarmAnim.restart();
+        } else if (kind === "blink") {
+            hit(0.25, "fx", true);
+            fxBlinkAnim.restart();
+        } else if (kind === "dark") {
+            hit(0.3, "fx", true);
+            fxDarkAnim.restart();
+        } else {
+            hit(0.9, "fx", true);
+        }
+        // `hit=held`: el portero de glitches (`hitGap`) se lo comió; el efecto visual igual salió
+        console.log("crt: fx s" + idx + " " + kind + " '" + word + "' hit="
+                    + (lastHitAt !== before ? "ok" : "held"));
+    }
+    // se llama desde el reloj de 80 ms del contenido (`Timer` de `reveal`)
+    function fxCheck() {
+        const f = fxHit;
+        if (f === null || fxFired || !ctl.crtWordFx)
+            return;
+        if (!visible || !showsText || tubeDark || fxBusy || ctl.crtIntroOn
+                || rareNoSignalOn || ctl.crtRare.screen === idx)
+            return;
+        if (lineWords) {
+            if (reveal < dueFrac(f.i))
+                return;
+        } else if (!emphasisGateOpen) {
+            return;
+        }
+        if (Date.now() - lastFxAt < ctl.pace.fxGapMs)
+            return;
+        fxFire(f.kind, f.word);
+    }
+
     // ------------------------------------------------------ cambio de canal
     // El verso entra como cuando se cambiaba de canal a mano: la pantalla se
     // llena de estática, pega un cuadro rojo y recién ahí aparece el texto,
@@ -977,6 +1085,7 @@ PanelWindow {
     // entrada de la línea.
     property double textArrivedAt: 0
     onMyTextChanged: {
+        fxFired = false;
         burnStep = 0;
         textArrivedAt = Date.now();
     }
@@ -1008,6 +1117,7 @@ PanelWindow {
     Connections {
         target: crt.ctl
         function onCrtSerialChanged() {
+            crt.fxFired = false;
             crt.ghostText = crt.myText;
             // T4.3: 0.45 y no 0.55. Ferox pidió el quemado "un poquito menos";
             // el punto 6 de la referencia de fluidez es más duro que eso — lo
@@ -2570,7 +2680,7 @@ PanelWindow {
         // vuelta cada 4 tiempos, anclada a la grilla del daemon; si no, la deriva libre de
         // siempre (0.085 vueltas/s). Se cuenta en QML (precisión doble), no con `t` en el shader.
         property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime)
-        property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
+        property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : crt.fxAlarmAmt
         property real vignette: crt.ctl.tubeVignette
         // el titileo llega desde el audio, no del reloj del shader
         // el latido tiene su propia perilla (`flicker`), aparte de la

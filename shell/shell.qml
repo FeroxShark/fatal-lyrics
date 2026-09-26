@@ -117,6 +117,10 @@ ShellRoot {
     // (`rollPhaseFor`). Sin compás medido (`bpmLive`) todo sigue como antes.
     property bool crtBeatLock: true
     onCrtBeatLockChanged: console.log("crt: beat_lock " + crtBeatLock)
+    // tanda 7, corrida 5b: unas pocas palabras (`motifWords`, entradas con `fx`) disparan un
+    // efecto suelto en la pantalla que las muestra (`Crt.qml`, `fxFire`)
+    property bool crtWordFx: true
+    onCrtWordFxChanged: console.log("crt: word_fx " + crtWordFx)
     // fase de la barra que rueda: `tt` (el reloj del tubo) sólo empuja la re-evaluación.
     // Deriva libre = una vuelta cada 1/`rollFreeRate` s. Con compás la vuelta dura los
     // compases (múltiplo de 4 tiempos) más cercanos a ese período: queda en fase con el
@@ -195,6 +199,8 @@ ShellRoot {
             // corrida 7: chance por verso de un raro (bsod/nosignal/testcard)
             // y el piso entre dos raros, en ms
             rarePerLine: 1 / 600, rareGapMs: 180000,
+            // corrida 5b: piso entre dos efectos por palabra en una MISMA pantalla, en ms
+            fxGapMs: 12000,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -205,6 +211,7 @@ ShellRoot {
             sceneGapMs: 12000,
             tensionMin: 0.80, tensionMax: 1.30,
             rarePerLine: 1 / 400, rareGapMs: 120000,
+            fxGapMs: 6000,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -222,6 +229,10 @@ ShellRoot {
             sceneGapMs: 0,
             tensionMin: 0.60, tensionMax: 1.70,
             rarePerLine: 1 / 150, rareGapMs: 30000,
+            // 0 = sin portero, pero `wild` es lo de la tanda 3, que no tenía efectos por
+            // palabra: se apagan igual con `crt.word_fx = false`. Sólo el piso de la duración
+            // del efecto (`fxBusy`) los separa
+            fxGapMs: 0,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -2314,7 +2325,24 @@ ShellRoot {
         { re: /\b(stars|star|sky|space|light\s?years)\b/i, kind: "stars" },
         { re: /\b(estrella|estrellas|cielo|espacio)\b/i, kind: "stars" },
         { re: /\b(run|road|drive|fall|corr[eo]|camino|caigo)\b/i, kind: "stars" },
+        // corrida 5b, efectos por palabra: sin `kind` (no eligen dibujo) y con `fx`. A
+        // diferencia de las de arriba, éstas se prueban contra UNA palabra ya sin puntuación
+        // (`crtFxOf`) y por eso van ancladas con ^...$: `\b` de JS no entiende "caí" ni "ardió"
+        { re: /^(fuego|fire|sangre|blood|burn|burns|burning|burned|burnt|quemar|quemo|quema|quemando|quemado)$/i, fx: "alarm" },
+        { re: /^(morir|muero|muere|muerte|muerto|muerta|die|dies|died|dying|dead|death)$/i, fx: "blink" },
+        { re: /^(romper|rompo|rompe|roto|rota|break|breaks|broke|broken|crash|caer|caigo|cae|caí|fall|falls|fell|falling)$/i, fx: "glitch" },
+        { re: /^(oscuro|oscura|oscuridad|dark|darkness|apagar|apago|apaga|apagado)$/i, fx: "dark" },
     ]
+    // qué efecto dispara UNA palabra (`""` = ninguno). Le saca la puntuación de los bordes.
+    function crtFxOf(word) {
+        const w = (word || "").replace(/^[^A-Za-zÀ-ÿ]+|[^A-Za-zÀ-ÿ]+$/g, "");
+        if (w === "")
+            return "";
+        for (let k = 0; k < motifWords.length; k++)
+            if (motifWords[k].fx && motifWords[k].re.test(w))
+                return motifWords[k].fx;
+        return "";
+    }
     // Cada cuánto se PUEDE cambiar de animación. El reloj sigue existiendo,
     // pero ya no es el que manda: lo que manda es el hold de cada pantalla
     // (`crtMotifRefresh`). Acá sólo se le da una oportunidad a la que venció.
@@ -2538,7 +2566,7 @@ ShellRoot {
         let wanted = "";
         const text = crtLine.text || "";
         for (let k = 0; k < motifWords.length && wanted === ""; k++)
-            if (motifWords[k].re.test(text)) {
+            if (motifWords[k].kind && motifWords[k].re.test(text)) {
                 const kind = motifWords[k].kind;
                 if ((crtWater || (kind !== "ocean" && kind !== "pond"))
                         && motifAllowed(kind))
@@ -3144,7 +3172,7 @@ ShellRoot {
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
         crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_burnin: "crtBurnin",
-        crt_beat_lock: "crtBeatLock",
+        crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",

@@ -3,6 +3,21 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
+**Tanda 7 (hecha 2026-09-26, estado en `docs/plans/2026-09-25-estado-tras-tanda7.md`):** señal compuesta,
+tubos, estela, tensión, quemado del estribillo, glitch al beat, efectos por palabra, intro v2 con carta, osciloscopio
+real, estática por suciedad, reposo en pausa. Todo medido con aparejo sintético; **nada visto con música real.** Abierto:
+
+- **Calibrar `dirt` con música real.** `FLAT_LO/HI` 0.10/0.45 (`audio.py`) y `dirtMax` 2/3/4.5 (`crtPaceTable`) salieron de
+  tonos, ruido y voz TTS. Con un tema de guitarras distorsionadas y uno limpio, mirar el campo `d` de `aud` y ajustar.
+- **Validar a ojo los rangos de tensión** (`tensionMin/Max` de `crtPaceTable`: calm 0.92–1.12, normal 0.80–1.30, wild
+  0.60–1.70): la captura de la corrida 4a no fue concluyente. `crt.tension = 0` la apaga.
+- **Reloj a 60 por `Timer`** en vez de `FrameAnimation` (con `frameSwapped` para `frameAvgMs`): el tope de 60 fps en
+  `tubeTime` no baja `normal` (~33 %) porque la animación sigue al refresco nativo (144/120/60).
+- Mirar con música: composite 0.5, estela (cara clara y `composite=1`), quemado (contraste 4.1–4.5 % a 0.5),
+  beat lock, efectos por palabra y la carta de la intro (`docs/plans/CHECKS-VISUALES.md`).
+- Decisiones de Ferox: `crt.tube` (`custom` de siempre, `auto` o `trinitron` fijo), default de `crtQuality`.
+- SIGSEGV en el driver nvidia (`QRhi::beginFrame`, 2 casos en la corrida 6, sin repro): si vuelve, seguir en TRAMPAS.
+
 **Tanda 6 (hecha 2026-09-16, falta que Ferox la mire con música):** set por tema + mazos,
 fuente por tema, mood, secciones que apagan pantallas, intro de tema, palabra con énfasis,
 eventos raros. De la tanda 5 absorbió los puntos 3 y 5; **1 (`stars`), 2 (`dunes`), 4 (zooms)

@@ -12,6 +12,10 @@ RUN="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos"
 mkdir -p "$RUN" 2>/dev/null
 QS_PID="$RUN/qs.pid"
 D_PID="$RUN/daemon.pid"
+# guardia de instancia única: flock sobre estos archivos (los toma el propio
+# proceso, así que se suelta solo cuando muere — no hay lock viejo que limpiar)
+QS_LOCK="$RUN/qs.lock"
+D_LOCK="$RUN/daemon.lock"
 QS_LOG="$RUN/qs.log"
 D_LOG="$RUN/daemon.log"
 # de dónde salió la letra del tema que suena: lo escribe el daemon (ver
@@ -80,11 +84,58 @@ rotate_log() {
 # overlay se caía calladito sin dejar ni una línea de log. `setsid` lo saca de
 # ese árbol; el PID lo escribe el propio hijo antes del exec porque setsid puede
 # forkear y ahí `$!` apunta al padre equivocado.
+#
+# Con LOCKFILE (sólo el overlay), además toma un flock ANTES de escribir el PID
+# y lo deja abierto en el fd 9 a través del exec: un segundo overlay sale con
+# mensaje sin pisar el pidfile del primero. El fd lo heredan los hijos de qs, y
+# eso es a propósito: el crash handler de Quickshell (ver TRAMPAS, "Procesos
+# huérfanos") relanza el shell tras un SIGSEGV con un `quickshell` que no figura
+# en qs.pid; con el lock heredado ese relanzado cuenta como INSTANCIA y `stop` lo
+# encuentra por acá. El daemon toma su lock él mismo (cartelitos/util.py).
 spawn() {
     local pidfile="$1" logfile="$2"
     shift 2
-    PIDFILE="$pidfile" LOGFILE="$logfile" setsid sh -c \
-        'echo $$ > "$PIDFILE"; exec "$@" >>"$LOGFILE" 2>&1' sh "$@" &
+    PIDFILE="$pidfile" LOGFILE="$logfile" LOCKFILE="${LOCKFILE:-}" setsid sh -c '
+        if [ -n "$LOCKFILE" ]; then
+            exec 9>>"$LOCKFILE"
+            flock -n 9 || { echo "another instance holds $LOCKFILE, not starting" >&2; exit 75; }
+        fi
+        echo $$ > "$PIDFILE"; exec "$@" >>"$LOGFILE" 2>&1' sh "$@" &
+}
+
+# ¿hay alguien con el lock tomado? (0 = sí). Se prueba tomándolo un instante.
+lock_held() {
+    [ -e "$1" ] || return 1
+    ! ( flock -n 8 ) 8>>"$1" 2>/dev/null
+}
+
+# Los PIDs que tienen abierto el archivo del lock: no sólo el que está en el
+# pidfile, también un relanzado por el crash handler o un daemon que arrancó
+# otra copia del repo (un worktree).
+lock_pids() {
+    fuser "$1" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true
+}
+
+# Baja a todo el que sostiene el lock: TERM, hasta 2 s de gracia, después KILL.
+lock_kill() {
+    local lock="$1" _
+    lock_held "$lock" || return 0
+    fuser -k -TERM "$lock" >/dev/null 2>&1
+    for _ in $(seq 1 10); do
+        lock_held "$lock" || return 0
+        sleep 0.2
+    done
+    fuser -k -KILL "$lock" >/dev/null 2>&1
+    sleep 0.2
+    return 0
+}
+
+# Rechazo de `start`: dice quién lo tiene y qué hacer, y NO toca el pidfile.
+refuse() {
+    local what="$1" lock="$2" pids
+    pids=$(lock_pids "$lock" | tr '\n' ' ')
+    echo "fatal: another $what is already running (pid ${pids:-?}) and it is not the one in the pidfile." >&2
+    echo "       run 'fatal stop' (or 'fatal restart') to take it down first." >&2
 }
 
 # El daemon y el overlay son dos procesos y se mueren por separado: si una
@@ -120,8 +171,12 @@ start() {
         exit 1
     fi
     if ! running "$QS_PID" "$QML"; then
+        if lock_held "$QS_LOCK"; then
+            refuse "overlay" "$QS_LOCK"
+            return 1
+        fi
         rotate_log "$QS_LOG"
-        spawn "$QS_PID" "$QS_LOG" qs -p "$QML"
+        LOCKFILE="$QS_LOCK" spawn "$QS_PID" "$QS_LOG" qs -p "$QML"
     fi
     # wait for the overlay to bring up the socket before starting the daemon
     for _ in $(seq 1 25); do
@@ -129,6 +184,10 @@ start() {
         sleep 0.2
     done
     if ! running "$D_PID" "$DAEMON"; then
+        if lock_held "$D_LOCK"; then
+            refuse "daemon" "$D_LOCK"
+            return 1
+        fi
         rotate_log "$D_LOG"
         spawn "$D_PID" "$D_LOG" python3 "$DAEMON"
     fi
@@ -138,6 +197,10 @@ start() {
 stop() {
     running "$D_PID" "$DAEMON" && kill "$(cat "$D_PID")" 2>/dev/null
     running "$QS_PID" "$QML" && kill "$(cat "$QS_PID")" 2>/dev/null
+    # lo que el pidfile no conoce pero tiene el lock: el `quickshell` que relanzó
+    # el crash handler, su reporter, un daemon de otra copia del repo
+    lock_kill "$QS_LOCK"
+    lock_kill "$D_LOCK"
     rm -f "$D_PID" "$QS_PID"
     # una instancia levantada por la versión anterior dejó el PID en /tmp:
     # sin esto quedaba corriendo para siempre, invisible para el nuevo status

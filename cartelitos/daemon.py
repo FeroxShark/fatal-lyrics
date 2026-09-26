@@ -2,6 +2,7 @@
 import collections
 import os
 import signal
+import sys
 import threading
 import time
 
@@ -14,7 +15,7 @@ from . import mood
 from . import offsets
 from . import system
 from . import tray
-from .util import log
+from .util import acquire_instance_lock, instance_lock_holder, log
 
 POLL = 0.3
 POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
@@ -512,5 +513,19 @@ class DaemonLoop:
             self.tick()
 
 
+_instance_lock = None   # el descriptor tiene que vivir tanto como el proceso
+
+
 def main():
+    """Un solo daemon por sesión: dos mandando eventos al mismo socket se pisan
+    el flag del CRT, duplican los carteles y falsean cualquier medición. El
+    segundo sale con mensaje en vez de sumarse (la corrida 7b encontró uno
+    huérfano de un worktree ya borrado, vivo a la par del real)."""
+    global _instance_lock
+    _instance_lock = acquire_instance_lock()
+    if _instance_lock is None:
+        print(f"fatal-lyrics daemon already running (pid {instance_lock_holder()}); "
+              "not starting a second one. `fatal restart` to replace it.",
+              file=sys.stderr, flush=True)
+        sys.exit(1)
     DaemonLoop().run()

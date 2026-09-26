@@ -17,6 +17,7 @@ DAEMON_PID_PATH = os.path.join(RUN_DIR, "daemon.pid")
 QS_PID_PATH = os.path.join(RUN_DIR, "qs.pid")
 LOG_PATH = os.path.join(RUN_DIR, "daemon.log")
 QS_LOG_PATH = os.path.join(RUN_DIR, "qs.log")
+DAEMON_LOCK_PATH = os.path.join(RUN_DIR, "daemon.lock")
 
 # El daemon corre semanas seguidas: sin tope, el log crece hasta donde aguante
 # el tmpfs (que es RAM).
@@ -32,6 +33,54 @@ def run_dir():
     except OSError:
         pass
     return RUN_DIR
+
+
+def acquire_instance_lock(path=None):
+    """Guardia de instancia única: flock exclusivo y sin espera sobre `path`.
+
+    Devuelve el archivo abierto (hay que MANTENERLO vivo: el lock dura lo que el
+    descriptor) o None si otro proceso ya lo tiene. Lo suelta el kernel cuando el
+    proceso muere, así que no hay lock viejo que limpiar ni PID reciclado que
+    engañe. No se hereda a los hijos (Python abre los archivos no heredables).
+    Sin flock disponible o sin poder crear el archivo NO bloquea el arranque:
+    la guardia es una red de seguridad, no un requisito."""
+    import fcntl
+    path = path or DAEMON_LOCK_PATH
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        f = open(path, "a+")
+    except OSError:
+        return _NO_GUARD
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        return None
+    except OSError:
+        return _NO_GUARD
+    f.seek(0)
+    f.truncate()
+    f.write(f"{os.getpid()}\n")
+    f.flush()
+    return f
+
+
+class _NoGuard:
+    """Lo que devuelve acquire_instance_lock si no pudo ni intentar: truthy."""
+    def close(self):
+        pass
+
+
+_NO_GUARD = _NoGuard()
+
+
+def instance_lock_holder(path=None):
+    """El PID que anotó quien tiene el lock (para el mensaje), o '?'."""
+    try:
+        with open(path or DAEMON_LOCK_PATH) as f:
+            return f.read().strip() or "?"
+    except OSError:
+        return "?"
 
 
 def rotate_log(path, limit=LOG_MAX):

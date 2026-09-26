@@ -156,6 +156,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
   `crt.rare`, tanda 6, corrida 7) — eventos raros `bsod`, `nosignal` y `testcard`; el sorteo
   nunca cae en intro ni en pantalla oscura. `fatal crt rare <kind> [--screen ...]` fuerza uno.
+- `burn.frag` + `burnLoader` (`Crt.qml`, perilla `crt.burnin`, tanda 7, corrida 4b) — quemado del
+  estribillo: desde la 2da ocurrencia (`rep.chorus`, k>=2) la silueta de la línea queda tenue en la
+  pantalla donde cae, hasta el `clear why=track`. Es ESTADO: `burnTex` recursivo, no vivo, se redibuja
+  sólo en `burnSnap()` (640 ms después de asentar); `signal.frag` lo suma bajo la señal. Techo de
+  contraste 0.10×burnin (medido 4.1% a 0.5, 8.3% a 1). Fade en el outro por cuenta sobre `posAbs`
+  (`crtBurnFade`), nunca un Behavior. Los items viven en un Loader (ver TRAMPAS).
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,

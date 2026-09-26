@@ -541,3 +541,16 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   fondo `#0000aa`, el verso en la fuente del set), `nosignal` reusa `standbyLayer` (3 s, vuelve
   sola) y `testcard` fuerza el motivo `testcard` 6 s. `motifs.py` (`parse_rare`) los fuerza por
   socket.
+
+## El quemado del estribillo (tanda 7, corrida 4b)
+
+- **Quickshell se cae (SIGSEGV en `QQuickItem::addToDirtyList`) al apagar/prender el CRT si hay un
+  `Behavior`/animación sobre una propiedad que llega a un uniform de un ShaderEffect, o si los items
+  del quemado (`burnPass`/`burnTex`, recursivo) existen siempre.** Con un `Behavior` por ventana: 6/6
+  caídas en `fatal crt off`. Con los items siempre presentes: ~1 de cada 10 ciclos on/off (0 de 45 sin
+  ellos). Hoy: el fade es una cuenta sobre `posAbs`, los items viven en un `Loader` (`active:
+  burnHave`) y se destruyen con `burnWipe()` (cambio de tema Y `crtOn` en false). 40/40 ciclos on/off
+  sin quemado, 6/6 con quemado armado. Diagnóstico: `coredumpctl info <pid>`; el que sale primero en la
+  lista suele ser el REPORTER del crash handler, no el proceso (mirar `Command Line`/timestamp).
+- Medir contraste: UNA pasada, alternando sólo `crt_burnin` en vivo (`chorus-drive.py burn`); dos
+  `clear` distintos re-siembran el set y cambian cara clara/oscura.

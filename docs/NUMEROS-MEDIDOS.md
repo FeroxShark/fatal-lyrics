@@ -116,3 +116,9 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   sube con `posAbs` hasta `crtClimaxT` (t0 de la última ocurrencia de la línea más repetida),
   escalón mientras suena el `chorus`, baja ×0.3 en el outro; con `crt.tension = 0` `mult` vale 1.
   Rangos de `crtTensionMult` (pace): calm 0.92–1.12, normal 0.80–1.30, wild 0.60–1.70.
+
+## Quemado del estribillo (tanda 7, corrida 4b)
+
+- Contraste máx. sobre cara oscura (captura, zona 86% del recorte): burnin 0.5 = 4.1–4.5 %, burnin 1 =
+  8.2–8.3 %; piso de ruido (0 vs 0 bis) < 0.65 %. Techo pedido: 5 % / 10 %.
+- CPU A/B burnin 0 vs 0.5: +1.9 / −0.5 puntos, ruido. Carga externa 14–20 (load average).

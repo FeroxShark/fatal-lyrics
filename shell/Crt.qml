@@ -2360,6 +2360,12 @@ PanelWindow {
             burnTimer.stop();
             crt.burnWipe();
         }
+        function onCrtOnChanged() {
+            if (!crt.ctl.crtOn) {
+                burnTimer.stop();
+                crt.burnWipe();
+            }
+        }
     }
     Loader {
         id: burnLoader

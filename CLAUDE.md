@@ -109,7 +109,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   (`lyrics.repeat_map`) viaja en `lyrics.lines[i]`, `show` y `next`. La tensión sube con `posAbs`
   hasta `crtClimaxT` (última ocurrencia de la línea más repetida), un escalón mientras suena un
   `chorus`, baja en el outro. Multiplica UN camino: `rest` de `Crt.qml` y `hitGap`; rango
-  `tensionMin/Max` en `crtPaceTable`. Driver: `docs/plans/chorus-drive.py`.
+  `tensionMin/Max` en `crtPaceTable`.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
   elige cuál dibuja. Las dieciséis son un `Component` cada una y las pone **UN solo `Loader`**
   (`sourceComponent` según `kind`): dos motivos no pueden estar vivos a la vez. Las que tienen
@@ -150,12 +150,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `burn.frag` + `burnLoader` (`Crt.qml`, perilla `crt.burnin`, tanda 7, corrida 4b) — quemado del
   estribillo: desde la 2da ocurrencia (`rep.chorus`, k>=2) la silueta de la línea queda tenue en su
   pantalla hasta el `clear why=track`. Es ESTADO: `burnTex` recursivo, no vivo, se redibuja
-  sólo en `burnSnap()` (640 ms después de asentar); `signal.frag` lo suma bajo la señal. Techo de
-  contraste 0.10×burnin. Fade en el outro por cuenta sobre `posAbs` (`crtBurnFade`), nunca un
-  Behavior. Los items viven en un Loader (ver TRAMPAS).
+  sólo en `burnSnap()` (640 ms después de asentar); `signal.frag` lo suma bajo la señal. Fade en el outro por cuenta sobre `posAbs` (`crtBurnFade`), nunca un
+  Behavior.
 - `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`, tanda 7, corrida 5a) — con `bpmLive`, el glitch sin
   animación propia (`line`, `interf`) espera al próximo tiempo, máx uno (`beatStep`; log `beat+<ms>`);
-  aro, salto, tubeon, canal y cámara son `urgent`. Barra: N compases (`rollPhaseFor`).
+  aro, salto, tubeon, canal y cámara son `urgent`.
 - `motifWords` `{re, kind?, fx?}` + `fxCheck`/`fxFire` (`Crt.qml`, `crt.word_fx`, tanda 7, corrida 5b) — fuego/
   morir/romper/oscuro pegan al tubo de la pantalla con la palabra, 1 vez por línea, vía `hit()` y `fxGapMs`.
   Trampas: `docs/TRAMPAS.md`.
@@ -191,11 +190,15 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   la captura es estéreo pero se baja a mono `(L+R)>>1` ANTES de `AudioAnalyzer.feed` (test: idéntico al mono
   de antes; no descalibra perfiles ni `ENERGY_GAIN_REF`; la 7b reusa `downmix_stereo`). A `WAVE_HZ`=20
   van 64+64 enteros por `send_soft`; el scope hace Lissajous L/R, retrato de fase si |corr|>0.98 y vuelve al
-  sintético sin `wave` >300 ms (`waveStaleMs`). Driver: `docs/plans/scope-drive.py`.
+  sintético sin `wave` >300 ms (`waveStaleMs`).
 - `audio.dirt_from` + `AudioAnalyzer._smooth_dirt` + campo `d` de `aud` → `crtDirt`/`crtDirtMult` (`crt.dirt`, tanda 7,
   corrida 7b) — planitud espectral local (ruido/guitarras) escala SÓLO `noiseAmt` (rango `dirtMin/Max` de `crtPaceTable`).
-  Guardia de instancia única: `flock` en daemon (`util.acquire_instance_lock`) y overlay (`spawn` de `bin/fatal`).
-- `tests/` — 678 tests, stdlib puro.
+- `crt.resting` + `tubeAccum` (`Crt.qml`, tanda 7, corrida 8) — pausa con letra puesta (`!musicLive` + `Motion.holdMs`):
+  reloj 15 fps, pump frenado, sin estela (log `crt: rest N on|off`); vuelve con el primer `pos`/`aud`. `tubeTime` con
+  tope de 60. El daemon real manda `aud` si suena CUALQUIER cosa: para medir la pausa hay que bajarlo (TRAMPAS).
+- Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`; overlay: `sh`
+  de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd, y el fd no se hereda (TRAMPAS).
+- `tests/` — 681 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

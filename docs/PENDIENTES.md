@@ -22,11 +22,10 @@ y 6 (círculo aburrido) siguen abiertos.**
 - **AUR:** `packaging/` listo y probado. Falta que Ferox cree cuenta en aur.archlinux.org y
   registre su clave SSH (1Password); después clonar
   `ssh://aur@aur.archlinux.org/fatal-lyrics-git.git`, copiar `packaging/` y push.
-- **CPU del overlay: falta re-medir en frío.** Todos los números de "Números medidos" de acá en
-  más se toman con el mismo aparejo de `cpu-bench.py` — motivos caros (tunnel/rorschach/ekg)
-  forzados en las tres pantallas y un verso cada 2 s —, que es el TECHO, no el uso normal.
-  Nunca se corrió con música de verdad, sin forzar nada, para saber el número que Ferox va a ver
-  la mayor parte del tiempo.
+- ~~CPU del overlay: re-medir en frío~~ **cerrado** en la tanda 7, corrida 8 (`docs/NUMEROS-MEDIDOS.md`, "Frío"):
+  `normal` ~33 %, `pausa` 25 -> 16 % con el reposo. Sigue sin haber música real en el aparejo (sintético).
+  Seguimiento abierto: el tope de 60 fps no baja el `normal` (la `FrameAnimation` sigue al refresco nativo);
+  si se quiere bajar de verdad, reloj a 60 por `Timer` en vez de `FrameAnimation`, con `frameSwapped` para `frameAvgMs`.
 - README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
 - **La tanda 4 quedó COMPLETA** (`docs/plans/2026-09-04-crt-tanda4.md`,

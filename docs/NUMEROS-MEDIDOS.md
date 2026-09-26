@@ -175,3 +175,20 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   5 muestras x 6 s, CRT prendido): d=0 media 32.7 % (rangos 28–36), d=0.8 media 34.7 % (29–40). Carga externa
   1.7–2.7 (loadavg). +2 puntos con rangos solapados y ruido de ±10 conocido de esta herramienta: no se
   distingue de cero (el multiplicador toca un uniform que ya se refresca por cuadro).
+
+## Frío: `normal` y `pausa`, antes/después de la corrida 8 (tanda 7) + media resolución
+
+- Aparejo SINTÉTICO (Spotify en pausa, no hubo música real): `cpu-bench normal` (aud 15 Hz + pos 1 Hz + un show cada
+  4 s, sin forzar motivos ni foco) y `cpu-bench pausa` (un show y silencio). CRT prendido, 3 muestras x 8 s, % de un
+  núcleo del overlay. Carga ajena de base ALTA en toda la medición (67–100 % de un núcleo: Hyprland ~19, Spotify ~17,
+  pipewire ~10–15, a veces Vesktop ~22); se esperó 30 s y no bajó. "Antes" = `Crt.qml` de 437b715.
+- `normal`: antes 32.7 % (28–36), después 32.9 % (30–35). Sin diferencia, esperado: el tope de 60 fps sólo frena el
+  avance de `tubeTime` (la `FrameAnimation` sigue al refresco nativo) y `normal` no entra en reposo.
+- `pausa` (con el daemon real bajado, ver TRAMPAS): antes 25.3 % (24–27), después 16.2 % (14–19). -9 puntos; entra a
+  los ~5.3 s de cortar el audio en las 3 pantallas y sale a los 0.05 s del primer `pos`.
+- Media resolución (`crtQuality` 1.0 / 0.85 / 0.75 / 0.6, `cpu-bench normal`, 3 x 8 s): 31.7 / 28.2 / 30.6 / 28.6 %.
+  Diferencias de 1–3 puntos con rangos solapados y ±10 de ruido conocido: no se distingue de cero. Hoja de capturas
+  (4 fuentes x 4 calidades, mismo verso, recorte 1:1): `docs/plans/tanda7/corrida-8-calidad.png` (no versionada).
+  A ojo, a esa escala no se ve diferencia entre calidades.
+- Las primeras pasadas de esta corrida (45 % / 35 %) salieron con el tubo APAGADO por la carrera de `restart` + `crt on`
+  y se descartaron (TRAMPAS).

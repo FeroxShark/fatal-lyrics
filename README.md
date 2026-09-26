@@ -80,8 +80,9 @@ What the tube does:
 - **Pick your tube**: `crt.tube` swaps the whole glass for a different CRT — `trinitron`
   (fine aperture grille), `pvm` (dot-mask broadcast monitor), `arcade` (coarse slot mask, saturated,
   curved), or the monochrome `green` and `amber` phosphors (colour collapses to a single tint,
-  no RGB mask). `custom` (default) keeps the individual knobs below; every other tube ignores
-  them. `auto` picks a colour tube per song.
+  no RGB mask). `auto` (default) picks a different colour tube for every song (never the monochrome ones);
+  `custom` keeps the individual knobs below (the look from before the tubes); every other tube
+  ignores them.
 - **The phosphor takes a moment to go out**: what moves leaves a faint, short-lived trail
   (`persistence`, half-life ~77 ms at the default, gone well before a new line settles in).
   Still text shows nothing; it switches itself off if the GPU falls behind.
@@ -91,8 +92,9 @@ What the tube does:
   (`tension`; `0` = flat, `1` = the full curve).
 - **The chorus leaves a mark**: from its second time, a chorus line burns a faint silhouette
   into the screen it landed on (a glow of the phosphor colour on a dark face, a slightly darker
-  patch on a light one) that stays until the song changes and fades in the outro (`burnin`;
-  never over 5% of luminance at `0.5`, 10% at `1`, `0` = off).
+  patch on a light one) that lasts one run of the chorus: it fades out over two seconds once a
+  non-chorus line settles, about six seconds pass without a chorus line, or the lyrics stop, and the
+  next chorus starts from scratch (`burnin`; never over 3% of luminance at `0.5`, 6% at `1`, `0` = off).
 - **The glitches keep time**: when the tempo is known, a break-up that belongs to no other
   animation waits for the next beat (at most one) instead of landing anywhere, and the
   rolling bar keeps its slow lap, rounded to whole bars so it stays in phase (`beat_lock`).
@@ -545,7 +547,7 @@ because there is nothing to install.
 | `crt`      | `intensity`          | How restless the tube is: signal breaks, how hard beats shake it, static (`0` = dead still) | `0.45` |
 | `crt`      | `word_flash`         | How much each word jolts as it lands — flash, colour ghosts and size kick (`0` = word just appears, `1` = lands white and shaking) | `0.3` |
 | `crt`      | `flicker`            | How hard the picture beats with the music on peaks (`0` = nothing moves with the volume) | `0.25` |
-| `crt`      | `tube`               | Which CRT: `custom` (use the knobs below), `trinitron`, `pvm`, `arcade`, `green`, `amber`, or `auto` (a colour tube per song) | `"custom"` |
+| `crt`      | `tube`               | Which CRT: `custom` (use the knobs below), `trinitron`, `pvm`, `arcade`, `green`, `amber`, or `auto` (a colour tube per song) | `"auto"` |
 | `crt`      | `curvature`          | Tube glass curvature (`0` = flat panel)                             | `1.0`       |
 | `crt`      | `scanlines`          | Depth of the horizontal comb                                        | `0.5`       |
 | `crt`      | `chroma`             | Steady RGB misalignment                                             | `0.6`       |
@@ -557,7 +559,7 @@ because there is nothing to install.
 | `crt`      | `persistence`        | Phosphor trail: how long moving light lingers (`0` = off, `0.35` = ~77 ms half-life, `1` = ~220 ms) | `0.35` |
 | `crt`      | `tension`            | Build-up towards the chorus: how much the rest and the hit rate follow the song's climb (`0` = flat, `1` = full curve, range per `pace`) | `1.0` |
 | `crt`      | `dirt`               | Dirty audio, dirty glass: the static on the glass follows the spectral flatness of the real audio (distorted guitars and noise crackle; silence does not). `0` = flat, `1` = full range per `pace` | `1.0` |
-| `crt`      | `burnin`             | Chorus burn-in: from the second time a chorus line plays, its screen keeps a faint silhouette of it (`0` = off, `0.5` = under 5% luminance, `1` = under 10%) | `0.5` |
+| `crt`      | `burnin`             | Chorus burn-in: from the second time a chorus line plays, its screen keeps a faint silhouette of it (`0` = off, `0.5` = under 3% luminance, `1` = under 6%; fades out when the chorus ends) | `0.5` |
 | `crt`      | `beat_lock`          | With the tempo known, glitches that belong to no other animation wait for the next beat (at most one) and the rolling bar laps in whole bars; the jump ray, the ring, the channel change and the camera still land at once | `true` |
 | `crt`      | `word_fx`            | A few key words (fire/blood/burn, die/dead, break/crash/fall, dark/apagar, es + en) fire an alarm / blink / glitch / dark effect on the screen showing them, as the word is sung (or once the line settles); paced by `pace` | `true` |
 | `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |

@@ -263,10 +263,13 @@ _CONFIG_COMMENTS = {
         "burnin": "the chorus leaves its silhouette burnt into the glass. From\n"
                   "the second time a chorus line plays, the screen it lands on\n"
                   "keeps a faint mark of it (a glow of the phosphor colour on a\n"
-                  "dark face, a slightly darker patch on a light one), until the\n"
-                  "song changes or ends. Never brighter than 5% of the screen's\n"
-                  "luminance at 0.5 and 10% at 1. 0 = none. It is drawn once per\n"
-                  "chorus line, not every frame: it costs nothing while it sits",
+                  "dark face, a slightly darker patch on a light one). It lasts\n"
+                  "one run of the chorus: when a non-chorus line settles, ~6 s\n"
+                  "pass without a chorus line, or the lyrics stop, it fades out\n"
+                  "over 2 s and is cleared, so the next chorus starts from zero.\n"
+                  "Never more than 3% of the screen's luminance at 0.5 and 6% at\n"
+                  "1. 0 = none. It is drawn once per chorus line, not every\n"
+                  "frame: it costs nothing while it sits",
         "beat_lock": "with the tempo known, the glitches that belong to no other\n"
                      "animation (the tube breaking up on a new line, the random\n"
                      "interference) wait for the next beat, at most one beat, and\n"
@@ -281,11 +284,12 @@ _CONFIG_COMMENTS = {
                    "for a beat (es/en tables in shell.qml). With per-word timing it\n"
                    "fires as the word is sung, otherwise once the line has settled;\n"
                    "never more often than the pace preset allows. false = never",
-        "tube": "the character of the glass, in one knob. custom = the loose\n"
-                "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
-                "vignette, composite), exactly as before. Any other value picks\n"
-                "a whole tube and IGNORES those knobs (intensity, quality and\n"
-                "flicker still apply):\n"
+        "tube": "the character of the glass, in one knob. auto (default) = a\n"
+                "different colour tube per track. custom = the loose knobs below\n"
+                "(curvature, scanlines, chroma, bloom, noise, roll, vignette,\n"
+                "composite), the tube as it was before the tubes existed. Any\n"
+                "other value picks a whole tube and IGNORES those knobs\n"
+                "(intensity, quality and flicker still apply):\n"
                 "  trinitron = fine aperture grille, nearly flat, sharp and bright\n"
                 "  pvm       = pro monitor: clean RGB, dot mask, marked scanlines\n"
                 "  arcade    = fat glass, coarse slot mask, a bit worn\n"
@@ -390,7 +394,7 @@ DEFAULTS = {
         "water": True, "water_amp": 0.55, "camera": 1.0, "section_zoom": True,
         "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
-        "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
+        "word_flash": 0.3, "flicker": 0.25, "tube": "auto", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
         "composite": 0.5, "persistence": 0.35, "tension": 1.0, "dirt": 1.0, "burnin": 0.5,
         "beat_lock": True, "word_fx": True,

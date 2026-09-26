@@ -28,7 +28,7 @@ layout(std140, binding = 0) uniform buf {
     float light;      // 1 = dark ink on a light face, 0 = light ink on a dark one
     vec4 bg;          // the face background, as it is right now
     vec3 tint;        // phosphor colour of this screen
-    float burnL;      // burn-in ceiling as a luminance step, 0 = nothing burnt (knob x 0.10 x fade)
+    float burnL;      // burn-in ceiling as a luminance step, 0 = nothing burnt (knob x 0.06 x fade x level)
 };
 
 layout(binding = 1) uniform sampler2D src;
@@ -156,7 +156,7 @@ const float TRAIL_HALF_S = 0.22;   // green half life at persistence = 1
 
 // The chorus burn-in (tanda 7, corrida 4b), UNDER the signal. The ceiling is
 // a hard promise ("que no sea molesto"): the burn never moves the luminance of
-// the face by more than `burnL` (0.05 at burnin 0.5, 0.10 at 1).
+// the face by more than `burnL` (0.03 at burnin 0.5, 0.06 at 1).
 //  - dark face: a glow of the phosphor colour, screen-blended so the letters
 //    keep their full value and only the background lifts. The tint is scaled to
 //    a luma of exactly `L` (floor of 0.15 so a very dark tint is not shouted up).

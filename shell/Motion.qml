@@ -44,6 +44,11 @@ Singleton {
     // veces no es una constante, es diez números que se van a separar solos.
     readonly property int levelMs: 420          // Easing.OutQuad
 
+    // ---- el quemado del estribillo se va (tanda 7, ajuste post): desvanecido lento de una
+    // marca casi invisible; no es una salida (`exitMs`), es una marca que se apaga sin llamar
+    // la atención. Easing.InOutQuad.
+    readonly property int burnFadeMs: 2000
+
     // ---- el hold: mínimo que algo se queda quieto antes de que pase la cosa
     // siguiente. No es una duración de animación: es el presupuesto.
     readonly property int holdMs: 1500

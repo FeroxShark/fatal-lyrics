@@ -314,13 +314,13 @@ SETTINGS = [
                         "beat shakes (0 = dead still, 1 = wild)", c, 0.0, 2.0)),
     ("tube", "crt", "Which tube (custom = the loose knobs below)", lambda c: _pick(
         "Which tube: a whole glass character, or custom to use the knobs below", [
+            ("auto: one per track (never green or amber)", "auto"),
             ("custom: the loose knobs below, the tube as it always was", "custom"),
             ("trinitron: fine aperture grille, nearly flat, sharp", "trinitron"),
             ("pvm: pro monitor, clean RGB, dot mask, marked scanlines", "pvm"),
             ("arcade: fat glass, coarse slot mask, a bit worn", "arcade"),
             ("green: P1 terminal, one green phosphor", "green"),
-            ("amber: P3 terminal, one amber phosphor", "amber"),
-            ("auto: one per track (never green or amber)", "auto")], c)),
+            ("amber: P3 terminal, one amber phosphor", "amber")], c)),
     ("curvature", "crt", "Tube glass curvature",
      lambda c: _ask_num("Tube glass curvature (0 = flat panel)", c, 0.0, 3.0)),
     ("scanlines", "crt", "Scanline depth",

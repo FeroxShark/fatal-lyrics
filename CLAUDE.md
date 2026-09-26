@@ -99,8 +99,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/Crt.qml` — el tubo, en DOS pasadas (tanda 7): `stage` → `signal.frag` (la señal: compuesta,
   perilla `crt.composite`) → `crt.frag` (el vidrio: fósforo, scanlines, rotura). Un `.qsb` c/u.
   `crtTubeTable` (`shell.qml`, perilla `crt.tube`, corrida 2): cada tubo es una fila con las perillas
-  sueltas + `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); `custom` = look de
-  siempre y es el único que obedece las sueltas. `auto` (en `crtSetFor`) sortea sólo tubos de color.
+  sueltas + `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); default `auto` (`crtSetFor`:
+  uno de color por tema); `custom` = look de siempre, el único que obedece las sueltas.
   **Estela** (corrida 3, `crt.persistence`): `signalTex` es `recursive`, `signal.frag` guarda
   `max(señal, prev*decay - piso)`; `trailOn` exige `trailQ` (= `crtQuality >= 1` con 150 ms de retraso: el
   resize y `recursive` nunca cambian en el mismo cuadro, TRAMPAS), el `dt` sale de `frameSwapped`
@@ -147,11 +147,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
   `crt.rare`, tanda 6, corrida 7) — eventos raros `bsod`, `nosignal` y `testcard`; el sorteo
   nunca cae en intro ni en pantalla oscura. `fatal crt rare <kind> [--screen ...]` fuerza uno.
-- `burn.frag` + `burnLoader` (`Crt.qml`, perilla `crt.burnin`, tanda 7, corrida 4b) — quemado del
-  estribillo: desde la 2da ocurrencia (`rep.chorus`, k>=2) la silueta de la línea queda tenue en su
-  pantalla hasta el `clear why=track`. Es ESTADO: `burnTex` recursivo, no vivo, se redibuja
-  sólo en `burnSnap()` (640 ms después de asentar); `signal.frag` lo suma bajo la señal. Fade en el outro por cuenta sobre `posAbs` (`crtBurnFade`), nunca un
-  Behavior.
+- `burn.frag` + `burnLoader` (`Crt.qml`, `crt.burnin`, tanda 7, corrida 4b) — quemado del estribillo, UNA tanda: desde la 2da ocurrencia (`rep.chorus`, k>=2) queda tenue mientras asientan
+  líneas chorus; una NO chorus, 6 s sin chorus o sin letra/pausa lo desvanece en 2 s (`burnFade`,
+  `NumberAnimation` sobre `level` DENTRO del Loader) y se limpia (`burnWipe`; `clear why=track` de golpe).
+  Log `crt: burn on|hold|fade|clear`. Techo ≤3 % (`0.5`) / ≤6 % (`1`). `burnTex` recursivo, no vivo.
 - `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`, tanda 7, corrida 5a) — con `bpmLive`, el glitch sin
   animación propia (`line`, `interf`) espera al próximo tiempo, máx uno (`beatStep`; log `beat+<ms>`);
   aro, salto, tubeon, canal y cámara son `urgent`.
@@ -198,7 +197,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   tope de 60. El daemon real manda `aud` si suena CUALQUIER cosa: para medir la pausa hay que bajarlo (TRAMPAS).
 - Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`; overlay: `sh`
   de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd, y el fd no se hereda (TRAMPAS); `start` espera `daemon.ready` (el daemon lo crea tras escribir el flag del CRT).
-- `tests/` — 681 tests, stdlib puro.
+- `tests/` — ~690 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

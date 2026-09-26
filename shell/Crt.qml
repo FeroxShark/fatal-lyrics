@@ -555,6 +555,8 @@ PanelWindow {
     onPausedChanged: {
         if (!paused)
             resting = false;
+        else
+            burnFade("pausa");
     }
     onRestingChanged: if (ctl.crtOn) console.log("crt: rest " + idx + (resting ? " on" : " off"))
 
@@ -2608,18 +2610,25 @@ PanelWindow {
     readonly property real trailLight: (0.299 * trailBgFace.r + 0.587 * trailBgFace.g + 0.114 * trailBgFace.b)
         - (0.299 * trailInkFace.r + 0.587 * trailInkFace.g + 0.114 * trailInkFace.b) > 0.1 ? 1 : 0
 
-    // ---- el quemado del estribillo (tanda 7, corrida 4b, `crt.burnin`)
+    // ---- el quemado del estribillo (tanda 7, corrida 4b, `crt.burnin`; ciclo de vida: ajuste post-tanda 7)
     // El tubo recuerda la silueta de una línea de estribillo desde su segunda
-    // ocurrencia, en la pantalla donde cae, hasta que cambia el tema. Es ESTADO,
-    // no animación: `burnTex` es un source recursivo NO vivo que se redibuja
-    // sólo cuando `burnSnap()` lo pide (una vez por línea de estribillo asentada),
-    // nunca por cuadro: entre evento y evento cuesta una muestra más en
-    // `signal.frag`. La fórmula es `burn = max(burn * 0.85, silueta * w(k))`
-    // (`burn.frag`); cuán visible se ve (tint, perilla, techo de contraste) lo
-    // decide `signal.frag`, así que la perilla se mueve en vivo.
+    // ocurrencia, en la pantalla donde cae, y dura UNA tanda de estribillo:
+    //   on    — `burnSnap()` (línea de estribillo k >= 2 ya asentada) la sube.
+    //   fade  — asienta una línea que NO es estribillo, pasan `burnHoldMs` sin
+    //           línea de estribillo, o se queda sin letra (instrumental/pausa):
+    //           la intensidad baja a 0 en `Motion.burnFadeMs`.
+    //   clear — terminado el fade el Loader se apaga (o `clear why=track`): se
+    //           destruyen los items y el acumulador desaparece; el próximo
+    //           estribillo arranca de cero (`burnFresh`).
+    // Es ESTADO, no animación por cuadro: `burnTex` es un source recursivo NO
+    // vivo que se redibuja sólo cuando `burnSnap()` lo pide; el fade es UNA
+    // `NumberAnimation` sobre `level` (un uniform de `signal.frag`), que vive
+    // ADENTRO del Loader para que se destruya con él (docs/TRAMPAS.md). La
+    // fórmula del acumulador es `burn = max(burn * 0.85, silueta * w(k))`
+    // (`burn.frag`); cuán visible se ve (tint, perilla, techo) lo decide `signal.frag`.
     property bool burnHave: false
-    // se desvanece en el outro (`ctl.crtBurnFade`, sin animación): una marca que se va
-    // no debe llamar la atención al irse
+    property bool burnFading: false
+    readonly property int burnHoldMs: 6000
     // el peso de la ocurrencia k: la 2da marca poco, y llega al tope en la 4ta.
     // (Nunca hay quemado con k = 1: `burnSnap()` sólo se llama desde k >= 2.)
     function burnWeight(k) {
@@ -2630,21 +2639,57 @@ PanelWindow {
     function burnSnap(k, n) {
         const w = burnWeight(k);
         burnW = w;
-        burnFresh = burnHave ? 0 : 1;
+        // si estaba yéndose, este es OTRO estribillo: el acumulador viejo no cuenta
+        burnFresh = (burnHave && !burnFading) ? 0 : 1;
+        const was = burnHave && !burnFading;
         burnHave = true;
-        if (burnLoader.item)
+        burnFading = false;
+        burnClearTimer.stop();
+        burnHoldTimer.restart();
+        if (burnLoader.item) {
             burnLoader.item.tex.scheduleUpdate();
-        console.log("crt: burn " + idx + " k=" + k + " n=" + n + " w=" + w.toFixed(2));
+            burnLoader.item.animateTo(1, Motion.enterMs, Easing.OutExpo);
+        }
+        console.log("crt: burn " + idx + (was ? " hold" : " on") + " k=" + k + " n=" + n + " w=" + w.toFixed(2));
     }
-    // tema nuevo: se borra. Los items del quemado se DESTRUYEN (el Loader se
-    // apaga): así no hay que redibujar en cero, y un tubo que nunca quemó nada
-    // no lleva ni el source ni el pase (ver docs/TRAMPAS.md).
-    function burnWipe() {
+    // sale del estribillo: se desvanece a 0 y, cuando llega, se limpia
+    function burnFade(why) {
+        if (!burnHave || burnFading)
+            return;
+        burnFading = true;
+        burnHoldTimer.stop();
+        burnTimer.stop();
+        if (burnLoader.item)
+            burnLoader.item.animateTo(0, Motion.burnFadeMs, Easing.InOutQuad);
+        burnClearTimer.restart();
+        console.log("crt: burn " + idx + " fade " + why);
+    }
+    // cambio de tema (o tubo apagado): se borra de golpe. Los items del quemado
+    // se DESTRUYEN (el Loader se apaga): así no hay que redibujar en cero, y un
+    // tubo que nunca quemó nada no lleva ni el source ni el pase (docs/TRAMPAS.md).
+    function burnWipe(why) {
+        burnHoldTimer.stop();
+        burnClearTimer.stop();
+        burnFading = false;
         if (!burnHave)
             return;
         burnHave = false;
-        console.log("crt: burn " + idx + " wipe");
+        console.log("crt: burn " + idx + " clear " + why);
     }
+    // ~6 s sin una línea de estribillo (más si la línea es larga: dura lo que dura + 2 s)
+    Timer {
+        id: burnHoldTimer
+        interval: crt.burnHoldMs
+        onTriggered: crt.burnFade("timeout")
+    }
+    // el fade terminó (el reloj es de esta Timer y no de la animación: destruir el
+    // Loader desde el handler de su propia animación no)
+    Timer {
+        id: burnClearTimer
+        interval: Motion.burnFadeMs + 60
+        onTriggered: crt.burnWipe("fade")
+    }
+    onNoLyricChanged: if (noLyric) burnFade("sin letra")
     // Se toma cuando la línea ya ASENTÓ: la cámara quieta (`cameraMs`) y el rayo
     // del salto (360 + 150 ms) ya pasó, más un puente (`bridgeMs`): si no, la
     // silueta llevaría el encuadre a medio camino o la cabeza del rayo.
@@ -2668,8 +2713,18 @@ PanelWindow {
         function onCrtSerialChanged() {
             const ln = crt.ctl.crtLine;
             const r = ln.rep;
+            // una línea que no es de estribillo cierra la tanda
+            if (!r || !r.chorus) {
+                crt.burnFade("verso");
+                return;
+            }
+            // sigue el estribillo: se sostiene (el reloj cuenta desde la ÚLTIMA línea)
+            if (crt.burnHave && !crt.burnFading) {
+                burnHoldTimer.interval = Math.max(crt.burnHoldMs, (ln.t1 - ln.t0) * 1000 + 2000);
+                burnHoldTimer.restart();
+            }
             // nunca antes de la segunda ocurrencia, y sólo un estribillo de verdad
-            if (!r || !r.chorus || r.k < 2 || crt.ctl.crtBurnin <= 0)
+            if (r.k < 2 || crt.ctl.crtBurnin <= 0)
                 return;
             burnTimer.serial = ln.serial;
             burnTimer.k = r.k;
@@ -2678,12 +2733,12 @@ PanelWindow {
         }
         function onCrtTrackSeedChanged() {
             burnTimer.stop();
-            crt.burnWipe();
+            crt.burnWipe("track");
         }
         function onCrtOnChanged() {
             if (!crt.ctl.crtOn) {
                 burnTimer.stop();
-                crt.burnWipe();
+                crt.burnWipe("off");
             }
         }
     }
@@ -2692,6 +2747,20 @@ PanelWindow {
         active: crt.burnHave
         sourceComponent: Item {
             property alias tex: burnTex
+            // intensidad 0..1 que lee `signal.frag` (burnL). La única animación del quemado
+            property real level: 0
+            function animateTo(v, ms, easing) {
+                levelAnim.stop();
+                levelAnim.to = v;
+                levelAnim.duration = ms;
+                levelAnim.easing.type = easing;
+                levelAnim.restart();
+            }
+            NumberAnimation {
+                id: levelAnim
+                target: parent
+                property: "level"
+            }
             ShaderEffect {
                 id: burnPass
                 width: crt.width
@@ -2730,10 +2799,11 @@ PanelWindow {
         property variant src: stageTex
         property variant prev: crt.trailOn ? signalTex : stageTex
         property variant burn: burnLoader.item ? burnLoader.item.tex : stageTex
-        // techo de contraste del quemado (luminancia de la cara): 0.10 con la
-        // perilla en 1, 0.05 con 0.5. 0 = el shader se saltea la muestra.
-        property real burnL: (crt.burnHave && !crt.tubeDark)
-            ? 0.10 * crt.ctl.crtBurnin * crt.ctl.crtBurnFade : 0
+        // techo de contraste del quemado (luminancia de la cara): 0.06 con la
+        // perilla en 1, 0.03 con 0.5 (el máximo medido queda ~15 % abajo).
+        // `level` es el fade del ciclo de vida. 0 = el shader se saltea la muestra.
+        property real burnL: (crt.burnHave && !crt.tubeDark && burnLoader.item)
+            ? 0.06 * crt.ctl.crtBurnin * crt.ctl.crtBurnFade * burnLoader.item.level : 0
         property variant tint: crt.ctl.tubeMono > 0.5 ? crt.ctl.tubeMonoTint : crt.pal.tint
         property real persist: crt.trailOn ? crt.ctl.tubePersistence : 0
         property real dt: crt.trailDt

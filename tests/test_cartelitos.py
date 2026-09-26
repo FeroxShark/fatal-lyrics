@@ -3185,11 +3185,11 @@ class TestKnobsAreReachable(unittest.TestCase):
 
     def test_tube_knob_is_wired_end_to_end(self):
         # corrida 2 de la tanda 7: los cuatro lugares de `crt.tube`
-        self.assertEqual(c.DEFAULTS["crt"]["tube"], "custom")
+        self.assertEqual(c.DEFAULTS["crt"]["tube"], "auto")
         self.assertIn("tube", config._CONFIG_COMMENTS["crt"])
         self.assertIn(("crt_tube", "crt", "tube"), ipc.CONFIG_EVENT_MAP)
         qml, _ = self._tube_table()
-        self.assertRegex(qml, r'property string crtTube:\s*"custom"')
+        self.assertRegex(qml, r'property string crtTube:\s*"auto"')
         self.assertIn('crt_tube: "crtTube"', qml)
         self.assertIn("tube", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
@@ -3525,13 +3525,17 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertEqual(w(4), 1)
         self.assertLess(w(2), 0.75)
         # tema nuevo: se borra
-        self.assertRegex(crt, r"function onCrtTrackSeedChanged\(\) \{[^}]*crt\.burnWipe\(\)")
+        self.assertRegex(crt, r"function onCrtTrackSeedChanged\(\) \{[^}]*crt\.burnWipe\(\"track\"\)")
 
     def test_burn_contrast_ceiling_and_decay_formula(self):
-        # techo de contraste que pidió Ferox ("que no sea molesto"): <= 5 % con la perilla en
-        # 0.5 y <= 10 % en 1, así que el uniform vale a lo sumo 0.10 * perilla
+        # techo de contraste que pidió Ferox ("que no sea molesto", ajuste post tanda 7): <= 3 % con
+        # la perilla en 0.5 y <= 6 % en 1, así que el uniform vale a lo sumo 0.06 * perilla
         crt = self._crt_qml()
-        self.assertRegex(crt, r"(?s)property real burnL:.*?\?\s*0\.10 \* crt\.ctl\.crtBurnin \* crt\.ctl\.crtBurnFade : 0")
+        m = re.search(r"(?s)property real burnL:.*?\?\s*([\d.]+) \* crt\.ctl\.crtBurnin \* crt\.ctl\.crtBurnFade"
+                      r" \* burnLoader\.item\.level : 0", crt)
+        self.assertIsNotNone(m)
+        self.assertLessEqual(float(m.group(1)) * 0.5, 0.03 + 1e-9)
+        self.assertLessEqual(float(m.group(1)) * 1.0, 0.06 + 1e-9)
         self.assertIn("!crt.tubeDark", crt)
         with open(os.path.join(self.SHELL, "burn.frag"), encoding="utf-8") as f:
             burn = f.read()
@@ -3541,6 +3545,40 @@ class TestKnobsAreReachable(unittest.TestCase):
         for name in ("burn.frag", "signal.frag"):
             self.assertGreaterEqual(os.path.getmtime(os.path.join(self.SHELL, name + ".qsb")) + 5,
                                     os.path.getmtime(os.path.join(self.SHELL, name)), name)
+
+    def test_burn_lifecycle_on_hold_fade_clear(self):
+        # el quemado dura UNA tanda de estribillo (ajuste post tanda 7): sube en k>=2, se sostiene
+        # mientras asientan líneas chorus, se desvanece al salir del estribillo y se limpia
+        crt = self._crt_qml()
+        # sube sólo desde la 2da ocurrencia (el Timer de asentado es el único que llama a burnSnap)
+        self.assertRegex(crt, r"r\.k < 2 \|\| crt\.ctl\.crtBurnin <= 0\)\s*return;\s*burnTimer\.serial")
+        # sale del estribillo: una línea sin `rep.chorus` cierra la tanda
+        on_serial = re.search(r"id: burnTimer.*?function onCrtSerialChanged\(\) \{(.*?)\n        \}", crt, re.S).group(1)
+        self.assertRegex(on_serial, r"if \(!r \|\| !r\.chorus\) \{\s*crt\.burnFade\(\"verso\"\);\s*return;")
+        # los otros cortes: 6 s sin chorus, sin letra, pausa
+        self.assertRegex(crt, r"readonly property int burnHoldMs:\s*6000")
+        self.assertRegex(crt, r"id: burnHoldTimer\s*interval: crt\.burnHoldMs\s*onTriggered: crt\.burnFade\(\"timeout\"\)")
+        self.assertIn('onNoLyricChanged: if (noLyric) burnFade("sin letra")', crt)
+        self.assertRegex(crt, r"onPausedChanged: \{[^}]*burnFade\(\"pausa\"\)")
+        # el fade es una NumberAnimation sobre un uniform, ADENTRO del Loader (se destruye con él),
+        # a 0 en 2 s, y nunca un re-render de la textura
+        motion = open(os.path.join(self.SHELL, "Motion.qml"), encoding="utf-8").read()
+        self.assertRegex(motion, r"property int burnFadeMs:\s*2000")
+        loader = re.search(r"id: burnLoader(.*?)\n    \}\n", crt, re.S).group(1)
+        self.assertRegex(loader, r"NumberAnimation \{\s*id: levelAnim")
+        fade = re.search(r"function burnFade\(.*?\n    \}", crt, re.S).group(0)
+        self.assertIn("animateTo(0, Motion.burnFadeMs", fade)
+        self.assertNotIn("scheduleUpdate", fade)
+        # terminado el fade se limpia: los items se destruyen y el próximo estribillo arranca de cero
+        self.assertRegex(crt, r"id: burnClearTimer\s*interval: Motion\.burnFadeMs \+ \d+\s*onTriggered: crt\.burnWipe\(\"fade\"\)")
+        snap = re.search(r"function burnSnap\(.*?\n    \}", crt, re.S).group(0)
+        self.assertIn("burnFresh = (burnHave && !burnFading) ? 0 : 1", snap)
+        self.assertIn("burnClearTimer.stop()", snap)
+        wipe = re.search(r"function burnWipe\(.*?\n    \}", crt, re.S).group(0)
+        self.assertIn("burnHave = false", wipe)
+        # log `crt: burn on|hold|fade|clear <motivo>`
+        for word in ('" on"', '" hold"', '" fade "', '" clear "'):
+            self.assertIn(word, crt)
 
     @unittest.skipUnless(os.path.exists("/usr/lib/qt6/bin/qsb"), "qsb no está instalado")
     def test_burn_qsb_has_its_uniforms(self):

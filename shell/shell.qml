@@ -149,7 +149,7 @@ ShellRoot {
     // tanda 7, corrida 2: el carácter del tubo en una sola perilla. `custom` =
     // las perillas sueltas de arriba, el tubo de siempre; los demás salen de
     // `crtTubeTable` (más abajo) y las ignoran. `auto` = uno por tema (`crtSetFor`).
-    property string crtTube: "custom"
+    property string crtTube: "auto"
     property real crtIntensity: 1.0
     property bool crtChrome: true
     property bool crtDirector: true

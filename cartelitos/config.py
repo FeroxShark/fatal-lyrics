@@ -118,6 +118,10 @@ _CONFIG_COMMENTS = {
         "intro": "a new track is a whole event: every tube goes dark, static, a\n"
                  "title/artist card, then the first line. false = the old plain\n"
                  "channel-change into the first lyric",
+        "intro_card": "the title card of the track intro: `testcard` = a test\n"
+                      "card (bars, grid circle, clock hand) with the title in the\n"
+                      "ident band and the artist under the circle, in the set's\n"
+                      "font and colours; `plain` = big title and artist, no drawing",
         "audio": "react to what's actually playing (captures the sound card's\n"
                  "monitor with pw-record/parec — no extra packages). Only while\n"
                  "the tube is up. false = everything follows the lyric clock",
@@ -371,7 +375,7 @@ DEFAULTS = {
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "scene": "sections",
-        "set": "track", "intro": True, "audio": True,
+        "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
         "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "rare": 1, "ghost_ms": 550,

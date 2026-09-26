@@ -235,6 +235,10 @@ SETTINGS = [
     ("intro", "crt", "New track is an event (dark, static, title card)",
      lambda c: _pick("A new track goes dark, static, a title/artist card, "
                       "then the first line", YESNO, c)),
+    ("intro_card", "crt", "Track intro title card (testcard = a test card)",
+     lambda c: _pick("The title card of the track intro", [
+         ("testcard: a test card with the title in the ident band", "testcard"),
+         ("plain: big title and artist, no drawing", "plain")], c)),
     ("audio", "crt", "React to the music",
      lambda c: _pick("React to what's actually playing", YESNO, c)),
     ("color_from_pitch", "crt", "Colour follows the register",

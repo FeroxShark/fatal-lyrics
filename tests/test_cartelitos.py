@@ -3199,6 +3199,60 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_word_fx: "crtWordFx"', qml)
         self.assertIn("word_fx", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def test_intro_card_knob_is_wired_end_to_end(self):
+        # corrida 6 de la tanda 7: la tarjeta del intro, en los cuatro lugares
+        self.assertEqual(c.DEFAULTS["crt"]["intro_card"], "testcard")
+        self.assertIn("intro_card", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_intro_card", "crt", "intro_card"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r'property string crtIntroCard:\s*"testcard"')
+        self.assertIn('crt_intro_card: "crtIntroCard"', qml)
+        editor = next(fn for key, section, _, fn in setup.SETTINGS
+                      if key == "intro_card" and section == "crt")
+        picked = []
+        for n in (1, 2):
+            _FakeInput(self, str(n))
+            picked.append(editor("testcard"))
+        self.assertEqual(set(picked), {"testcard", "plain"})
+
+    def test_degauss_phase_sits_between_off_and_static(self):
+        # corrida 6: off -> degauss -> static -> card, con la duración en Motion.qml
+        qml, _ = self._tube_table()
+        m = re.search(r"function crtIntroAdvance\(\) \{(.*?)\n    \}\n", qml, re.S)
+        self.assertIsNotNone(m)
+        body = m.group(1)
+        order = [body.index(f'crtIntroPhase = "{ph}"') for ph in ("degauss", "static", "card")]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("Motion.degaussMs", body)
+        # la fase se pone ANTES de prender: Crt.qml la mira al reencender (sin haz de tubeon)
+        self.assertLess(body.index('crtIntroPhase = "degauss"'), body.index("crtSetDark(-1, false)"))
+        # el primer verso corta también el degauss
+        self.assertIn('crtIntroPhase === "degauss"', qml)
+        with open(os.path.join(self.SHELL, "Motion.qml"), encoding="utf-8") as f:
+            motion = f.read()
+        ms = int(re.search(r"readonly property int degaussMs:\s*(\d+)", motion).group(1))
+        self.assertTrue(500 <= ms <= 900, ms)
+
+    def test_degauss_uniform_is_bound_and_neutral_at_zero(self):
+        with open(os.path.join(self.SHELL, "crt.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        self.assertRegex(frag, r"float degauss;")
+        # con degauss = 0 no se toca ni la geometría ni el color
+        self.assertEqual(frag.count("if (degauss > 0.001)"), 2)
+        crt = self._crt_qml()
+        self.assertRegex(crt, r"property real degauss:\s*crt\.degauss")
+        self.assertIn("if (!degaussOn)\n                tubeOnAnim.restart();", crt)
+        # la tarjeta carga la carta de ajuste de Motif.qml con título y artista
+        self.assertRegex(crt, r'kind: "testcard"\s+title: crt\.ctl\.npTitle\s+info: crt\.ctl\.npInfo')
+        self.assertIn('crt.ctl.crtIntroCard !== "plain"', crt)
+
+    @unittest.skipUnless(os.path.exists("/usr/lib/qt6/bin/qsb"), "qsb no está instalado")
+    def test_crt_qsb_has_degauss(self):
+        import subprocess
+        dump = subprocess.run(["/usr/lib/qt6/bin/qsb", "--dump", os.path.join(self.SHELL, "crt.frag.qsb")],
+                              capture_output=True, text=True, check=True).stdout
+        self.assertIn('"name": "degauss"', dump, "crt.frag.qsb no trae `degauss`: recompilar")
+
     def _pace_rows(self):
         with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
             qml = f.read()

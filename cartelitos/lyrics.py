@@ -683,6 +683,35 @@ VOICE_TAIL_BLIND = 0.6      # ...y la cola cuando el largo es todo lo que hay
 VOICE_MIN_GAP = 1.7
 
 
+CHORUS_MIN_WORDS = 3        # una línea repetida de menos palabras es un golpe, no un estribillo
+
+
+def repeat_map(lines):
+    """Por cada línea de la letra, cuántas veces aparece y cuál ocurrencia es.
+
+    Devuelve `[{n, k, chorus}]`, uno por línea y en el mismo orden. La línea se
+    compara normalizada (`seg_key` por palabra: sin mayúsculas ni puntuación ni
+    espacios de más). `n` es cuántas veces aparece, `k` cuál de ellas es (de 1 a
+    n) y `chorus` es `n >= 2` con al menos tres palabras: "yeah yeah" repetido
+    es un golpe, no un estribillo. Una línea vacía nunca cuenta como repetida."""
+    keys = [" ".join(k for k in (seg_key(w) for w in (ln[1] or "").split()) if k)
+            for ln in lines or ()]
+    total = {}
+    for key in keys:
+        total[key] = total.get(key, 0) + 1
+    seen = {}
+    out = []
+    for key in keys:
+        if not key:
+            out.append({"n": 1, "k": 1, "chorus": False})
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        n = total[key]
+        out.append({"n": n, "k": seen[key],
+                    "chorus": n >= 2 and len(key.split()) >= CHORUS_MIN_WORDS})
+    return out
+
+
 def voice_end(t0, text, words=None, next_t0=None):
     """Cuándo se deja de cantar esta línea, en segundos de la letra.
 

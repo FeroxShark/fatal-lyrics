@@ -37,7 +37,7 @@ from .lyrics import (
     cache_get, cache_put, clean_title, current_line_index, expand_repeats,
     expand_spelled, fetch_lyrics, fetch_lyrics_async, http_json, lrclib_get,
     lrclib_search, netease, netease_pick, parse_lrc,
-    purge_cache, seg_key, spelled_run, split_repeats, state_line, write_state,
+    purge_cache, repeat_map, seg_key, spelled_run, split_repeats, state_line, write_state,
     _cache_path, _fetch, _fetch_lock, _retry_delay,
 )
 

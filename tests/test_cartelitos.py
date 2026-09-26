@@ -2632,6 +2632,49 @@ class TestSyncKeyBinds(unittest.TestCase):
                                       "sync_back": self.D["sync_back"]}, run=boom)
 
 
+class TestRepeatMap(unittest.TestCase):
+    """El estribillo existe: qué líneas se repiten y cuál ocurrencia es cada una
+    (tanda 7, corrida 4). El tubo lo usa para la curva de tensión."""
+
+    def rep(self, *texts):
+        return c.repeat_map([(float(i), t) for i, t in enumerate(texts)])
+
+    def test_no_repeats(self):
+        self.assertEqual(self.rep("one two three", "four five six"),
+                         [{"n": 1, "k": 1, "chorus": False}] * 2)
+
+    def test_a_chorus_three_times(self):
+        out = self.rep("we are the champions", "verse one goes here",
+                       "we are the champions", "verse two goes here",
+                       "we are the champions")
+        self.assertEqual([(r["n"], r["k"], r["chorus"]) for r in out],
+                         [(3, 1, True), (1, 1, False), (3, 2, True),
+                          (1, 1, False), (3, 3, True)])
+
+    def test_a_one_word_repeat_is_not_a_chorus(self):
+        out = self.rep("hey", "hey", "hey hey")
+        self.assertEqual([r["chorus"] for r in out], [False, False, False])
+        self.assertEqual([(r["n"], r["k"]) for r in out], [(2, 1), (2, 2), (1, 1)])
+
+    def test_two_words_are_still_not_a_chorus(self):
+        self.assertFalse(any(r["chorus"] for r in self.rep("oh baby", "oh baby")))
+
+    def test_case_and_punctuation_do_not_matter(self):
+        out = self.rep("Take me home,", "take   ME home!!", "  TAKE me... home")
+        self.assertEqual([(r["n"], r["k"], r["chorus"]) for r in out],
+                         [(3, 1, True), (3, 2, True), (3, 3, True)])
+
+    def test_blank_lines_never_repeat(self):
+        out = self.rep("", "", "...")
+        self.assertEqual(out, [{"n": 1, "k": 1, "chorus": False}] * 3)
+
+    def test_word_times_and_no_lines_do_not_break_it(self):
+        self.assertEqual(c.repeat_map([(0.0, "a b c", [(0.0, "a")]), (1.0, "a b c", None)])[1],
+                         {"n": 2, "k": 2, "chorus": True})
+        self.assertEqual(c.repeat_map([]), [])
+        self.assertEqual(c.repeat_map(None), [])
+
+
 class TestSplitRepeats(unittest.TestCase):
     """Una línea de letra no siempre es una frase: muchas veces son golpes
     repetidos, y cada golpe va a una pantalla distinta. Esto tiene que aguantar

@@ -82,6 +82,9 @@ What the tube does:
   curved), or the monochrome `green` and `amber` phosphors (colour collapses to a single tint,
   no RGB mask). `custom` (default) keeps the individual knobs below; every other tube ignores
   them. `auto` picks a colour tube per song.
+- **The phosphor takes a moment to go out**: what moves leaves a faint, short-lived trail
+  (`persistence`, half-life ~77 ms at the default, gone well before a new line settles in).
+  Still text shows nothing; it switches itself off if the GPU falls behind.
 - **The picture comes down a cable**: before the glass, a composite-video pass
   (`composite`) bleeds the colour sideways, rings and crawls on the edges, and at
   the top of its range turns into a worn VHS — colour lagging behind, snow at
@@ -536,6 +539,7 @@ because there is nothing to install.
 | `crt`      | `roll`               | Brightness bar rolling down the tube                                | `0.5`       |
 | `crt`      | `vignette`           | Darkening towards the corners                                       | `0.9`       |
 | `crt`      | `composite`          | Analog signal before the glass: colour bleeds sideways, edges ring and crawl (`0` = clean RGB, `0.5` = old TV, `1` = worn-out VHS) | `0.5` |
+| `crt`      | `persistence`        | Phosphor trail: how long moving light lingers (`0` = off, `0.35` = ~77 ms half-life, `1` = ~220 ms) | `0.35` |
 | `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |
 | `keys`     | `sync_back`          | ...and the ones that push it back 0.1 s                             | `"Super+Alt, Left"` |
 

@@ -93,3 +93,19 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   **4.4 puntos**, más del tope de 3 del plan: el Flow quedó atrás de `crt.wholeWordsOn`
   (`crtQuality >= 1`), con el Text de una pieza de fallback cuando la pantalla ya viene lenta
   y `crtQuality` bajó sola (`Crt.qml` línea ~1077).
+- **Tanda 7, corrida 3 — estela del fósforo (`crt.persistence` 0.35, `docs/plans/persist-drive.py`).**
+  Vida media DIBUJADA en pantalla (wf-recorder sin pérdida de una caja de ≤240 px sobre la tinta,
+  cara oscura, cambio de "M…" a "i", curva normalizada por canal, interpolada entre cuadros):
+  mitad ≤ 37 ms en verde y ≤ 27 ms en rojo/azul en todas las corridas (umbral 90 / 60);
+  al 10% ≤ 152 ms y al 2% ≤ 275 ms (umbral: no sobrevivir a `Motion.enterMs`, 320). La última
+  corrida dio, DP-4 (60 Hz) r/g/b: mitad 9/10/12 ms, 10% 91/95/91, 2% 154/164/156;
+  DP-5 (144 Hz) r/g: mitad 12/9, 10% 120/152, 2% 152/209. Iguales a 60, 144 y 200 Hz (el `dt`
+  sale de `frameSwapped`). La curva cae de golpe en el primer cuadro (1.0 → ~0.55 dibujado) y
+  después arrastra una cola: el vidrio (bloom + curva) aplasta la estela, por eso queda sutil.
+  Texto quieto: |estela prendida − apagada| (2.2 / 1.7 de media en DP-4 / DP-5) queda dentro del
+  ruido prendida-prendida (2.8 / 2.0): invisible.
+  CPU: sin costo medible. A/B intercalado (persistence 0 contra 0.35, mismas condiciones):
+  techo 46.4 → 44.7, pausa 26.1 → 25.7, instrumental (dunes en todas) 40.5 → 40.0. Los niveles
+  absolutos están inflados por carga externa (la base de la corrida 0 era 27.4 / 29.8 / 24.5);
+  vale la diferencia, que cae dentro del ruido y del tope de +3. Una primera corrida quedó
+  inválida: las capturas bajaron `crtQuality` y la estela se apagó sola.

@@ -488,3 +488,22 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   `show` tras un restart cae en el intro (estática o un motif): calentar con uno de descarte.
   Ruido viejo contra viejo: máx. 1/255; el passthrough contra el viejo: máx. 3/255 en ~60
   píxeles de borde de glifo (empate de redondeo del muestreo).
+- **La estela (`crt.persistence`, tanda 7 corrida 3) y sus siete trampas.**
+  1. **El `dt` NO sale del reloj de animaciones.** Un `ShaderEffectSource` `live` + `recursive`
+     se vuelve a dibujar en cada cuadro de SU ventana (medido: DP-5 144/s, HDMI-A-2 120/s, DP-4
+     60/s) pero el driver de QML marca 16 ms en las tres. Con `FrameAnimation` la estela decaía
+     3 veces más rápido en las pantallas rápidas. `trailDt` sale de `frameSwapped` de cada ventana.
+  2. **Un `.qsb` no se recarga en caliente** (el QML sí): tras tocar `signal.frag` hace falta
+     `fatal restart`, o se mide un shader viejo y la estela "no existe".
+  3. **El auto-drop de calidad apaga la estela** (`trailOn` pide `crtQuality >= 1`): cualquier
+     `grim`/`wf-recorder` en las tres pantallas baja el tubo (frame > 28 ms por 3 s). Capturar de a
+     un monitor y mandar `crt_quality` 0.999 antes (un cambio del techo resetea `crtQuality`).
+  4. **Cara clara: la tinta es oscura.** El piso lineal y el `max` se invierten (`light`) y la
+     pantalla clara cambia de verso con estática/rotura, así que no mide nada. Para medir hay que
+     mover el monitor a una cara oscura con `crt_order` (`persist-drive.py` prueba permutaciones).
+  5. **El residuo en RGBA8** de `prev*decay` se clava en 1/255 si no hay piso lineal: por eso
+     `lin`, y por eso los tests simulan el redondeo de 8 bits.
+  6. **Un monitor vertical (DP-5, 1080x1920)** dio una caja de 230x1874 y `persist-drive.py`
+     se quedó sin memoria: la caja va tope en 240 px.
+  7. **wf-recorder graba VFR:** `ffmpeg -fps_mode passthrough` y los `pts` de `ffprobe`
+     (`frame=pts_time`, con coma final); sin eso ffmpeg duplica cuadros hasta la cadencia fija.

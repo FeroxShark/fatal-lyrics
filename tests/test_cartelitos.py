@@ -3223,10 +3223,24 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn("property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime)", crt)
         qml, _ = self._tube_table()
         fn = qml.split("function rollPhaseFor(tt)", 1)[1].split("property real crtRoll", 1)[0]
-        # con compás: una vuelta cada 4 tiempos; sin él, la deriva libre de siempre
+        # con compás: la vuelta dura N compases (múltiplo de 4 tiempos) cercanos al período
+        # libre, que sale de UNA constante; sin compás, la deriva libre de siempre
         self.assertIn("crtBeatLock && bpmLive", fn)
-        self.assertIn("(4 * beatMs)", fn)
-        self.assertIn("tt * 0.085", fn)
+        self.assertIn("4 * beatMs", fn)
+        self.assertIn("1000 / rollFreeRate / bar", fn)
+        self.assertIn("tt * rollFreeRate", fn)
+        self.assertIn("readonly property real rollFreeRate: 0.085", qml)
+        self.assertNotIn("(4 * beatMs)", fn)
+
+    def test_roll_lap_is_the_bar_multiple_nearest_to_free_drift(self):
+        # mismo cálculo que `rollPhaseFor`: a 120 bpm ~12 s (6 compases), nunca 2 s
+        for bpm in (70, 90, 120, 140, 174):
+            bar = 4 * 60000 / bpm
+            lap = max(1, round(1000 / 0.085 / bar)) * bar
+            self.assertLessEqual(abs(lap - 1000 / 0.085), bar / 2 + 1e-6)
+            self.assertGreaterEqual(lap, bar)
+        bar = 4 * 60000 / 120
+        self.assertEqual(round(1000 / 0.085 / bar), 6)
 
     def _crt_qml(self):
         with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:

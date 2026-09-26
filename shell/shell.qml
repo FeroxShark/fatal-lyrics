@@ -117,13 +117,22 @@ ShellRoot {
     // (`rollPhaseFor`). Sin compás medido (`bpmLive`) todo sigue como antes.
     property bool crtBeatLock: true
     onCrtBeatLockChanged: console.log("crt: beat_lock " + crtBeatLock)
-    // fase de la barra que rueda: `tt` (el reloj del tubo) sólo empuja la re-evaluación
+    // fase de la barra que rueda: `tt` (el reloj del tubo) sólo empuja la re-evaluación.
+    // Deriva libre = una vuelta cada 1/`rollFreeRate` s. Con compás la vuelta dura los
+    // compases (múltiplo de 4 tiempos) más cercanos a ese período: queda en fase con el
+    // tiempo sin acelerar (1 vuelta/compás iría 6 veces más rápida y chocaría con "una
+    // animación por pantalla"). La fase sale de la grilla absoluta de tiempos (`g` = donde
+    // cae la grilla en el reloj), no de `lastBeatAt`: un re-anclaje del `bpm` no la salta.
+    readonly property real rollFreeRate: 0.085
     function rollPhaseFor(tt) {
         if (crtBeatLock && bpmLive) {
-            const p = (Date.now() - lastBeatAt) / (4 * beatMs);
+            const bar = 4 * beatMs;
+            const lapMs = Math.max(1, Math.round(1000 / rollFreeRate / bar)) * bar;
+            const g = ((lastBeatAt % beatMs) + beatMs) % beatMs;
+            const p = (Date.now() - g) / lapMs;
             return p - Math.floor(p);
         }
-        const q = tt * 0.085;
+        const q = tt * rollFreeRate;
         return q - Math.floor(q);
     }
     property real crtRoll: 1.0

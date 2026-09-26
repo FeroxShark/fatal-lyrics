@@ -120,7 +120,10 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 ## Quemado del estribillo (tanda 7, corrida 4b)
 
 - Contraste máx. sobre cara oscura (captura, zona 86% del recorte): burnin 0.5 = 4.1–4.5 %, burnin 1 =
-  8.2–8.3 %; piso de ruido (0 vs 0 bis) < 0.65 %. Techo pedido: 5 % / 10 %.
+  8.2–8.3 %; piso de ruido (0 vs 0 bis) < 0.65 %. Techo pedido: 5 % / 10 %. **Ajuste post tanda 7**
+  (Ferox: "molesto"): techo 0.06 × perilla → ≈ 2.5 % a 0.5 y ≈ 3.3 % a 1 (medido por mediana de cuadros
+  contra la perilla en 0; el piso de ruido del tubo, 0.5–3 %, limita la precisión). Ciclo de vida
+  on/hold/fade/clear: fantasma visible a +1 s, ya sin nada a +3 s del fin del estribillo (fade 2 s).
 - CPU A/B burnin 0 vs 0.5: +1.9 / −0.5 puntos, ruido. Carga externa 14–20 (load average).
 
 ## Glitches en el tiempo (tanda 7, corrida 5a, `crt.beat_lock`)

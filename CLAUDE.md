@@ -150,7 +150,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `burn.frag` + `burnLoader` (`Crt.qml`, `crt.burnin`, tanda 7, corrida 4b) — quemado del estribillo, UNA tanda: desde la 2da ocurrencia (`rep.chorus`, k>=2) queda tenue mientras asientan
   líneas chorus; una NO chorus, 6 s sin chorus o sin letra/pausa lo desvanece en 2 s (`burnFade`,
   `NumberAnimation` sobre `level` DENTRO del Loader) y se limpia (`burnWipe`; `clear why=track` de golpe).
-  Log `crt: burn on|hold|fade|clear`. Techo ≤3 % (`0.5`) / ≤6 % (`1`). `burnTex` recursivo, no vivo.
+  Log `crt: burn on|hold|fade|clear`. Techo 3 %/6 %. Fuente `lyricTex` (sólo el texto, TRAMPAS).
 - `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`, tanda 7, corrida 5a) — con `bpmLive`, el glitch sin
   animación propia (`line`, `interf`) espera al próximo tiempo, máx uno (`beatStep`; log `beat+<ms>`);
   aro, salto, tubeon, canal y cámara son `urgent`.

@@ -13,9 +13,9 @@ real, estática por suciedad, reposo en pausa. Todo medido con aparejo sintétic
   0.60–1.70): la captura de la corrida 4a no fue concluyente. `crt.tension = 0` la apaga.
 - **Reloj a 60 por `Timer`** en vez de `FrameAnimation` (con `frameSwapped` para `frameAvgMs`): el tope de 60 fps en
   `tubeTime` no baja `normal` (~33 %) porque la animación sigue al refresco nativo (144/120/60).
-- Mirar con música: composite 0.5, estela (cara clara y `composite=1`), quemado (contraste 4.1–4.5 % a 0.5),
+- Mirar con música: composite 0.5, estela (cara clara y `composite=1`), quemado (contraste ≤ 3 % a 0.5, se apaga solo al salir del estribillo),
   beat lock, efectos por palabra y la carta de la intro (`docs/plans/CHECKS-VISUALES.md`).
-- Decisiones de Ferox: `crt.tube` (`custom` de siempre, `auto` o `trinitron` fijo), default de `crtQuality`.
+- Decisión de Ferox: default de `crtQuality` (`crt.tube` ya es `auto` por defecto).
 - SIGSEGV en el driver nvidia (`QRhi::beginFrame`, 2 casos en la corrida 6, sin repro): si vuelve, seguir en TRAMPAS.
 
 **Tanda 6 (hecha 2026-09-16, falta que Ferox la mire con música):** set por tema + mazos,

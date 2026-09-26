@@ -579,6 +579,18 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   cambios); con el fix: 0 en 60 `mixed`. Se dispara sólo con la GPU pisada (frames de 33 ms) y algo de
   suerte, así que "0 caídas" no prueba el arreglo: si vuelve, mirar primero qué más redimensiona un
   source (`burnTex` es de tamaño fijo) y probar liberar la textura con `visible: false` un cuadro antes.
+- **El quemado dejaba letras que NO estaban (verso viejo o futuro) — la fuente era el escenario entero.**
+  `burnPass` leía `stageTex` a los 640 ms de asentar, o sea TODO lo que hubiera en el tubo: el fantasma
+  del verso anterior (`ghost`, al 0.45 mientras se apaga), el motivo, el fondo y, si el `show` siguiente
+  ya había llegado, su entrada. Hoy la fuente es `lyricTex`: un `ShaderEffectSource` no vivo de `lyric`
+  SOLO (el texto del verso, alpha en el resto), y `burn.frag` toma tinta del alpha, no de la distancia
+  al fondo. `lyric` está dentro de `camera`, así que el shader deshace la cuenta: cámara (`camS`, sobre
+  el centro) ∘ `textPlane` ∘ `tubeOnY` ∘ salto (`sc`/`off`, uv de pantalla → uv de la letra; fuera de
+  la caja no hay tinta). Además el `burnTimer` guarda `serial` Y `myText` al armarse y NO llama a
+  `burnSnap` si cambiaron, si el tubo se está abriendo (`tubeOnY < 0.99`) o hay salto en curso (`hopShift`);
+  un `show` nuevo lo re-arma (`restart`). El snapshot va en dos tiempos (`lyricTex.scheduleUpdate()` y a los
+  60 ms `burnTex.scheduleUpdate()`, `burnGo`) para no depender del orden en que el grafo renderiza dos
+  sources no vivos. Si el quemado sale corrido o mal escalado, revisar la cuenta de `sc`/`off` en `burnPass`.
 - Medir contraste: UNA pasada, alternando sólo `crt_burnin` en vivo (`chorus-drive.py burn`); dos
   `clear` distintos re-siembran el set y cambian cara clara/oscura.
 

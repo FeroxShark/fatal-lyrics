@@ -2288,6 +2288,106 @@ PanelWindow {
     readonly property real trailLight: (0.299 * trailBgFace.r + 0.587 * trailBgFace.g + 0.114 * trailBgFace.b)
         - (0.299 * trailInkFace.r + 0.587 * trailInkFace.g + 0.114 * trailInkFace.b) > 0.1 ? 1 : 0
 
+    // ---- el quemado del estribillo (tanda 7, corrida 4b, `crt.burnin`)
+    // El tubo recuerda la silueta de una línea de estribillo desde su segunda
+    // ocurrencia, en la pantalla donde cae, hasta que cambia el tema. Es ESTADO,
+    // no animación: `burnTex` es un source recursivo NO vivo que se redibuja
+    // sólo cuando `burnSnap()` lo pide (una vez por línea de estribillo asentada),
+    // nunca por cuadro: entre evento y evento cuesta una muestra más en
+    // `signal.frag`. La fórmula es `burn = max(burn * 0.85, silueta * w(k))`
+    // (`burn.frag`); cuán visible se ve (tint, perilla, techo de contraste) lo
+    // decide `signal.frag`, así que la perilla se mueve en vivo.
+    property bool burnHave: false
+    // se desvanece en el outro con `Motion.holdMs`: es lo más lento que tiene el
+    // tubo, y una marca que se va no debe llamar la atención al irse
+    property real burnFade: ctl.crtInOutro ? 0 : 1
+    Behavior on burnFade { NumberAnimation { duration: Motion.holdMs } }
+    // el peso de la ocurrencia k: la 2da marca poco, y llega al tope en la 4ta.
+    // (Nunca hay quemado con k = 1: `burnSnap()` sólo se llama desde k >= 2.)
+    function burnWeight(k) {
+        return Math.min(1, 0.45 + 0.25 * (k - 1));
+    }
+    function burnSnap(k, n) {
+        const w = burnWeight(k);
+        burnPass.weight = w;
+        burnPass.fresh = burnHave ? 0 : 1;
+        burnHave = true;
+        burnTex.scheduleUpdate();
+        console.log("crt: burn " + idx + " k=" + k + " n=" + n + " w=" + w.toFixed(2));
+    }
+    // tema nuevo: se borra (una pasada con peso 0 y sin `prev`, así queda en cero
+    // y no en lo que había)
+    function burnWipe() {
+        if (!burnHave)
+            return;
+        burnPass.weight = 0;
+        burnPass.fresh = 1;
+        burnHave = false;
+        burnTex.scheduleUpdate();
+        console.log("crt: burn " + idx + " wipe");
+    }
+    // Se toma cuando la línea ya ASENTÓ: la cámara quieta (`cameraMs`) y el rayo
+    // del salto (360 + 150 ms) ya pasó, más un puente (`bridgeMs`): si no, la
+    // silueta llevaría el encuadre a medio camino o la cabeza del rayo.
+    Timer {
+        id: burnTimer
+        interval: Motion.cameraMs + Motion.bridgeMs
+        property int serial: -1
+        property int k: 0
+        property int n: 0
+        onTriggered: {
+            const ln = crt.ctl.crtLine;
+            // la línea sigue siendo la misma y sigue en ESTA pantalla
+            if (ln.serial !== serial || !crt.showsText || crt.myText === ""
+                || crt.tubeDark || crt.ctl.crtBurnin <= 0)
+                return;
+            crt.burnSnap(k, n);
+        }
+    }
+    Connections {
+        target: crt.ctl
+        function onCrtSerialChanged() {
+            const ln = crt.ctl.crtLine;
+            const r = ln.rep;
+            // nunca antes de la segunda ocurrencia, y sólo un estribillo de verdad
+            if (!r || !r.chorus || r.k < 2 || crt.ctl.crtBurnin <= 0)
+                return;
+            burnTimer.serial = ln.serial;
+            burnTimer.k = r.k;
+            burnTimer.n = r.n;
+            burnTimer.restart();
+        }
+        function onCrtTrackSeedChanged() {
+            burnTimer.stop();
+            crt.burnWipe();
+        }
+    }
+    ShaderEffect {
+        id: burnPass
+        anchors.fill: parent
+        visible: false
+        blending: false
+        property variant src: stageTex
+        property variant prev: crt.burnHave ? burnTex : stageTex
+        property real weight: 0
+        property real fresh: 1
+        property color bg: stageBg.color
+        property variant res: Qt.vector2d(burnTex.textureSize.width, burnTex.textureSize.height)
+        fragmentShader: Qt.resolvedUrl("burn.frag.qsb")
+    }
+    ShaderEffectSource {
+        id: burnTex
+        sourceItem: burnPass
+        visible: false
+        // bilineal: la silueta es un resplandor, no un sello
+        smooth: true
+        live: false
+        recursive: true
+        // media resolución: es una máscara de cobertura, y es memoria de GPU por pantalla
+        textureSize: Qt.size(Math.max(1, Math.round(stageTex.textureSize.width / 2)),
+                             Math.max(1, Math.round(stageTex.textureSize.height / 2)))
+    }
+
     ShaderEffect {
         id: signalPass
         anchors.fill: parent
@@ -2295,6 +2395,12 @@ PanelWindow {
         blending: false
         property variant src: stageTex
         property variant prev: crt.trailOn ? signalTex : stageTex
+        property variant burn: crt.burnHave ? burnTex : stageTex
+        // techo de contraste del quemado (luminancia de la cara): 0.10 con la
+        // perilla en 1, 0.05 con 0.5. 0 = el shader se saltea la muestra.
+        property real burnL: (crt.burnHave && !crt.tubeDark && crt.visible)
+            ? 0.10 * crt.ctl.crtBurnin * crt.burnFade : 0
+        property variant tint: crt.ctl.tubeMono > 0.5 ? crt.ctl.tubeMonoTint : crt.pal.tint
         property real persist: crt.trailOn ? crt.ctl.tubePersistence : 0
         property real dt: crt.trailDt
         property real light: crt.trailLight

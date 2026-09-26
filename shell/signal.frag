@@ -27,10 +27,13 @@ layout(std140, binding = 0) uniform buf {
     float dt;         // real seconds since the last time this pass drew
     float light;      // 1 = dark ink on a light face, 0 = light ink on a dark one
     vec4 bg;          // the face background, as it is right now
+    vec3 tint;        // phosphor colour of this screen
+    float burnL;      // burn-in ceiling as a luminance step, 0 = nothing burnt (knob x 0.10 x fade)
 };
 
 layout(binding = 1) uniform sampler2D src;
 layout(binding = 2) uniform sampler2D prev;   // this pass's own last frame
+layout(binding = 3) uniform sampler2D burn;   // chorus silhouette (burn.frag), 0..1 in .r
 
 float hash21(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -151,9 +154,28 @@ vec3 signalRgb(vec2 uv) {
 const float TRAIL_KILL_S = 0.28;   // < Motion.enterMs (0.32)
 const float TRAIL_HALF_S = 0.22;   // green half life at persistence = 1
 
+// The chorus burn-in (tanda 7, corrida 4b), UNDER the signal. The ceiling is
+// a hard promise ("que no sea molesto"): the burn never moves the luminance of
+// the face by more than `burnL` (0.05 at burnin 0.5, 0.10 at 1).
+//  - dark face: a glow of the phosphor colour, screen-blended so the letters
+//    keep their full value and only the background lifts. The tint is scaled to
+//    a luma of exactly `L` (floor of 0.15 so a very dark tint is not shouted up).
+//  - light face: the ink is dark, so the burn is a slightly darker patch,
+//    scaled so the background loses exactly `L` of luma.
+vec3 burnIn(vec3 rgb, vec2 uv) {
+    float L = burnL * texture(burn, uv).r;
+    vec3 g = tint * (L / max(dot(tint, LUMA), 0.15));
+    vec3 dk = 1.0 - (1.0 - rgb) * (1.0 - g);
+    vec3 lt = rgb * (1.0 - L / max(dot(bg.rgb, LUMA), 0.2));
+    return mix(dk, lt, light);
+}
+
 void main() {
     vec2 uv = qt_TexCoord0;
     vec3 rgb = signalRgb(uv);
+    // `burn` is read at the raw uv, like `prev`: the VHS tracking must not drag it
+    if (burnL > 0.0005)
+        rgb = burnIn(rgb, uv);
     if (persist > 0.001) {
         vec3 half_life = vec3(2.0 / 3.0, 1.0, 2.0 / 3.0) * (persist * TRAIL_HALF_S);
         vec3 d = exp2(-dt / half_life);

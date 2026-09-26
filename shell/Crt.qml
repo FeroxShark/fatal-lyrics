@@ -2305,23 +2305,24 @@ PanelWindow {
     function burnWeight(k) {
         return Math.min(1, 0.45 + 0.25 * (k - 1));
     }
+    property real burnW: 0
+    property real burnFresh: 1
     function burnSnap(k, n) {
         const w = burnWeight(k);
-        burnPass.weight = w;
-        burnPass.fresh = burnHave ? 0 : 1;
+        burnW = w;
+        burnFresh = burnHave ? 0 : 1;
         burnHave = true;
-        burnTex.scheduleUpdate();
+        if (burnLoader.item)
+            burnLoader.item.tex.scheduleUpdate();
         console.log("crt: burn " + idx + " k=" + k + " n=" + n + " w=" + w.toFixed(2));
     }
-    // tema nuevo: se borra (una pasada con peso 0 y sin `prev`, así queda en cero
-    // y no en lo que había)
+    // tema nuevo: se borra. Los items del quemado se DESTRUYEN (el Loader se
+    // apaga): así no hay que redibujar en cero, y un tubo que nunca quemó nada
+    // no lleva ni el source ni el pase (ver docs/TRAMPAS.md).
     function burnWipe() {
         if (!burnHave)
             return;
-        burnPass.weight = 0;
-        burnPass.fresh = 1;
         burnHave = false;
-        burnTex.scheduleUpdate();
         console.log("crt: burn " + idx + " wipe");
     }
     // Se toma cuando la línea ya ASENTÓ: la cámara quieta (`cameraMs`) y el rayo
@@ -2360,30 +2361,39 @@ PanelWindow {
             crt.burnWipe();
         }
     }
-    ShaderEffect {
-        id: burnPass
-        anchors.fill: parent
-        visible: false
-        blending: false
-        property variant src: stageTex
-        property variant prev: crt.burnHave ? burnTex : stageTex
-        property real weight: 0
-        property real fresh: 1
-        property color bg: stageBg.color
-        property variant res: Qt.vector2d(burnTex.textureSize.width, burnTex.textureSize.height)
-        fragmentShader: Qt.resolvedUrl("burn.frag.qsb")
-    }
-    ShaderEffectSource {
-        id: burnTex
-        sourceItem: burnPass
-        visible: false
-        // bilineal: la silueta es un resplandor, no un sello
-        smooth: true
-        live: false
-        recursive: true
-        // media resolución: es una máscara de cobertura, y es memoria de GPU por pantalla
-        textureSize: Qt.size(Math.max(1, Math.round(stageTex.textureSize.width / 2)),
-                             Math.max(1, Math.round(stageTex.textureSize.height / 2)))
+    Loader {
+        id: burnLoader
+        active: crt.burnHave
+        sourceComponent: Item {
+            property alias tex: burnTex
+            ShaderEffect {
+                id: burnPass
+                width: crt.width
+                height: crt.height
+                visible: false
+                blending: false
+                property variant src: stageTex
+                property variant prev: burnTex
+                property real weight: crt.burnW
+                property real fresh: crt.burnFresh
+                property color bg: stageBg.color
+                property variant res: Qt.vector2d(Math.max(1, Math.round(crt.width / 2)),
+                                                  Math.max(1, Math.round(crt.height / 2)))
+                fragmentShader: Qt.resolvedUrl("burn.frag.qsb")
+            }
+            ShaderEffectSource {
+                id: burnTex
+                sourceItem: burnPass
+                visible: false
+                // bilineal: la silueta es un resplandor, no un sello
+                smooth: true
+                live: false
+                recursive: true
+                // media resolución: es una máscara de cobertura, y es memoria de GPU por pantalla
+                textureSize: Qt.size(Math.max(1, Math.round(crt.width / 2)),
+                                     Math.max(1, Math.round(crt.height / 2)))
+            }
+        }
     }
 
     ShaderEffect {
@@ -2393,10 +2403,10 @@ PanelWindow {
         blending: false
         property variant src: stageTex
         property variant prev: crt.trailOn ? signalTex : stageTex
-        property variant burn: crt.burnHave ? burnTex : stageTex
+        property variant burn: burnLoader.item ? burnLoader.item.tex : stageTex
         // techo de contraste del quemado (luminancia de la cara): 0.10 con la
         // perilla en 1, 0.05 con 0.5. 0 = el shader se saltea la muestra.
-        property real burnL: (crt.burnHave && !crt.tubeDark && crt.visible)
+        property real burnL: (crt.burnHave && !crt.tubeDark)
             ? 0.10 * crt.ctl.crtBurnin * crt.ctl.crtBurnFade : 0
         property variant tint: crt.ctl.tubeMono > 0.5 ? crt.ctl.tubeMonoTint : crt.pal.tint
         property real persist: crt.trailOn ? crt.ctl.tubePersistence : 0

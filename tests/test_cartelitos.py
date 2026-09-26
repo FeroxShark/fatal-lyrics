@@ -3185,16 +3185,21 @@ class TestKnobsAreReachable(unittest.TestCase):
 
     def test_burn_is_event_driven_never_per_frame(self):
         # el quemado es ESTADO: un source recursivo no vivo que se redibuja sólo cuando
-        # `burnSnap()`/`burnWipe()` lo piden. Un `live: true`, un scheduleUpdate suelto o
+        # `burnSnap()` lo pide. Un `live: true`, un scheduleUpdate suelto o
         # un Timer que lo repita lo vuelve un costo por cuadro (docs/NUMEROS-MEDIDOS.md)
         crt = self._crt_qml()
         tex = re.search(r"ShaderEffectSource \{\s*id: burnTex(.*?)\n    \}", crt, re.S).group(1)
         self.assertRegex(tex, r"live:\s*false")
         self.assertRegex(tex, r"recursive:\s*true")
-        self.assertEqual(len(re.findall(r"burnTex\.scheduleUpdate\(\)", crt)), 2)
-        for fn in ("burnSnap", "burnWipe"):
-            body = re.search(rf"function {fn}\(.*?\n    \}}", crt, re.S).group(0)
-            self.assertIn("burnTex.scheduleUpdate()", body, fn)
+        # un solo scheduleUpdate, en burnSnap: el borrado DESTRUYE los items (Loader),
+        # no redibuja en cero
+        self.assertEqual(len(re.findall(r"tex\.scheduleUpdate\(\)", crt)), 1)
+        body = re.search(r"function burnSnap\(.*?\n    \}", crt, re.S).group(0)
+        self.assertIn("tex.scheduleUpdate()", body)
+        wipe = re.search(r"function burnWipe\(.*?\n    \}", crt, re.S).group(0)
+        self.assertNotIn("scheduleUpdate", wipe)
+        # sin quemado no hay items: el pase y el source viven en un Loader
+        self.assertRegex(crt, r"id: burnLoader\s*active:\s*crt\.burnHave")
         # y `burnSnap` sólo lo llama el Timer de asentado, nunca un binding ni un cuadro
         self.assertEqual(len(re.findall(r"crt\.burnSnap\(", crt)), 1)
         self.assertNotIn("burnTex.live", crt)

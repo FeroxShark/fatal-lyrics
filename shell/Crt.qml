@@ -2502,8 +2502,35 @@ PanelWindow {
         visible: false
         smooth: false   // como el `layer` de antes: sin filtro al muestrear
         live: crt.visible
-        textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.ctl.crtQuality)),
-                             Math.max(1, Math.round(crt.height * crt.ctl.crtQuality)))
+        textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.texQuality)),
+                             Math.max(1, Math.round(crt.height * crt.texQuality)))
+    }
+
+    // Cambiar la calidad NUNCA redimensiona y conmuta `recursive` en el mismo cuadro:
+    // Quickshell se cayó dos veces (SIGSEGV dentro del driver nvidia, en
+    // `QRhi::beginFrame`, o sea al liberar diferido la textura vieja) justo después de
+    // `quality 0.75 -> 1` + `trail N on` (docs/TRAMPAS.md, "Cambio de calidad"). Ahora va
+    // en dos tiempos: al bajar, la estela se apaga YA y la textura achica `qualityStepMs`
+    // después; al subir, la textura crece YA y la estela vuelve `qualityStepMs` después.
+    property real texQuality: ctl.crtQuality
+    property bool trailQ: ctl.crtQuality >= 0.999
+    readonly property int qualityStepMs: 150
+    Connections {
+        target: crt.ctl
+        function onCrtQualityChanged() {
+            const q = crt.ctl.crtQuality;
+            if (q < 0.999) crt.trailQ = false;
+            if (q > crt.texQuality) crt.texQuality = q;
+            qualityStepTimer.restart();
+        }
+    }
+    Timer {
+        id: qualityStepTimer
+        interval: crt.qualityStepMs
+        onTriggered: {
+            crt.texQuality = crt.ctl.crtQuality;
+            crt.trailQ = crt.ctl.crtQuality >= 0.999;
+        }
     }
 
     // La estela (corrida 3): `signalTex` es RECURSIVO y vuelve a `signalPass` como
@@ -2513,7 +2540,7 @@ PanelWindow {
     // lenta) queda un source común y `prev` apunta a otra textura para no leerse
     // a sí misma.
     readonly property bool trailOn: visible && ctl.tubePersistence > 0.001
-        && !deepSleep && ctl.crtQuality >= 0.999
+        && !deepSleep && trailQ
     onTrailOnChanged: console.log("crt: trail " + idx + (trailOn ? " on " + ctl.tubePersistence : " off"))
     // el decay es por segundo, no por cuadro: el tiempo REAL desde el último
     // cuadro de ESTA ventana (a 144 Hz un factor por cuadro duraría la mitad). `tubeTime` no

@@ -3511,7 +3511,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
             qml = f.read()
         gate = re.search(r"readonly property bool trailOn:(.*?)\n    on", qml, re.S).group(1)
-        for term in ("deepSleep", "crtQuality >= 0.999", "tubePersistence > 0.001", "visible"):
+        for term in ("deepSleep", "trailQ", "tubePersistence > 0.001", "visible"):
             self.assertIn(term, gate)
         self.assertRegex(qml, r"recursive:\s*crt\.trailOn")
         self.assertRegex(qml, r"property variant prev:\s*crt\.trailOn \? signalTex : stageTex")
@@ -3521,6 +3521,17 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertRegex(qml, r"onFrameSwapped\(\)")
         self.assertRegex(qml, r"crt\.trailDt\s*=\s*Math\.max\(")
         self.assertNotRegex(qml, r"crt\.trailDt\s*=\s*Math\.min\(frameTime")
+
+    def test_quality_change_never_resizes_and_flips_recursive_in_one_frame(self):
+        # SIGSEGV en el driver nvidia (QRhi::beginFrame) tras `quality 0.75 -> 1` + `trail on`
+        # (TRAMPAS.md): el resize y `recursive` van en dos tiempos, separados por un Timer
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        self.assertNotRegex(qml, r"textureSize:[^\n]*\n?[^\n]*crt\.ctl\.crtQuality")
+        self.assertRegex(qml, r"crt\.width \* crt\.texQuality")
+        self.assertIn("qualityStepTimer", qml)
+        self.assertRegex(qml, r"if \(q < 0\.999\) crt\.trailQ = false;")   # baja: estela YA
+        self.assertRegex(qml, r"if \(q > crt\.texQuality\) crt\.texQuality = q;")  # sube: textura YA
 
     @staticmethod
     def _trail_curve(persist, dt, channel, frag):

@@ -149,7 +149,8 @@ instance_busy() {
 }
 
 # Los PIDs a bajar de una instancia: el dueño del lock (si el cmdline confirma que
-# es lo que esperamos, contra PIDs reciclados) y, si es el overlay, los
+# es lo que esperamos — el nombre del archivo, no la ruta: puede ser la copia de
+# otro checkout —, contra PIDs reciclados) y, si es el overlay, los
 # `qs|quickshell` de su sesión. Nada por fd: lo que qs lance y no sea quickshell
 # (un navegador, una app) no se toca.
 lock_targets() {
@@ -253,8 +254,8 @@ stop() {
     running "$QS_PID" "$QML" && kill "$(cat "$QS_PID")" 2>/dev/null
     # lo que el pidfile no conoce pero figura en el lock: el `quickshell` que
     # relanzó el crash handler, su reporter, un daemon de otra copia del repo
-    lock_kill "$QS_LOCK" "$QML"
-    lock_kill "$D_LOCK" "$DAEMON"
+    lock_kill "$QS_LOCK" "shell.qml"
+    lock_kill "$D_LOCK" "cartelitos.py"
     rm -f "$D_PID" "$QS_PID"
     # una instancia levantada por la versión anterior dejó el PID en /tmp:
     # sin esto quedaba corriendo para siempre, invisible para el nuevo status

@@ -285,6 +285,21 @@ class FatalGuardTests(unittest.TestCase):
         # qs cuelga del dueño del lock, que no es el mismo proceso
         self.assertNotEqual(wrapper, self.pidfile("qs.pid"))
 
+    def test_stop_from_another_checkout_takes_down_the_instance(self):
+        # `fatal on` desde un worktree levanta ESA copia: `stop` desde otra tiene que bajarla
+        # igual (el pidfile no la reconoce por ruta, el lock sí)
+        self.assertEqual(self.fatal("on").returncode, 0)
+        self.wait_daemon_locked()
+        qs, d = self.pidfile("qs.pid"), self.pidfile("daemon.pid")
+        other = os.path.join(self.tmp, "other")
+        os.makedirs(os.path.join(other, "shell"))
+        for name in ("shell/shell.qml", "cartelitos.py"):
+            with open(os.path.join(other, name), "w") as f:
+                f.write("")
+        self.fatal("stop", CARTELITOS_HOME=other)
+        self.assertTrue(self.wait_gone(qs))
+        self.assertTrue(self.wait_gone(d))
+
     def test_second_daemon_exits_while_the_first_lives(self):
         self.assertEqual(self.fatal("on").returncode, 0)
         self.wait_daemon_locked()

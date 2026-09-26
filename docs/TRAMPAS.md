@@ -682,7 +682,8 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   crash handler contara como instancia) y `fatal stop` con `fuser -k` se llevaba puesto cualquier proceso que
   qs lanzara — un navegador, un xdg-open —, aunque fuera una app de Ferox. Ahora el wrapper queda vivo mientras
   haya un `qs|quickshell` en su sesión (`setsid`: el relanzado y el reporter nacen ahí) y `stop` baja el pid del
-  lock (confirmando cmdline) más esos `qs|quickshell` de la sesión — nunca por fd. Si el wrapper cae y quedan
+  lock (confirmando el cmdline por NOMBRE de archivo, `shell.qml`/`cartelitos.py`: puede ser la copia de otro
+  checkout) más esos `qs|quickshell` de la sesión — nunca por fd. Si el wrapper cae y quedan
   huérfanos, `on` los ve por el número de sesión (el wrapper ya no existe, así que el número no puede ser de
   otro). `fatal on/restart` con una instancia ajena rechaza con mensaje y NO pisa el pidfile. El kernel suelta el
   flock al morir el dueño: nunca hay lock viejo que limpiar. `qs.pid` guarda el pid de qs, no el del wrapper.

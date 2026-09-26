@@ -651,8 +651,7 @@ Item {
 
             // ---- las barras de color, arriba. La SMPTE son siete combinaciones
             // de R, G y B prendidos o apagados (blanco, amarillo, cian, verde,
-            // magenta, rojo, azul), y eso es lo que va acá: la máscara de la
-            // barra MULTIPLICA al color caliente del tema. Con una rampa de
+            // magenta, rojo, azul), y eso es lo que va acá. Con una rampa de
             // luminancia sobre un solo tinte —el primer intento— las siete
             // barras salían siete azules y no se distinguían de la escalera de
             // grises de abajo, que es justo lo que la escalera ya hace.
@@ -672,9 +671,14 @@ Item {
                         readonly property int mask: [7, 6, 3, 2, 5, 4, 1][index]
                         width: card.cw / 7
                         height: card.barsH
-                        color: Qt.rgba(motif.hot.r * ((mask & 4) ? 1 : 0.10),
-                                       motif.hot.g * ((mask & 2) ? 1 : 0.10),
-                                       motif.hot.b * ((mask & 1) ? 1 : 0.10), 1)
+                        // color PROPIO de la carta, no derivado de la cara (corrida 6b): con
+                        // `motif.hot` como base, en un esquema claro (tinta oscura) las siete
+                        // barras salían casi negras. Barras al 80% como las de un generador
+                        // real; el canal apagado queda en 0, así que son siete colores
+                        // distintos en cualquier cara, clara u oscura
+                        color: Qt.rgba((mask & 4) ? 0.8 : 0,
+                                       (mask & 2) ? 0.8 : 0,
+                                       (mask & 1) ? 0.8 : 0, 1)
                         opacity: 0.9
                     }
                 }

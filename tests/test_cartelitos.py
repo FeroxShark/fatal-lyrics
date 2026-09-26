@@ -3514,6 +3514,14 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertLessEqual(total, 1300)
         self.assertGreater(ms["introStaticMs"], 0)
 
+    def test_testcard_bars_have_their_own_colour(self):
+        # corrida 6b: derivadas de `motif.hot` salían casi negras en los esquemas claros
+        with open(os.path.join(self.SHELL, "Motif.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        bars = re.search(r"readonly property int mask:.*?opacity: 0\.9", qml, re.S).group(0)
+        self.assertNotIn("motif.", bars)
+        self.assertIn("(mask & 4) ? 0.8 : 0", bars)
+
     def test_trail_is_off_when_the_screen_is_slow_or_asleep(self):
         # un source vivo y recursivo re-renderiza en cada cuadro (TRAMPAS.md): sólo
         # lo está mientras hay estela, y `prev` no se lee a sí mismo si no

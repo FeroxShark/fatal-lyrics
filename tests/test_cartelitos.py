@@ -3518,7 +3518,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         # corrida 6b: derivadas de `motif.hot` salían casi negras en los esquemas claros
         with open(os.path.join(self.SHELL, "Motif.qml"), encoding="utf-8") as f:
             qml = f.read()
-        bars = re.search(r"readonly property int mask:.*?opacity: 0\.9", qml, re.S).group(0)
+        bars = re.search(r"\n\s*color: Qt\.rgba\(\(mask.*?\)\s*\n\s*opacity: 0\.9", qml, re.S).group(0)
         self.assertNotIn("motif.", bars)
         self.assertIn("(mask & 4) ? 0.8 : 0", bars)
 

@@ -538,6 +538,26 @@ PanelWindow {
             deepSleep = false;
     }
 
+    // tanda 7, corrida 8 (idea 14): la música se pausó y la letra quedó puesta. No es
+    // standby (que es sin letra: NO SIGNAL, descartado para la pausa) — se ve EXACTAMENTE
+    // igual, sólo cuesta menos: reloj a 15 fps, `pump` frenado, sin estela recursiva (el
+    // source recursivo re-renderiza cada cuadro). `musicLive` ya espera 3.5 s sin `pos`/`aud`
+    // (una pausa corta o un tema que cambia no llegan); `Motion.holdMs` más, para no
+    // dormirse en el hueco entre dos temas. Vuelve solo con el primer `pos` o `aud`, porque
+    // `musicLive` los lee en su binding.
+    readonly property bool paused: !noLyric && !ctl.musicLive
+    property bool resting: false
+    Timer {
+        interval: Motion.holdMs
+        running: crt.visible && crt.paused && !crt.resting
+        onTriggered: crt.resting = true
+    }
+    onPausedChanged: {
+        if (!paused)
+            resting = false;
+    }
+    onRestingChanged: if (ctl.crtOn) console.log("crt: rest " + idx + (resting ? " on" : " off"))
+
     // el texto de ESTA pantalla: el pedazo del director, o la línea entera
     // (partida por posición si `split` mandó cortarla) cuando no hay director
     readonly property string myText: allMode
@@ -630,7 +650,7 @@ PanelWindow {
     Timer {
         interval: 70
         repeat: true
-        running: crt.visible
+        running: crt.visible && !crt.resting
         triggeredOnStart: true
         onTriggered: {
             // el nivel del momento, pero pesado por la parte del tema: el mismo
@@ -1320,7 +1340,7 @@ PanelWindow {
     property real slowSince: -1
     property real healthySince: -1
     FrameAnimation {
-        running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep
+        running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep && !crt.resting
         onTriggered: {
             crt.tubeAccum += frameTime;
             if (crt.tubeAccum >= crt.tubeStep) {
@@ -1361,11 +1381,12 @@ PanelWindow {
     }
     Timer {
         // el instrumental va por acá (20 fps, que es lo que necesita un motif);
-        // dormido, 5 fps
-        interval: crt.deepSleep ? 200 : 50
+        // dormido, 5 fps; en pausa con la letra puesta (`resting`), 15 — también en la
+        // pantalla que muestra el texto, que el resto del tiempo va por el FrameAnimation
+        interval: crt.deepSleep ? 200 : crt.resting ? 66 : 50
         repeat: true
-        running: crt.visible && !crt.showsText && (!crt.standby || crt.deepSleep)
-        onTriggered: crt.tubeTime += crt.deepSleep ? 0.2 : 0.05
+        running: crt.visible && (!crt.showsText || crt.resting) && (!crt.standby || crt.deepSleep)
+        onTriggered: crt.tubeTime += interval / 1000
     }
 
     // Encuadre: la pantalla con la letra se acerca y abre el cuadro; la que no,
@@ -2550,11 +2571,12 @@ PanelWindow {
     // La estela (corrida 3): `signalTex` es RECURSIVO y vuelve a `signalPass` como
     // `prev`. Un source vivo y recursivo re-renderiza en CADA cuadro (no hay forma
     // de que descanse), por eso sólo lo está mientras hay estela que dibujar: con
-    // persistence 0, en `deepSleep` y con `crtQuality < 1` (la pantalla ya va
+    // persistence 0, en `deepSleep`, en pausa (`resting`: el vidrio ya no se mueve, así que la
+    // estela convergió a la señal y apagarla no se ve) y con `crtQuality < 1` (la pantalla ya va
     // lenta) queda un source común y `prev` apunta a otra textura para no leerse
     // a sí misma.
     readonly property bool trailOn: visible && ctl.tubePersistence > 0.001
-        && !deepSleep && trailQ
+        && !deepSleep && !resting && trailQ
     onTrailOnChanged: console.log("crt: trail " + idx + (trailOn ? " on " + ctl.tubePersistence : " off"))
     // el decay es por segundo, no por cuadro: el tiempo REAL desde el último
     // cuadro de ESTA ventana (a 144 Hz un factor por cuadro duraría la mitad). `tubeTime` no

@@ -2762,7 +2762,7 @@ PanelWindow {
         property real noiseAmt: crt.tubeDark ? crt.ctl.tubeNoise * 0.06
             : crt.chanNoise > 0 ? 1
             : crt.deepSleep ? 0
-            : crt.ctl.tubeNoise * (0.35 + 0.65 * crt.rest)
+            : crt.ctl.tubeNoise * (0.35 + 0.65 * crt.rest) * crt.ctl.crtDirtMult
             * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
         property real tubeLevel: crt.tubeLevel
         property real degauss: crt.degauss

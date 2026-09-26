@@ -106,6 +106,11 @@ ShellRoot {
     // el rango entero de la fila de `pace` (`tensionMin`..`tensionMax`)
     property real crtTensionAmount: 1.0
     onCrtTensionAmountChanged: console.log("crt: tension_amount " + crtTensionAmount)
+    // tanda 7, corrida 7b: cuánto ensucia la estática del vidrio el audio sucio
+    // (guitarras saturadas, ruido). 0 = plano (el multiplicador vale siempre 1),
+    // 1 = el rango entero de la fila de `pace` (`dirtMin`..`dirtMax`)
+    property real crtDirtAmount: 1.0
+    onCrtDirtAmountChanged: console.log("crt: dirt_amount " + crtDirtAmount)
     // tanda 7, corrida 4b: el quemado del estribillo (`Crt.qml`, `burn*`). 0 = no
     // se dibuja ni se acumula; 1 = el techo de contraste (10 % de luminancia,
     // 5 % con el default 0.5). Es un multiplicador del shader, así que la perilla
@@ -200,6 +205,9 @@ ShellRoot {
             // corrida 4: rango del multiplicador de la curva de tensión (ruido,
             // chroma, roll y el hueco entre roturas); 1 = como estaba
             tensionMin: 0.92, tensionMax: 1.12,
+            // corrida 7b: rango del multiplicador de la estática del vidrio según
+            // lo sucio que suena el audio (`audDirt`, planitud espectral); 1 = como estaba
+            dirtMin: 1.0, dirtMax: 2.0,
             // corrida 7: chance por verso de un raro (bsod/nosignal/testcard)
             // y el piso entre dos raros, en ms
             rarePerLine: 1 / 600, rareGapMs: 180000,
@@ -214,6 +222,7 @@ ShellRoot {
             driveMin: 0.70, driveMax: 2.00, driveDrop: 3.00, surgeK: 0.50,
             sceneGapMs: 12000,
             tensionMin: 0.80, tensionMax: 1.30,
+            dirtMin: 1.0, dirtMax: 3.0,
             rarePerLine: 1 / 400, rareGapMs: 120000,
             fxGapMs: 6000,
         },
@@ -232,6 +241,7 @@ ShellRoot {
             // mueve, como el resto de `wild` (sin portero)
             sceneGapMs: 0,
             tensionMin: 0.60, tensionMax: 1.70,
+            dirtMin: 1.0, dirtMax: 4.5,
             rarePerLine: 1 / 150, rareGapMs: 30000,
             // 0 = sin portero, pero `wild` es lo de la tanda 3, que no tenía efectos por
             // palabra: se apagan igual con `crt.word_fx = false`. Sólo el piso de la duración
@@ -407,6 +417,9 @@ ShellRoot {
     property real audMid: 0
     property real audHi: 0
     property real audCentroid: 0.5
+    // corrida 7b: qué tan sucio suena (planitud espectral, 0 limpio .. 1 ruido); el
+    // daemon ya lo suaviza (~1.5 s), el silencio manda 0
+    property real audDirt: 0
     property int audBeat: 0
     // los picos: no cada golpe, sino los pocos momentos más altos del tema
     property int audPeak: 0
@@ -1889,6 +1902,22 @@ ShellRoot {
             + " pos " + root.posAbs.toFixed(0))
     }
 
+    // corrida 7b: el ÚNICO multiplicador de la suciedad; lo lee `Crt.qml` en
+    // `noiseAmt` (SÓLO la estática del vidrio, no `rest`: eso lo maneja la tensión).
+    // Estado, no animación: el daemon ya suaviza, el Behavior sólo esconde el escalón
+    // de 10 Hz. Sin audio vivo vale 0 (multiplicador 1).
+    property real crtDirt: audLive ? audDirt : 0
+    Behavior on crtDirt { NumberAnimation { duration: Motion.holdMs } }
+    readonly property real crtDirtMult: 1 + (pace.dirtMin
+        + (pace.dirtMax - pace.dirtMin) * crtDirt - 1) * crtDirtAmount
+    Timer {
+        interval: 5000
+        repeat: true
+        running: root.crtOn && root.audLive
+        onTriggered: console.log("crt: dirt " + root.crtDirt.toFixed(2)
+            + " mult " + root.crtDirtMult.toFixed(2))
+    }
+
     // la primera palabra de la línea que viene ("" si no hay próxima)
     readonly property string crtNextWord: {
         const nx = crtNext;
@@ -3196,7 +3225,7 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
-        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_burnin: "crtBurnin",
+        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_dirt: "crtDirtAmount", crt_burnin: "crtBurnin",
         crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
@@ -3326,6 +3355,7 @@ ShellRoot {
                             root.audMid = ev.mid;
                             root.audHi = ev.hi;
                             root.audCentroid = ev.c;
+                            root.audDirt = ev.d || 0;
                             root.audAt = Date.now();
                             // el centroide se promedia largo: el color tiene que
                             // seguir el registro del tema, no cada sílaba

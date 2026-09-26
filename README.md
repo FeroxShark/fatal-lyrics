@@ -556,6 +556,7 @@ because there is nothing to install.
 | `crt`      | `composite`          | Analog signal before the glass: colour bleeds sideways, edges ring and crawl (`0` = clean RGB, `0.5` = old TV, `1` = worn-out VHS) | `0.5` |
 | `crt`      | `persistence`        | Phosphor trail: how long moving light lingers (`0` = off, `0.35` = ~77 ms half-life, `1` = ~220 ms) | `0.35` |
 | `crt`      | `tension`            | Build-up towards the chorus: how much the rest and the hit rate follow the song's climb (`0` = flat, `1` = full curve, range per `pace`) | `1.0` |
+| `crt`      | `dirt`               | Dirty audio, dirty glass: the static on the glass follows the spectral flatness of the real audio (distorted guitars and noise crackle; silence does not). `0` = flat, `1` = full range per `pace` | `1.0` |
 | `crt`      | `burnin`             | Chorus burn-in: from the second time a chorus line plays, its screen keeps a faint silhouette of it (`0` = off, `0.5` = under 5% luminance, `1` = under 10%) | `0.5` |
 | `crt`      | `beat_lock`          | With the tempo known, glitches that belong to no other animation wait for the next beat (at most one) and the rolling bar laps in whole bars; the jump ray, the ring, the channel change and the camera still land at once | `true` |
 | `crt`      | `word_fx`            | A few key words (fire/blood/burn, die/dead, break/crash/fall, dark/apagar, es + en) fire an alarm / blink / glitch / dark effect on the screen showing them, as the word is sung (or once the line settles); paced by `pace` | `true` |

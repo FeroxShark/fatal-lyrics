@@ -3255,6 +3255,48 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_tension: "crtTensionAmount"', qml)
         self.assertIn("tension", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def test_dirt_knob_is_wired_end_to_end(self):
+        # corrida 7b de la tanda 7: la suciedad del audio, en los cuatro lugares
+        self.assertEqual(c.DEFAULTS["crt"]["dirt"], 1.0)
+        self.assertIn("dirt", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_dirt", "crt", "dirt"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"property real crtDirtAmount:\s*1\.0\b")
+        self.assertIn('crt_dirt: "crtDirtAmount"', qml)
+        self.assertIn("dirt", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        with open(os.path.join(os.path.dirname(self.SHELL), "README.md"), encoding="utf-8") as f:
+            self.assertIn("`dirt`", f.read())
+
+    def test_dirt_ranges_live_in_the_pace_table(self):
+        # amplitudes en `crtPaceTable`, las tres filas: calm angosto, wild ancho; el piso en 1
+        # (audio limpio o silencio = el tubo de siempre)
+        qml, _ = self._tube_table()
+        table = re.search(r"crtPaceTable:\s*\(\{(.*?)\n    \}\)", qml, re.S).group(1)
+        table = re.sub(r"//[^\n]*", "", table)
+        span = {}
+        for name, body in re.findall(r"^\s{8}(\w+):\s*\{(.*?)\n\s{8}\},", table, re.S | re.M):
+            lo = float(re.search(r"dirtMin:\s*([\d.]+)", body).group(1))
+            hi = float(re.search(r"dirtMax:\s*([\d.]+)", body).group(1))
+            self.assertEqual(lo, 1.0, name)
+            self.assertGreater(hi, 1.0, name)
+            span[name] = hi - lo
+        self.assertEqual(set(span), {"calm", "normal", "wild"})
+        self.assertLess(span["calm"], span["normal"])
+        self.assertLess(span["normal"], span["wild"])
+
+    def test_dirt_scales_only_the_glass_static(self):
+        # UN solo camino: `noiseAmt` de Crt.qml. No `rest` (eso es de la tensión)
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            crt = f.read()
+        self.assertEqual(len(re.findall(r"crtDirtMult", crt)), 1)
+        noise = re.search(r"property real noiseAmt:(.*?)\n        property real tubeLevel", crt, re.S).group(1)
+        self.assertIn("crt.ctl.crtDirtMult", noise)
+        self.assertRegex(crt, r"readonly property real rest:\s*ctl\.crtIntensity \* ctl\.crtTensionMult\n")
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"crtDirtMult:\s*1 \+ \(pace\.dirtMin\s*\+ \(pace\.dirtMax - pace\.dirtMin\) \* crtDirt - 1\) \* crtDirtAmount")
+        self.assertIn("root.audDirt = ev.d || 0;", qml)
+        self.assertIn('console.log("crt: dirt "', qml)
+
     def test_burnin_knob_is_wired_end_to_end(self):
         # corrida 4b de la tanda 7: el quemado del estribillo, en los cuatro lugares
         self.assertEqual(c.DEFAULTS["crt"]["burnin"], 0.5)

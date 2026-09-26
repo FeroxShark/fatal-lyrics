@@ -255,6 +255,11 @@ _CONFIG_COMMENTS = {
                    "creep up until that chorus (and a notch more while one plays)\n"
                    "and ease off in the outro. 0 = flat, always as before, 1 =\n"
                    "the whole range of the pace preset (calm is narrow, wild wide)",
+        "dirt": "the glass static follows how dirty the music sounds (spectral\n"
+                "flatness of the real audio: a clean voice or synth is calm,\n"
+                "distorted guitars and noise crackle). Only the static on the\n"
+                "glass moves; silence is not dirty. 0 = flat, always as before,\n"
+                "1 = the whole range of the pace preset (calm is narrow, wild wide)",
         "burnin": "the chorus leaves its silhouette burnt into the glass. From\n"
                   "the second time a chorus line plays, the screen it lands on\n"
                   "keeps a faint mark of it (a glow of the phosphor colour on a\n"
@@ -387,7 +392,7 @@ DEFAULTS = {
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,
         "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
-        "composite": 0.5, "persistence": 0.35, "tension": 1.0, "burnin": 0.5,
+        "composite": 0.5, "persistence": 0.35, "tension": 1.0, "dirt": 1.0, "burnin": 0.5,
         "beat_lock": True, "word_fx": True,
     },
 }

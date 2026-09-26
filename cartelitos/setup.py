@@ -336,6 +336,9 @@ SETTINGS = [
     ("tension", "crt", "Tension towards the last chorus (0 = flat)",
      lambda c: _ask_num("Tension: the tube breaks up more towards the last chorus "
                         "(0 = flat, 1 = the whole range of the pace preset)", c, 0.0, 1.0)),
+    ("dirt", "crt", "Glass static follows how dirty the music sounds (0 = flat)",
+     lambda c: _ask_num("Dirt: the glass static rises with distortion and noise in the "
+                        "audio (0 = flat, 1 = the whole range of the pace preset)", c, 0.0, 1.0)),
     ("beat_lock", "crt", "Glitches and the rolling bar land on the beat",
      lambda c: _pick("With the tempo known, the glitches that belong to no other "
                      "animation wait for the next beat (and the rolling bar "

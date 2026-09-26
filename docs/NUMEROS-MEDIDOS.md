@@ -163,3 +163,15 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 - Trampa de la medición: un overlay viejo (otro proceso `quickshell` del mismo repo) seguía vivo y pintaba
   NO SIGNAL encima del propio con el CRT prendido; hay que mirar `hyprctl layers | grep cartelitos-crt` y
   que haya UN solo pid antes de medir o capturar.
+
+## Suciedad del audio (tanda 7, corrida 7b, campo `d` del evento `aud`, `crt.dirt`)
+
+- Fuente: tonos/ruido sintéticos (ffmpeg + `pw-play --volume=0.35`), Spotify en pausa; no hubo música real
+  para calibrar. `dirt-drive.py shots`: seno 220+330 -> d 0.00 (mult 1.00); seno+ruido -> 0.90 (2.79);
+  ruido -> 0.75..1.00 (2.5..3.0); silencio -> baja a 0.02 (1.03) en ~4 s. Voz TTS limpia: mediana ~0.19.
+- Costo del análisis en el hilo de audio (`spectral_flatness_local`, FFT de 512 puntos por bloque, stdlib
+  puro): ~0.36 ms por bloque, ~1 % de un núcleo del daemon.
+- CPU A/B del overlay (`dirt-drive.py cpu`: `cpu-bench normal`, 3 rondas intercaladas, `d`=0 contra `d`=0.8,
+  5 muestras x 6 s, CRT prendido): d=0 media 32.7 % (rangos 28–36), d=0.8 media 34.7 % (29–40). Carga externa
+  1.7–2.7 (loadavg). +2 puntos con rangos solapados y ruido de ±10 conocido de esta herramienta: no se
+  distingue de cero (el multiplicador toca un uniform que ya se refresca por cuadro).

@@ -192,7 +192,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   de antes; no descalibra perfiles ni `ENERGY_GAIN_REF`; la 7b reusa `downmix_stereo`). A `WAVE_HZ`=20
   van 64+64 enteros por `send_soft`; el scope hace Lissajous L/R, retrato de fase si |corr|>0.98 y vuelve al
   sintético sin `wave` >300 ms (`waveStaleMs`). Driver: `docs/plans/scope-drive.py`.
-- `tests/` — 650 tests, stdlib puro.
+- `audio.dirt_from` + `AudioAnalyzer._smooth_dirt` + campo `d` de `aud` → `crtDirt`/`crtDirtMult` (`crt.dirt`, tanda 7,
+  corrida 7b) — planitud espectral local (ruido/guitarras) escala SÓLO `noiseAmt` (rango `dirtMin/Max` de `crtPaceTable`).
+  Guardia de instancia única: `flock` en daemon (`util.acquire_instance_lock`) y overlay (`spawn` de `bin/fatal`).
+- `tests/` — 678 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

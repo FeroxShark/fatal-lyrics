@@ -588,7 +588,9 @@ PanelWindow {
     // El sonido NO decide qué se ve ni dónde: sólo cuánto late todo. Sin captura
     // (o con `audio = false`) esto queda en un valor tranquilo y no se nota.
     readonly property bool live: ctl.audLive
-    readonly property real rest: ctl.crtIntensity
+    // tanda 7, corrida 4: la curva de tensión multiplica ACÁ y en `hitGap`, no en
+    // un cuarto lugar que pelee con `sectionEnergy`
+    readonly property real rest: ctl.crtIntensity * ctl.crtTensionMult
     // el estilo de entrada lo reparte el root al llegar la línea (un estilo por
     // pantalla, pesado por lo que está sonando): acá sólo se lee el que tocó
     readonly property string entryStyle: ctl.crtEntryStyles[idx] || "snap"
@@ -754,7 +756,8 @@ PanelWindow {
     // como viene, `normal` son exactamente los 4 s del presupuesto. Sin ese
     // factor la tabla diría 4000 y la pared esperaría 8.9 s.
     readonly property int hitGap: Math.round(
-        ctl.quantize(ctl.pace.hitGapMs * 0.45 / Math.max(ctl.crtIntensity, 0.25)))
+        ctl.quantize(ctl.pace.hitGapMs * 0.45 / Math.max(ctl.crtIntensity, 0.25)
+                     / ctl.crtTensionMult))
     function hit(amount, src) {
         const now = Date.now();
         if (now - lastHitAt < hitGap && amount < glitchAmt * 1.5)

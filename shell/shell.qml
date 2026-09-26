@@ -101,6 +101,11 @@ ShellRoot {
     // de un `Motion.enterMs`; ver el comentario del shader
     property real crtPersistence: 0.35
     onCrtPersistenceChanged: console.log("crt: persistence " + crtPersistence)
+    // tanda 7, corrida 4: cuánto se rompe el tubo hacia el último estribillo
+    // (`crtTension`, más abajo). 0 = plano (el multiplicador vale siempre 1), 1 =
+    // el rango entero de la fila de `pace` (`tensionMin`..`tensionMax`)
+    property real crtTensionAmount: 1.0
+    onCrtTensionAmountChanged: console.log("crt: tension_amount " + crtTensionAmount)
     property real crtRoll: 1.0
     property real crtVignette: 0.9
     // tanda 7, corrida 2: el carácter del tubo en una sola perilla. `custom` =
@@ -155,6 +160,9 @@ ShellRoot {
             motifScale: 0.012, motifOpaMin: 0.86, motifOpaSpan: 0.10,
             driveMin: 0.80, driveMax: 1.60, driveDrop: 2.20, surgeK: 0.35,
             sceneGapMs: 20000,
+            // corrida 4: rango del multiplicador de la curva de tensión (ruido,
+            // chroma, roll y el hueco entre roturas); 1 = como estaba
+            tensionMin: 0.92, tensionMax: 1.12,
             // corrida 7: chance por verso de un raro (bsod/nosignal/testcard)
             // y el piso entre dos raros, en ms
             rarePerLine: 1 / 600, rareGapMs: 180000,
@@ -166,6 +174,7 @@ ShellRoot {
             motifScale: 0.020, motifOpaMin: 0.80, motifOpaSpan: 0.15,
             driveMin: 0.70, driveMax: 2.00, driveDrop: 3.00, surgeK: 0.50,
             sceneGapMs: 12000,
+            tensionMin: 0.80, tensionMax: 1.30,
             rarePerLine: 1 / 400, rareGapMs: 120000,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
@@ -182,6 +191,7 @@ ShellRoot {
             // sceneGapMs en 0 = la sección cambia la máscara apenas se
             // mueve, como el resto de `wild` (sin portero)
             sceneGapMs: 0,
+            tensionMin: 0.60, tensionMax: 1.70,
             rarePerLine: 1 / 150, rareGapMs: 30000,
         },
     })
@@ -1723,7 +1733,7 @@ ShellRoot {
             return;
         if (activeCrtScreens.length <= 1)
             return;
-        const outro = posLen > 0 && (posAbs / posLen) > 0.92 && audSection !== "drop";
+        const outro = posLen > 0 && (posAbs / posLen) > crtOutroAt && audSection !== "drop";
         if (outro === crtSceneOutroOn)
             return;
         crtSceneOutroOn = outro;
@@ -1750,6 +1760,64 @@ ShellRoot {
             if (Math.abs((ls[i].t0 || 0) - t0) < 0.05)
                 return i;
         return -1;
+    }
+
+    // ---- tanda 7, corrida 4: el estribillo existe, y el tubo se rompe hacia él
+    // El daemon manda `rep` = {n, k, chorus} en cada línea (`lyrics.repeat_map`).
+    // `crtClimaxT` es el `t0` de la ÚLTIMA ocurrencia de la línea más repetida
+    // (empate: la más tardía); -1 si la letra no tiene estribillo.
+    readonly property real crtClimaxT: {
+        const ls = crtLines;
+        let best = -1, bestN = 1;
+        if (!ls || !crtLinesSynced)
+            return -1;
+        for (let i = 0; i < ls.length; i++) {
+            const r = ls[i].rep;
+            if (!r || !r.chorus || r.k !== r.n)
+                continue;
+            const t0 = ls[i].t0 || 0;
+            if (r.n > bestN || (r.n === bestN && t0 > best)) {
+                bestN = r.n;
+                best = t0;
+            }
+        }
+        return best;
+    }
+    // Desde acá el tema está en su outro: lo usan la escena (`crtSceneOutroCheck`)
+    // y la tensión, que baja
+    readonly property real crtOutroAt: 0.92
+    // Cuánto del valor lo pone el escalón de "está sonando una línea de
+    // estribillo" (el resto, la subida hacia `crtClimaxT`), y cuánto se calma en
+    // el outro. Constantes de la CURVA; el rango va en la tabla de `pace`.
+    readonly property real crtTensionStep: 0.2
+    readonly property real crtTensionOutroDrop: 0.7
+    // 0..1: sube con la posición hasta el último estribillo (sin estribillo, el
+    // progreso del tema), un escalón mientras suena una línea `chorus`, baja en
+    // el outro. Depende de `posAbs` (1 Hz), y `crtTension` la suaviza.
+    readonly property real crtTensionRaw: {
+        if (posLen <= 0)
+            return 0;
+        const frac = Math.min(posAbs / posLen, 1);
+        const base = crtClimaxT > 0 ? Math.min(posAbs / crtClimaxT, 1) : frac;
+        const step = (crtLine.rep && crtLine.rep.chorus) ? crtTensionStep : 0;
+        const out = Math.max(0, Math.min((frac - crtOutroAt) / (1 - crtOutroAt), 1));
+        return Math.max(0, Math.min(base * (1 - crtTensionStep) + step, 1))
+            * (1 - crtTensionOutroDrop * out);
+    }
+    // Estado, no animación: `Motion.holdMs` sólo esconde el escalón de 1 Hz
+    property real crtTension: crtTensionRaw
+    Behavior on crtTension { NumberAnimation { duration: Motion.holdMs } }
+    // El ÚNICO multiplicador de la tensión: lo lee `Crt.qml` en `rest` (ruido,
+    // chroma y roll) y en `hitGap`. La perilla lo lleva de 1 (plano) al rango.
+    readonly property real crtTensionMult: 1 + (pace.tensionMin
+        + (pace.tensionMax - pace.tensionMin) * crtTension - 1) * crtTensionAmount
+    Timer {
+        interval: 5000
+        repeat: true
+        running: root.crtOn && root.musicLive && root.crtLines.length > 0
+        onTriggered: console.log("crt: tension " + root.crtTension.toFixed(2)
+            + " mult " + root.crtTensionMult.toFixed(2)
+            + " climax " + root.crtClimaxT.toFixed(1))
     }
 
     // la primera palabra de la línea que viene ("" si no hay próxima)
@@ -2760,7 +2828,7 @@ ShellRoot {
         }
     }
 
-    function show(text, title, icon, t0, t1, segs, words, kind, nxt, vEnd) {
+    function show(text, title, icon, t0, t1, segs, words, kind, nxt, vEnd, rep) {
         // T4.5: "fatal-lyrics no responde". No es un verso: no toca el tubo, no
         // envejece a nadie y no pasa a ser la línea actual. Muere solo cuando
         // llegue la próxima línea de verdad (ver shouldDie).
@@ -2830,7 +2898,7 @@ ShellRoot {
         // eventos `sec` llegan cuando quieren) y la palabra saltaría de lugar.
         crtLine = { text: text, t0: t0 ?? 0, t1: t1 ?? 0, serial: serial,
                     segs: segs || [], words: words || [], section: audSection,
-                    trackStart: crtTrackStart };
+                    trackStart: crtTrackStart, rep: rep || null };
         // Lo ÚNICO que la predicción no podía saber es en qué parte del tema
         // iba a caer la línea. Si cayó en un drop y eso la vuelve IOWN, se
         // rehace encima: el foco no cambia (sale de la semilla y de cuántas
@@ -3037,7 +3105,7 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
-        crt_persistence: "crtPersistence",
+        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",
@@ -3076,7 +3144,7 @@ ShellRoot {
                         const ev = JSON.parse(message);
                         if (ev.cmd === "show")
                             root.show(ev.text, ev.title, ev.icon, ev.t0, ev.t1, ev.segs,
-                                      ev.words, ev.kind, ev.next, ev.v_end);
+                                      ev.words, ev.kind, ev.next, ev.v_end, ev.rep);
                         else if (ev.cmd === "lyrics") {
                             root.crtLines = ev.lines || [];
                             root.crtLinesSynced = ev.synced !== false;

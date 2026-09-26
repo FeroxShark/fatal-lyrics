@@ -197,7 +197,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   reloj 15 fps, pump frenado, sin estela (log `crt: rest N on|off`); vuelve con el primer `pos`/`aud`. `tubeTime` con
   tope de 60. El daemon real manda `aud` si suena CUALQUIER cosa: para medir la pausa hay que bajarlo (TRAMPAS).
 - Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`; overlay: `sh`
-  de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd, y el fd no se hereda (TRAMPAS).
+  de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd, y el fd no se hereda (TRAMPAS); `start` espera `daemon.ready` (el daemon lo crea tras escribir el flag del CRT).
 - `tests/` — 681 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por

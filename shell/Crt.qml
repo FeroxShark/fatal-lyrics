@@ -452,7 +452,7 @@ PanelWindow {
     property real hopShift: 0
     SequentialAnimation {
         id: hopKick
-        ScriptAction { script: crt.hit(0.4) }
+        ScriptAction { script: crt.hit(0.4, "hop", true) }
         NumberAnimation {
             target: crt; property: "hopShift"
             to: crt.ctl.crtHop.dir * 16
@@ -710,14 +710,14 @@ PanelWindow {
             // propio: el tubo se queda donde estaba.
             if (crt.sectionZoomOn && crt.ctl.audSection === "drop") {
                 sectionKick.restart();
-                crt.hit(1, "glass");
+                crt.hit(1, "glass", true);
             }
             // llegó el golpe: se suelta el acercamiento y se rompe la pantalla
             if (crt.cueZoom <= 1.001)
                 return;
             cueAnim.stop();
             cueRelease.restart();
-            crt.hit(1, "glass");
+            crt.hit(1, "glass", true);
         }
     }
     Connections {
@@ -758,11 +758,54 @@ PanelWindow {
     readonly property int hitGap: Math.round(
         ctl.quantize(ctl.pace.hitGapMs * 0.45 / Math.max(ctl.crtIntensity, 0.25)
                      / ctl.crtTensionMult))
-    function hit(amount, src) {
+    // tanda 7, corrida 5a (`crt.beat_lock`): con el compás medido, un glitch que NO está atado a
+    // otra animación espera al próximo `beatTick` (como mucho un tiempo) y entra en el pulso del
+    // tema. El portero (`hitGap`) se mira al PEDIR, no al soltar: el que pasa queda pendiente, y
+    // los que llegan mientras espera se fusionan en uno (gana el más fuerte). Un `urgent` entra
+    // ya y borra al pendiente: es un golpe de otra animación (aro, salto, tubeon, cambio de
+    // canal, cámara) y su glitch tiene que caer con ella, no un tiempo después.
+    readonly property bool beatLocked: ctl.crtBeatLock && ctl.bpmLive
+    property bool hitPending: false
+    property real hitPendingAmt: 0
+    property string hitPendingSrc: ""
+    function hit(amount, src, urgent) {
         const now = Date.now();
         if (now - lastHitAt < hitGap && amount < glitchAmt * 1.5)
             return;
-        lastHitAt = now;
+        if (urgent || !beatLocked) {
+            hitPending = false;
+            hitFallback.stop();
+            fireHit(amount, src, "");
+            return;
+        }
+        if (hitPending) {
+            if (amount > hitPendingAmt) {
+                hitPendingAmt = amount;
+                hitPendingSrc = src || "";
+            }
+            return;
+        }
+        hitPending = true;
+        hitPendingAmt = amount;
+        hitPendingSrc = src || "";
+        // red: si el compás se pierde a mitad de la espera no llega ningún beatTick
+        hitFallback.interval = Math.round(ctl.beatMs) + 40;
+        hitFallback.restart();
+    }
+    function releaseHit(onBeat) {
+        if (!hitPending)
+            return;
+        hitPending = false;
+        hitFallback.stop();
+        if (tubeDark || !visible)
+            return;
+        // `beat+<ms>`: cuánto después del tiempo (contra la grilla del daemon) entró de verdad
+        const b = ctl.beatMs;
+        const late = b > 0 ? ((Date.now() - ctl.lastBeatAt) % b + b) % b : 0;
+        fireHit(hitPendingAmt, hitPendingSrc, onBeat ? " beat+" + Math.round(late) : " beat+fallback");
+    }
+    function fireHit(amount, src, beat) {
+        lastHitAt = Date.now();
         // el presupuesto de eventos se MIDE, no se estima: cada glitch que
         // pasa el portero deja su marca, y con eso se cuentan las roturas por
         // minuto antes y después de tocar cualquier número (tanda 4, corrida 3)
@@ -771,10 +814,20 @@ PanelWindow {
         // glitch de contenido — el `col *= tubeLevel` de `crt.frag` va ANTES
         // del ruido, así que ese fogonazo se ve aunque `tubeLevel` siga en 0.
         console.log("crt: hit s" + idx + " " + amount.toFixed(2)
-                     + (src ? " src=" + src : ""));
+                     + (src ? " src=" + src : "") + beat);
         glitchDecay.stop();
         glitchAmt = Math.min(amount, 1);
         glitchDecay.start();
+    }
+    Timer {
+        id: hitFallback
+        repeat: false
+        onTriggered: crt.releaseHit(false)
+    }
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible && crt.hitPending
+        function onBeatTickChanged() { crt.releaseHit(true); }
     }
 
     // ------------------------------------------------------ cambio de canal
@@ -805,7 +858,7 @@ PanelWindow {
             if (crt.tubeDark)
                 return;
             console.log("crt: chan s" + crt.idx);
-            crt.hit(1.0);
+            crt.hit(1.0, "chan", true);
         } }
     }
 
@@ -843,7 +896,7 @@ PanelWindow {
     property real beamFade: 0
     SequentialAnimation {
         id: tubeOnAnim
-        ScriptAction { script: crt.hit(0.35, "tubeon") }
+        ScriptAction { script: crt.hit(0.35, "tubeon", true) }
         PropertyAction { target: crt; property: "tubeOnY"; value: 0.02 }
         PropertyAction { target: crt; property: "beamFade"; value: 1 }
         // el punto se estira hasta ser una raya de lado a lado
@@ -955,7 +1008,7 @@ PanelWindow {
                 const wasRing = crt.ctl.crtRingWas === crt.idx;
                 const held = Date.now() - crt.lastHitAt >= Motion.holdMs;
                 if (moved && held && !wasRing && !crt.tubeDark)
-                    crt.hit(0.35 + Math.random() * 0.3);
+                    crt.hit(0.35 + Math.random() * 0.3, "line");
                 // las entradas que son de la PANTALLA (no de cada palabra)
                 // arrancan acá, con la línea ya puesta
                 if (crt.entryStyle === "interlace")
@@ -1007,7 +1060,7 @@ PanelWindow {
             if (crt.ctl.interfScreen !== crt.idx)
                 return;
             crt.hit((0.12 + Math.random() * 0.35) * crt.ctl.crtIntensity
-                * crt.ctl.sectionEnergy);
+                * crt.ctl.sectionEnergy, "interf");
         }
     }
 
@@ -1689,7 +1742,7 @@ PanelWindow {
                 // cuando la frase llega de verdad — no cuando vence el reloj.
                 // El `show` cae 0–300 ms después (el poll del daemon) y una
                 // rotura en la hora se gastaba el portero justo antes.
-                onCollapsed: crt.hit(0.5)
+                onCollapsed: crt.hit(0.5, "ring", true)
             }
 
             // ---- instrumental: no hay letra pero SÍ hay música. La pantalla
@@ -2485,6 +2538,10 @@ PanelWindow {
         // velocidad a la que se percibe que la barra "carga".
         property real roll: crt.ctl.tubeRoll * (0.25 + 0.75 * crt.rest)
             * (1 + crt.ctl.crtProgress())
+        // fase de la barra, en vueltas (0..1). Con el compás medido y `crt.beat_lock` da una
+        // vuelta cada 4 tiempos, anclada a la grilla del daemon; si no, la deriva libre de
+        // siempre (0.085 vueltas/s). Se cuenta en QML (precisión doble), no con `t` en el shader.
+        property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime)
         property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : 0
         property real vignette: crt.ctl.tubeVignette
         // el titileo llega desde el audio, no del reloj del shader

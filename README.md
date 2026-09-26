@@ -93,6 +93,9 @@ What the tube does:
   into the screen it landed on (a glow of the phosphor colour on a dark face, a slightly darker
   patch on a light one) that stays until the song changes and fades in the outro (`burnin`;
   never over 5% of luminance at `0.5`, 10% at `1`, `0` = off).
+- **The glitches keep time**: when the tempo is known, a break-up that belongs to no other
+  animation waits for the next beat (at most one) instead of landing anywhere, and the
+  rolling bar makes one lap every 4 beats (`beat_lock`).
 - **The picture comes down a cable**: before the glass, a composite-video pass
   (`composite`) bleeds the colour sideways, rings and crawls on the edges, and at
   the top of its range turns into a worn VHS — colour lagging behind, snow at
@@ -550,6 +553,7 @@ because there is nothing to install.
 | `crt`      | `persistence`        | Phosphor trail: how long moving light lingers (`0` = off, `0.35` = ~77 ms half-life, `1` = ~220 ms) | `0.35` |
 | `crt`      | `tension`            | Build-up towards the chorus: how much the rest and the hit rate follow the song's climb (`0` = flat, `1` = full curve, range per `pace`) | `1.0` |
 | `crt`      | `burnin`             | Chorus burn-in: from the second time a chorus line plays, its screen keeps a faint silhouette of it (`0` = off, `0.5` = under 5% luminance, `1` = under 10%) | `0.5` |
+| `crt`      | `beat_lock`          | With the tempo known, glitches that belong to no other animation wait for the next beat (at most one) and the rolling bar laps every 4 beats; the jump ray, the ring, the channel change and the camera still land at once | `true` |
 | `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |
 | `keys`     | `sync_back`          | ...and the ones that push it back 0.1 s                             | `"Super+Alt, Left"` |
 

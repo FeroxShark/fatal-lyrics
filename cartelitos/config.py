@@ -258,6 +258,13 @@ _CONFIG_COMMENTS = {
                   "song changes or ends. Never brighter than 5% of the screen's\n"
                   "luminance at 0.5 and 10% at 1. 0 = none. It is drawn once per\n"
                   "chorus line, not every frame: it costs nothing while it sits",
+        "beat_lock": "with the tempo known, the glitches that belong to no other\n"
+                     "animation (the tube breaking up on a new line, the random\n"
+                     "interference) wait for the next beat, at most one beat, and\n"
+                     "land on the pulse of the song; the rolling bar makes one lap\n"
+                     "every 4 beats. Glitches tied to something else (the jump ray,\n"
+                     "the ring, the channel change, the camera) still land at once.\n"
+                     "Without a tempo nothing changes. false = as before",
         "tube": "the character of the glass, in one knob. custom = the loose\n"
                 "knobs below (curvature, scanlines, chroma, bloom, noise, roll,\n"
                 "vignette, composite), exactly as before. Any other value picks\n"
@@ -370,6 +377,7 @@ DEFAULTS = {
         "word_flash": 0.3, "flicker": 0.25, "tube": "custom", "curvature": 1.0, "scanlines": 0.5,
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
         "composite": 0.5, "persistence": 0.35, "tension": 1.0, "burnin": 0.5,
+        "beat_lock": True,
     },
 }
 

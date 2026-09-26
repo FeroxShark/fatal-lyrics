@@ -112,6 +112,20 @@ ShellRoot {
     // se mueve en vivo sin rehacer lo ya quemado.
     property real crtBurnin: 0.5
     onCrtBurninChanged: console.log("crt: burnin " + crtBurnin)
+    // tanda 7, corrida 5a: los glitches sin animación propia esperan al próximo tiempo del
+    // compás (`Crt.qml`, `hit()`) y la barra que rueda da una vuelta cada 4 tiempos
+    // (`rollPhaseFor`). Sin compás medido (`bpmLive`) todo sigue como antes.
+    property bool crtBeatLock: true
+    onCrtBeatLockChanged: console.log("crt: beat_lock " + crtBeatLock)
+    // fase de la barra que rueda: `tt` (el reloj del tubo) sólo empuja la re-evaluación
+    function rollPhaseFor(tt) {
+        if (crtBeatLock && bpmLive) {
+            const p = (Date.now() - lastBeatAt) / (4 * beatMs);
+            return p - Math.floor(p);
+        }
+        const q = tt * 0.085;
+        return q - Math.floor(q);
+    }
     property real crtRoll: 1.0
     property real crtVignette: 0.9
     // tanda 7, corrida 2: el carácter del tubo en una sola perilla. `custom` =
@@ -3121,6 +3135,7 @@ ShellRoot {
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
         crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_burnin: "crtBurnin",
+        crt_beat_lock: "crtBeatLock",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro",

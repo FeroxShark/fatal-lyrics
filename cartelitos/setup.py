@@ -332,6 +332,10 @@ SETTINGS = [
     ("tension", "crt", "Tension towards the last chorus (0 = flat)",
      lambda c: _ask_num("Tension: the tube breaks up more towards the last chorus "
                         "(0 = flat, 1 = the whole range of the pace preset)", c, 0.0, 1.0)),
+    ("beat_lock", "crt", "Glitches and the rolling bar land on the beat",
+     lambda c: _pick("With the tempo known, the glitches that belong to no other "
+                     "animation wait for the next beat (and the rolling bar "
+                     "laps every 4 beats)", YESNO, c)),
     ("burnin", "crt", "Chorus burn-in (0 = none)",
      lambda c: _ask_num("Burn-in: the chorus leaves a faint silhouette on its screen "
                         "(0 = none, 0.5 = default, 1 = strongest, still under 10%)", c, 0.0, 1.0)),

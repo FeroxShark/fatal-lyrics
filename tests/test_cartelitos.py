@@ -3179,6 +3179,51 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_burnin: "crtBurnin"', qml)
         self.assertIn("burnin", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def test_beat_lock_knob_is_wired_end_to_end(self):
+        # corrida 5a de la tanda 7: los glitches en el pulso del tema, en los cuatro lugares
+        self.assertIs(c.DEFAULTS["crt"]["beat_lock"], True)
+        self.assertIn("beat_lock", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_beat_lock", "crt", "beat_lock"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"property bool crtBeatLock:\s*true\b")
+        self.assertIn('crt_beat_lock: "crtBeatLock"', qml)
+        self.assertIn("beat_lock", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+
+    def test_hit_defers_to_the_beat_unless_urgent(self):
+        # el único portero de glitches difiere al próximo beatTick (con red de un tiempo) lo que
+        # no es de otra animación; aro, salto, tubeon, cambio de canal y cámara entran ya
+        crt = self._crt_qml()
+        self.assertIn("function hit(amount, src, urgent)", crt)
+        self.assertIn("readonly property bool beatLocked: ctl.crtBeatLock && ctl.bpmLive", crt)
+        self.assertRegex(crt, r"function onBeatTickChanged\(\) \{ crt\.releaseHit\(true\); \}")
+        self.assertIn('" beat+"', crt)
+        for call in ('crt.hit(0.4, "hop", true)', 'crt.hit(1, "glass", true)',
+                     'crt.hit(1.0, "chan", true)', 'crt.hit(0.35, "tubeon", true)',
+                     'crt.hit(0.5, "ring", true)'):
+            self.assertIn(call, crt)
+        # y los dos que caen en tiempo NO son urgentes
+        self.assertRegex(crt, r'crt\.hit\(0\.35 \+ Math\.random\(\) \* 0\.3, "line"\);')
+        self.assertRegex(crt, r'crt\.ctl\.sectionEnergy, "interf"\);')
+        # el resto del archivo no llama a hit() con la firma vieja de un solo argumento
+        body = crt.split("function fireHit", 1)[1]
+        for m in re.finditer(r"crt\.hit\(", body):
+            self.assertRegex(body[m.start():m.start() + 120], r'"(hop|glass|chan|tubeon|ring|line|interf)"')
+
+    def test_roll_phase_is_a_uniform_counted_in_qml(self):
+        with open(os.path.join(self.SHELL, "crt.frag"), encoding="utf-8") as f:
+            frag = f.read()
+        self.assertIn("float rollPhase;", frag)
+        self.assertIn("float by = rollPhase;", frag)
+        self.assertNotIn("fract(t * 0.085)", frag)
+        crt = self._crt_qml()
+        self.assertIn("property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime)", crt)
+        qml, _ = self._tube_table()
+        fn = qml.split("function rollPhaseFor(tt)", 1)[1].split("property real crtRoll", 1)[0]
+        # con compás: una vuelta cada 4 tiempos; sin él, la deriva libre de siempre
+        self.assertIn("crtBeatLock && bpmLive", fn)
+        self.assertIn("(4 * beatMs)", fn)
+        self.assertIn("tt * 0.085", fn)
+
     def _crt_qml(self):
         with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
             return f.read()

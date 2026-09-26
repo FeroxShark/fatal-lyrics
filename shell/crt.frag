@@ -26,6 +26,7 @@ layout(std140, binding = 0) uniform buf {
     float noiseAmt;   // static
     float glitch;     // 0..1 burst: tearing, wave, extra chroma
     float roll;       // brightness bar rolling down the tube
+    float rollPhase;  // 0..1: where the bar is (a lap every 4 beats when the tempo is known)
     float alarm;      // 0..1 red critical wash
     float vignette;
     float pulse;      // 0..1 golpe de la canción: el tubo levanta con el ritmo
@@ -191,7 +192,7 @@ void main() {
     // the EDGE, and none of that fits in a band riding the comb.
 
     // rolling bar: the classic bright band sliding down an out-of-sync tube
-    float by = fract(t * 0.085);
+    float by = rollPhase;
     float d = abs(fract(uv.y - by + 0.5) - 0.5);
     col += tint * 0.05 * smoothstep(0.07, 0.0, d) * roll;
 

@@ -3179,6 +3179,70 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_burnin: "crtBurnin"', qml)
         self.assertIn("burnin", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def _crt_qml(self):
+        with open(os.path.join(self.SHELL, "Crt.qml"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_burn_is_event_driven_never_per_frame(self):
+        # el quemado es ESTADO: un source recursivo no vivo que se redibuja sólo cuando
+        # `burnSnap()`/`burnWipe()` lo piden. Un `live: true`, un scheduleUpdate suelto o
+        # un Timer que lo repita lo vuelve un costo por cuadro (docs/NUMEROS-MEDIDOS.md)
+        crt = self._crt_qml()
+        tex = re.search(r"ShaderEffectSource \{\s*id: burnTex(.*?)\n    \}", crt, re.S).group(1)
+        self.assertRegex(tex, r"live:\s*false")
+        self.assertRegex(tex, r"recursive:\s*true")
+        self.assertEqual(len(re.findall(r"burnTex\.scheduleUpdate\(\)", crt)), 2)
+        for fn in ("burnSnap", "burnWipe"):
+            body = re.search(rf"function {fn}\(.*?\n    \}}", crt, re.S).group(0)
+            self.assertIn("burnTex.scheduleUpdate()", body, fn)
+        # y `burnSnap` sólo lo llama el Timer de asentado, nunca un binding ni un cuadro
+        self.assertEqual(len(re.findall(r"crt\.burnSnap\(", crt)), 1)
+        self.assertNotIn("burnTex.live", crt)
+
+    def test_burn_never_before_the_second_occurrence(self):
+        crt = self._crt_qml()
+        on_serial = re.search(r"id: burnTimer.*?function onCrtSerialChanged\(\) \{(.*?)\n        \}", crt, re.S).group(1)
+        self.assertIn("!r.chorus", on_serial)
+        self.assertRegex(on_serial, r"r\.k\s*<\s*2")
+        self.assertIn("crtBurnin <= 0", on_serial)
+        # el peso: la 2da marca poco, la 4ta llega al tope
+        m = re.search(r"function burnWeight\(k\) \{\s*return Math\.min\(1, ([\d.]+) \+ ([\d.]+) \* \(k - 1\)\);", crt)
+        self.assertIsNotNone(m)
+        w = lambda k: min(1, float(m.group(1)) + float(m.group(2)) * (k - 1))
+        self.assertLess(w(2), w(3))
+        self.assertLess(w(3), 1.0 + 1e-9)
+        self.assertEqual(w(4), 1)
+        self.assertLess(w(2), 0.75)
+        # tema nuevo: se borra
+        self.assertRegex(crt, r"function onCrtTrackSeedChanged\(\) \{[^}]*crt\.burnWipe\(\)")
+
+    def test_burn_contrast_ceiling_and_decay_formula(self):
+        # techo de contraste que pidió Ferox ("que no sea molesto"): <= 5 % con la perilla en
+        # 0.5 y <= 10 % en 1, así que el uniform vale a lo sumo 0.10 * perilla
+        crt = self._crt_qml()
+        self.assertRegex(crt, r"(?s)property real burnL:.*?\?\s*0\.10 \* crt\.ctl\.crtBurnin \* crt\.burnFade : 0")
+        self.assertIn("!crt.tubeDark", crt)
+        with open(os.path.join(self.SHELL, "burn.frag"), encoding="utf-8") as f:
+            burn = f.read()
+        self.assertRegex(burn, r"texture\(prev, uv\)\.r \* 0\.85")
+        self.assertRegex(burn, r"max\(p, s \* weight\)")
+        # el .frag y el .qsb se compilan juntos
+        for name in ("burn.frag", "signal.frag"):
+            self.assertGreaterEqual(os.path.getmtime(os.path.join(self.SHELL, name + ".qsb")) + 5,
+                                    os.path.getmtime(os.path.join(self.SHELL, name)), name)
+
+    @unittest.skipUnless(os.path.exists("/usr/lib/qt6/bin/qsb"), "qsb no está instalado")
+    def test_burn_qsb_has_its_uniforms(self):
+        import subprocess
+        dump = subprocess.run(["/usr/lib/qt6/bin/qsb", "--dump", os.path.join(self.SHELL, "burn.frag.qsb")],
+                              capture_output=True, text=True, check=True).stdout
+        crt = self._crt_qml()
+        effect = re.search(r"id: burnPass(.*?)fragmentShader: Qt\.resolvedUrl\(\"burn\.frag\.qsb\"\)", crt, re.S)
+        self.assertIsNotNone(effect, "burnPass no usa burn.frag.qsb")
+        for u in ("res", "weight", "fresh", "bg"):
+            self.assertIn(f'"name": "{u}"', dump, f"burn.frag.qsb no trae `{u}`: recompilar")
+            self.assertRegex(effect.group(1), rf"property \w+ {u}:", f"burnPass no ata `{u}`")
+
     def test_tension_ranges_live_in_the_pace_table(self):
         # amplitudes en `crtPaceTable`, las tres filas: calm angosto, wild ancho
         qml, _ = self._tube_table()

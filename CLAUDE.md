@@ -134,10 +134,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   cada `Motion.holdMs`, con un timer único reapuntado (mismo patrón que `crtRelightTimer`).
   Nunca apaga la pantalla que `crtPredict()` ya prendió por anticipación.
 - `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`crtIntroAdvance`/`crtIntroEnd`/
-  `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, tanda 6, corrida 5) — el cambio de tema es
-  un evento: `clear` (why="track") apaga la pared, estática (`Static.qml`) y la tarjeta
-  título/artista en la pantalla del próximo foco. La tarjeta NO tiene plazo: la corta
-  `show()`. Detalle del orden y los cortes en `docs/TRAMPAS.md` ("Detalle movido").
+  `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, tanda 6, corrida 5; v2 tanda 7, corrida 6:
+  `crt.intro_card`) — el cambio de tema es un evento: `clear` (why="track") apaga la pared,
+  degauss (uniform de `crt.frag`), estática (`Static.qml`) y la tarjeta (carta de ajuste
+  `testcard` con título/artista) en la pantalla del próximo foco. La tarjeta NO tiene plazo: la
+  corta `show()`. Detalle del orden y los cortes en `docs/TRAMPAS.md` ("Detalle movido").
 - `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`, tanda 6, corrida 6) — la palabra que
   suena pulsa con la familia de entrada del set (`crt: word <i> <emphasis>`). `wholeWordsOn`
   gatea el `Flow` por palabra (4.4 puntos de CPU); el auto-drop de calidad lo apaga.
@@ -184,7 +185,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `tests/` — 633 tests, stdlib puro.
+- `tests/` — 637 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

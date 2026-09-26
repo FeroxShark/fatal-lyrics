@@ -507,3 +507,18 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
      se quedó sin memoria: la caja va tope en 240 px.
   7. **wf-recorder graba VFR:** `ffmpeg -fps_mode passthrough` y los `pts` de `ffprobe`
      (`frame=pts_time`, con coma final); sin eso ffmpeg duplica cuadros hasta la cadencia fija.
+
+## Autostart: un solo `exec-once`
+
+Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin monitores y el de
+`execs.conf` veía sus pidfiles y hacía no-op → boot roto. Queda UNO solo, en `execs.conf`, con
+`sleep 6 && cartelitos restart`. No reintroducir un segundo.
+
+## Drivers de la tensión: el `clear` del daemon y el reinicio
+
+- Con el reproductor pausado el daemon manda `clear` (why=track) a los ~15 s ("long pause:
+  dialogs cleared"): el overlay pierde `crtLines`, el Timer de `crt: tension` (que exige
+  `crtLines.length > 0`) deja de loguear y la curva se trunca. `chorus-drive.py` reenvía el
+  evento `lyrics` cada 2 s por eso. Cualquier driver que pause el player tiene que hacer lo mismo.
+- `fatal restart` deja el CRT apagado (el archivo `cartelitos-crt` se resetea): un driver que
+  reinicia para releer el log tiene que volver a hacer `fatal crt on`.

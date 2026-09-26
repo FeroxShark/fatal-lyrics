@@ -85,6 +85,10 @@ What the tube does:
 - **The phosphor takes a moment to go out**: what moves leaves a faint, short-lived trail
   (`persistence`, half-life ~77 ms at the default, gone well before a new line settles in).
   Still text shows nothing; it switches itself off if the GPU falls behind.
+- **The wall winds up towards the chorus**: the daemon tells the overlay which lines repeat
+  and which occurrence each one is; the tube's rest between hits shortens and its hits come
+  closer as the song climbs to the last time the chorus sings, then relaxes in the outro
+  (`tension`; `0` = flat, `1` = the full curve).
 - **The picture comes down a cable**: before the glass, a composite-video pass
   (`composite`) bleeds the colour sideways, rings and crawls on the edges, and at
   the top of its range turns into a worn VHS — colour lagging behind, snow at
@@ -540,6 +544,7 @@ because there is nothing to install.
 | `crt`      | `vignette`           | Darkening towards the corners                                       | `0.9`       |
 | `crt`      | `composite`          | Analog signal before the glass: colour bleeds sideways, edges ring and crawl (`0` = clean RGB, `0.5` = old TV, `1` = worn-out VHS) | `0.5` |
 | `crt`      | `persistence`        | Phosphor trail: how long moving light lingers (`0` = off, `0.35` = ~77 ms half-life, `1` = ~220 ms) | `0.35` |
+| `crt`      | `tension`            | Build-up towards the chorus: how much the rest and the hit rate follow the song's climb (`0` = flat, `1` = full curve, range per `pace`) | `1.0` |
 | `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |
 | `keys`     | `sync_back`          | ...and the ones that push it back 0.1 s                             | `"Super+Alt, Left"` |
 

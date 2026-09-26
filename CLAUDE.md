@@ -96,11 +96,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
   (`split_repeats`) y cada golpe cae en otra pantalla. `focus = "all"` vuelve al comportamiento
   viejo.
-- **La letra va en el idioma en que se canta.** Hay una cadena de proveedores
-  (`lrclib` match exacto → `lrclib` búsqueda → `NetEase`), se prueba con el título
-  original y después con el limpio, y gana el primer `ok`. De NetEase se usa `lrc`
-  y **nunca** `tlyric`, que es la traducción al chino. Nada de campos de traducción,
-  en ningún proveedor.
+- **La letra va en el idioma en que se canta.** Cadena de proveedores (`lrclib` exacto →
+  `lrclib` búsqueda → `NetEase`), título original y después el limpio, gana el primer `ok`.
+  De NetEase `lrc`, **nunca** `tlyric` (traducción al chino). Ningún campo de traducción.
 - **Casi todo lo raro tiene una razón medida.** Los gotchas caros están documentados EN EL CÓDIGO.
   Leerlos antes de "optimizar" algo que parece raro.
 
@@ -115,9 +113,14 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `crtTubeTable` (`shell.qml`, perilla `crt.tube`, corrida 2): cada tubo es una fila con las perillas
   sueltas + `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); `custom` = look de
   siempre y es el único que obedece las sueltas. `auto` (en `crtSetFor`) sortea sólo tubos de color.
-  **Estela** (corrida 3, perilla `crt.persistence`): `signalTex` es `recursive` y `signal.frag` guarda
-  `max(señal, prev*decay - piso)` (al revés en cara clara). `trailOn` exige `crtQuality >= 1`; el `dt`
-  sale de `frameSwapped`, no del reloj de animaciones (`docs/TRAMPAS.md`). Vida media = persistence × 220 ms.
+  **Estela** (corrida 3, `crt.persistence`): `signalTex` es `recursive`, `signal.frag` guarda
+  `max(señal, prev*decay - piso)`; `trailOn` exige `crtQuality >= 1`, el `dt` sale de `frameSwapped`
+  (`docs/TRAMPAS.md`). Vida media = persistence × 220 ms.
+- `crtTension`/`crtClimaxT` (`shell.qml`, `crt.tension`, corrida 4a) — `rep` `{n,k,chorus}`
+  (`lyrics.repeat_map`) viaja en `lyrics.lines[i]`, `show` y `next`. La tensión sube con `posAbs`
+  hasta `crtClimaxT` (última ocurrencia de la línea más repetida), un escalón mientras suena un
+  `chorus`, baja en el outro. Multiplica UN camino: `rest` de `Crt.qml` y `hitGap`; rango
+  `tensionMin/Max` en `crtPaceTable`. Driver: `docs/plans/chorus-drive.py`.
 - `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
   elige cuál dibuja. Las dieciséis son un `Component` cada una y las pone **UN solo `Loader`**
   (`sourceComponent` según `kind`): dos motivos no pueden estar vivos a la vez. Las que tienen
@@ -199,7 +202,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `tests/` — 605 tests, stdlib puro.
+- `tests/` — 621 tests, stdlib puro.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -231,9 +234,7 @@ un motivo CON el verso puesto. Los kinds válidos los lista `fatal crt motif --h
 `motifKinds` en `shell.qml`, no de una copia).
 
 Autostart: **UNO solo** `exec-once` en `execs.conf` con `sleep 6 && cartelitos restart`. `restart`
-deja estado limpio aunque haya quedado media instancia. (Hubo dos exec-once compitiendo: el de
-`hyprland.conf` arrancaba en t=0 sin monitores y el de `execs.conf` veía sus pidfiles y hacía
-no-op → boot roto. No reintroducir un segundo.)
+deja estado limpio aunque haya quedado media instancia. No reintroducir un segundo (`docs/TRAMPAS.md`).
 
 ## Dónde está el resto (leer sólo lo que toca)
 

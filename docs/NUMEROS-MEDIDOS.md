@@ -109,3 +109,10 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   absolutos están inflados por carga externa (la base de la corrida 0 era 27.4 / 29.8 / 24.5);
   vale la diferencia, que cae dentro del ruido y del tope de +3. Una primera corrida quedó
   inválida: las capturas bajaron `crtQuality` y la estela se apagó sola.
+- **Tanda 7, corrida 4a — tensión hacia el estribillo (`crt.tension` 1.0, `docs/plans/chorus-drive.py`).**
+  CPU: A/B intercalado (tension 0 contra 1, mismo momento, con estribillo sintético x3): +1.4
+  puntos, dentro del ruido y del tope de +3. Carga externa fuerte durante la medición (load
+  ~1.7–1.9), así que los absolutos no valen, sólo la diferencia. Curva (`crt: tension` cada 5 s):
+  sube con `posAbs` hasta `crtClimaxT` (t0 de la última ocurrencia de la línea más repetida),
+  escalón mientras suena el `chorus`, baja ×0.3 en el outro; con `crt.tension = 0` `mult` vale 1.
+  Rangos de `crtTensionMult` (pace): calm 0.92–1.12, normal 0.80–1.30, wild 0.60–1.70.

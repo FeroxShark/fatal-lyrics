@@ -1265,7 +1265,13 @@ PanelWindow {
     // de los de prueba — redibujando tres pantallas enteras con shader para un efecto
     // que es ruido — plata tirada. Va a 60, que ya no se distingue, y la pantalla
     // sin letra a 20. Ahí está la mayor parte del ahorro de tener tres tubos.
+    // El tope es de verdad (corrida 8): el `FrameAnimation` sigue al refresh, pero `tubeTime`
+    // sólo avanza cuando juntó `tubeStep` de tiempo real (1 ms menos que un cuadro a 60 Hz, para
+    // que un monitor de 60 con jitter no pierda cuadros): 120 Hz → 60, 144 → 48, 60 → 60.
+    // Avanza por el tiempo REAL juntado, no por un paso fijo: el reloj no se atrasa.
     property real tubeTime: 0
+    property real tubeAccum: 0
+    readonly property real tubeStep: 1 / 60 - 0.001
     // ---- IOWN (T3.B5): la palabra se ancla, no se desliza
     // En qué pantalla está la palabra ahora mismo, refrescado por cuadro; y el
     // "punto → raya → palabra" con el que entra en cada una, que es el mismo
@@ -1316,7 +1322,11 @@ PanelWindow {
     FrameAnimation {
         running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep
         onTriggered: {
-            crt.tubeTime += frameTime;
+            crt.tubeAccum += frameTime;
+            if (crt.tubeAccum >= crt.tubeStep) {
+                crt.tubeTime += crt.tubeAccum;
+                crt.tubeAccum = 0;
+            }
             // el IOWN se mueve por cuadro: con el muestreo de 80 ms del reloj
             // del contenido, una palabra cruzando tres pantallas va a saltos.
             // songPos() extrapola con el reloj local, así que preguntarle cada

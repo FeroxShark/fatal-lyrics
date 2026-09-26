@@ -659,3 +659,31 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   `fatal restart` no lo mata.
 - Cómo verlo: `hyprctl layers | grep cartelitos-crt` con el CRT prendido: debe haber UN solo pid por pantalla.
   Se cerró con `kill <pid>` del sobrante.
+
+## Procesos huérfanos: dos overlays / dos daemons a la vez (tanda 7, corrida 7b, paso 0)
+
+- **Síntoma:** medidas de CPU y capturas que no cierran, NO SIGNAL o un flag del CRT que "se pisa solo".
+  El flag `cartelitos-crt` y el socket son UNO por sesión: cada overlay o daemon extra pelea por ellos.
+- **Quiénes eran (2026-09-26):** dos `/usr/bin/quickshell` sin args (ppid 1, cwd en el repo) y dos
+  `cartelitos.py`, uno de un worktree `/tmp/wt` ya borrado (`fatal on` desde un worktree levanta ESA copia:
+  `BASE` sale de dónde vive el script). El `fatal restart` no los mataba: sólo conoce lo que está en el pidfile.
+- **El respawn del crash handler de Quickshell SÍ aplica (0.3.1, `strings /usr/bin/quickshell`):** tras un
+  SIGSEGV el proceso caído lanza un *reporter* (un `quickshell` sin args que abre el diálogo "Quickshell has
+  crashed" y queda con ppid 1 hasta que alguien lo cierre) y, si el crash fue a más de 10 s de arrancar
+  ("Quickshell has been restarted."), relanza el shell. El relanzado tiene otro PID que el de `qs.pid`, así que
+  `fatal status` dice HALF/OFF y un `fatal restart` levantaba uno SEGUNDO. Los crashes de la tanda 7 (ver
+  quemado y calidad más arriba) dejaron un reporter y un relanzado cada uno. Detalle de cada caída en
+  `~/.cache/quickshell/crashes/<id>/`; `QS_DISABLE_CRASH_HANDLER=1` apagaría el respawn pero también el
+  `report.txt`/`log.qslog.log` que usamos para diagnosticar: no se apagó.
+- **Arreglo (guardia de instancia única):** el daemon toma un `flock` sobre `$XDG_RUNTIME_DIR/cartelitos/
+  daemon.lock` (`util.acquire_instance_lock`, el segundo sale con "already running (pid N)"); el overlay lo
+  toma `bin/fatal` (`qs.lock`, fd 9) ANTES de escribir el pidfile y lo deja abierto a través del exec. Los hijos
+  de qs lo heredan a propósito: el relanzado y el reporter del crash handler cuentan como instancia.
+  `fatal on/restart` con un lock ajeno tomado rechaza con mensaje y NO pisa el pidfile; `fatal stop` baja a
+  todo el que sostenga el lock (`fuser -k`, TERM → KILL a los 2 s), esté o no en el pidfile. El kernel suelta el
+  lock al morir el proceso: nunca hay lock viejo que limpiar. Tests: `tests/test_guard.py`.
+- **Drivers:** ninguno de `docs/plans/*.py` levanta su propio daemon u overlay (todos hablan con `fatal`);
+  los helpers que sí lanzan (`aud-feed.py`, `pw-play`) se bajan en un `finally`. Si un worker necesita una
+  instancia aparte, tiene que ser con otro `XDG_RUNTIME_DIR` (otro lock, otro socket, otro flag).
+- **Ver a mano:** `pgrep -af 'quickshell|cartelitos.py'` — tiene que haber un overlay y un daemon (más, a lo
+  sumo, `/usr/bin/quickshell` de otras cosas de Ferox que NO abren `shell.qml`).

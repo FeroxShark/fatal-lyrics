@@ -1817,7 +1817,8 @@ ShellRoot {
         running: root.crtOn && root.musicLive && root.crtLines.length > 0
         onTriggered: console.log("crt: tension " + root.crtTension.toFixed(2)
             + " mult " + root.crtTensionMult.toFixed(2)
-            + " climax " + root.crtClimaxT.toFixed(1))
+            + " climax " + root.crtClimaxT.toFixed(1)
+            + " pos " + root.posAbs.toFixed(0))
     }
 
     // la primera palabra de la línea que viene ("" si no hay próxima)

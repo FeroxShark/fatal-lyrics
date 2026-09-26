@@ -370,6 +370,107 @@ def wave_points(left, right, peak):
     return block(left), block(right)
 
 
+# ---- lo sucio del sonido: planitud espectral local (tanda 7, corrida 7b)
+# Ruido y distorsión reparten la energía pareja entre las frecuencias; una voz
+# limpia o un piano la juntan en picos. La medida es spectral flatness =
+# media geométrica / media aritmética del espectro de potencia (1 = plano/ruido,
+# ~0 = tonal). Ojo con dos trampas que la hacen mentir sobre música real:
+#  - el espectro de la música está inclinado (~1/f): flatness sobre TODO el
+#    espectro da bajo aun en un tema saturado. Por eso se mide LOCAL, en bandas de
+#    DIRT_GROUP bins, donde la inclinación no cuenta, y se promedian las bandas.
+#    Con bandas de 8 bins (250 Hz) una voz limpia daba 0.34 de mediana: los picos
+#    de los armónicos (Hann ensancha cada uno a 4 bins) no se resuelven. Medido
+#    con voz TTS + ruido: 32 bins y -20 dB separan limpio (0.06) de 10 dB SNR (0.47).
+#  - una banda casi muda parece "plana" (es puro piso de cuantización): sólo
+#    cuentan las bandas dentro de DIRT_BAND_DB del pico, y silencio total es 0.
+DIRT_LO_HZ = 125.0        # debajo de esto manda el bombo, no el timbre
+DIRT_HI_HZ = 6000.0
+DIRT_GROUP = 32           # bins por banda local (1 kHz con bloques de 512 a 16 kHz)
+DIRT_BAND_DB = 20.0       # una banda cuenta si está a menos de esto del pico de bandas
+DIRT_FLOOR = 1e-3         # piso relativo por bin: un bin en 0 no puede hundir la media geométrica
+DIRT_FLAT_LO = 0.10       # flatness que ya es "limpio" (0): seno ~0.02, voz limpia (TTS) mediana ~0.06
+DIRT_FLAT_HI = 0.45       # flatness que ya es "sucio" (1): ruido blanco ~0.5; la voz + ruido a 10 dB SNR ~0.47
+DIRT_GATE_LO = 0.003      # rms (0..1) debajo del cual no hay señal que juzgar: silencio no es sucio
+DIRT_GATE_HI = 0.02       # ...y desde acá pesa entero (misma vara que QUIET_LEVEL)
+DIRT_RISE_S = 0.5         # EMA: sube rápido (en 0.5 s) y baja lento (1.5 s): la
+DIRT_FALL_S = 1.5         # estática aparece con el golpe de ruido y se va sin titilar
+DIRT_MAX_DT = 0.25        # un hueco más largo que esto (captura caída) no cuenta como tiempo
+
+_FFT_TABLES = {}
+
+
+def _fft_tables(n):
+    """Bit-reversal, twiddles y ventana de Hann para un FFT de n puntos (potencia de 2)."""
+    t = _FFT_TABLES.get(n)
+    if t is None:
+        bits = n.bit_length() - 1
+        rev = [int(format(i, "0%db" % bits)[::-1], 2) for i in range(n)]
+        tw = [complex(math.cos(-2.0 * math.pi * k / n), math.sin(-2.0 * math.pi * k / n))
+              for k in range(n // 2)]
+        win = [0.5 - 0.5 * math.cos(2.0 * math.pi * i / max(n - 1, 1)) for i in range(n)]
+        t = (rev, tw, win)
+        _FFT_TABLES[n] = t
+    return t
+
+
+def power_spectrum(samples):
+    """Espectro de potencia (bins 0..n/2) de las primeras 2^k muestras, con Hann.
+
+    FFT radix-2 en Python pelado: ~0.36 ms para 512 puntos, ~1% de un núcleo a
+    31 bloques por segundo."""
+    n = 1 << (len(samples).bit_length() - 1)
+    if n < 16:
+        return []
+    rev, tw, win = _fft_tables(n)
+    a = [complex(samples[r] * win[r]) for r in rev]
+    size = 2
+    while size <= n:
+        half, step = size // 2, n // size
+        for s in range(0, n, size):
+            for k in range(half):
+                u = a[s + k]
+                v = a[s + k + half] * tw[k * step]
+                a[s + k] = u + v
+                a[s + k + half] = u - v
+        size *= 2
+    return [abs(a[k]) ** 2 for k in range(n // 2 + 1)]
+
+
+def spectral_flatness_local(samples, rate):
+    """Planitud espectral local promedio, 0..1 (ver arriba). 0.0 si no hay banda que medir."""
+    spec = power_spectrum(samples)
+    if not spec:
+        return 0.0
+    n = (len(spec) - 1) * 2
+    lo = max(1, int(DIRT_LO_HZ * n / rate))
+    hi = min(len(spec) - 1, int(DIRT_HI_HZ * n / rate))
+    bands = []
+    for b in range(lo, hi - DIRT_GROUP + 1, DIRT_GROUP):
+        seg = spec[b:b + DIRT_GROUP]
+        bands.append((sum(seg) / DIRT_GROUP, seg))
+    if not bands:
+        return 0.0
+    peak = max(am for am, _ in bands)
+    if peak <= 1e-12:
+        return 0.0
+    keep = peak * 10.0 ** (-DIRT_BAND_DB / 10.0)
+    flats = []
+    for am, seg in bands:
+        if am < keep:
+            continue
+        floor = am * DIRT_FLOOR
+        gm = math.exp(sum(math.log(p + floor) for p in seg) / DIRT_GROUP)
+        flats.append(gm / (am + floor))
+    return sum(flats) / len(flats)
+
+
+def dirt_from(flat, rms):
+    """Planitud + nivel absoluto -> `dirt` instantáneo 0..1 (antes de suavizar)."""
+    x = (flat - DIRT_FLAT_LO) / (DIRT_FLAT_HI - DIRT_FLAT_LO)
+    gate = (rms - DIRT_GATE_LO) / (DIRT_GATE_HI - DIRT_GATE_LO)
+    return min(max(x, 0.0), 1.0) * min(max(gate, 0.0), 1.0)
+
+
 class AudioAnalyzer:
     """PCM crudo → nivel, bandas, centroide (proxy del tono) y golpes.
 
@@ -383,6 +484,16 @@ class AudioAnalyzer:
         self.peak = LEVEL_PEAK_FLOOR
         self.slow = 0.0
         self.last_beat = 0.0
+        self.dirt = 0.0
+        self.dirt_at = None
+
+    def _smooth_dirt(self, raw, now):
+        """EMA asimétrica en el tiempo real (no por bloque): sube con tau 0.5 s, baja con 1.5 s."""
+        dt = 0.0 if self.dirt_at is None else min(max(now - self.dirt_at, 0.0), DIRT_MAX_DT)
+        self.dirt_at = now
+        tau = DIRT_RISE_S if raw > self.dirt else DIRT_FALL_S
+        self.dirt += (raw - self.dirt) * (1.0 - math.exp(-dt / tau))
+        return self.dirt
 
     def feed(self, pcm, now):
         """pcm: bytes s16 mono. Devuelve el dict del evento, o None si vino vacío."""
@@ -440,6 +551,7 @@ class AudioAnalyzer:
             "c": round(centroid, 3),
             "b": 1 if beat else 0,
             "h": 1 if hard else 0,
+            "d": round(self._smooth_dirt(dirt_from(spectral_flatness_local(samples, self.rate), rms), now), 3),
         }
 
 

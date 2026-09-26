@@ -1810,14 +1810,14 @@ ShellRoot {
         return Math.max(0, Math.min(base * (1 - crtTensionStep) + step, 1))
             * (1 - crtTensionOutroDrop * out);
     }
-    // ¿el tema está en su outro? Lo usa el quemado del estribillo (`Crt.qml`), que se
-    // desvanece ahí; mismo umbral que la tensión
-    readonly property bool crtInOutro: posLen > 0 && posAbs / posLen >= crtOutroAt
-    // 1 mientras el quemado está a pleno, 0 en el outro. VIVE ACÁ y no en cada `Crt.qml`:
-    // un `Behavior` por ventana, con el quemado armado, hacía caer a Quickshell al apagar
-    // el tubo (ventana destruida con la animación viva; docs/TRAMPAS.md)
-    property real crtBurnFade: crtInOutro ? 0 : 1
-    Behavior on crtBurnFade { NumberAnimation { duration: Motion.holdMs } }
+    // El quemado del estribillo (`Crt.qml`) se desvanece en el outro, mismo umbral que la tensión:
+    // 1 mientras está a pleno, baja a 0 a lo largo del outro (la ventana entre
+    // `crtOutroAt` y el final). SIN `Behavior`: `posAbs` ya llega a 1 Hz y son ~15 pasos de
+    // <1 % de luminancia. Con una animación (una por ventana, o una sola en el root) el
+    // quemado armado tiraba Quickshell al apagar el tubo: `ShaderEffect` recibía el cambio
+    // de `burnL` con la ventana ya destruida (docs/TRAMPAS.md)
+    readonly property real crtBurnFade: posLen > 0
+        ? 1 - Math.max(0, Math.min((posAbs / posLen - crtOutroAt) / (1 - crtOutroAt), 1)) : 1
     // Estado, no animación: `Motion.holdMs` sólo esconde el escalón de 1 Hz
     property real crtTension: crtTensionRaw
     Behavior on crtTension { NumberAnimation { duration: Motion.holdMs } }

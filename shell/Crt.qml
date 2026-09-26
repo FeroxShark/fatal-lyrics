@@ -2298,8 +2298,8 @@ PanelWindow {
     // (`burn.frag`); cuán visible se ve (tint, perilla, techo de contraste) lo
     // decide `signal.frag`, así que la perilla se mueve en vivo.
     property bool burnHave: false
-    // se desvanece en el outro (`ctl.crtBurnFade`, `Motion.holdMs`): es lo más lento que tiene
-    // el tubo, y una marca que se va no debe llamar la atención al irse
+    // se desvanece en el outro (`ctl.crtBurnFade`, sin animación): una marca que se va
+    // no debe llamar la atención al irse
     // el peso de la ocurrencia k: la 2da marca poco, y llega al tope en la 4ta.
     // (Nunca hay quemado con k = 1: `burnSnap()` sólo se llama desde k >= 2.)
     function burnWeight(k) {

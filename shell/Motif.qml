@@ -18,7 +18,8 @@ Item {
     id: motif
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
-    // | static | textsea | eyes | ekg | rorschach | plasma | tunnel | none
+    // | static | textsea | eyes | ekg | rorschach | plasma | tunnel
+    // | swarm | splitflap | maze | pipes | defrag | mystify | vector | harmonograph | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -46,6 +47,7 @@ Item {
     // viva, pero no pega un salto en cada bombo
     property real beatAmt: 1
     property real clock: 0         // reloj del tubo, en segundos
+    property color bg: "#04162e" // la cara del tubo (los motivos de loop pintan paletas y paredes con ella)
     property bool spinning: true   // false = quieto (pantalla apagada)
     // el tubo apagado (tanda 6, corrida 0): a diferencia de `spinning`, esto
     // DESACTIVA el `Loader` de abajo entero. Un dibujo con física propia
@@ -230,6 +232,14 @@ Item {
             : motif.kind === "tunnel" ? tunnelC
             : motif.kind === "static" ? staticC
             : motif.kind === "textsea" ? textseaC
+            : motif.kind === "swarm" ? swarmC
+            : motif.kind === "splitflap" ? splitflapC
+            : motif.kind === "maze" ? mazeC
+            : motif.kind === "pipes" ? pipesC
+            : motif.kind === "defrag" ? defragC
+            : motif.kind === "mystify" ? mystifyC
+            : motif.kind === "vector" ? vectorC
+            : motif.kind === "harmonograph" ? harmonographC
             : null
     }
 
@@ -1154,6 +1164,269 @@ Item {
             beatAmt: motif.beatAmt
             energy: motif.energy * (1 + 0.5 * motif.surge)
             amp: motif.waterAmp
+            running: motif.spinning
+        }
+    }
+
+    // ------------------------------------------------------ los de loop (15 s)
+    // Ocho motivos que salieron de `previews/crt-motifs/` (ahí está el render
+    // offscreen de cada uno por el vidrio real). Heredan de `MotifBase.qml`:
+    // son función pura de `clock` (lo que deriva es periódico en 15 s) y lo
+    // que avanza a los saltos lo hace por `tick`/`kick`, nunca por velocidad.
+    // Todos reciben lo mismo; cada uno lee lo suyo.
+    Component {
+        id: swarmC
+
+        Swarm {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: splitflapC
+
+        Splitflap {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: mazeC
+
+        Maze {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: pipesC
+
+        Pipes {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: defragC
+
+        Defrag {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: mystifyC
+
+        Mystify {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: vectorC
+
+        Vector {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
+            running: motif.spinning
+        }
+    }
+    Component {
+        id: harmonographC
+
+        Harmonograph {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            nextWord: motif.nextWord
+            lineNo: motif.lineNo
+            lines: motif.lines
+            linesSynced: motif.linesSynced
+            fontFamily: motif.fontFamily
             running: motif.spinning
         }
     }

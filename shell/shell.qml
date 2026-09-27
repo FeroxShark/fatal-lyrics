@@ -2056,12 +2056,14 @@ ShellRoot {
     // hasta que cambie el tema. `crt.set = "off"` (crtSetOn === false) apaga
     // esto entero y vuelve al pool parejo de siempre.
     //
-    // Los 16 motivos en tres grupos, por temperamento (la corrida 3 les
+    // Los 24 motivos en tres grupos, por temperamento (la corrida 3 les
     // cambia las cuotas según el mood; sin mood: 2 calm + 1 hot + 1 neutral).
     readonly property var motifGroups: ({
-        calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach"],
-        hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar"],
-        neutral: ["textsea", "eyes", "testcard", "rain"],
+        calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach",
+                  "harmonograph", "splitflap"],
+        hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar",
+                  "pipes", "vector", "mystify", "maze"],
+        neutral: ["textsea", "eyes", "testcard", "rain", "swarm", "defrag"],
     })
     // Familias de entradas para cuando hay set puesto (el wiring adentro de
     // `crtEntriesFor`/`crtPickEntry` es un paso aparte; acá sólo se define
@@ -2284,7 +2286,7 @@ ShellRoot {
     // cada pantalla saca su estilo de un mazo de la familia sin reemplazo en
     // vez de sorteo con reposición — así 5 líneas seguidas en la misma
     // pantalla no repiten la misma entrada 3 veces. Se vacía en el `clear`
-    // de tema (misma condición que `crtMotifBag`, más abajo en el handler).
+    // de tema (la misma condición que vacía `crtMotifUsed`, más abajo en el handler).
     property var crtEntryBag: ({})
     property int crtEntryRoll: 0
 
@@ -2410,7 +2412,10 @@ ShellRoot {
     readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
                                        "rain", "ocean", "pond", "dunes", "static",
                                        "textsea", "eyes", "ekg",
-                                       "rorschach", "plasma", "tunnel"]
+                                       "rorschach", "plasma", "tunnel",
+                                       // los de loop de 15 s (previews/crt-motifs)
+                                       "swarm", "splitflap", "maze", "pipes",
+                                       "defrag", "mystify", "vector", "harmonograph"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca
@@ -2466,27 +2471,9 @@ ShellRoot {
     // cámara sola cada 25 s — o sea justo "cambia sin razón". Se siembra UNA
     // vez, al asignar.
     property var crtMotifSeeds: []
-    property int crtMotifRoll: 0
-    // Mazo barajado del set del tema: se agota antes de repetir kind (tanda 6,
-    // corrida 1). Se rellena solo cuando queda vacío (`crtMotifDraw`) o cuando
-    // cambia el tema (handler de `clear`, `why === "track"` o ausente — misma
-    // condición que resiembra `crtTrackSeed`).
-    property var crtMotifBag: []
-
-    // Baraja `motifPool(crtSet.motifs)` con Fisher-Yates determinístico
-    // (`crtHash`, nunca `Math.random`). `crtTrackSeed` en la semilla: dos
-    // temas con el mismo set no barajan igual si el roll ya avanzó distinto.
-    function crtMotifBagFill() {
-        const bag = motifPool(crtSet.motifs).slice();
-        for (let k = bag.length - 1; k > 0; k--) {
-            crtMotifRoll++;
-            const j = Math.floor(crtHash(crtTrackSeed * 131 + crtMotifRoll) * (k + 1));
-            const tmp = bag[k]; bag[k] = bag[j]; bag[j] = tmp;
-        }
-        crtMotifBag = bag;
-        console.log("crt: bag refill [" + bag.join(",") + "]");
-    }
-
+    // arranca en un número al azar: si no, el primer tema después de cada
+    // restart barajaba siempre el mismo mazo
+    property int crtMotifRoll: Math.floor(Math.random() * 100000)
     // ---- forzar un dibujo (`fatal crt motif <kind> [--screen ...]`)
     //
     // Modo TEST y nada más: pisa el pool, el hold, el filtro de validez y la
@@ -2556,53 +2543,121 @@ ShellRoot {
         return crtMotifKinds[i] || "eye";
     }
 
+    // ---- qué dibujo va con lo que suena (Ferox 2026-09-27: "que el cambio de
+    // las animaciones o la elección sea basado en lo que esté sonando")
+    //
+    // Cada motivo tiene un perfil: para qué energía (0 quieto .. 1 salvaje),
+    // qué brillo de sonido (0 grave/oscuro .. 1 agudo/brillante) y qué tempo
+    // (0 lento .. 1 rápido) sirve. El sorteo pesa cada uno por lo cerca que
+    // queda de lo que suena AHORA (`crtSoundNow`) — no es "el más parecido
+    // gana": es un sorteo con los dados cargados, así que dos escuchas del
+    // mismo tema no dan la misma película. Lo que ya salió en el tema pesa
+    // menos (`crtMotifUsed`), y el contraste del tema (`crtMood.contrast`,
+    // del mapa de energía de la escucha anterior) dice cuán fino hay que
+    // separar: en un tema que explota, la estrofa y el drop tienen que verse
+    // distintos; en uno parejo, se abre el abanico para que haya variedad.
+    readonly property var motifFit: ({
+        eye:          { e: 0.30, b: 0.45, t: 0.30 },
+        scope:        { e: 0.60, b: 0.75, t: 0.60 },
+        radar:        { e: 0.40, b: 0.40, t: 0.45 },
+        stars:        { e: 0.70, b: 0.65, t: 0.85 },
+        testcard:     { e: 0.45, b: 0.60, t: 0.40 },
+        rain:         { e: 0.35, b: 0.55, t: 0.45 },
+        ocean:        { e: 0.15, b: 0.25, t: 0.20 },
+        pond:         { e: 0.15, b: 0.40, t: 0.25 },
+        dunes:        { e: 0.20, b: 0.30, t: 0.20 },
+        static:       { e: 0.85, b: 0.95, t: 0.75 },
+        textsea:      { e: 0.40, b: 0.50, t: 0.45 },
+        eyes:         { e: 0.40, b: 0.50, t: 0.40 },
+        ekg:          { e: 0.55, b: 0.50, t: 0.65 },
+        rorschach:    { e: 0.20, b: 0.30, t: 0.15 },
+        plasma:       { e: 0.65, b: 0.55, t: 0.55 },
+        tunnel:       { e: 0.90, b: 0.60, t: 0.90 },
+        swarm:        { e: 0.60, b: 0.70, t: 0.70 },
+        splitflap:    { e: 0.30, b: 0.60, t: 0.40 },
+        maze:         { e: 0.55, b: 0.40, t: 0.60 },
+        pipes:        { e: 0.65, b: 0.50, t: 0.60 },
+        defrag:       { e: 0.50, b: 0.65, t: 0.70 },
+        mystify:      { e: 0.70, b: 0.70, t: 0.60 },
+        vector:       { e: 0.80, b: 0.80, t: 0.80 },
+        harmonograph: { e: 0.20, b: 0.50, t: 0.25 },
+    })
+    // cuántas veces salió cada kind en este tema (se vacía con el tema nuevo)
+    property var crtMotifUsed: ({})
+    // el último cambio de UNA pantalla: los cambios sueltos van de a uno y con
+    // aire entre ellos, así nunca se lee como un reseteo de la pared
+    property double crtMotifLastOneAt: 0
+
+    // Lo que suena ahora, en las tres escalas del perfil. La energía mezcla la
+    // parte del tema (lo que decide el daemon contra el tema entero), el
+    // volumen de los últimos ~2 s y el tema entero (mood); el brillo, el
+    // centroide promediado (~2.5 s) y el del tema; el tempo, el compás.
+    function crtSoundNow() {
+        const cl = x => Math.max(0, Math.min(1, x));
+        const m = crtMoodLocked || crtMood;
+        const eSec = audSection === "quiet" ? 0.1 : audSection === "build" ? 0.72
+            : audSection === "drop" ? 0.95 : 0.45;
+        const e = 0.55 * eSec + 0.3 * cl(audLevel2s / 0.8) + 0.15 * (m ? m.energy : 0.5);
+        // centroide: 0.12 (muy oscuro) .. 0.40 (muy brillante), medido sobre
+        // los 343 temas del cache (mediana por tema 0.24)
+        const bNorm = c => cl((c - 0.12) / 0.28);
+        const b = 0.7 * bNorm(pitchAvg) + 0.3 * (m && m.known ? bNorm(m.bright) : 0.5);
+        const t = bpm > 0 ? cl((bpm - 70) / 110) : 0.5;
+        return { e: e, b: b, t: t, contrast: m && m.contrast !== undefined ? m.contrast : 0.5 };
+    }
+
+    function crtMotifWeight(kind, snd) {
+        const f = motifFit[kind];
+        if (!f)
+            return 0.1;
+        const se = 0.2 + 0.2 * (1 - snd.contrast);
+        const d = Math.pow((f.e - snd.e) / se, 2) + Math.pow((f.b - snd.b) / 0.45, 2)
+            + Math.pow((f.t - snd.t) / 0.4, 2);
+        const used = crtMotifUsed[kind] || 0;
+        // exp(-d) y no exp(-d/2): con 24 motivos el favorito quedaba en 11–15 %
+        // (medido con pace-count), casi parejo; así pesan más los que encajan
+        // y el resto (piso 0.01) sigue pudiendo salir
+        return (Math.exp(-d) + 0.01) / (1 + 1.5 * used);
+    }
+
     // El sorteo de UNA pantalla, excluyendo lo que están mostrando las otras
     // (la invariante de siempre: dos pantallas apagadas nunca muestran el
     // mismo dibujo) y lo que mostraba ella misma. Devuelve `{kind, src}`:
     // `src` es de dónde salió el pick (`crt: motif` lo loguea en
-    // `crtMotifRefresh`, tanda 6 corrida 2 paso 0).
+    // `crtMotifRefresh`). Sin set (`crt.set = "off"`) el sorteo es parejo,
+    // como siempre.
     function crtMotifDraw(i, taken) {
-        const calm = audSection === "quiet";
-        // tanda 6, corrida 1: el pool chico de `quiet` (la sección decide, no
-        // el set) y el camino sin set (`crt.set = "off"`) siguen con reemplazo,
-        // como siempre. La palabra clave (motifAllowed más abajo, en
-        // crtMotifRefresh) sigue pudiendo traer un kind de afuera del set.
-        if (calm || !crtSet) {
-            const base = motifPool(calm ? ["eye", "testcard", "scope", "pond"] : motifKinds);
-            const free = base.filter(k => taken.indexOf(k) < 0);
-            const pool = free.length > 0 ? free : base;
-            crtMotifRoll++;
-            return { kind: pool[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * pool.length)],
-                      src: "pool" };
-        }
-        // shuffle-bag: con el set puesto el sorteo es SIN reemplazo, un mazo
-        // que se agota antes de repetir kind.
-        if (crtMotifBag.length === 0)
-            crtMotifBagFill();
-        const bag = crtMotifBag.slice();
-        const idx = bag.findIndex(k => taken.indexOf(k) < 0);
-        if (idx < 0) {
-            // el mazo entero está tomado (4 kinds, 3 pantallas + la propia):
-            // se admite repetir con el set puesto antes de salir de él
-            const base = motifPool(crtSet.motifs);
-            if (base.length > 0)
-                return { kind: base[0], src: "set" };
-            // defensivo: si ni eso hay, el pool entero de siempre
-            const full = motifPool(motifKinds);
-            crtMotifRoll++;
-            return { kind: full[Math.floor(crtHash(crtMotifRoll * 17 + i * 11 + 3) * full.length)],
-                      src: "pool" };
-        }
-        const pick = bag[idx];
-        bag.splice(idx, 1);
-        crtMotifBag = bag;
-        return { kind: pick, src: "bag" };
+        const base = motifPool(motifKinds);
+        const free = base.filter(k => taken.indexOf(k) < 0);
+        const pool = free.length > 0 ? free : base;
+        crtMotifRoll++;
+        const r = crtHash(crtMotifRoll * 17 + i * 11 + 3);
+        if (!crtSet)
+            return { kind: pool[Math.floor(r * pool.length)], src: "pool" };
+        const snd = crtSoundNow();
+        const w = pool.map(k => crtMotifWeight(k, snd));
+        let tot = 0;
+        for (const x of w) tot += x;
+        let pick = r * tot, k = 0;
+        while (k < pool.length - 1 && pick > w[k]) { pick -= w[k]; k++; }
+        const order = pool.map((kk, j) => [kk, w[j] / tot]).sort((u, v) => v[1] - u[1]).slice(0, 4);
+        console.log("crt: fit e=" + snd.e.toFixed(2) + " b=" + snd.b.toFixed(2) + " t=" + snd.t.toFixed(2)
+                    + " c=" + snd.contrast.toFixed(2) + " top=" + order.map(o => o[0] + ":" + o[1].toFixed(2)).join(",")
+                    + " -> " + pool[k]);
+        return { kind: pool[k], src: "fit" };
     }
 
-    // Repartir de nuevo lo que VENCIÓ, y nada más. `force` es el cambio de
-    // escena (tema nuevo, drop): ahí se reparte todo junto, que es lo que hace
-    // que el corte se lea como un corte y no como tres pantallas sueltas.
-    function crtMotifRefresh(force) {
+    // Repartir de nuevo. Tres maneras (Ferox 2026-09-27: "juntas en el drop,
+    // de a una el resto"):
+    //   · `force`: el cambio de escena (tema nuevo, drop) — todas juntas, que
+    //     es lo que hace que el corte se lea como un corte
+    //   · `one`: cambió la parte del tema — UNA pantalla, la que lleva más
+    //     tiempo con su dibujo (si ya tuvo un rato para verse)
+    //   · ninguna: el reloj — la que venció su hold, de a una por vez y con
+    //     aire entre cambios. El hold se acorta cuanto más movido suena.
+    // El filtro de validez (un dibujo que ya no tiene con qué dibujarse)
+    // cambia en el acto, siempre.
+    function crtMotifRefresh(force, one) {
         const n = activeCrtScreens.length;
         if (n <= 0)
             return;
@@ -2611,7 +2666,11 @@ ShellRoot {
         let seeds = crtMotifSeeds.slice(0, n);
         while (kinds.length < n) { kinds.push(""); since.push(0); seeds.push(0); }
         const now = Date.now();
-        const hold = pace.motifHoldMs;
+        // `wild` no escala el hold con la energía (ya es de 3 s); lo que sí
+        // cambió ahí también: de a una pantalla por vez y una por cambio de parte
+        const hold = crtPace === "wild" ? pace.motifHoldMs
+            : pace.motifHoldMs * (1.35 - 0.7 * crtSoundNow().e);
+        const gap = Math.min(4000, hold / 3);
         // la palabra clave se lleva UNA sola pantalla, no todas — y sólo si esa
         // pantalla ya cumplió su hold: si no, cualquier letra que hable de ojos
         // vuelve a ser un cambio de dibujo por verso
@@ -2625,21 +2684,27 @@ ShellRoot {
                         && motifAllowed(kind))
                     wanted = kind;
             }
+        // una pantalla apagada (tanda 6, corrida 0) no dibuja nada: no gasta
+        // su hold ni reserva el kind que tenía. Un raro en curso (corrida 7)
+        // tampoco: `crtMotifFor` ya la pisa (testcard) o no la muestra
+        const live = i => crtDark[i] !== true && crtRare.screen !== i;
+        const valid = i => kinds[i] !== "" && motifAllowed(kinds[i])
+            && (crtWater || (kinds[i] !== "ocean" && kinds[i] !== "pond"));
+        // la única que cambia sin `force`: la más vieja entre las candidatas
+        let single = -1;
+        if (!force) {
+            const oldEnough = one ? Math.min(3000, gap) : hold;
+            const spaced = one || now - crtMotifLastOneAt >= gap;
+            for (let i = 0; i < n && spaced; i++)
+                if (live(i) && valid(i) && now - since[i] >= oldEnough
+                        && (single < 0 || since[i] < since[single]))
+                    single = i;
+        }
         let changed = false;
         for (let i = 0; i < n; i++) {
-            // una pantalla apagada (tanda 6, corrida 0) no dibuja nada: no
-            // gasta su hold (nunca "vence" mientras esté oscura) ni reserva
-            // el kind que tenía para las demás. Un raro en curso (corrida 7)
-            // tampoco: `crtMotifFor` ya la pisa (testcard) o no la muestra
-            if (crtDark[i] === true || crtRare.screen === i)
+            if (!live(i))
                 continue;
-            // el filtro de validez SÍ es inmediato: un dibujo que ya no tiene
-            // con qué dibujarse (los ojos sin letra, la marea sin lyrics, el
-            // agua apagada) se cambia en esa pantalla y no toca a las otras
-            const valid = kinds[i] !== "" && motifAllowed(kinds[i])
-                && (crtWater || (kinds[i] !== "ocean" && kinds[i] !== "pond"));
-            const expired = force || !valid || now - since[i] >= hold;
-            if (!expired)
+            if (!(force || !valid(i) || i === single))
                 continue;
             // las que no se tocan también reservan su dibujo (salvo las
             // apagadas: ver arriba)
@@ -2659,7 +2724,13 @@ ShellRoot {
             since[i] = now;
             seeds[i] = crtHash(crtMotifRoll * 31 + i * 7 + 13);
             changed = true;
-            console.log("crt: motif screen=" + i + " kind=" + pick + " src=" + src);
+            const used = Object.assign({}, crtMotifUsed);
+            used[pick] = (used[pick] || 0) + 1;
+            crtMotifUsed = used;
+            if (!force)
+                crtMotifLastOneAt = now;
+            console.log("crt: motif screen=" + i + " kind=" + pick + " src=" + src
+                        + (force ? " (all)" : one ? " (section)" : ""));
         }
         // arrays nuevos, no mutados: si no, el binding de Crt.qml no se entera
         if (changed || crtMotifKinds.length !== n) {
@@ -3318,10 +3389,13 @@ ShellRoot {
                             // `docs/plans/` la repiten, y un drop repetido cada
                             // pocos segundos daría vuelta la pared entera con
                             // puente y todo.
+                            // Ferox 2026-09-27: el cambio de parte cambia UNA
+                            // pantalla; el drop, todas juntas
                             if (root.motifPreCued)
                                 root.motifPreCued = false;
                             else if (!root.crtIntroOn)
-                                root.crtMotifRefresh(ev.kind === "drop" && secMoved);
+                                root.crtMotifRefresh(ev.kind === "drop" && secMoved,
+                                                     ev.kind !== "drop" && secMoved);
                         } else if (ev.cmd === "bpm") {
                             root.bpm = ev.v;
                             root.bpmConf = ev.conf;
@@ -3398,6 +3472,7 @@ ShellRoot {
                             root.crtMood = { valence: ev.valence || 0,
                                 energy: ev.energy !== undefined ? ev.energy : 0.5,
                                 bright: ev.bright !== undefined ? ev.bright : 0.5,
+                                contrast: ev.contrast !== undefined ? ev.contrast : 0.5,
                                 known: ev.known === true };
                         } else if (ev.cmd === "sing") {
                             // T5.3: sólo llegan los cambios, no un nivel por
@@ -3419,10 +3494,9 @@ ShellRoot {
                             // como tema nuevo.
                             if (ev.why === "track" || ev.why === undefined) {
                                 root.crtTrackSeed++;
-                                // tema nuevo: el mazo del set anterior no vale
-                                // para el que viene (`crtMotifBagFill` lo
-                                // rellena solo, en el próximo `crtMotifDraw`)
-                                root.crtMotifBag = [];
+                                // tema nuevo: lo que ya salió era del tema
+                                // anterior (el sorteo castiga repetir)
+                                root.crtMotifUsed = ({});
                                 // mismo motivo: los mazos de entrada por
                                 // pantalla son de la familia del tema viejo
                                 root.crtEntryBag = ({});

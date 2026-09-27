@@ -104,10 +104,29 @@ class TestBrightness(unittest.TestCase):
         self.assertAlmostEqual(mood.brightness({"known": True, "cen": [0.2, 0.8]}), 0.5)
 
 
+class TestContrast(unittest.TestCase):
+    def test_unknown_profile_is_neutral(self):
+        self.assertEqual(mood.contrast({"known": False}), 0.5)
+
+    def test_too_few_samples_is_neutral(self):
+        self.assertEqual(mood.contrast({"known": True, "rms": [0.05] * 5}), 0.5)
+
+    def test_an_even_track_is_flat(self):
+        self.assertEqual(mood.contrast({"known": True, "rms": [0.05] * 100}), 0.0)
+
+    def test_whisper_then_explosion_is_full(self):
+        rms = [0.01] * 50 + [0.12] * 50
+        self.assertEqual(mood.contrast({"known": True, "rms": rms}), 1.0)
+
+    def test_silences_do_not_count_as_quiet_parts(self):
+        rms = [0.0] * 200 + [0.05] * 100
+        self.assertEqual(mood.contrast({"known": True, "rms": rms}), 0.0)
+
+
 class TestMoodFor(unittest.TestCase):
-    def test_it_has_the_five_keys(self):
+    def test_it_has_the_six_keys(self):
         ev = mood.mood_for(["te amo"], {"known": False}, 0)
-        self.assertEqual(set(ev), {"cmd", "valence", "energy", "bright", "known"})
+        self.assertEqual(set(ev), {"cmd", "valence", "energy", "bright", "contrast", "known"})
         self.assertEqual(ev["cmd"], "mood")
 
     def test_known_flag_reflects_the_profile(self):

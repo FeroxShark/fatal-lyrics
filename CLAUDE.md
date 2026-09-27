@@ -167,12 +167,14 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   qué dibuja cada pantalla, desde cuándo y con qué semilla.
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
-- `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): 4 kinds
-  de motif, familia de entrada (`crtEntryFamilies`), scheme y fuente, de una semilla atada a
-  `crtTrackSeed`. `crtMotifBag`/`crtEntryBag`: mazos barajados con `crtHash`, sin repetir hasta
-  agotarse. `crt.set = "off"` vuelve al sorteo plano. El `mood` (corrida 3) se congela una vez por
-  tema (`crtMoodLocked`). Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
-- `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright
+- `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): familia
+  de entrada (`crtEntryFamilies`), scheme y fuente, de una semilla atada a `crtTrackSeed`
+  (`crtEntryBag`: mazos sin repetir). Los DIBUJOS no salen del set: `crtMotifDraw` sortea con dados
+  cargados por lo que suena (`motifFit` × `crtSoundNow()` × `crtMotifUsed` × `contrast` del mood);
+  cambia una pantalla por cambio de parte, todas en el drop (`crtMotifRefresh(force, one)`).
+  `crt.set = "off"` vuelve al sorteo plano. El `mood` (corrida 3) se congela una vez por tema
+  (`crtMoodLocked`). Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
+- `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright/contrast
   determinísticos (léxico chico es/en para valence, rms absoluto calibrado contra `~/.cache/
   cartelitos/audio` para energy, sin red ni IA — `feedback_ia_sin_creditos`). El daemon lo manda
   por el socket como evento `mood`, hasta dos veces por tema (al juntar la letra, y de nuevo si
@@ -198,6 +200,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`; overlay: `sh`
   de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd, y el fd no se hereda (TRAMPAS); `start` espera `daemon.ready` (el daemon lo crea tras escribir el flag del CRT).
 - `tests/` — ~690 tests, stdlib puro.
+- `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar (QtQuick puro, render offscreen
+  determinista con `./render.py`; `SyntheticAudio` usa los mismos nombres que `root`). Qué módulo y cómo integrarlo: su `README.md`.
+- `previews/crt-motifs/` — banco de render de los 8 motivos de loop de 15 s (swarm, splitflap, maze, pipes, defrag,
+  mystify, vector, harmonograph), YA INTEGRADOS: la fuente es `shell/<Kind>.qml` + `MotifBase.qml` (dibujan en
+  `onFrame` con `MShape.qml` — Qt Quick Shapes, NUNCA un Canvas de pantalla entera: ver TRAMPAS); la copia de
+  `previews/` es para renderizar por el vidrio real. Ver su `README.md`.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

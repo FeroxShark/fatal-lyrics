@@ -145,6 +145,29 @@ def brightness(profile_summary):
     return 0.5
 
 
+# Contraste: cuánto cambia el tema entre lo tranquilo y lo fuerte, del mapa de
+# energía de una escucha anterior (percentil 85 sobre percentil 25 del rms, sin
+# los silencios). 1.2 o menos = parejo de punta a punta (0); 4 o más = estrofa
+# susurrada y estribillo que explota (1). El overlay lo usa para cuánto tiene
+# que distinguir las partes al elegir los dibujos.
+CONTRAST_SILENCE = 0.002
+CONTRAST_LO = 1.2
+CONTRAST_HI = 4.0
+CONTRAST_MIN_SAMPLES = 20
+
+
+def contrast(profile_summary):
+    if not (profile_summary and profile_summary.get("known")):
+        return 0.5
+    rms = sorted(r for r in profile_summary.get("rms") or [] if r > CONTRAST_SILENCE)
+    if len(rms) < CONTRAST_MIN_SAMPLES:
+        return 0.5
+    lo = rms[int(len(rms) * 0.25)]
+    hi = rms[min(len(rms) - 1, int(len(rms) * 0.85))]
+    ratio = hi / max(lo, CONTRAST_SILENCE)
+    return max(0.0, min(1.0, (ratio - CONTRAST_LO) / (CONTRAST_HI - CONTRAST_LO)))
+
+
 def mood_for(lines, profile_summary, bpm):
     known = bool(profile_summary and profile_summary.get("known"))
     return {
@@ -152,5 +175,6 @@ def mood_for(lines, profile_summary, bpm):
         "valence": round(valence(lines), 3),
         "energy": round(energy(profile_summary, bpm), 3),
         "bright": round(brightness(profile_summary), 3),
+        "contrast": round(contrast(profile_summary), 3),
         "known": known,
     }

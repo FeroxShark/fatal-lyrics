@@ -1925,6 +1925,7 @@ PanelWindow {
                     // bajito, cuando pasa se tiene que ver acompañado.
                     kick: crt.surgeGen
                     clock: crt.tubeTime
+                    bg: crt.pal.bg
                     spinning: crt.visible && (crt.idle || crt.instrumental || crt.motifForced)
                 }
             }

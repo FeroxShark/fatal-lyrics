@@ -653,14 +653,26 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
 - `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): 4 kinds
   de motif, una familia de entrada (`typed`/`hard`/`burn`/`soft`, tabla `crtEntryFamilies`), un
   scheme de color y una fuente, todo de una semilla atada a `crtTrackSeed` (se recalcula sólo al
-  cambiar de tema). `crtMotifBag`/`crtEntryBag` — mazos barajados con `crtHash` (uno por
-  pantalla) que reparten SIN repetir de los 4 kinds del set hasta agotarse y recién ahí
-  rebarajan (`crt: bag refill [...]` en el log); se vacían en el `clear` de tema. Con
-  `crt.set = "off"` vuelve el sorteo plano de siempre (`motifPool`/`crtEntryTable`). Una
-  palabra clave de `motifWords` sigue pudiendo forzar un motif de afuera del set. El `mood`
-  (corrida 3) mueve la cuota de `motifGroups` calm/hot/neutral y la familia de entrada según
-  energy/valence — se congela una sola vez por tema en `crtMoodLocked` (primer verso), y no
-  toca el esquema de color si la tapa ya lo puso (`crtPalette = "album"`).
+  cambiar de tema). `crtEntryBag` — mazos de entradas barajados con `crtHash` (uno por
+  pantalla), sin repetir hasta agotarse; se vacían en el `clear` de tema. Con `crt.set = "off"`
+  vuelve el sorteo plano de siempre (`motifPool`/`crtEntryTable`). El `mood` (corrida 3) mueve
+  la familia de entrada según energy/valence — se congela una sola vez por tema en
+  `crtMoodLocked` (primer verso), y no toca el esquema de color si la tapa ya lo puso
+  (`crtPalette = "album"`).
+- **Los DIBUJOS ya no salen del set** (2026-09-27, Ferox: "que la elección sea basada en lo que
+  esté sonando"). `crtMotifDraw` sortea entre los 24 con dados cargados: `motifFit` da a cada kind
+  su energía/brillo/tempo, `crtSoundNow()` mide lo que suena (parte del tema + volumen de ~2 s +
+  mood; centroide promediado `pitchAvg`; bpm) y `crtMotifWeight` pesa por cercanía, castiga lo
+  que ya salió en el tema (`crtMotifUsed`, se vacía en el `clear` de tema) y afina según el
+  `contrast` del tema (`mood.py`, p85/p25 del mapa de energía de la escucha anterior). Log:
+  `crt: fit e= b= t= c= top=... -> kind`. Cuándo cambia (`crtMotifRefresh(force, one)`): el
+  drop, todas juntas; un cambio de parte, UNA (la de dibujo más viejo, `(section)`); el reloj,
+  la que venció su hold, de a una y con ≥ `min(4 s, hold/3)` entre cambios; el hold se acorta
+  con la energía (salvo `pace = wild`). Probarlo sin música: `fatal on` + `fatal crt on` +
+  `docs/plans/pace-count.py 60` y leer `crt: fit`/`crt: motif` en `qs.log`. Cada aparición de
+  un motivo de loop varía con su `seed` (vértices de mystify, giros de vector, bandadas de
+  swarm, repertorio del harmonógrafo, grosor/órbita de pipes). Una palabra clave de
+  `motifWords` sigue pudiendo forzar un dibujo.
 
 ## Capturas/medidas con NO SIGNAL encima: un overlay viejo del mismo repo (tanda 7, corrida 7)
 
@@ -718,3 +730,35 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   audio del sistema y manda `aud` (un video, otra app), así que `musicLive` no baja aunque Spotify esté en pausa.
   Para medir o mirar la pausa hay que bajar el daemon (`kill $(cat $XDG_RUNTIME_DIR/cartelitos/daemon.pid)`; el
   overlay sigue solo) y devolverlo con `fatal restart`. Con música real en pausa de verdad sí entra.
+
+## Render offscreen de QML: la sesión exporta `QT_QPA_PLATFORM=wayland` (showreel, 2026-09-27)
+
+- **`os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")` NO alcanza.** La sesión de Ferox ya trae
+  `QT_QPA_PLATFORM=wayland;xcb`, así que `setdefault` no hace nada y la "prueba offscreen" abre una ventana de
+  verdad en su pantalla (Hyprland la tilea: los cuadros salían de 920x1064). Hay que ASIGNAR la variable.
+  `previews/showreel/render.py` lo hace.
+- **La pantalla virtual del plugin `offscreen` es chica y recorta la ventana.** Se le pasa una de 4K con
+  `offscreen:configfile=offscreen.json`. Con `QT_QUICK_BACKEND=rhi` + `QSG_RHI_BACKEND=opengl` los
+  `ShaderEffect` (`.qsb`) andan; Vulkan y `eglfs` crashean.
+- **Un `Canvas` gigante no se puede alocar** (QPainter llena el log con "Painter not active"). En el zoom del drop
+  el ícono del cartel llega a miles de px: el `Canvas` se achica a 0 cuando `k` es enorme.
+- **Los errores de QML de un `Loader` no salían por ningún lado** con PyQt6: `render.py` instala un
+  `qInstallMessageHandler` que los imprime con prefijo `qml:`.
+- **Sin `QT_QUICK_BACKEND=rhi`, `offscreen` cae al backend de SOFTWARE** y los Qt Quick Shapes tardan ~500 ms por
+  cuadro (una prueba de CPU ahí mide otra cosa). Para medir CPU de verdad: `QQuickView` de Wayland que nunca se
+  muestra (sin `show()`) + `grabWindow()`: renderiza en la placa sin abrir ventana. Ahí el `CurveRenderer` de
+  Shapes deja de dibujar desde la segunda captura (no pasa en vivo); `shell/MShape.qml` usa GeometryRenderer.
+
+## Motivos: nada de `Canvas` de pantalla entera (2026-09-27)
+
+- Un `Canvas` se rasteriza en el procesador y se sube como textura en cada cuadro, en cada pantalla: los ocho
+  motivos de loop costaban 50–110 ms por cuadro (mystify/vector 110–120 % de CPU en vivo con tres pantallas).
+  Agrupar trazos y bajar la resolución a la mitad no alcanzó. Ahora van por `shell/MShape.qml` (Shapes) o
+  `Text`/`Rectangle`: 24–31 % los de líneas, pipes 45 %, swarm/defrag ~65 % (tres pantallas con el mismo motivo;
+  el túnel, todo shader, 24 %).
+- `MShape` recibe colores de QML (`E.col`), no el `"rgba(...)"` de `E.css`: un `color` de QML no entiende ese
+  texto y el trazo sale transparente SIN error.
+- Muchos bindings colgados del reloj también pesan: 96 paletas × 25 bindings = ~15 ms por cuadro. Splitflap lo
+  hace con un recorrido JS que escribe sólo en las paletas que giran.
+- `tubeTime` en las pantallas sin letra va a 20 Hz (Timer de `Crt.qml`): un motivo que dibuja con él se ve a
+  saltos. `MotifBase` lleva su propio reloj (`FrameAnimation`) re-anclado a `tubeClock`.

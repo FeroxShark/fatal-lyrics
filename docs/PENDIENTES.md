@@ -5,11 +5,20 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
 **Tanda 8 (hecha 2026-09-28, falta verla con música real).** Cinco slices en paralelo sobre lo que Ferox vio con
 música el 2026-09-26 (capturas viejas en `docs/plans/tanda8/`, gitignored); estado de cada uno en
-`docs/tanda8-estado/{shaders,senales,fuentes,sigue,reaccion}.md`: túnel sin costura y vidrio sin moiré (shaders),
+`docs/tanda8-estado/{shaders,senales,fuentes,sigue,reaccion,colores}.md`: túnel sin costura y vidrio sin moiré (shaders),
 campos `cut`/`cutf`/`hf` nuevos en el evento `aud` (señales), cuatro fuentes libres reemplazando Press Start 2P
 (fuentes), fix del "SIGUE:" vacío en el motif splitflap (sigue, cerrado sin pendientes), y reacción visual a
-corte/silencio, agudos y grano con movimiento propio (reacción). Nadie lo corrió en pantalla con música real
-todavía. Abierto:
+corte/silencio, agudos y grano con movimiento propio (reacción), y paletas de tres caras con reparto por
+parte del tema (colores). **Validado 2026-09-28 (Ferox, con música real): el vidrio sin moiré** — se fueron la
+estrella del centro y los círculos de las esquinas, quedan sólo las líneas horizontales quietas, "no se perdió
+el toque". El resto nadie lo corrió en pantalla con música real todavía. Abierto:
+
+- **Mirar `crt.face_mode = song` con música real** (colores): estrofa 2-1, estribillo las tres iguales,
+  puente/raro las tres distintas (`docs/tanda8-estado/colores-tira.png`). Si el cambio por sección se siente
+  como flash, `crt.face_mode = classic` vuelve al 2-1 de siempre. Supuestos a confirmar (estribillo = `drop`,
+  puente = `build` o `quiet` después del primer drop, la cara `c` es MEDIA): `docs/tanda8-estado/colores.md`.
+- **Tapas amarillas dan una cara `c` oliva** (`Faces.faceMid`): un amarillo no puede tener luminancia 0.11 y
+  seguir viéndose amarillo. Si a Ferox no le gusta, correr el tono de `c` en esas tapas en vez de la luz.
 
 - **Umbrales de `cut` calibrados sólo contra el sintetizador** (`CUT_LOW`/`CUT_HIGH`/`CUT_ENTER_S`/
   `CUT_RECENT_S` en `cartelitos/audio.py`): si con música real da falsos positivos en pasajes dinámicos que no
@@ -19,8 +28,6 @@ todavía. Abierto:
 - **Que Space Mono Bold y Chakra Petch (anchas) entren en líneas largas**: hoy no hay regla, se confía en el
   `Text.Fit` de `Crt.qml`; si una línea larga queda chica, falta una regla por clave en `crtFontKeyFor` (Press
   Start tenía ">3 palabras → share").
-- **Scanlines ya no respiran**: antes latían de contraste cada ~2 s (parte del moiré), ahora quedan quietas y
-  en filas de pantalla en vez de seguir la curva del tubo. Reversible, alternativa en `shaders.md`.
 - **`Behavior on crtDirt` bajado de 1500 a 420 ms** (el grano sigue a la suciedad más rápido que antes): mirar
   si queda demasiado nervioso con música real.
 - **La reacción (corte/agudos/grano) no escala con `flickerAmt`**: con el default 0.25² el golpe de bajo es

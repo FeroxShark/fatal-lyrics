@@ -58,12 +58,13 @@ MotifBase {
     // ---- corte seco -----------------------------------------------------------
     // Estampas, no historia: `cutAt`/`backAt` en `clock`, `freezeAt`/`thawAt` en la fase
     // monótona `clock + movOff` (la de `lt` sin envolver a los 15 s). Mientras el corte dura
-    // `backAt`/`thawAt` valen 1e9. Nada se llama `lt`/`rate`/`movOff` (TRAMPAS: pisan MotifBase).
+    // `backAt`/`thawAt` valen 1e9; sin corte todavía valen -1e6 (ya volvió hace mucho: agarre 0,
+    // atraso 0 — con 1e9 de arranque el dibujo nacía agarrado). Nada se llama `lt`/`rate`/`movOff` (TRAMPAS: pisan MotifBase).
     property bool started: false
     property real cutAt: -1e6
-    property real backAt: 1e9
+    property real backAt: -1e6
     property real freezeAt: 0
-    property real thawAt: 1e9
+    property real thawAt: -1e6
     function markCut() {
         cutAt = clock;
         backAt = 1e9;

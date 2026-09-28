@@ -188,13 +188,16 @@ Item {
     }
 
     property real acc: 0
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     FrameAnimation {
         running: lamp.running && lamp.visible
         onTriggered: {
             lamp.acc += frameTime;
             if (lamp.acc >= lamp.stepMin) {
                 // un cuadro perdido no puede reventar el resorte
-                lamp.step(Math.min(lamp.acc, 0.05));
+                lamp.step(Math.min(lamp.acc * lamp.rate, 0.05));
                 lamp.acc = 0;
             }
         }

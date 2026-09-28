@@ -129,6 +129,9 @@ Item {
     // así que en el silencio el tubo sigue girando despacio (la deriva del
     // video de referencia: velocidad uniforme que nunca para).
     property real travel: 0
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     property real clock: 0
     property real roll: 0
 
@@ -170,9 +173,9 @@ Item {
             // prohíbe — la deriva es de velocidad uniforme y el único que la
             // cambia es el drop. Al volumen le queda un ±3 %, que es respirar.
             const speed = 0.78 * (1 + 0.06 * (tube.level - 0.4)) * tube.rush;
-            tube.travel += tube.pending * speed;
+            tube.travel += tube.pending * speed * tube.rate;
             tube.clock += tube.pending;
-            tube.roll += tube.pending * (0.012 + 0.055 * (tube.pitch - 0.5));
+            tube.roll += tube.pending * tube.rate * (0.012 + 0.055 * (tube.pitch - 0.5));
             tube.pending = 0;
         }
     }

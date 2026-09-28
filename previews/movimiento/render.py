@@ -4,11 +4,14 @@
     ./render.py sheet            # docs/tanda8-estado/movimiento-ritmo.png + out/metrics.json
     ./render.py cpu [--frames N] # CPU y pared por cuadro: perilla en 0 vs ritmo andando
     ./render.py sheet --pace wild
+    ./render.py sheet --score fast   # ronda 3: pasaje nervioso con golpes → movimiento-ritmo-golpes.png
 
 Nunca abre nada en pantalla (plataforma `offscreen` ASIGNADA). El dibujo es el
 `Mystify` de `shell/`; el ritmo, `shell/Speed.js`; la fila de `crtPaceTable`, la de
 `shell/shell.qml`. La partitura es `mov` subiendo y bajando a los 240 s de tema (con
-`t` grande, el producto `t · rate` salta; el integrado no).
+`t` grande, el producto `t · rate` salta; el integrado no). Hay dos: `slow` (rampas de 4 s,
+sin golpes: la de la ronda 1) y `fast` (ronda 3: sube en 0.4 s, golpes cada 0.5 s y una
+caída de 1 s — lo que hace `mov` con el suavizado nuevo del daemon).
 """
 import argparse
 import json
@@ -71,6 +74,25 @@ def mov_at(tau):
     return 1.0 - smooth((tau - 7) / 4)
 
 
+def mov_fast(tau):
+    """Ronda 3: quieto (0.15) 1 s, sube en 0.4 s a 0.72, nervioso 4.6 s, cae en 1 s a 0.2."""
+    if tau < 1:
+        return 0.15
+    if tau < 1.4:
+        return 0.15 + 0.57 * smooth((tau - 1) / 0.4)
+    if tau < 6:
+        return 0.72
+    if tau < 7:
+        return 0.72 - 0.52 * smooth((tau - 6) / 1.0)
+    return 0.2
+
+
+# golpes de la partitura `fast`: (tau, fuerte?). Uno cada 0.5 s en el pasaje nervioso, el
+# cuarto fuerte; y uno suelto en el calmo.
+HITS_FAST = [(1.4 + 0.5 * i, i % 4 == 0) for i in range(10)] + [(9.0, False)]
+SCORES = {"slow": (mov_at, []), "fast": (mov_fast, HITS_FAST)}
+
+
 class Bench:
     def __init__(self):
         self.app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
@@ -84,6 +106,8 @@ class Bench:
         self.view.resize(1280, 720)
         self.view.show()
         self.root = self.view.rootObject()
+        self.score = "slow"
+        self.fired = 0
 
     def set(self, **kw):
         for k, v in kw.items():
@@ -92,9 +116,18 @@ class Bench:
     def start(self, mode):
         self.set(mode=mode)
         QMetaObject.invokeMethod(self.root, "reset")
+        self.fired = 0
 
     def step(self, t, grab=True):
-        self.root.setProperty("mov", float(mov_at(t - T0)))
+        mov_fn, hits = SCORES[self.score]
+        # los golpes van ANTES de `t`: el `rate` de este cuadro ya lo lleva
+        while self.fired < len(hits) and hits[self.fired][0] <= t - T0 + 1e-9:
+            tau, hard = hits[self.fired]
+            self.root.setProperty("hitT", float(T0 + tau))
+            self.root.setProperty("hitStrength", 1.0 if hard else 0.4)
+            self.root.setProperty("hitN", self.root.property("hitN") + 1)
+            self.fired += 1
+        self.root.setProperty("mov", float(mov_fn(t - T0)))
         self.root.setProperty("t", float(t))
         self.app.processEvents()
         if not grab:
@@ -154,13 +187,14 @@ def run(b, mode, grab_at=(), mad=True):
     b.start(mode)
     n = int(DUR * FPS)
     prev_d, prev_l = None, None
-    speed, diff, shots, rates = [], [], {}, {}
+    speed, diff, shots, rates, bases = [], [], {}, {}, {}
     want = {round(T0 + g, 4): g for g in grab_at}
     for k in range(n + 1):
         t = T0 + k / FPS
         img = b.step(t, grab=mad or round(t, 4) in want)
         d_t = b.root.property("drawT")
         rates[round(t - T0, 4)] = b.root.property("rate")
+        bases[round(t - T0, 4)] = b.root.property("baseRate")
         if prev_d is not None:
             speed.append((t - T0, (d_t - prev_d) * FPS))
         prev_d = d_t
@@ -172,26 +206,32 @@ def run(b, mode, grab_at=(), mad=True):
                 if prev_l is not None:
                     diff.append((t - T0, float(np.abs(l_ - prev_l).mean())))
                 prev_l = l_
-    return speed, diff, shots, rates
+    return speed, diff, shots, rates, bases
 
 
 def sheet(args):
     pace = pace_row(args.pace)
     b = Bench()
-    b.set(pace={"movMin": pace["movMin"], "movMax": pace["movMax"]})
+    b.score = args.score
+    mov_fn = SCORES[args.score][0]
+    b.set(pace={"movMin": pace["movMin"], "movMax": pace["movMax"], "movKick": pace["movKick"]})
     os.makedirs(OUT, exist_ok=True)
 
-    grabs = [0.5, 2.5, 3.5, 4.5, 6.0, 8.0, 9.5, 11.5]
+    if args.score == "fast":
+        grabs = [0.5, 1.2, 1.6, 2.5, 5.0, 6.5, 8.0, 10.0]
+    else:
+        grabs = [0.5, 2.5, 3.5, 4.5, 6.0, 8.0, 9.5, 11.5]
     res = {mode: run(b, mode, grabs) for mode in ("off", "int", "prod")}
     rates = res["int"][3]
+    bases = res["int"][4]
 
     def rate_at(tau):
         return rates[round(tau, 4)]
 
     taus = [k / FPS for k in range(int(DUR * FPS) + 1)]
-    metrics = {"pace": args.pace, "movMin": pace["movMin"], "movMax": pace["movMax"],
-               "t0_s": T0, "fps": FPS}
-    for mode, (speed, diff, _, rr) in res.items():
+    metrics = {"pace": args.pace, "score": args.score, "movMin": pace["movMin"],
+               "movMax": pace["movMax"], "movKick": pace["movKick"], "t0_s": T0, "fps": FPS}
+    for mode, (speed, diff, _, rr, _bb) in res.items():
         sp = [v for _, v in speed]
         dev = [abs(v - rr[round(t, 4)]) for t, v in speed]
         metrics[mode] = {
@@ -201,6 +241,20 @@ def sheet(args):
             "mad_cuadro_a_cuadro_media": round(float(np.mean([v for _, v in diff])), 3),
             "mad_cuadro_a_cuadro_max": round(float(max(v for _, v in diff)), 3),
         }
+    if args.score == "fast":
+        # cuánto tarda el ritmo BASE (sin el empujón) en llegar al 90 % del pasaje nervioso al
+        # subir y del calmo al bajar, y cuánto pega el golpe encima
+        base_hi = bases[round(3.0, 4)]
+        base_lo = bases[round(10.0, 4)]
+        base_start = bases[round(0.5, 4)]
+        up = next(t for t in taus if t >= 1.0 and bases[round(t, 4)] >= base_start + 0.9 * (base_hi - base_start))
+        dn = next(t for t in taus if t >= 6.0 and bases[round(t, 4)] <= base_hi - 0.9 * (base_hi - base_lo))
+        pk = max(rates[round(t, 4)] / bases[round(t, 4)] for t in taus if 1.4 <= t < 6.0)
+        metrics["ritmo_base"] = {"quieto": round(base_start, 3), "nervioso": round(base_hi, 3),
+                                 "calmo_final": round(base_lo, 3),
+                                 "sube_al_90pct_s": round(up - 1.0, 2), "baja_al_90pct_s": round(dn - 6.0, 2),
+                                 "empujon_max_sobre_base": round(pk, 3),
+                                 "ritmo_max_con_golpes": round(max(rates.values()), 3)}
     with open(os.path.join(OUT, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
     print(json.dumps(metrics, indent=2))
@@ -216,7 +270,7 @@ def sheet(args):
     d.text((12, 14), f"Ritmo de los dibujos con mov subiendo y bajando — Mystify, pace {args.pace}, "
                      f"a los {T0:.0f} s de tema", fill=(235, 235, 235), font=font(28))
     for j, g in enumerate(grabs):
-        d.text((lw + j * (cw + 8) + 4, 72), f"+{g:.1f}s mov={mov_at(g):.2f} ×{rate_at(g):.2f}",
+        d.text((lw + j * (cw + 8) + 4, 72), f"+{g:.1f}s mov={mov_fn(g):.2f} ×{rate_at(g):.2f}",
                fill=(200, 200, 200), font=font(16))
     for i, (lab, shots) in enumerate(rows):
         y = top + i * (ch + 8)
@@ -224,10 +278,13 @@ def sheet(args):
         for j, g in enumerate(grabs):
             strip.paste(thumb(shots[g], cw), (lw + j * (cw + 8), y))
 
-    p1 = plot([("mov", (140, 200, 255), [(t, mov_at(t)) for t in taus]),
-               ("rate (Speed.rate)", (255, 180, 90), [(t, rate_at(t)) for t in taus])],
-              0, DUR, W, 260, f"la partitura: mov y el ritmo (fila {args.pace}: "
-              f"{pace['movMin']:g}–{pace['movMax']:g}, pivote 0.35)", lo=0, hi=1.7, marks=(1.0,))
+    hi1 = max(1.7, max(rates.values()) + 0.1)
+    p1 = plot([("mov", (140, 200, 255), [(t, mov_fn(t)) for t in taus]),
+               ("ritmo base", (255, 180, 90), [(t, bases[round(t, 4)]) for t in taus]),
+               ("ritmo con el golpe", (255, 90, 160), [(t, rate_at(t)) for t in taus])],
+              0, DUR, W, 260, f"la partitura {args.score}: mov y el ritmo (fila {args.pace}: "
+              f"{pace['movMin']:g}–{pace['movMax']:g}, golpe {pace['movKick']:g}, pivote 0.45, mov crudo)",
+              lo=0, hi=hi1, marks=(1.0,))
     p2 = plot([("integrado", (255, 180, 90), res["int"][0]),
                ("t · rate (control)", (255, 90, 90), res["prod"][0]),
                ("perilla en 0", (140, 140, 150), res["off"][0])],
@@ -245,6 +302,8 @@ def sheet(args):
         out.paste(im, (0, y))
         y += im.height
     suffix = "" if args.pace == "normal" else "-" + args.pace
+    if args.score == "fast":
+        suffix = "-golpes" + suffix
     path = os.path.join(DOCS, f"movimiento-ritmo{suffix}.png")
     out.save(path, optimize=True)
     print(path)
@@ -253,7 +312,7 @@ def sheet(args):
 def cpu(args):
     pace = pace_row(args.pace)
     b = Bench()
-    b.set(pace={"movMin": pace["movMin"], "movMax": pace["movMax"]})
+    b.set(pace={"movMin": pace["movMin"], "movMax": pace["movMax"], "movKick": pace["movKick"]})
     res = {}
     for mode in ("off", "int") * 2:
         b.start(mode)
@@ -272,6 +331,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["sheet", "cpu"])
     ap.add_argument("--pace", default="normal")
+    ap.add_argument("--score", choices=sorted(SCORES), default="slow")
     ap.add_argument("--frames", type=int, default=600)
     args = ap.parse_args()
     {"sheet": sheet, "cpu": cpu}[args.cmd](args)

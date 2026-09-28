@@ -39,6 +39,9 @@ Item {
     // velocidad es exacta) pero sólo publica el valor ~70 veces por segundo: en
     // un monitor de 200 Hz eso es un tercio de los redibujos, y a ojo es lo
     // mismo.
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     property real clock: 0
     property real pending: 0
     FrameAnimation {
@@ -46,7 +49,7 @@ Item {
         onTriggered: {
             sea.pending += frameTime;
             if (sea.pending >= sea.stepMin) {
-                sea.clock += sea.pending;
+                sea.clock += sea.pending * sea.rate;
                 sea.pending = 0;
             }
         }

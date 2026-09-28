@@ -795,6 +795,26 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   un fallback que no dependa del daemon (Splitflap ahora saca la primera palabra de la línea siguiente de
   `lines`, que ya se conoce de antes).
 
+## Tres caras y reparto por sección (tanda 8, slice colores, 2026-09-28)
+
+- **Cambiar el fondo por SECCIÓN reabre el "flashea" de la tanda 2** (`crtFaceTick`, `shell.qml`): la sección
+  del daemon cambia cada pocos segundos en temas movidos. Tres frenos, no sacar ninguno: se re-reparte sólo al
+  cambiar de MODO (`verse|chorus|wild`), la pantalla con la letra conserva su cara, y los cambios van de a UNA
+  pantalla por `Motion.enterMs` desde la del foco (`Faces.stepOrder`). El portero (`Faces.gateOk`) es
+  asimétrico: entrar a estribillo/puente/raro pasa ya, volver a estrofa espera `crt_color_hold`; piso 2,5 s.
+- **`rep.chorus` por línea NO sirve para saber si es el estribillo**: flapea línea a línea. La sección sale
+  sólo del daemon (`drop` = estribillo).
+- **Una luz FIJA (HSL) para la cara de la tapa no se lee en azul/violeta**: el mismo L da luminancias muy
+  distintas por tono. Las caras de `Faces.js` buscan la luz por LUMINANCIA (`lightFor`, bisección) y así la
+  letra pasa 4.5 de contraste en cualquier tono. Tapas amarillas: la cara media sale oliva (física, no bug).
+- **La infección intercambia caras donante↔receptor**: conserva el multiconjunto y por eso no rompe el modo
+  (estribillo sigue todo igual). Pero no puede correr a la vez que un reparto escalonado: `updateInfection`
+  espera si hay `faceSteps` pendientes.
+- **Importar `cartelitos.config` en un test lee (y crea) el `~/.config` real**: los tests de la perilla leen
+  los fuentes por regex (`tests/test_colores.py`).
+- **Chequeo de sintaxis QML sin pantalla**: `/usr/lib/qt6/bin/qmllint shell/shell.qml` (rc 255 = error de
+  sintaxis; los warnings viejos no cuentan). Sirve cuando la regla es cero corridas en pantalla.
+
 ## Detalle movido: mapa técnico (poda CLAUDE.md, tanda 8, 2026-09-28)
 
 - **Timing del rayo del salto (`hop`, `shell/HopRay.qml`):** 360 ms + 150 de cola; 200 + 150 si es

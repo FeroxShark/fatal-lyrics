@@ -80,8 +80,28 @@ vec3 hueTurn(vec3 c, float a) {
     return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
 }
 
+// How much of a pattern survives on screen (tanda 8). `f` is its frequency in
+// cycles per SCREEN pixel. Up to ~0.36 it is drawn whole; from there to 0.48 it
+// fades to nothing, because a comb that close to Nyquist does not draw itself:
+// it beats against the pixel grid, and through the curvature (which stretches
+// the frequency a little more towards every corner) the beat draws circles in
+// the corners and a star in the middle.
+float keepAt(float f) {
+    return 1.0 - smoothstep(0.36, 0.48, f);
+}
+
 void main() {
     vec2 uv = curve(qt_TexCoord0);
+    // The footprint of one screen pixel in tube pixels, taken HERE: after the
+    // glass and before the glitch shoves bands sideways (a derivative across a
+    // band boundary spikes and would carve lines of faded mask along the band
+    // edges), and before the early return, where the derivatives are still
+    // defined for the whole quad. Each row is the gradient of one tube axis.
+    vec2 tp = uv * res;
+    vec2 gx = vec2(dFdx(tp.x), dFdy(tp.x));
+    vec2 gy = vec2(dFdx(tp.y), dFdy(tp.y));
+    float kx = length(gx);   // tube px per screen px, across
+    float ky = length(gy);   // and down
 
     // degauss: la bobina desmagnetiza el vidrio y la imagen ondula desde el centro hacia
     // afuera, cada vez menos. Se aplica sobre la geometría (después de la curvatura), así
@@ -160,45 +180,84 @@ void main() {
 
     vec2 fc = uv * res;
 
-    // scanlines: the comb crawls slowly so it never looks like a static texture
-    float sl = 0.5 + 0.5 * cos(fc.y * 3.14159 + t * 1.6);
+    // scanlines (tanda 8): one dark row every other row, on the rows of the
+    // SCREEN and not of the tube. The period is two pixels, which is Nyquist
+    // exactly: laid on the curved face, any stretch pushed it past what the
+    // pixels can hold and it aliased — the beat against the grid goes as
+    // `x²·y`, and that was the star over the middle of the screen and the
+    // circles in the corners. Bent, the rows now stay straight, which at two
+    // pixels nobody can see; flat, the comb is where it always was.
+    //
+    // And it holds still. It used to carry `+ t·1.6` so it would crawl, but a
+    // two-pixel comb cannot crawl: the phase only turned its CONTRAST up and
+    // down, the whole screen at once, every two seconds — and through the
+    // curvature, the figures of the moiré came and went with it. The contrast
+    // is now the average of that breathing (0.30 of 0.50), which also takes it
+    // down a notch: Ferox found it too marked.
+    float sy = qt_TexCoord0.y * res.y;
+    float sl = 0.5 + 0.30 * cos(sy * 3.14159265);
     col *= 1.0 - scanline * 0.55 * sl;
 
     // La máscara del vidrio: RGB triads, the reason CRT text never looks clean.
     // Tres tubos distintos (`maskType`): la rejilla de apertura de siempre
     // (Trinitron: franjas verticales continuas), la slot mask de las arcade
     // (franjas cortadas en ranuras, ladrilladas) y la shadow mask de puntos de
-    // un PVM (tríadas en delta, círculos). El tipo 0 con pitch 3 es la de antes,
-    // píxel por píxel: `p3` vale 1.0 y los umbrales son los mismos.
-    float p3 = maskPitch / 3.0;
+    // un PVM (tríadas en delta, círculos).
+    //
+    // Tanda 8: la máscara va LIMITADA EN BANDA. Antes cada tríada era un
+    // escalón (tres franjas de bordes duros, ranuras con un puente de un píxel,
+    // puntos recortados), y un borde duro tiene armónicos por encima de lo que
+    // la grilla de píxeles aguanta: a través de la curvatura eso se veía como
+    // círculos en las esquinas. Ahora cada patrón es su fundamental (y el
+    // segundo armónico del puente de la slot), escrito como cosenos, y cada
+    // coseno se funde con `keepAt` según la frecuencia a la que cae EN
+    // PANTALLA. El promedio de cada canal es el de antes, así que el brillo no
+    // se mueve. El tipo 0 con pitch 3 en un tubo plano da, en el centro de cada
+    // píxel, EXACTAMENTE 1.16 / 0.86 / 0.86 como antes.
+    const float TAU = 6.2831853;
+    // la fase de cada canal: R, G y B centrados en su tercio de la tríada
+    const vec3 chPhase = vec3(0.5, 1.5, 2.5) * (TAU / 3.0);
+    float fx = kx / maskPitch;
     vec3 mask;
     if (maskType < 0.5) {
-        float tri = mod(fc.x, maskPitch);
-        mask = vec3(1.16, 0.86, 0.86);
-        if (tri > p3 && tri <= 2.0 * p3) mask = vec3(0.86, 1.16, 0.86);
-        else if (tri > 2.0 * p3) mask = vec3(0.86, 0.86, 1.16);
+        float ph = TAU * fc.x / maskPitch;
+        mask = 0.96 + 0.20 * keepAt(fx) * cos(ph - chPhase);
     } else if (maskType < 1.5) {
-        // slot: cada fila de ranuras mide tres tríadas de alto y se corre media
-        // tríada respecto de la de arriba; el puente oscuro entre ranuras
+        // slot: cada fila de ranuras mide dos tríadas de alto y se corre media
+        // tríada respecto de la de arriba. Correr media tríada es cambiarle el
+        // signo al coseno, así que las filas ladrilladas son el producto por un
+        // coseno de media frecuencia en y (cero en el puente, ±1 en el centro
+        // de la ranura): dos cosenos inclinados, sin escalón entre filas.
         float cy = fc.y / (maskPitch * 2.0);
-        float row = floor(cy);
-        float tri = mod(fc.x + mod(row, 2.0) * maskPitch * 0.5, maskPitch);
-        mask = vec3(1.16, 0.86, 0.86);
-        if (tri > p3 && tri <= 2.0 * p3) mask = vec3(0.86, 1.16, 0.86);
-        else if (tri > 2.0 * p3) mask = vec3(0.86, 0.86, 1.16);
-        mask *= mix(1.0, 0.62, smoothstep(0.78, 0.92, fract(cy)));
+        float fy = ky / (maskPitch * 2.0);
+        float ph = TAU * fc.x / maskPitch;
+        float rowSign = cos(3.14159265 * (cy - 0.422));
+        mask = 0.96 + 0.26 * keepAt(fx) * rowSign * cos(ph - chPhase);
+        // el puente oscuro entre ranuras: sus dos primeros armónicos, con el
+        // promedio del de antes (0.943) y el centro donde estaba (0.922)
+        float vb = cy - 0.922;
+        mask *= 0.943 - 0.109 * keepAt(fy) * cos(TAU * vb)
+                      - 0.094 * keepAt(2.0 * fy) * cos(2.0 * TAU * vb);
     } else {
-        // puntos: filas de altura 0.866 de tríada, las impares corridas media
-        // tríada; cada canal es un punto redondo con centro en su tercio
-        float rh = maskPitch * 0.866;
-        float row = floor(fc.y / rh);
-        float x = fc.x + mod(row, 2.0) * maskPitch * 0.5;
-        float tri = mod(x, maskPitch);
-        float ch = floor(tri / p3);                 // 0 = R, 1 = G, 2 = B
-        vec2 c = vec2(tri - (ch + 0.5) * p3, fract(fc.y / rh) - 0.5) * vec2(1.0 / p3, 1.0);
-        float dot_ = smoothstep(0.62, 0.30, length(c * vec2(1.0, 1.15)));
-        vec3 lit = ch < 0.5 ? vec3(1.0, 0.0, 0.0) : (ch < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
-        mask = mix(vec3(0.70), vec3(0.70) + lit * 0.62, dot_);
+        // puntos: cada canal es una red triangular de paso `maskPitch` (filas
+        // de 0.866 de tríada, las impares corridas media tríada), y una red
+        // triangular limitada en banda es la suma de tres cosenos a 120°. El
+        // punto rojo, el verde y el azul se corren un tercio de tríada entre
+        // sí. Promedio 0.82, el de los puntos de antes.
+        vec2 q = fc / maskPitch;
+        vec2 g1 = vec2(1.0, -0.57735);
+        vec2 g2 = vec2(0.0, 1.1547);
+        vec2 g3 = vec2(1.0, 0.57735);
+        // centro del punto de cada canal (en tríadas): medio renglón abajo y su tercio
+        vec3 ox = vec3(0.5, 1.5, 2.5) / 3.0;
+        const float oy = 0.433;
+        vec3 dots = vec3(0.0);
+        dots += cos(TAU * (g1.x * (q.x - ox) + g1.y * (q.y - oy)));
+        dots += cos(TAU * (g2.x * (q.x - ox) + g2.y * (q.y - oy)));
+        dots += cos(TAU * (g3.x * (q.x - ox) + g3.y * (q.y - oy)));
+        // la frecuencia en pantalla de la red: 1.15 tríadas⁻¹ en la peor dirección
+        float fd = 1.1547 * max(kx, ky) / maskPitch;
+        mask = 0.82 + 0.13 * keepAt(fd) * dots;   // dots va de -1.5 a 3
     }
     // un tubo monocromo tiene un solo fósforo: no hay tríadas
     col *= mix(vec3(1.0), mask, 0.55 * (1.0 - mono));
@@ -208,7 +267,9 @@ void main() {
     // once both fields land. It rides on top of the grille, over the whole
     // image and not just the glyph: what is half-drawn is the SIGNAL.
     if (interlacePhase > 0.5) {
-        float odd = mod(floor(fc.y), 2.0);
+        // en las filas de la pantalla, como las scanlines: de a una fila es
+        // Nyquist y sobre la cara curva dibujaba el mismo moiré (tanda 8)
+        float odd = mod(floor(sy), 2.0);
         float keep = interlacePhase < 1.5 ? 1.0 - odd : odd;
         col *= mix(0.10, 1.0, keep);
     }

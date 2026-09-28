@@ -195,3 +195,21 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   A ojo, a esa escala no se ve diferencia entre calidades.
 - Las primeras pasadas de esta corrida (45 % / 35 %) salieron con el tubo APAGADO por la carrera de `restart` + `crt on`
   y se descartaron (TRAMPAS).
+
+## Tanda 8 (2026-09-28): vidrio sin moiré, señales nuevas y reacción visual
+
+- **Vidrio sin moiré** (`shell/crt.frag`, campo parejo sin ruido/viñeta, 1920×1080, `previews/shader-check/`):
+  envolvente (contraste de las figuras falsas) y moiré (brillo 8–200 px) antes → después: custom 27.1 % → 0.15 %
+  / 0.067 → 0.063; trinitron 11.4 → 0.12 % / 0.34 → 0.028; pvm 21.1 → 1.0 % / 0.77 → 0.25; arcade 25.3 → 0.20 % /
+  1.38 → 1.14 (lo que queda es el puente de la slot mask, período 8 px, que ES su textura, no un batido);
+  green/amber 32.4 → 0.6 % / 0.05 → 0.06. Brillo medio por canal sin cambio (±0.5 de 255). Suite: 691 tests OK.
+- **Señales nuevas `cut`/`hf`** (`cartelitos/audio.py`, `AudioAnalyzer.feed`, `timeit` manual, 200 bloques de
+  32 ms, bajo+medio+agudo variable, misma máquina): 0.641 ms/bloque antes → 0.662 ms/bloque después (+0.021 ms,
+  ~3.3 % relativo, ~0.065 % de un núcleo extra sobre un hop de 32 ms). `hf` reusa la FFT que `dirt` ya calculaba
+  (`power_spectrum`), no hay FFT nueva.
+- **Reacción visual** (`shell/crt.frag` vía `shell/React.js`, banco offscreen `previews/reaccion/`, pace normal):
+  corte — brillo medio durante el corte 1.003 → 0.479 del de antes, pico de vuelta 1.147 → 1.594. Golpe de bajo
+  (a flicker 1): brillo +10.0 %, cambio local de rms 2.6, azul−rojo en claros −4.7. Agudos: brillo +0.08 %,
+  cambio local de rms 3.8, azul−rojo en claros +25.9 (se distinguen del golpe de bajo). Grano (dirt 0.9,
+  motivo arcade): contraste de franjas 0.067 → 0.32. CPU (render offscreen + grab, 300 cuadros, arcade):
+  18.5 → 17.6 ms/cuadro, dentro del ruido — no medido en el overlay real. Suite: 718 tests OK.

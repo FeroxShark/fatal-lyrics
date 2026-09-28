@@ -40,6 +40,24 @@ def silence():
     return pcm([0.0] * N)
 
 
+def sustained(a, freq, amp, seconds, t0=0.0, phase0=0):
+    """Tono de FASE CONTINUA (no `tone()`, que arranca de la muestra 0 en cada
+    llamada y da bloques bit-idénticos: flujo espectral trivialmente 0 sin
+    importar si la normalización de abajo está bien o mal). Simula sostenido
+    real: cada bloque sigue la fase donde dejó el anterior. Devuelve (t final,
+    índice de muestra final, último `ev`). Mismo patrón que `sustained()` en
+    `test_movimiento.py` (ese slice pisó el mismo tipo de bug)."""
+    i0 = phase0
+    t = t0
+    ev = None
+    for _ in range(int(seconds / DT)):
+        blk = pcm([amp * math.sin(2 * math.pi * freq * (i0 + i) / RATE) for i in range(N)])
+        ev = a.feed(blk, t)
+        i0 += N
+        t += DT
+    return t, i0, ev
+
+
 class CutTests(unittest.TestCase):
     """`cut`/`cutf`: silencio abrupto tras sonar fuerte, con histéresis."""
 
@@ -193,6 +211,44 @@ class HfTests(unittest.TestCase):
             ev = a.feed(tone(80.0, 0.6), t)
             t += DT
         self.assertLess(ev["hf"], peak_hf * 0.3, "tiene que bajar con cola, no quedarse prendido")
+
+    def test_a_sustained_in_band_tone_does_not_stay_pinned_near_one(self):
+        """Bug real (corregido en este slice, ver senales.md): con la
+        normalización vieja (pico propio que decae, `spectral_flux_band`), un
+        tono sostenido de FASE CONTINUA hace decaer el pico hasta la fuga
+        espectral del propio Hann, y a partir de ahí cualquier bloque
+        normalizaba cerca de 1.0 — `hf` quedaba clavado en ~0.88 en vez de caer
+        a 0 (el caso de cuerdas nerviosas tipo Vivaldi, energía sostenida sin
+        ataques nuevos). Usa `sustained()`, NO `tone()`: `tone()` reinicia la
+        fase en la muestra 0 en cada llamada y da bloques bit-idénticos, flujo
+        espectral 0 por construcción — el test pasaría igual con el bug."""
+        a = audio.AudioAnalyzer()
+        _, _, ev = sustained(a, freq=220.0, amp=0.7, seconds=8.0)
+        self.assertLess(ev["hf"], 0.15, "tono sostenido sin ataques nuevos: hf tiene que caer, no quedar clavado")
+
+    def test_a_treble_onset_after_the_track_gets_quiet_still_pulses_hf(self):
+        """Bug real (corregido en este slice): con el pico que decae, un pasaje
+        fuerte deja el pico viejo alto un rato; si el tema baja de volumen
+        (`mf` después de `ff`) un onset nuevo pero flojo no llega a superarlo y
+        el detector queda sordo justo cuando más hace falta. Con
+        `spectral_flux_ratio` (normaliza contra la energía DE ESE BLOQUE) el
+        onset flojo tiene que pulsar igual."""
+        a = audio.AudioAnalyzer()
+        t = 0.0
+        for _ in range(15):     # pasaje fuerte: platillo grande sobre bajo fuerte
+            a.feed(mix((80.0, 0.9), (4000.0, 0.7)), t)
+            t += DT
+        for _ in range(20):     # baja de volumen: sólo un bajo flojo, constante
+            ev = a.feed(tone(80.0, 0.1), t)
+            t += DT
+        quiet_baseline = ev["hf"]
+        peak_hf = 0.0
+        for _ in range(6):      # onset de agudos flojo, sobre el bajo flojo
+            ev = a.feed(mix((80.0, 0.1), (4000.0, 0.08)), t)
+            t += DT
+            peak_hf = max(peak_hf, ev["hf"])
+        self.assertGreater(peak_hf, quiet_baseline + 0.2,
+                            "el detector no puede quedar sordo tras bajar el volumen")
 
     def test_hf_is_json_bounded(self):
         import json

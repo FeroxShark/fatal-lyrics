@@ -66,11 +66,12 @@ tema (lineNo=-1, hay `lines`), sin nada (lines=[]) → fila vacía sin "SIGUE:".
 ## Estado
 
 - [x] Diagnóstico.
-- [ ] Fix en `shell/Splitflap.qml` + copia en previews.
-- [ ] Test que falla antes / pasa después.
-- [ ] Correr suite completa.
+- [x] Fix en `shell/Splitflap.qml` (`69d9dbb`) + copia en previews (`4e37df2`).
+- [x] Test `TestSplitflapNextWord` (`7270ee4`): falló 4/5 contra el código viejo, pasa
+  5/5 contra el fix.
+- [x] Suite completa: 709 tests, OK, sin regresiones.
 
 ## Cómo retomar
 
-Si se corta acá: falta escribir el fix (arriba está el plan exacto) y el test. No hace
-falta más lectura de código, ya está todo rastreado línea por línea.
+Slice cerrado. Nada pendiente de código. Todo verificado sin encender el overlay/CRT
+(sólo tests offline + evaluación con node del JS real extraído de `Splitflap.qml`).

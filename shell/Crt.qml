@@ -1271,9 +1271,8 @@ PanelWindow {
     // Rótulos que no son la letra (instrumental, NO SIGNAL, sync, chrome,
     // carta de ajuste) siguen con `fontFamily` de arriba.
     readonly property string lyricFont: ctl.crtFontFor(lineText, myWords.length)
-    // Press Start 2P es un bitmap ancho: con `letterSpacing` normal (3) se
-    // pasa del cuadro. Sólo para esta fuente se aprieta a 1.
-    readonly property int lyricLetterSpacing: lyricFont === ctl.crtFontFamilies.press ? 1 : 3
+    // Era 1 sólo para Press Start 2P (bitmap ancho), que se fue en la tanda 8.
+    readonly property int lyricLetterSpacing: 3
     // La CLAVE (no el nombre de familia) de `lyricFont`, sólo para loguear
     // (mismo patrón que `motifKind`/`onMotifKindChanged`, más abajo): así un
     // driver puede confirmar que una línea con CJK cae a `dot` sin tener que

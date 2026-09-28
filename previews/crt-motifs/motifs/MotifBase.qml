@@ -61,7 +61,8 @@ Item {
     property real quality: 1
     property bool drop: false
     // corte seco (`cut` del daemon: la música cae de golpe y vuelve) y flujo de agudos (`hf`,
-    // 0..1): los lee sólo el laberinto, que planta la marcha y mira al costado
+    // 0..1): los leen el laberinto (planta la marcha y mira al costado) y mystify (se agarra
+    // y estira la estela; el color y el resplandor siguen los agudos)
     property bool cut: false
     property real hf: 0
     property string section: "verse"

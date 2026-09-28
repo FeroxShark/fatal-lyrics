@@ -27,8 +27,9 @@ la música ahora mismo".
     (EMA de impulsos, ventana `MOV_RATE_TAU`=1.2s) — eso es la DENSIDAD, no la
     magnitud de un solo golpe: un tremolo de notas chiquitas sube esto tanto como
     pocos golpes grandes, que es justo lo que un `beat` de bajo no ve.
-  - **`hf`** (peso 0.3, `MOV_W_HF`): el flujo de agudos que YA existe (brillo que
-    cambia, 125-6000 Hz), reusado tal cual, ya suavizado.
+  - **Brillo que cambia** (peso 0.3, `MOV_W_BRIGHT`): mismo CONCEPTO que `hf`
+    (flujo de agudos, banda 125-6000 Hz) pero NO es el campo `hf` reusado — ver
+    "Bug encontrado y corregido" más abajo, importante.
   - **Energía relativa al PROPIO tema** (peso 0.2, `MOV_W_ENERGY`): el percentil
     que ya calcula `classify_level(rms, TrackProfile.rms)` — el mismo número que
     ya usa `PeakGate` (`cur_pct` en `_capture_loop`) — NO el nivel crudo. Así un
@@ -75,21 +76,80 @@ barata, y el resultado con cuerdas sin pulso claro (rubato) sería poco confiabl
 un proxy barato de "qué tan rápido va esto" sin prometer un BPM que puede mentir.
 Si Ferox lo quiere igual, es un slice aparte.
 
+## Bug encontrado y corregido (normalización contra un pico que decae)
+
+La primera versión de `_mov_step` normalizaba el flujo espectral contra un pico
+propio que decae (`mov_flux_peak`, igual que hace `hf` con `flux_peak`). Un
+`advisor()` en este slice marcó dos fallas del patrón, y ambas se confirmaron
+con un tono sostenido de FASE CONTINUA (no `tone()` del test rig, que reinicia
+la fase en cada llamada y da bloques bit-idénticos — flujo 0 por construcción,
+no prueba nada):
+
+1. **Sordera después de bajar el volumen** — el caso Vivaldi real: un pasaje
+   `ff` deja el pico alto, y onsets genuinos de un pasaje `mf` que sigue no
+   llegan a cruzar el umbral (normalizado contra el pico viejo) hasta que el
+   pico decae, ~varios segundos. Medido ANTES del fix: un tren de onsets fuerte
+   seguido del mismo tren flojo daba `mov` muy distinto entre los dos tramos.
+   Después del fix: 0.795 vs 0.754 (parecido) — test
+   `test_loud_then_quiet_onsets_at_the_same_rate_give_similar_mov`.
+2. **Clavado arriba con tono sostenido** — con un tono de fase continua a
+   `pct=1.0` durante 90s, `mov` quedaba en ~0.972 en vez de bajar al techo de
+   energía (~0.2): el pico decae hasta la magnitud de la fuga espectral del
+   propio Hann (inevitable si el período no entra un número entero de veces en
+   el bloque) y de ahí en más CUALQUIER bloque normaliza cerca de 1.0.
+
+**Fix**: nueva función `spectral_flux_ratio(spec, prev_spec, rate, lo_hz,
+hi_hz)` — mismo flujo semirrectificado que `spectral_flux_band`, pero
+normalizado contra la energía ACTUAL del bloque (`sum(sqrt(spec[lo:hi]))`), NO
+contra un pico que decae. Invariante a escala: un onset desde silencio da ~1.0
+sin importar el volumen absoluto, y una señal sostenida da ~0.0 sin importar
+cuánto tiempo tuvo el pico para decaer. Se usa para el término de densidad
+(banda completa) Y para el de brillo (ver abajo). `MOV_ATTACK_THRESH` se
+recalibró de 0.35 (escala vieja, relativa al pico) a 0.12 (escala nueva,
+relativa a la energía del bloque).
+
+**Hallazgo colateral, NO corregido acá**: el campo `hf` del evento (de OTRO
+slice ya cerrado, "senales") tiene el MISMO bug — con el tono sostenido de fase
+continua, `hf` queda clavado en ~0.85-0.93 en vez de caer a 0, porque
+`self.flux_peak` (decay 0.97) también decae hasta la fuga del Hann. Como el
+primer diseño de `mov` reusaba `hf` directo (peso 0.3), heredaba el sesgo:
+`mov` quedaba en ~0.47 en vez de ~0.2 para un tema sostenido. Corregir `hf` es
+de otro slice, ya testeado y calibrado — no se tocó acá. En cambio, `mov`
+calcula su PROPIO término de brillo con `spectral_flux_ratio` sobre la misma
+banda (`DIRT_LO_HZ`-`DIRT_HI_HZ`, 125-6000 Hz) — mismo `spec`/`prev_spec`, sin
+FFT nueva — suavizado con su propio estado (`mov_bright`/`mov_bright_at`,
+`_smooth_mov_bright`, mismas constantes de ventana que `hf`:
+`MOV_BRIGHT_RISE_S`=`FLUX_RISE_S`, `MOV_BRIGHT_FALL_S`=`FLUX_FALL_S`). Si algún
+día se corrige `hf` en su propio slice, `mov` podría volver a reusarlo — no es
+urgente, el costo de tenerlo aparte es despreciable (mismo FFT, un
+`spectral_flux_ratio` más).
+
+Verificado con tono sostenido de fase continua, `pct=1.0`, 30s: `mov` converge
+exactamente a 0.2 (el techo de energía sola) mientras `hf` se queda en
+~0.85-0.93. Test `test_a_loud_but_steady_track_does_not_stay_pinned_high`
+reescrito para usar `sustained()` (fase continua) en vez de `tone()`.
+
 ## Hecho
 
-- `cartelitos/audio.py`: constantes `MOV_*`, estado nuevo en `AudioAnalyzer`
-  (`mov_flux_peak`, `mov_rate`, `mov_rate_at`, `mov_last_attack`, `mov`, `mov_at`),
-  método `_mov_step` (densidad de onsets banda completa) + `_smooth_mov` (EMA
-  asimétrica), `feed()` con parámetro nuevo `pct=None` y campo `mov` en el evento;
-  `_capture_loop` pasa `pct=cur_pct` al llamado a `feed()`.
-- `tests/test_movimiento.py`, archivo nuevo: 7 tests — pasaje que acelera sin
+- `cartelitos/audio.py`: función módulo `spectral_flux_ratio` (flujo
+  normalizado contra la energía del bloque ACTUAL, no un pico que decae — ver
+  "Bug encontrado y corregido"); constantes `MOV_*`; estado nuevo en
+  `AudioAnalyzer` (`mov_rate`, `mov_rate_at`, `mov_last_attack`, `mov_bright`,
+  `mov_bright_at`, `mov`, `mov_at`); métodos `_mov_step` (densidad de onsets
+  banda completa), `_smooth_mov_bright` (brillo invariante a escala, propio de
+  `mov`) y `_smooth_mov` (EMA asimétrica final); `feed()` con parámetro nuevo
+  `pct=None` y campo `mov` en el evento; `_capture_loop` pasa `pct=cur_pct` al
+  llamado a `feed()`.
+- `tests/test_movimiento.py`, archivo nuevo: 8 tests — pasaje que acelera sin
   cambiar volumen sube `mov`; trémolo agudo sin nada de bajo también lo sube
-  (>0.4); silencio lo mantiene en 0.0 todo el tiempo; tema fuerte y PAREJO con
-  `pct=1.0` (peor caso) queda bajo 0.35, lejos de clavarse arriba; sin `pct`
-  (perfil desconocido) no explota y sigue en 0..1; sube apreciablemente
+  (>0.4); silencio lo mantiene en 0.0 todo el tiempo; tema fuerte y PAREJO
+  (tono de fase continua, no `tone()`) con `pct=1.0` (peor caso) queda bajo
+  0.35, lejos de clavarse arriba; onsets a la misma densidad fuerte-luego-flojo
+  dan `mov` parecido (el caso Vivaldi real, regresión del bug de abajo); sin
+  `pct` (perfil desconocido) no explota y sigue en 0..1; sube apreciablemente
   (>0.15) en el primer segundo de un pasaje ocupado; y al cortarse ese pasaje
   sigue por encima del 40% de su pico un segundo después (baja más lento de lo
-  que subió). Suite completa: 731 tests, OK.
+  que subió). Suite completa: 732 tests, OK.
 
 ## Cómo lo va a usar el otro worker (no es tarea mía, pero para que no adivine)
 
@@ -106,17 +166,19 @@ Si Ferox lo quiere igual, es un slice aparte.
 
 - `feed()` sin el cálculo de `mov` (`_mov_step` parcheado a no-op, mismo proceso
   para que sea comparable): **0.690 ms/bloque**.
-- `feed()` con `mov` completo: **0.728-0.702 ms/bloque** según la corrida (ruido
-  de medición normal en esta máquina).
-- Diferencia: **+0.02 a +0.04 ms/bloque** (~5-6% relativo), o sea bien por
-  debajo del ~33% de un núcleo que ya usa el overlay con audio prendido.
-  Esperable: no hay FFT nueva, sólo un tercer `spectral_flux_band` sobre una
-  banda más ancha (~el doble de bins que la de `hf`) reusando el mismo
-  `spec`/`prev_spec`.
+- `feed()` con `mov` completo (densidad banda completa + brillo propio vía
+  `spectral_flux_ratio`, sin reusar `hf`): **0.786 ms/bloque** (re-medido tras
+  el fix del bug, que agrega un segundo `spectral_flux_ratio` para el término
+  de brillo — antes del fix, que reusaba `hf` ya calculado, daba 0.702-0.728).
+- Diferencia: **+0.1 ms/bloque** (~14% relativo) contra el `feed()` sin `mov`,
+  bien por debajo del ~33% de un núcleo que ya usa el overlay con audio
+  prendido. Sigue sin haber FFT nueva: todo reusa el mismo `spec`/`prev_spec`
+  que ya calculan `dirt`/`hf`, sólo se suman dos pasadas O(bins de la banda)
+  sobre arrays ya calculados (raíces cuadradas + sumas).
 
 ## Falta / por decidir (default elegido, reversible)
 
-- Pesos (`MOV_W_DENS`=0.5/`MOV_W_HF`=0.3/`MOV_W_ENERGY`=0.2) y umbrales
+- Pesos (`MOV_W_DENS`=0.5/`MOV_W_BRIGHT`=0.3/`MOV_W_ENERGY`=0.2) y umbrales
   (`MOV_ATTACK_THRESH`, `MOV_RATE_REF`, `MOV_RATE_TAU`) calibrados a mano contra
   el sintetizador de test, no contra audio real (no había música sonando en este
   entorno al momento del slice — `playerctl status` daba `Paused`). Son 6

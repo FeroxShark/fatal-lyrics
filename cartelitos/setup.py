@@ -344,6 +344,10 @@ SETTINGS = [
     ("dirt", "crt", "Glass static follows how dirty the music sounds (0 = flat)",
      lambda c: _ask_num("Dirt: the glass static rises with distortion and noise in the "
                         "audio (0 = flat, 1 = the whole range of the pace preset)", c, 0.0, 1.0)),
+    ("mov_speed", "crt", "Drawings speed up and slow down with the music (0 = off)",
+     lambda c: _ask_num("Movement: the motifs run slower in still passages and faster in "
+                        "busy ones, around the pace preset (0 = off, 1 = the whole range "
+                        "of the pace preset)", c, 0.0, 1.0)),
     ("beat_lock", "crt", "Glitches and the rolling bar land on the beat",
      lambda c: _pick("With the tempo known, the glitches that belong to no other "
                      "animation wait for the next beat (and the rolling bar "

@@ -77,6 +77,30 @@ NO entra (y por qué):
   lo que NO se escala, y con node: `rate`, `amount`, `advance` y el escalón de ritmo
   integrado vs el producto `t·rate` como control).
 
-## Falta
+## Banco offscreen (`previews/movimiento/`)
 
-- Banco offscreen con la tira de frames y CPU antes/después (ver abajo cuando esté).
+`./render.py sheet [--pace calm|normal|wild]` → `docs/tanda8-estado/movimiento-ritmo.png` (+
+`out/metrics.json`); `./render.py cpu [--frames N]`. `Bench.qml` carga el `Mystify` REAL de `shell/`
+(deriva por `lt`), sin el vidrio; el ritmo lo calcula `shell/Speed.js` dentro del QML y la fila sale
+de `crtPaceTable`. Partitura: a los 240 s de tema, `mov` quieto 1 s → sube en 4 s → arriba 2 s →
+baja en 4 s → quieto 1 s (smoothstep). Tres pasadas: `int` (como el overlay), `prod` (control:
+reloj de dibujo `t · rate`) y `off` (perilla en 0).
+
+Resultado, pace normal, 721 cuadros a 60 fps:
+- Velocidad del reloj de dibujo (s de dibujo por s real): integrado 0.75–1.35, desvío máximo contra
+  el `rate` del cuadro **0.0000** (sin saltos de fase); perilla en 0: 1.0 exacto; `t · rate`: de
+  **+63× a −63×** (a los 240 s, el cambio de ritmo de la rampa ya teletransporta: corre para
+  adelante al subir y para ATRÁS al bajar).
+- Cambio de imagen cuadro a cuadro (luminancia media absoluta): integrado media 8.98 / máx 15.9;
+  perilla en 0 9.05 / 14.8; `t · rate` 12.2 / 23.3. La tira de cuadros de la hoja muestra la
+  estela de Mystify continua en el integrado y deshecha en el control.
+- CPU (render offscreen + grab 1280×720, 600 cuadros, dos corridas): perilla en 0 5.38 / 5.44
+  ms/cuadro, ritmo andando 5.48 / 5.45 — dentro del ruido (lo agregado son dos multiplicaciones
+  por cuadro y por pantalla). No medido en el overlay real (cero corridas en pantalla).
+
+## Falta (para Ferox / con música real)
+
+- Calibrar `movMin`/`movMax`/`PIVOT` con música real (Vivaldi, Invierno): hoy salen de los números
+  de `movimiento.md` (parejo ≈ 0.2, ocupado ≈ 0.75-0.8), no de haberlo visto.
+- Las entradas y el shader quedaron afuera a propósito (arriba). Si Ferox quiere que la ENTRADA de la
+  frase también siga el pasaje, es otra discusión (rompe "UN lenguaje de movimiento").

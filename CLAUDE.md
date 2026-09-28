@@ -174,6 +174,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   cambia una pantalla por cambio de parte, todas en el drop (`crtMotifRefresh(force, one)`).
   `crt.set = "off"` vuelve al sorteo plano. El `mood` (corrida 3) se congela una vez por tema
   (`crtMoodLocked`). Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
+- `crtFontPools` (`shell.qml`, tanda 8) — mazo de fuentes por familia de entrada
+  (`crtEntryFamilies`: typed/hard/burn/soft), elegido con el mismo dado que la fuente del set
+  (`crtHash(seed*7+3)`). Reemplaza `crtFontKeys`/Press Start 2P (sacada del repo, a Ferox no le
+  gustaba): plex, space, chakra, syne, vt323, share, system — créditos en `shell/fonts/README.md`.
 - `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright/contrast
   determinísticos (léxico chico es/en para valence, rms absoluto calibrado contra `~/.cache/
   cartelitos/audio` para energy, sin red ni IA — `feedback_ia_sin_creditos`). El daemon lo manda
@@ -194,6 +198,15 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   sintético sin `wave` >300 ms (`waveStaleMs`).
 - `audio.dirt_from` + `AudioAnalyzer._smooth_dirt` + campo `d` de `aud` → `crtDirt`/`crtDirtMult` (`crt.dirt`, tanda 7,
   corrida 7b) — planitud espectral local (ruido/guitarras) escala SÓLO `noiseAmt` (rango `dirtMin/Max` de `crtPaceTable`).
+- `audio._cut_step`/`_smooth_hf` + campos `cut`/`cutf`/`hf` de `aud` (`audio.py`, tanda 8) — `cut` (sostenido)
+  marca un corte seco tras sonar fuerte y sale solo al volver a cruzar `CUT_HIGH`; `cutf` (un frame) es la
+  fuerza del golpe de vuelta y fuerza envío inmediato como el beat; `hf` es flujo espectral en la banda de
+  `dirt` (125–6000 Hz), reusa el mismo espectro que `dirt` ya calculaba (sin FFT nueva).
+- `shell/React.js` (tanda 8) — funciones puras del reloj del tubo (`cutDim`, `backFlash`, `fizz`, `grain`,
+  `grainAdvance`) que llaman `Crt.qml` Y el banco `previews/reaccion/` (misma fuente, no una copia); mapean
+  `cut`/`cutf`/`hf` a uniforms de `crt.frag` en ejes distintos del golpe de bajo (posición/color, no brillo),
+  sin sumar animación por pantalla. Fase del grano acumulada en QML (`grainAdvance`), no calculada como
+  `t · velocidad(x)` en el shader (TRAMPAS: salta al tocar la velocidad).
 - `crt.resting` + `tubeAccum` (`Crt.qml`, tanda 7, corrida 8) — pausa con letra puesta (`!musicLive` + `Motion.holdMs`):
   reloj 15 fps, pump frenado, sin estela (log `crt: rest N on|off`); vuelve con el primer `pos`/`aud`. `tubeTime` con
   tope de 60. El daemon real manda `aud` si suena CUALQUIER cosa: para medir la pausa hay que bajarlo (TRAMPAS).

@@ -28,12 +28,14 @@ MotifBase {
     readonly property real gapMul: 0.7 + 0.8 * E.hash(seed * 2.71 + 0.3)
 
     // rebotes por loop de cada vértice [x, y], y su arranque
-    function rate(p, v, axis) { return 2 + Math.floor(E.hash(p * 13.1 + v * 3.7 + axis * 1.9 + seed) * 4); }
+    // (no se llama `rate`: esa es la propiedad del ritmo que hereda de MotifBase, y un
+    // método del hijo la PISA — `base.rate` leería la función y el ritmo daría NaN)
+    function bounces(p, v, axis) { return 2 + Math.floor(E.hash(p * 13.1 + v * 3.7 + axis * 1.9 + seed) * 4); }
     function start(p, v, axis) { return E.hash(p * 7.3 + v * 11.9 + axis * 5.1 + seed * 3); }
 
     function vertex(p, v, tt) {
-        const x = margin + E.tri(tt / loopS * rate(p, v, 0) + start(p, v, 0)) * (width - 2 * margin);
-        const y = margin + E.tri(tt / loopS * rate(p, v, 1) + start(p, v, 1)) * (height - 2 * margin);
+        const x = margin + E.tri(tt / loopS * bounces(p, v, 0) + start(p, v, 0)) * (width - 2 * margin);
+        const y = margin + E.tri(tt / loopS * bounces(p, v, 1) + start(p, v, 1)) * (height - 2 * margin);
         if (p < 2)
             return [x, y];
         // el tercero crece desde el centro con el drop

@@ -44,6 +44,16 @@ class TestMovPaceTable(unittest.TestCase):
         self.assertLess(span["calm"], span["normal"])
         self.assertLess(span["normal"], span["wild"])
 
+    def test_every_row_has_a_kick_amplitude_calm_small_wild_big(self):
+        kick = {name: float(re.search(r"movKick:\s*([\d.]+)", body).group(1))
+                for name, body in pace_rows().items()}
+        self.assertEqual(set(kick), {"calm", "normal", "wild"})
+        for name, k in kick.items():
+            self.assertGreater(k, 0.0, name)
+            self.assertLess(k, 1.5, name)        # con KICK_CAP, nunca más de ~2.2x el ritmo base
+        self.assertLess(kick["calm"], kick["normal"])
+        self.assertLess(kick["normal"], kick["wild"])
+
 
 class TestMovKnob(unittest.TestCase):
     def test_mov_speed_travels_from_the_toml_to_the_overlay(self):
@@ -64,9 +74,24 @@ class TestMovWiring(unittest.TestCase):
         qml = read("shell.qml")
         self.assertIn("root.audMov = ev.mov || 0;", qml)
         self.assertIn('import "Speed.js" as Speed', qml)
-        self.assertRegex(qml, r"property real crtMovRate: audLive\s*\n\s*\? Speed\.rate\(movFit\.mov, "
-                              r"pace\.movMin, pace\.movMax, crtMovAmount, movFit\.pivot\) : 1\n")
+        self.assertRegex(qml, r"property real crtMovRate: audLive\s*\n\s*\? Speed\.push\(Speed\.rate\(movFit\.mov, "
+                              r"pace\.movMin, pace\.movMax, crtMovAmount, movFit\.pivot\),\s*\n"
+                              r"\s*crtMovKick, crtMovAmount\) : 1\n")
+        # ronda 3: el Behavior de 420 ms encima del suavizado se comía el empujón del golpe
+        self.assertNotRegex(qml, r"Behavior on crtMovRate")
         self.assertIn("root.movStat = Speed.newStat();", qml)   # percentiles por tema
+
+    def test_the_beat_kick_is_fed_by_the_aud_event_and_only_runs_while_it_lasts(self):
+        qml = read("shell.qml")
+        self.assertIn("root.movKickHit(Speed.kickStrength(!!ev.h));", qml)
+        self.assertIn("Speed.kickAdd(", qml)
+        self.assertIn("pace.movKick", qml)
+        # el reloj del empujón se apaga solo cuando decayó (no es un FrameAnimation eterno)
+        tick = re.search(r"FrameAnimation\s*\{\s*id: movKickTick\s*running: false(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(tick)
+        self.assertIn("running = false", tick.group(1))
+        # sin la perilla o sin audio vivo no hay empujón
+        self.assertRegex(qml, r"function movKickHit\(strength\) \{\s*if \(!\(crtMovAmount > 0\) \|\| !audLive\)\s*return;")
 
     def test_crt_integrates_the_offset_where_tube_time_advances_and_never_scales_it(self):
         crt = read("Crt.qml")
@@ -173,6 +198,8 @@ class TestSpeedJs(unittest.TestCase):
         # quedar por encima, pero no tanto que el tema parejo se arrastre
         self.assertGreater(v[5], 0.2)
         self.assertLess(v[5], 0.5)
+        # ronda 3: la música con pulso ronda 0.6-0.7, sin saturar: el pivote sube
+        self.assertAlmostEqual(v[5], 0.45)
 
     def test_narrow_mov_band_is_stretched_to_the_whole_range(self):
         # Vivaldi real (qs.log): mov 0.63–0.80. Absoluto: rate 1.0–1.2; con percentiles: todo el rango
@@ -188,7 +215,98 @@ class TestSpeedJs(unittest.TestCase):
         self.assertGreater(v[2], 1.9)
         self.assertEqual(v[3], 1)
         self.assertAlmostEqual(v[4], 0.7)     # sin muestras: absoluto de siempre
-        self.assertAlmostEqual(v[5], 0.35)
+        self.assertAlmostEqual(v[5], 0.45)
+
+    def test_a_skewed_theme_still_puts_its_median_at_rate_one_and_uses_both_extremes(self):
+        # ronda 3: música con pulso (mov 0.58-0.68, 80 % del tiempo) y un final que se calma
+        # (0.15-0.30, 20 %). El estirado lineal de p5..p95 dejaba la mediana casi arriba de
+        # todo (el tema "corría" siempre); con el mapa por tres cuantiles el ritmo habitual
+        # queda en 1 y los dos extremos del rango se tocan
+        v = self.run_js("""(() => { const st = newStat();
+            for (let i = 0; i < 800; i++)
+              observe(st, i % 5 === 4 ? 0.15 + 0.15 * ((i * 7) % 10) / 9 : 0.58 + 0.10 * ((i * 3) % 10) / 9, 0.1);
+            const sp = span(st);
+            const f = (m) => { const q = fit(m, sp); return rate(q.mov, 0.4, 2.2, 1, q.pivot); };
+            return [f(sp.mid), f(sp.lo), f(0.01), f(sp.hi), f(0.99), sp.lo, sp.mid, sp.hi,
+                    fit(sp.mid - 0.02, sp).mov, fit(sp.mid + 0.02, sp).mov]; })()""")
+        self.assertAlmostEqual(v[0], 1.0, delta=0.02)      # la mediana es ritmo 1
+        self.assertAlmostEqual(v[1], 0.4, delta=0.02)      # P_LO y por debajo: movMin
+        self.assertAlmostEqual(v[2], 0.4, delta=0.02)
+        self.assertAlmostEqual(v[3], 2.2, delta=0.02)      # P_HI y por encima: movMax
+        self.assertAlmostEqual(v[4], 2.2, delta=0.02)
+        self.assertLess(v[5], v[6] - 0.10 + 1e-9)          # cada mitad mide al menos MIN_HALF
+        self.assertGreater(v[7], v[6] + 0.10 - 1e-9)
+        self.assertLess(v[8], 0.5)                         # monótono alrededor de la mediana
+        self.assertGreater(v[9], 0.5)
+
+    def test_a_flat_theme_does_not_amplify_noise(self):
+        # un tema parejo (mov 0.60 ± 0.01): cada mitad ensanchada a MIN_HALF → ±0.01 mueve el
+        # ritmo unos pocos %, no el rango entero
+        v = self.run_js("""(() => { const st = newStat();
+            for (let i = 0; i < 800; i++) observe(st, 0.60 + 0.01 * Math.sin(i), 0.1);
+            const sp = span(st); const f = (m) => { const q = fit(m, sp);
+              return rate(q.mov, 0.4, 2.2, 1, q.pivot); };
+            return [f(0.59), f(0.61)]; })()""")
+        self.assertLess(abs(v[0] - v[1]), 0.45)
+
+    def test_kick_decays_to_zero_along_outquad_and_never_starts_from_nothing(self):
+        v = self.run_js("[kickAt(0.7, 0), kickAt(0.7, KICK_S / 2), kickAt(0.7, KICK_S),"
+                        " kickAt(0.7, KICK_S + 5), kickAt(0.7, -1), kickAt(0, 0.1), kickAt(NaN, 0.1), KICK_S]")
+        self.assertAlmostEqual(v[0], 0.7)
+        self.assertAlmostEqual(v[1], 0.7 * 0.25)         # (1 - 1/2)^2
+        self.assertEqual(v[2], 0)
+        self.assertEqual(v[3], 0)
+        self.assertEqual(v[4], 0)                         # el reloj no anda para atrás
+        self.assertEqual(v[5], 0)
+        self.assertEqual(v[6], 0)
+        # dura ~medio segundo: se nota y no arrastra al golpe siguiente
+        self.assertGreater(v[7], 0.3)
+        self.assertLess(v[7], 0.6)
+
+    def test_kick_is_monotone_decreasing_and_stacked_hits_are_capped(self):
+        v = self.run_js("""(() => { let prev = 1e9, mono = true;
+            for (let i = 0; i <= 50; i++) { const k = kickAt(1, i * KICK_S / 50); mono = mono && k <= prev; prev = k; }
+            let cur = 0; for (let i = 0; i < 20; i++) cur = kickAdd(cur, kickStrength(true), 0.7);
+            return [mono, cur, KICK_CAP * 0.7, kickAdd(0.3, 0.4, 0.7), kickAdd(0, 1, 0), kickAdd(0.2, 0, 0.7),
+                    kickStrength(true) > kickStrength(false)]; })()""")
+        self.assertTrue(v[0])
+        self.assertAlmostEqual(v[1], v[2])               # 20 golpes fuertes encimados: tope
+        self.assertAlmostEqual(v[3], 0.3 + 0.4 * 0.7)    # dos golpes se suman
+        self.assertEqual(v[4], 0)                        # amplitud 0 (fila sin empujón): nada
+        self.assertAlmostEqual(v[5], 0.2)
+        self.assertTrue(v[6])
+
+    def test_push_multiplies_the_base_and_amount_zero_leaves_rate_one(self):
+        v = self.run_js("[push(1.4, 0.7, 1), push(0.4, 0.7, 1), push(1.4, 0.7, 0.5), push(1, 0.7, 0),"
+                        " push(1.4, -3, 1), push(1.4, 0, 1)]")
+        self.assertAlmostEqual(v[0], 1.4 * 1.7)
+        self.assertAlmostEqual(v[1], 0.4 * 1.7)           # multiplica: pesa lo mismo en lo quieto
+        self.assertAlmostEqual(v[2], 1.4 * 1.35)
+        self.assertEqual(v[3], 1)                          # perilla en 0: ritmo 1 EXACTO
+        self.assertEqual(v[4], 1.4)
+        self.assertEqual(v[5], 1.4)
+
+    def test_a_beat_kick_is_speed_not_position(self):
+        # 300 s de tema, un golpe fuerte cada 0.5 s sobre ritmo base 1.4 (normal): la fase
+        # integrada nunca avanza más de rate·dt por cuadro (velocidad acotada); con `t·rate`
+        # cada golpe teletransporta ~ t · (Δrate) = 300 · 1.4 · 0.7 s de dibujo
+        v = self.run_js("""(() => {
+            const dt = 1 / 60; let t = 300, off = 0, prevInt = t, prevProd = t * 1.4;
+            let worstInt = 0, worstProd = 0, peak = 0, hitAt = -1, k0 = 0;
+            for (let i = 0; i < 600; i++) {
+                const now = i * dt;
+                if (i % 30 === 0) { k0 = kickAdd(kickAt(k0, now - hitAt), 1, 0.7); hitAt = now; }
+                const r = push(1.4, kickAt(k0, now - hitAt), 1);
+                peak = Math.max(peak, r);
+                t += dt; off = advance(off, dt, r);
+                worstInt = Math.max(worstInt, (t + off - prevInt) / dt);
+                worstProd = Math.max(worstProd, Math.abs(t * r - prevProd) / dt);
+                prevInt = t + off; prevProd = t * r;
+            }
+            return [worstInt, worstProd, peak]; })()""")
+        self.assertLessEqual(v[0], v[2] + 1e-6)            # velocidad de fase ≤ el pico de ritmo
+        self.assertGreater(v[2], 2.3)                      # el golpe se nota: 1.4 → ~2.4
+        self.assertGreater(v[1], 1000)                     # el control salta
 
     def test_amount_scales_the_deviation_and_zero_is_off(self):
         v = self.run_js("[rate(0, 0.75, 1.35, 0), rate(1, 0.75, 1.35, 0), rate(1, 0.75, 1.35, 0.5),"

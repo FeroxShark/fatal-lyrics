@@ -524,26 +524,71 @@ def spectral_flux_band(spec, prev_spec, rate, lo_hz=FLUX_LO_HZ, hi_hz=FLUX_HI_HZ
     return sum(max(0.0, a - p) for a, p in zip(amp, prev_amp))
 
 
+MOV_FLUX_RATIO_FLOOR = 1e-6   # piso del denominador: silencio total no puede dividir por ~0
+
+
+def spectral_flux_ratio(spec, prev_spec, rate, lo_hz, hi_hz, floor=MOV_FLUX_RATIO_FLOOR):
+    """Como `spectral_flux_band`, pero relativa a la energía ACTUAL de la banda,
+    no a un pico que decae con el tiempo. Un pico que decae tiene un problema
+    concreto: si el tema bajó de volumen (una `mf` después de una `ff`, el caso
+    de la dinámica clásica que motivó `mov`) el pico viejo sigue alto un rato y
+    ningún onset nuevo, aunque sea real, llega a superarlo — el detector queda
+    sordo justo cuando más hace falta. Dividir por la energía DE ESTE BLOQUE lo
+    hace invariante a la escala: un onset que nace de silencio da ~1.0 sin
+    importar si el silencio era fuerte o flojo, y un tono sostenido (sin energía
+    nueva) da ~0.0 aunque el pico de hace 10s todavía esté clavado arriba."""
+    if not spec:
+        return 0.0
+    n = (len(spec) - 1) * 2
+    lo = max(1, int(lo_hz * n / rate))
+    hi = min(len(spec) - 1, int(hi_hz * n / rate))
+    if hi <= lo:
+        return 0.0
+    if not prev_spec or len(prev_spec) != len(spec):
+        return 0.0
+    amp = [math.sqrt(v) for v in spec[lo:hi]]
+    total = sum(amp)
+    prev_amp = [math.sqrt(v) for v in prev_spec[lo:hi]]
+    rise = sum(max(0.0, a - p) for a, p in zip(amp, prev_amp))
+    return min(rise / max(total, floor), 1.0)
+
+
 # ---- movimiento: cuánto se está moviendo la música AHORA (tanda 8, slice "movimiento")
 # Ferox, escuchando Vivaldi (Invierno, op.8 n.4: cuerdas rápidas y nerviosas, casi
 # sin bajo ni batería): el ritmo de las animaciones se elige por TEMA (pace/mood) y
 # no sigue los cambios DENTRO del tema. `mov` (0..1) junta tres cosas, PESADAS (no
 # un OR): densidad de onsets en TODO el espectro (no sólo el bajo — la clásica no
-# tiene bombo), `hf` (el flujo de agudos que ya existe) y la energía relativa al
-# PROPIO tema (el percentil de `TrackProfile`, no el nivel crudo: así un tema
-# tranquilo entero también tiene sus picos). Pesado y no OR porque un tema fuerte
-# y PAREJO (sin onsets nuevos, sin cambio de brillo) no tiene que quedar clavado
-# arriba sólo por sonar fuerte — con energía a 0.2 de peso, ésa sola no alcanza.
+# tiene bombo), brillo que cambia (mismo concepto y misma banda que `hf`, 125-6000
+# Hz) y la energía relativa al PROPIO tema (el percentil de `TrackProfile`, no el
+# nivel crudo: así un tema tranquilo entero también tiene sus picos). Pesado y no
+# OR porque un tema fuerte y PAREJO (sin onsets nuevos, sin cambio de brillo) no
+# tiene que quedar clavado arriba sólo por sonar fuerte — con energía a 0.2 de
+# peso, ésa sola no alcanza.
+#
+# El término de brillo NO reusa el campo `hf` del evento: `hf` normaliza contra
+# un pico propio que decae (mismo patrón que `an.peak`), y eso tiene un problema
+# real con un tono sostenido de fase continua — medido en este slice: con un
+# tono fijo, `flux_peak` decae hasta la magnitud de la fuga espectral del propio
+# Hann (inevitable si el período no entra un número entero de veces en el
+# bloque) y a partir de ahí CUALQUIER bloque normaliza cerca de 1.0: `hf` queda
+# clavado en ~0.88 para siempre en vez de caer a 0. Se ve arrastrando ese sesgo
+# a `mov` (con `hf` de peso 0.3, un tema sostenido daba `mov`≈0.47 en vez de
+# bajar). Corregir `hf` es de otro slice (`senales`, ya cerrado y testeado); acá
+# se calcula el mismo concepto con `spectral_flux_ratio` (ver esa función:
+# normaliza contra la energía ACTUAL de la banda, no contra un pico viejo), así
+# `mov` no hereda el sesgo. Mismo `spec`/banda que `hf`: sin costo extra de FFT.
 MOV_FLUX_LO_HZ = 40.0              # casi todo el espectro, incluido el bajo (a
-MOV_FLUX_HI_HZ = AUDIO_RATE / 2.0 - 1.0   # diferencia de la banda de `hf`, que arranca en 125)
-MOV_FLUX_PEAK_DECAY = 0.995        # pico propio del flux de mov: importa la
-MOV_FLUX_PEAK_FLOOR = 1e-6         # densidad de onsets, no el pico puntual
-MOV_ATTACK_THRESH = 0.35           # fracción del pico de flux que ya cuenta como "entró algo"
+MOV_FLUX_HI_HZ = AUDIO_RATE / 2.0 - 1.0   # diferencia de la banda de brillo, que arranca en 125)
+MOV_ATTACK_THRESH = 0.12           # fracción de la energía ACTUAL de la banda que ya
+                                    # cuenta como "entró algo" (spectral_flux_ratio, no
+                                    # un pico que decae: ver el porqué junto a esa función)
 MOV_ATTACK_REFRACTORY = 0.05       # onsets cada 50ms como mucho (cuerdas rápidas: hasta ~15/s)
 MOV_RATE_TAU = 1.2                 # ventana del contador de densidad (EMA de impulsos)
 MOV_RATE_REF = 3.0                 # densidad ya "todo movimiento" (unidades de la EMA)
+MOV_BRIGHT_RISE_S = FLUX_RISE_S    # mismo ritmo que `hf`: sube casi al instante...
+MOV_BRIGHT_FALL_S = FLUX_FALL_S    # ...baja con cola (pulso, no parpadeo)
 MOV_W_DENS = 0.5                   # peso: densidad de onsets (todas las bandas)
-MOV_W_HF = 0.3                     # peso: brillo que cambia (ya existe, se reusa)
+MOV_W_BRIGHT = 0.3                 # peso: brillo que cambia (concepto de `hf`, invariante a escala)
 MOV_W_ENERGY = 0.2                 # peso: energía relativa al propio tema (percentil)
 MOV_RISE_S = 1.0                   # sube rápido: un pasaje que se acelera se nota en ~1s
 MOV_FALL_S = 3.0                   # baja despacio: no es otro parpadeo (ventana total ~2-4s)
@@ -574,12 +619,13 @@ class AudioAnalyzer:
         self.flux_peak = FLUX_PEAK_FLOOR
         self.hf = 0.0
         self.hf_at = None
-        # movimiento: pico propio del flux banda completa, contador de densidad
-        # de onsets (decae solo) y el valor final ya suavizado
-        self.mov_flux_peak = MOV_FLUX_PEAK_FLOOR
+        # movimiento: contador de densidad de onsets (decae solo) y el valor
+        # final ya suavizado
         self.mov_rate = 0.0
         self.mov_rate_at = None
         self.mov_last_attack = None
+        self.mov_bright = 0.0
+        self.mov_bright_at = None
         self.mov = 0.0
         self.mov_at = None
 
@@ -599,6 +645,20 @@ class AudioAnalyzer:
         self.hf += (raw - self.hf) * (1.0 - math.exp(-dt / tau))
         return self.hf
 
+    def _smooth_mov_bright(self, raw, now):
+        """Brillo que cambia para `mov`, mismo concepto que `hf` (agudo que
+        aparece) pero SIN el pico que decae de `hf` (`self.flux_peak`): ese pico
+        se queda sordo a un tono sostenido (fuga espectral del Hann, ver el
+        comentario largo junto a MOV_FLUX_LO_HZ). `raw` ya viene de
+        `spectral_flux_ratio` (invariante a escala), acá sólo se suaviza con la
+        misma ventana rápida que `hf` (sube casi al instante, baja con cola)."""
+        dt = 0.0 if self.mov_bright_at is None else min(
+            max(now - self.mov_bright_at, 0.0), DIRT_MAX_DT)
+        self.mov_bright_at = now
+        tau = MOV_BRIGHT_RISE_S if raw > self.mov_bright else MOV_BRIGHT_FALL_S
+        self.mov_bright += (raw - self.mov_bright) * (1.0 - math.exp(-dt / tau))
+        return self.mov_bright
+
     def _mov_step(self, spec, prev_spec, now):
         """Onsets en TODO el espectro -> densidad 0..1 (ver el comentario largo
         junto a MOV_FLUX_LO_HZ). Reusa `spec`/`prev_spec`: no hay FFT nueva.
@@ -607,11 +667,8 @@ class AudioAnalyzer:
         tiempo: un contador que suma 1 por onset y decae solo (EMA de impulsos,
         ventana MOV_RATE_TAU), así un tremolo de notas chiquitas pesa tanto como
         pocos golpes grandes."""
-        raw = spectral_flux_band(spec, prev_spec, self.rate, MOV_FLUX_LO_HZ, MOV_FLUX_HI_HZ)
-        self.mov_flux_peak = max(raw, self.mov_flux_peak * MOV_FLUX_PEAK_DECAY,
-                                 MOV_FLUX_PEAK_FLOOR)
-        norm = min(raw / self.mov_flux_peak, 1.0)
-        attack = norm > MOV_ATTACK_THRESH and (
+        ratio = spectral_flux_ratio(spec, prev_spec, self.rate, MOV_FLUX_LO_HZ, MOV_FLUX_HI_HZ)
+        attack = ratio > MOV_ATTACK_THRESH and (
             self.mov_last_attack is None or now - self.mov_last_attack > MOV_ATTACK_REFRACTORY)
         if attack:
             self.mov_last_attack = now
@@ -720,11 +777,15 @@ class AudioAnalyzer:
         hf = self._smooth_hf(min(flux_raw / self.flux_peak, 1.0), now)
 
         # `mov`: densidad de onsets banda completa (self.prev_spec, todavía sin
-        # pisar) + hf + energía relativa al tema. Pesado, no OR: ver MOV_W_*.
+        # pisar) + brillo que cambia (banda de `hf`, pero invariante a escala:
+        # NO reusa `hf` en sí, ver el porqué junto a MOV_FLUX_LO_HZ) + energía
+        # relativa al tema. Pesado, no OR: ver MOV_W_*.
         dens = self._mov_step(spec, self.prev_spec, now)
+        bright_raw = spectral_flux_ratio(spec, self.prev_spec, self.rate, DIRT_LO_HZ, DIRT_HI_HZ)
+        bright = self._smooth_mov_bright(bright_raw, now)
         erel = level if pct is None else pct
         mov = self._smooth_mov(
-            MOV_W_DENS * dens + MOV_W_HF * hf + MOV_W_ENERGY * erel, now)
+            MOV_W_DENS * dens + MOV_W_BRIGHT * bright + MOV_W_ENERGY * erel, now)
         self.prev_spec = spec
 
         return {

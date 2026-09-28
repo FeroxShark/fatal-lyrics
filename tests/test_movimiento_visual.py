@@ -98,6 +98,19 @@ class TestMovWiring(unittest.TestCase):
         self.assertIn("frameTime * stars.speed * motif.rate", motif)
         self.assertIn("readonly property real mclock: clock + movOff", motif)
 
+    def test_no_motif_base_child_shadows_rate_or_mov_off(self):
+        # Un método del hijo con el mismo nombre PISA la propiedad heredada: Mystify tenía
+        # `function rate(p, v, axis)` y `base.rate` en MotifBase leía la función → NaN.
+        # Un `property ... rate` repetido es error de compilación. Ninguno de los dos.
+        for name in sorted(os.listdir(SHELL)):
+            if not name.endswith(".qml") or name == "MotifBase.qml":
+                continue
+            src = read(name)
+            if not re.search(r"^MotifBase \{", src, re.M):
+                continue
+            self.assertNotRegex(src, r"function\s+(rate|movOff|lt)\s*\(", name)
+            self.assertNotRegex(src, r"property\s+\w+\s+(rate|movOff)\b", name)
+
     def test_physics_motifs_scale_the_accumulated_dt_never_the_clock(self):
         for name, pat in (("Dunes", r"sand\.clock \+= sand\.pending \* sand\.rate;"),
                           ("Ocean", r"sea\.clock \+= sea\.pending \* sea\.rate;"),

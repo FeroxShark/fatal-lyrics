@@ -262,7 +262,7 @@ pudo repetir con el `mov` nuevo. Se usó como proxy una réplica offline: captur
   (onsets/golpes/brillo/energía), suavizado **0.25 s sube / 0.7 s baja**.
 - **`mov` en la captura (Home / X):** música con pulso, 28–68 s, entre 0.56 y 0.71 (mediana 0.63); un final
   que se calma desde 68 s (0.2–0.4) y silencio. Con la señal vieja (umbral 0.12) el pasaje con pulso quedaba
-  pegado arriba, sin margen. `mov` cae de 0.62 a 0.40 en el primer segundo de la calma y a ≤ 0.3 a los 4 s.
+  pegado arriba, sin margen. Promedio por 4 s: 0.66 (60–64 s) → 0.38 (68–72 s) → 0.31 (72–76 s) → 0.12 (76–80 s).
 - **Curva** (mismos eventos, `Speed.js` viejo vs nuevo, pace normal 0.4–2.2; ritmo por cuadro de `aud`):
 
   | ventana | mapeo | p5 | p25 | p50 | p75 | p95 | cerca de movMin | cerca de movMax |

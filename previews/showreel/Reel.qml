@@ -20,7 +20,7 @@ Item {
     readonly property string segmentsJson: JSON.stringify(TL.SEGMENTS)
 
     FontLoader { id: fVt; source: "../../shell/fonts/VT323-Regular.ttf" }
-    FontLoader { id: fPress; source: "../../shell/fonts/PressStart2P-Regular.ttf" }
+    FontLoader { id: fPress; source: "../../shell/fonts/VT323-Regular.ttf" }
     FontLoader { id: fShare; source: "../../shell/fonts/ShareTechMono-Regular.ttf" }
 
     SyntheticAudio { id: aud; t: reel.t }

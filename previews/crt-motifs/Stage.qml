@@ -50,7 +50,7 @@ Item {
     readonly property real shaderT: E.wrap(t, L.LOOP)
 
     FontLoader { id: vt323; source: "../../shell/fonts/VT323-Regular.ttf" }
-    FontLoader { id: pixel; source: "../../shell/fonts/PressStart2P-Regular.ttf" }
+    FontLoader { id: pixel; source: "../../shell/fonts/VT323-Regular.ttf" }
 
     LoopFeed { id: feed; t: stage.t }
 

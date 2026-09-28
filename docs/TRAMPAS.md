@@ -904,8 +904,12 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   sin tope, un corte largo lanzaba la cámara por el pasillo). `rate` se limita a 0.25–2.6 dentro de
   `credit` y en el cobro del corte.
 - **La mirada es un yaw con `OutExpo` entre dos estampas de reloj**, no un `Behavior`: el `Behavior`
-  usa el reloj de pared y no cierra en el banco. El vistazo de agudos se limita por SLOT de pasos
-  (`walked / 4`), no por tiempo: así es determinista.
+  usa el reloj de pared y no cierra en el banco. El vistazo de agudos sólo se permite en los dos
+  primeros pasos de cada cuatro (`wrap(walked, 4) < 2`), sin memoria del vistazo anterior, y el lado
+  sale del slot DENTRO de la vuelta (`wrap(walked, 32) / 4`), NO de `walked / 4`: con el número absoluto
+  cada vuelta sortea otro lado, el preroll del banco (que arranca 32 pasos antes) no coincide con la
+  corrida continua y la costura daba media 16.6, máx 246 (yaw ±0.3 rad al final del loop vs. al
+  principio). Ahora `costura: media 0.000`.
 - **`Maze.qml` no puede definir `rate`** (ni función ni propiedad): pisa el de `MotifBase` y el
   `movOff` da NaN (misma trampa que `Mystify`). Un test lo prohíbe.
 - **El rebobinado del banco (`d < 0`) tiene que resetear `doneAct`,** o el huevo que ya se mostró

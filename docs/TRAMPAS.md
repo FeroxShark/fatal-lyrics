@@ -877,6 +877,11 @@ cuesta caro si se "simplifica":
   fase: animar una fase la hace ir y volver.
 - **Pivote 0.35, no 0.5:** un tema fuerte y parejo da `mov` ≈ 0.2; con el pivote al medio correría
   más lento que antes de punta a punta. Sin `audLive` el ritmo es 1 exacto (no `movMin`).
+- **Un método del hijo PISA la propiedad heredada.** `Mystify` tenía `function rate(p, v, axis)`;
+  con `property real rate` nueva en `MotifBase`, `base.rate` leía la FUNCIÓN y `movOff` daba NaN en el
+  overlay (el dibujo desaparece). El banco no lo veía (`tubeClock` −1 apaga ese `FrameAnimation`) ni
+  los tests de regex: se encontró con `typeof m.rate` en un `QQmlComponent` offscreen. Hoy se llama
+  `bounces`, y un test prohíbe `rate`/`movOff` en los hijos de `MotifBase`.
 - **Entradas afuera a propósito:** `Motion.enterMs` está en ~35 compuertas de tiempo real
   (`Date.now() − textArrivedAt < Motion.enterMs`, el empalme del aro con la frase). Un test
   (`test_movimiento_visual.py`) controla que `Ring`/`Motion`/`HopRay`/`WordSlot` no se enteren.

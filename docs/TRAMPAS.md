@@ -785,9 +785,10 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   ACUMULARLA afuera (QML, `React.grainAdvance`) y mandarla ya acumulada como uniform, no calcularla como
   producto directo dentro del shader.
 - **`D.clean(entry)` con el objeto de letra `{t0,t1,text,rep}` entero en vez de `.text` da basura**
-  (`D.clean` stringifica el objeto letra por letra): pasó en `shell/Splitflap.qml` (fix: `lineText()`) y
-  sigue SIN corregir en `shell/Swarm.qml` (mismo patrón, no tocado porque no era la causa del bug reportado)
-  — si en algún momento se ve `[OBJECT...]` en el motivo swarm con letra real, es este mismo bug ahí.
+  (`D.clean` stringifica el objeto letra por letra): pasó en `shell/Splitflap.qml` y en `shell/Swarm.qml`
+  (mismo patrón, en `wordText` cuando no hay `nextWord`), fix en los dos: `lineText()`. Corregido también
+  en la copia de `previews/crt-motifs/motifs/Swarm.qml`. Barrido del resto de los motivos: ninguno más
+  indexa `lines[...]` directo a `D.clean`.
 - **`crtNextWord` (la property que llena `nxt=` del daemon) queda `null` todo el tema con letra SIN
   sincronizar** (`lyrics_kind == "plain"`, común en proveedores que no traen LRC por palabra) y también en el
   hueco entre el evento `lyrics` y el primer `show()` al arrancar un tema. Cualquier UI que la use necesita

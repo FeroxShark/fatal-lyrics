@@ -7,6 +7,11 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 (apagado/degauss/estática/tarjeta) y la escena por secciones (`crt.scene`) quedan inertes; `true` los devuelve. No toca el dip del
 corte seco (tanda 8), `fatal crt dark` a mano ni los raros. Sin línea en su config: el default ya apaga todo eso.
 
+**Decisión de Ferox 2026-09-28: la carta de ajuste no aparece a mitad de tema** ("no hace nada más que dar info"). Perilla
+`crt.testcard` (default `false`): el motivo `testcard` sale del pool del director (`motifAllowed`) y el raro `testcard` del sorteo
+(`crtRareRoll`); `true` los devuelve. Siguen andando la tarjeta del intro (`crt.intro_card`, hoy inerte salvo `screen_off = true`)
+y los forzados `fatal crt motif|rare testcard`.
+
 **Tanda 8 (hecha 2026-09-28, falta verla con música real).** Seis slices en paralelo sobre lo que Ferox vio con
 música el 2026-09-26 (capturas viejas en `docs/plans/tanda8/`, gitignored); estado de cada uno en
 `docs/tanda8-estado/{shaders,senales,fuentes,sigue,reaccion,colores}.md`: túnel sin costura y vidrio sin moiré (shaders),

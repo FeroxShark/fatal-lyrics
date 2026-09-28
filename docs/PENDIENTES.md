@@ -3,25 +3,29 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
-**Tanda 8 — lo que vio Ferox con música real (2026-09-26), próxima tanda.** Capturas en `docs/plans/tanda8/`
-(gitignored). Regla de pantalla: todos los cambios primero, UNA sola corrida visual al final.
+**Tanda 8 (hecha 2026-09-28, falta verla con música real).** Cinco slices en paralelo sobre lo que Ferox vio con
+música el 2026-09-26 (capturas viejas en `docs/plans/tanda8/`, gitignored); estado de cada uno en
+`docs/tanda8-estado/{shaders,senales,fuentes,sigue,reaccion}.md`: túnel sin costura y vidrio sin moiré (shaders),
+campos `cut`/`cutf`/`hf` nuevos en el evento `aud` (señales), cuatro fuentes libres reemplazando Press Start 2P
+(fuentes), fix del "SIGUE:" vacío en el motif splitflap (sigue, cerrado sin pendientes), y reacción visual a
+corte/silencio, agudos y grano con movimiento propio (reacción). Nadie lo corrió en pantalla con música real
+todavía. Abierto:
 
-- **Bug del túnel:** el motif túnel/tubo tiene un corte mal hecho, una franja horizontal donde la geometría no
-  empalma (`docs/plans/tanda8/bug-tunel-corte.png`, a la izquierda, a media altura).
-- **Máscara/scanlines estáticas demasiado marcadas:** se notan mucho, y hacen moiré, con círculos en cada esquina y
-  una estrella marcada en el centro. Sospecha: interferencia entre la máscara (`maskPitch`/tipo del tubo) y las
-  scanlines con la curvatura, o el pitch contra la resolución real del monitor. Bajarla o filtrarla (sin
-  aliasing) hasta que se sienta la textura sin dibujar figuras.
-- **Sacar la fuente pixel/bitmap** de bloques gruesos (`docs/plans/tanda8/font-pixel-no-gusta.png`, "WHEN I'M AWAY")
-  y buscar otras fuentes libres (licencia OK para repo público) para tener variedad en los sets.
-- **Reaccionar al silencio seco**, aunque sea breve (un corte o un stop): por ejemplo bajar la luz de los monitores
-  y volver con el golpe. Distinguirlo del `quiet` de sección, que es por energía y lento.
-- **La estática por suciedad (`dirt`) funciona bien pero se siente estática:** que el grano tenga movimiento propio
-  o que responda más rápido o con más matices.
-- **Algo que muestre que la música se mueve más allá del bajo:** hoy la reacción se siente como un parpadeo de los
-  bajos. Falta algo que siga la melodía, la armonía, el brillo o los cambios de la canción (por ejemplo centroide
-  espectral, onsets de agudos o cambios de acorde) con una respuesta visual propia. Sin romper "una animación por
-  pantalla".
+- **Umbrales de `cut` calibrados sólo contra el sintetizador** (`CUT_LOW`/`CUT_HIGH`/`CUT_ENTER_S`/
+  `CUT_RECENT_S` en `cartelitos/audio.py`): si con música real da falsos positivos en pasajes dinámicos que no
+  llegan a silencio real, separar más `CUT_LOW`/`CUT_HIGH` (más lento para entrar, menos falsos positivos).
+- **Vetar fuentes nuevas mirando `docs/tanda8-estado/fuentes-muestra.png`**: decisión de Ferox; el reparto está
+  en `crtFontPools` (`shell.qml`).
+- **Que Space Mono Bold y Chakra Petch (anchas) entren en líneas largas**: hoy no hay regla, se confía en el
+  `Text.Fit` de `Crt.qml`; si una línea larga queda chica, falta una regla por clave en `crtFontKeyFor` (Press
+  Start tenía ">3 palabras → share").
+- **Scanlines ya no respiran**: antes latían de contraste cada ~2 s (parte del moiré), ahora quedan quietas y
+  en filas de pantalla en vez de seguir la curva del tubo. Reversible, alternativa en `shaders.md`.
+- **`Behavior on crtDirt` bajado de 1500 a 420 ms** (el grano sigue a la suciedad más rápido que antes): mirar
+  si queda demasiado nervioso con música real.
+- **La reacción (corte/agudos/grano) no escala con `flickerAmt`**: con el default 0.25² el golpe de bajo es
+  chico y el corte de `cut` se vería apenas — si hace falta más presencia, es lo primero para tocar.
+- **Temblor de agudos en `wild` (`fizz` 1.0)**: puede quedar demasiado marcado, mirar con música real.
 
 **Tanda 7 (hecha 2026-09-26, estado en `docs/plans/2026-09-25-estado-tras-tanda7.md`):** señal compuesta,
 tubos, estela, tensión, quemado del estribillo, glitch al beat, efectos por palabra, intro v2 con carta, osciloscopio

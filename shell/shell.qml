@@ -182,6 +182,10 @@ ShellRoot {
     // pool ni el raro `testcard` sale sorteado; la tarjeta del intro (crt.intro_card),
     // `fatal crt motif testcard` y `fatal crt rare testcard` siguen andando.
     property bool crtTestcard: false
+    // Ferox 2026-09-28: el laberinto lleva huevos de pascua como el salvapantallas de Win95
+    // (carita, diálogo de error, SALIDA, una rata, un poliedro que da vuelta el mundo y el
+    // mundo patas arriba en el drop). true (default); false = el laberinto pelado.
+    property bool crtMazeEggs: true
     onCrtScreenOffChanged: {
         if (!crtScreenOff) {
             crtIntroTimer.stop();
@@ -3495,7 +3499,7 @@ ShellRoot {
         crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
-        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_screen_off: "crtScreenOff", crt_testcard: "crtTestcard", crt_intro_card: "crtIntroCard",
+        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_screen_off: "crtScreenOff", crt_testcard: "crtTestcard", crt_maze_eggs: "crtMazeEggs", crt_intro_card: "crtIntroCard",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_face_mode: "crtFaceMode",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",

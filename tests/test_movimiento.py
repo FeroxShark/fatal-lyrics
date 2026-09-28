@@ -46,6 +46,23 @@ def pulses(a, rate_hz, freq, amp, seconds, t0=0.0, pct=None):
     return t, ev
 
 
+def sustained(a, freq, amp, seconds, t0=0.0, pct=None, phase0=0):
+    """Tono de FASE CONTINUA (no `tone()`, que arranca de la muestra 0 en cada
+    llamada y da bloques bit-idénticos: un flujo espectral trivialmente 0 sin
+    importar si la normalización de abajo está bien o mal). Simula sostenido
+    real: cada bloque sigue la fase donde dejó el anterior. Devuelve (t final,
+    índice de muestra final, último `ev`)."""
+    i0 = phase0
+    t = t0
+    ev = None
+    for _ in range(int(seconds / DT)):
+        blk = pcm([amp * math.sin(2 * math.pi * freq * (i0 + i) / RATE) for i in range(N)])
+        ev = a.feed(blk, t, pct=pct)
+        i0 += N
+        t += DT
+    return t, i0, ev
+
+
 class MovTests(unittest.TestCase):
     """`mov`: cuánto se está moviendo la música ahora (densidad de onsets en todo
     el espectro + hf + energía relativa al propio tema, pesado y suavizado)."""
@@ -79,14 +96,31 @@ class MovTests(unittest.TestCase):
         arriba. Peor caso: se le pasa pct=1.0 (percentil máximo posible contra el
         perfil) todo el tiempo, y el tono no cambia nunca (sin onsets, sin brillo
         que cambie). Sólo el término de energía (peso 0.2) puede empujar `mov`,
-        así que el techo es ~0.2, lejos de 1.0."""
+        así que el techo es ~0.2, lejos de 1.0.
+
+        Usa `sustained()`, NO `tone()`: `tone()` reinicia la fase en la muestra 0
+        en cada llamada y dos bloques quedan bit-idénticos, dando flujo espectral
+        0 por construcción — el test pasaría igual aunque la normalización de
+        abajo estuviera mal (bug real encontrado en este slice: ver
+        docs/tanda8-estado/movimiento.md). `sustained()` arrastra la fase real
+        entre bloques, como un tono sostenido de verdad."""
         a = audio.AudioAnalyzer()
-        t = 0.0
-        ev = None
-        for _ in range(int(6.0 / DT)):
-            ev = a.feed(tone(220.0, 0.7), t, pct=1.0)
-            t += DT
+        _, _, ev = sustained(a, freq=220.0, amp=0.7, seconds=6.0, pct=1.0)
         self.assertLess(ev["mov"], 0.35)
+
+    def test_loud_then_quiet_onsets_at_the_same_rate_give_similar_mov(self):
+        """El caso Vivaldi de verdad: un pasaje fuerte (`ff`) seguido de uno
+        flojo (`mf`) con la MISMA densidad de onsets. Si la detección normaliza
+        contra un pico absoluto que todavía está alto por el pasaje fuerte
+        anterior, los onsets del pasaje flojo no llegan a cruzar el umbral y
+        `mov` se queda sordo justo cuando la música bajó de volumen (bug real
+        encontrado y corregido en este slice, ver movimiento.md). Con
+        `spectral_flux_ratio` (normaliza contra la energía DE ESE BLOQUE) los
+        dos pasajes, misma densidad, tienen que dar un `mov` parecido."""
+        a = audio.AudioAnalyzer()
+        t, ev_loud = pulses(a, rate_hz=10.0, freq=800.0, amp=0.8, seconds=3.0, t0=0.0, pct=0.9)
+        t, ev_quiet = pulses(a, rate_hz=10.0, freq=800.0, amp=0.15, seconds=3.0, t0=t, pct=0.2)
+        self.assertGreater(ev_quiet["mov"], ev_loud["mov"] * 0.6)
 
     def test_without_a_track_profile_mov_falls_back_to_raw_level(self):
         """Sin `pct` (perfil todavía no conocido: arranque del tema, o sin

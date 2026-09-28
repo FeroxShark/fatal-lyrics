@@ -64,8 +64,9 @@ class TestMovWiring(unittest.TestCase):
         qml = read("shell.qml")
         self.assertIn("root.audMov = ev.mov || 0;", qml)
         self.assertIn('import "Speed.js" as Speed', qml)
-        self.assertRegex(qml, r"property real crtMovRate: audLive\s*\n\s*\? Speed\.rate\(audMov, "
-                              r"pace\.movMin, pace\.movMax, crtMovAmount\) : 1\n")
+        self.assertRegex(qml, r"property real crtMovRate: audLive\s*\n\s*\? Speed\.rate\(movFit\.mov, "
+                              r"pace\.movMin, pace\.movMax, crtMovAmount, movFit\.pivot\) : 1\n")
+        self.assertIn("root.movStat = Speed.newStat();", qml)   # percentiles por tema
 
     def test_crt_integrates_the_offset_where_tube_time_advances_and_never_scales_it(self):
         crt = read("Crt.qml")
@@ -93,8 +94,8 @@ class TestMovWiring(unittest.TestCase):
             self.assertIsNotNone(body, kind)
             self.assertIn("rate: motif.rate", body.group(1), kind)
         # radar y lluvia dibujan con el reloj de dibujo; las estrellas acumulan con rate
-        self.assertIn("rotation: motif.mclock *", motif)
-        self.assertIn("y: ((motif.mclock * speed", motif)
+        self.assertIn("rotation: radar.angle", motif)
+        self.assertIn("rain.base + rain.kph", motif)
         self.assertIn("frameTime * stars.speed * motif.rate", motif)
         self.assertIn("readonly property real mclock: clock + movOff", motif)
 
@@ -172,6 +173,22 @@ class TestSpeedJs(unittest.TestCase):
         # quedar por encima, pero no tanto que el tema parejo se arrastre
         self.assertGreater(v[5], 0.2)
         self.assertLess(v[5], 0.5)
+
+    def test_narrow_mov_band_is_stretched_to_the_whole_range(self):
+        # Vivaldi real (qs.log): mov 0.63–0.80. Absoluto: rate 1.0–1.2; con percentiles: todo el rango
+        v = self.run_js("""(() => { const st = newStat();
+            for (let i = 0; i < 1200; i++) observe(st, 0.63 + 0.17 * (i % 100) / 99, 0.1);
+            const sp = span(st); const f = (m) => { const q = fit(m, sp);
+              return rate(q.mov, 0.4, 2.2, 1, q.pivot); };
+            const st0 = newStat(); const s0 = span(st0);
+            return [f(0.63), f(0.715), f(0.80), sp.conf, fit(0.7, s0).mov, fit(0.7, s0).pivot,
+                    rate(0.8, 0.4, 2.2, 1)]; })()""")
+        self.assertLess(v[0], 0.55)
+        self.assertAlmostEqual(v[1], 1.0, delta=0.15)
+        self.assertGreater(v[2], 1.9)
+        self.assertEqual(v[3], 1)
+        self.assertAlmostEqual(v[4], 0.7)     # sin muestras: absoluto de siempre
+        self.assertAlmostEqual(v[5], 0.35)
 
     def test_amount_scales_the_deviation_and_zero_is_off(self):
         v = self.run_js("[rate(0, 0.75, 1.35, 0), rate(1, 0.75, 1.35, 0), rate(1, 0.75, 1.35, 0.5),"

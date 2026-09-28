@@ -68,6 +68,7 @@ MotifBase {
         if (d < 0) {                  // el reloj volvió atrás (el banco): corrida entera
             walked += d;
             sFrom += d;
+            doneAct = -1e9;           // lo ya mostrado se vuelve a mostrar
             return;
         }
         if (cut) {

@@ -33,14 +33,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - **El salto de la frase se ve viajar, y ESA es la flecha.** Cuando la línea cae en otra pantalla,
   la perilla `hop` (`corridor|interference|both|off`) manda un rayo: nace como hebras estiradas de
   la letra que se va, cruza cada pantalla del medio POR EL BORDE (arriba o abajo, alternando) y
-  converge al centro de la de destino, encima de la línea que llega. Cabeza brillante y cola, y
-  el color va del de la letra de origen al de la de destino a lo largo de todo el viaje. El reloj
-  (360 ms + 150 de cola; 200 + 150 si es a la pantalla de al lado, que es la mitad de camino a la
-  misma velocidad) lo publica `shell.qml` UNA vez (`crtHopStart`) y cada monitor lo lee: es un
-  solo rayo atravesando la pared. **El rayo es lo que dice DÓNDE va a caer la letra** — textual
-  de Ferox: "me gusta la línea glitchada que indica 'tu ojo va a ir para acá', esa antes que un
-  timer" —, y por eso sale también en el salto de una sola pantalla (tanda 4). El aro no señala
-  nada: avisa que vuelve la voz.
+  converge al centro de la de destino, encima de la línea que llega. Cabeza brillante y cola, color
+  degradado origen→destino. Un solo reloj lo publica (`shell.qml`, `crtHopStart`) y cada monitor lo
+  lee. **El rayo es lo que dice DÓNDE va a caer la letra** — textual de Ferox: "me gusta la línea
+  glitchada que indica 'tu ojo va a ir para acá', esa antes que un timer". El aro no señala nada:
+  avisa que vuelve la voz.
 - **REGLA: una animación por pantalla.** Textual de Ferox: "no quiero que ninguna animación se
   superponga con ninguna". En cada pantalla hay UNA cosa a la vez — o el motivo, o el aro, o la
   letra con su entrada, o el instrumental. Por eso el aro apaga el motivo de su pantalla (`dim` a
@@ -96,67 +93,50 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `crt motif <kind> [--screen <nombre|idx|all>]|off` y `sync +|-|show|reset [<artista>|all]`
   (`sync show|reset` y `crt motif` NO necesitan el daemon; `crt motif` habla con el overlay).
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
-- `shell/Crt.qml` — el tubo, en DOS pasadas (tanda 7): `stage` → `signal.frag` (la señal: compuesta,
-  perilla `crt.composite`) → `crt.frag` (el vidrio: fósforo, scanlines, rotura). Un `.qsb` c/u.
-  `crtTubeTable` (`shell.qml`, perilla `crt.tube`, corrida 2): cada tubo es una fila con las perillas
-  sueltas + `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); default `auto` (`crtSetFor`:
-  uno de color por tema); `custom` = look de siempre, el único que obedece las sueltas.
-  **Estela** (corrida 3, `crt.persistence`): `signalTex` es `recursive`, `signal.frag` guarda
-  `max(señal, prev*decay - piso)`; `trailOn` exige `trailQ` (= `crtQuality >= 1` con 150 ms de retraso: el
-  resize y `recursive` nunca cambian en el mismo cuadro, TRAMPAS), el `dt` sale de `frameSwapped`
-  (`docs/TRAMPAS.md`). Vida media = persistence × 220 ms.
-- `crtTension`/`crtClimaxT` (`shell.qml`, `crt.tension`, corrida 4a) — `rep` `{n,k,chorus}`
-  (`lyrics.repeat_map`) viaja en `lyrics.lines[i]`, `show` y `next`. La tensión sube con `posAbs`
-  hasta `crtClimaxT` (última ocurrencia de la línea más repetida), un escalón mientras suena un
-  `chorus`, baja en el outro. Multiplica UN camino: `rest` de `Crt.qml` y `hitGap`; rango
-  `tensionMin/Max` en `crtPaceTable`.
-- `shell/Motif.qml` — dieciséis animaciones para las pantallas sin letra: reparte propiedades y
-  elige cuál dibuja. Las dieciséis son un `Component` cada una y las pone **UN solo `Loader`**
-  (`sourceComponent` según `kind`): dos motivos no pueden estar vivos a la vez. Las que tienen
-  física propia viven al lado, un archivo cada una — `Ocean.qml`, `Pond.qml`, `Dunes.qml`,
-  `Static.qml`, `Rorschach.qml`, `Plasma.qml` y `Tunnel.qml` (con su `.frag` + `.qsb`), más
-  `Ekg.qml` (Canvas), `TextSea.qml`, `Eyes.qml` y `Eye.qml` (el dibujo del ojo, que usan el
-  motivo `eye` y la grilla `eyes`). Lo que se dibuja con items sueltos (el radar, la lluvia, el
-  hiperespacio, la carta de ajuste, el osciloscopio) sigue adentro de `Motif.qml`. El osciloscopio
-  dibuja el audio REAL (tanda 7, corrida 7): ver `wave` abajo.
+- `shell/Crt.qml` — el tubo, en DOS pasadas: `signal.frag` (la señal, perilla `crt.composite`) →
+  `crt.frag` (el vidrio: fósforo, scanlines, rotura, estela). `crtTubeTable` (`shell.qml`, perilla
+  `crt.tube`) define el tubo por tema; default `auto` (`crtSetFor`), `custom` = look de siempre.
+  Detalle de las dos pasadas y la estela: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- `crtTension`/`crtClimaxT` (`shell.qml`, `crt.tension`) — la tensión sube con la repetición de la
+  letra (`rep`, `lyrics.repeat_map`) hasta el estribillo más repetido, y multiplica el ritmo del
+  tubo (`rest` de `Crt.qml`, `hitGap`). Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- `shell/Motif.qml` — animaciones para las pantallas sin letra: reparte propiedades y elige cuál
+  dibuja con **UN solo `Loader`** (dos motivos no pueden estar vivos a la vez). Física propia en
+  archivos aparte: `Ocean.qml`, `Pond.qml`, `Dunes.qml`, `Static.qml`, `Rorschach.qml`,
+  `Plasma.qml`, `Tunnel.qml`, `Ekg.qml`, `TextSea.qml`, `Eyes.qml`/`Eye.qml`. El resto (radar,
+  lluvia, hiperespacio, carta de ajuste, osciloscopio) vive adentro de `Motif.qml`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
-- `cartelitos/motifs.py` + `crtSetForceMotif` / `crtMotifForced` (`shell.qml`) — el forzado de
-  `fatal crt motif`: el parseo y el socket de un lado, el evento `motif` y el pisado del sorteo
-  del otro. La lista de kinds del `--help` se LEE de `motifKinds` en `shell.qml`, no se copia.
+- `cartelitos/motifs.py` + `crtSetForceMotif`/`crtMotifForced` (`shell.qml`) — el forzado de
+  `fatal crt motif` (parseo+socket de un lado, evento `motif` del otro). El `--help` LEE
+  `motifKinds` de `shell.qml`, no lo copia.
 - `crtDark[]` / `crtSetDark(i, on)` / `tubeDark` (`Crt.qml`) — el tubo apagado: `fatal crt dark
   <screen|all> on|off` lo prende/apaga por socket, y `crtPredict()` lo reenciende solo antes de
   que llegue la letra ("la letra prende el tubo").
 - `crtSceneFor(section, outro, n, focus)` + `crtSceneApply`/`crtSceneStartOutro`/
-  `crtSceneOutroCheck` (`shell.qml`, perilla `crt.scene = sections | all`, tanda 6, corrida 4) —
-  la sección decide qué pantallas viven sobre el primitivo `crtSetDark` de la corrida 0: la
-  estrofa deja una sola pantalla prendida (la del foco), el drop enciende la pared entera
-  (portero `sceneGapMs` de `crtPaceTable` salteado a propósito, siempre pasa) y el final del
-  tema (umbral de `posAbs/posLen`, no lo manda el daemon) apaga de a una hacia el foco, una
-  cada `Motion.holdMs`, con un timer único reapuntado (mismo patrón que `crtRelightTimer`).
-  Nunca apaga la pantalla que `crtPredict()` ya prendió por anticipación.
+  `crtSceneOutroCheck` (`shell.qml`, perilla `crt.scene = sections | all`) — la sección decide qué
+  pantallas viven: la estrofa deja sólo el foco prendido, el drop enciende la pared entera y el
+  final del tema apaga de a una hacia el foco. Nunca apaga la pantalla que `crtPredict()` ya
+  prendió por anticipación. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
 - `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`crtIntroAdvance`/`crtIntroEnd`/
-  `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, tanda 6, corrida 5; v2 tanda 7, corrida 6:
-  `crt.intro_card`) — el cambio de tema es un evento: `clear` (why="track") apaga la pared,
-  degauss (uniform de `crt.frag`), estática (`Static.qml`) y la tarjeta (carta de ajuste
-  `testcard` con título/artista) en la pantalla del próximo foco. La tarjeta NO tiene plazo: la
-  corta `show()`. Detalle del orden y los cortes en `docs/TRAMPAS.md` ("Detalle movido").
-- `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`, tanda 6, corrida 6) — la palabra que
-  suena pulsa con la familia de entrada del set (`crt: word <i> <emphasis>`). `wholeWordsOn`
-  gatea el `Flow` por palabra (4.4 puntos de CPU); el auto-drop de calidad lo apaga.
+  `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, `crt.intro_card`) — el cambio de tema es un
+  evento: `clear` (why="track") apaga la pared, degauss, estática y la tarjeta (título/artista) en
+  la pantalla del próximo foco. La tarjeta NO tiene plazo: la corta `show()`. Detalle del orden y
+  los cortes: `docs/TRAMPAS.md` ("Detalle movido desde CLAUDE.md").
+- `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`) — la palabra que suena pulsa con la familia
+  de entrada del set. Costo y auto-drop de calidad: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
-  `crt.rare`, tanda 6, corrida 7) — eventos raros `bsod`, `nosignal` y `testcard`; el sorteo
-  nunca cae en intro ni en pantalla oscura. `fatal crt rare <kind> [--screen ...]` fuerza uno.
-- `burn.frag` + `burnLoader` (`Crt.qml`, `crt.burnin`, tanda 7, corrida 4b) — quemado del estribillo, UNA tanda: desde la 2da ocurrencia (`rep.chorus`, k>=2) queda tenue mientras asientan
-  líneas chorus; una NO chorus, 6 s sin chorus o sin letra/pausa lo desvanece en 2 s (`burnFade`,
-  `NumberAnimation` sobre `level` DENTRO del Loader) y se limpia (`burnWipe`; `clear why=track` de golpe).
-  Log `crt: burn on|hold|fade|clear`. Techo 3 %/6 %. Fuente `lyricTex` (sólo el texto, TRAMPAS).
-- `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`, tanda 7, corrida 5a) — con `bpmLive`, el glitch sin
-  animación propia (`line`, `interf`) espera al próximo tiempo, máx uno (`beatStep`; log `beat+<ms>`);
-  aro, salto, tubeon, canal y cámara son `urgent`.
-- `motifWords` `{re, kind?, fx?}` + `fxCheck`/`fxFire` (`Crt.qml`, `crt.word_fx`, tanda 7, corrida 5b) — fuego/
-  morir/romper/oscuro pegan al tubo de la pantalla con la palabra, 1 vez por línea, vía `hit()` y `fxGapMs`.
-  Trampas: `docs/TRAMPAS.md`.
+  `crt.rare`) — eventos raros `bsod`, `nosignal` y `testcard`; el sorteo nunca cae en intro ni en
+  pantalla oscura. `fatal crt rare <kind> [--screen ...]` fuerza uno.
+- `burn.frag` + `burnLoader` (`Crt.qml`, `crt.burnin`) — quemado del estribillo: desde la 2da
+  ocurrencia del chorus queda tenue, se desvanece sin chorus y se limpia al cambiar de tema.
+  Detalle y crashes evitados: `docs/TRAMPAS.md` ("El quemado del estribillo").
+- `hit()` + `rollPhase` (`Crt.qml`, `crt.beat_lock`) — con `bpmLive`, el glitch sin animación
+  propia espera al próximo tiempo (máx uno); aro, salto, tubeon, canal y cámara son `urgent`.
+  Detalle: `docs/TRAMPAS.md` ("Glitches en el tiempo").
+- `motifWords` `{re, kind?, fx?}` + `fxCheck`/`fxFire` (`Crt.qml`, `crt.word_fx`) — fuego/morir/
+  romper/oscuro pegan al tubo de la pantalla con la palabra, 1 vez por línea. Detalle:
+  `docs/TRAMPAS.md` ("Efectos por palabra").
 - `shell/Ring.qml` — el cronómetro de la línea que viene: arco que se vacía en sentido horario,
   doce marcas, número en el centro y colapso que empalma con la entrada de la frase.
 - `shell/Motion.qml` — singleton con las constantes de movimiento del tubo (`enterMs`,
@@ -167,22 +147,16 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   qué dibuja cada pantalla, desde cuándo y con qué semilla.
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
-- `crtSetFor(seed, mood)` (`shell.qml`) — el set por tema (perilla `crt.set`, tanda 6): familia
-  de entrada (`crtEntryFamilies`), scheme y fuente, de una semilla atada a `crtTrackSeed`
-  (`crtEntryBag`: mazos sin repetir). Los DIBUJOS no salen del set: `crtMotifDraw` sortea con dados
-  cargados por lo que suena (`motifFit` × `crtSoundNow()` × `crtMotifUsed` × `contrast` del mood);
-  cambia una pantalla por cambio de parte, todas en el drop (`crtMotifRefresh(force, one)`).
-  `crt.set = "off"` vuelve al sorteo plano. El `mood` (corrida 3) se congela una vez por tema
-  (`crtMoodLocked`). Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
-- `crtFontPools` (`shell.qml`, tanda 8) — mazo de fuentes por familia de entrada
-  (`crtEntryFamilies`: typed/hard/burn/soft), elegido con el mismo dado que la fuente del set
-  (`crtHash(seed*7+3)`). Reemplaza `crtFontKeys`/Press Start 2P (sacada del repo, a Ferox no le
+- `crtSetFor(seed, mood)` (`shell.qml`, perilla `crt.set`) — el set por tema: familia de entrada,
+  scheme y fuente, de una semilla atada a `crtTrackSeed`. Los DIBUJOS no salen del set:
+  `crtMotifDraw` sortea con dados cargados por lo que suena. `crt.set = "off"` vuelve al sorteo
+  plano. Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
+- `crtFontPools` (`shell.qml`) — mazo de fuentes por familia de entrada, elegido con el mismo dado
+  que la fuente del set. Reemplaza `crtFontKeys`/Press Start 2P (sacada del repo, a Ferox no le
   gustaba): plex, space, chakra, syne, vt323, share, system — créditos en `shell/fonts/README.md`.
 - `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright/contrast
-  determinísticos (léxico chico es/en para valence, rms absoluto calibrado contra `~/.cache/
-  cartelitos/audio` para energy, sin red ni IA — `feedback_ia_sin_creditos`). El daemon lo manda
-  por el socket como evento `mood`, hasta dos veces por tema (al juntar la letra, y de nuevo si
-  el compás se asienta después).
+  determinísticos, sin red ni IA (`feedback_ia_sin_creditos`). El daemon lo manda por el socket
+  como evento `mood`, hasta dos veces por tema. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
@@ -191,34 +165,30 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
 - `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
-- `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`, tanda 7, corrida 7) —
-  la captura es estéreo pero se baja a mono `(L+R)>>1` ANTES de `AudioAnalyzer.feed` (test: idéntico al mono
-  de antes; no descalibra perfiles ni `ENERGY_GAIN_REF`; la 7b reusa `downmix_stereo`). A `WAVE_HZ`=20
-  van 64+64 enteros por `send_soft`; el scope hace Lissajous L/R, retrato de fase si |corr|>0.98 y vuelve al
-  sintético sin `wave` >300 ms (`waveStaleMs`).
-- `audio.dirt_from` + `AudioAnalyzer._smooth_dirt` + campo `d` de `aud` → `crtDirt`/`crtDirtMult` (`crt.dirt`, tanda 7,
-  corrida 7b) — planitud espectral local (ruido/guitarras) escala SÓLO `noiseAmt` (rango `dirtMin/Max` de `crtPaceTable`).
-- `audio._cut_step`/`_smooth_hf` + campos `cut`/`cutf`/`hf` de `aud` (`audio.py`, tanda 8) — `cut` (sostenido)
-  marca un corte seco tras sonar fuerte y sale solo al volver a cruzar `CUT_HIGH`; `cutf` (un frame) es la
-  fuerza del golpe de vuelta y fuerza envío inmediato como el beat; `hf` es flujo espectral en la banda de
-  `dirt` (125–6000 Hz), reusa el mismo espectro que `dirt` ya calculaba (sin FFT nueva).
-- `shell/React.js` (tanda 8) — funciones puras del reloj del tubo (`cutDim`, `backFlash`, `fizz`, `grain`,
-  `grainAdvance`) que llaman `Crt.qml` Y el banco `previews/reaccion/` (misma fuente, no una copia); mapean
-  `cut`/`cutf`/`hf` a uniforms de `crt.frag` en ejes distintos del golpe de bajo (posición/color, no brillo),
-  sin sumar animación por pantalla. Fase del grano acumulada en QML (`grainAdvance`), no calculada como
-  `t · velocidad(x)` en el shader (TRAMPAS: salta al tocar la velocidad).
-- `crt.resting` + `tubeAccum` (`Crt.qml`, tanda 7, corrida 8) — pausa con letra puesta (`!musicLive` + `Motion.holdMs`):
-  reloj 15 fps, pump frenado, sin estela (log `crt: rest N on|off`); vuelve con el primer `pos`/`aud`. `tubeTime` con
-  tope de 60. El daemon real manda `aud` si suena CUALQUIER cosa: para medir la pausa hay que bajarlo (TRAMPAS).
-- Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`; overlay: `sh`
-  de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd, y el fd no se hereda (TRAMPAS); `start` espera `daemon.ready` (el daemon lo crea tras escribir el flag del CRT).
+- `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`) — la captura
+  estéreo se baja a mono ANTES de `AudioAnalyzer.feed` (no descalibra perfiles viejos); el scope
+  dibuja Lissajous L/R real. Detalle y números: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.
+- `audio.dirt_from` + `AudioAnalyzer._smooth_dirt` + campo `d` de `aud` → `crtDirt`/`crtDirtMult`
+  (`crt.dirt`) — planitud espectral local (ruido/guitarras) escala SÓLO `noiseAmt`. Detalle:
+  `docs/NUMEROS-MEDIDOS.md`.
+- `audio._cut_step`/`_smooth_hf` + campos `cut`/`cutf`/`hf` de `aud` (`audio.py`) — `cut`/`cutf`
+  marcan un corte seco al bajar de golpe y la fuerza de vuelta; `hf` es flujo espectral, reusa el
+  espectro que `dirt` ya calculaba. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- `shell/React.js` — funciones puras del reloj del tubo (`cutDim`, `backFlash`, `fizz`, `grain`,
+  `grainAdvance`) que llaman `Crt.qml` Y el banco `previews/reaccion/` (misma fuente). Mapean
+  `cut`/`cutf`/`hf` a uniforms de `crt.frag` sin sumar animación por pantalla. Fase del grano
+  acumulada en QML, no en el shader (TRAMPAS: salta al tocar la velocidad).
+- `crt.resting` + `tubeAccum` (`Crt.qml`) — pausa con letra puesta: reloj a 15 fps, pump frenado,
+  sin estela; vuelve con el primer `pos`/`aud`. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`;
+  overlay: `sh` de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd. Detalle: `docs/TRAMPAS.md`.
 - `tests/` — ~690 tests, stdlib puro.
-- `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar (QtQuick puro, render offscreen
-  determinista con `./render.py`; `SyntheticAudio` usa los mismos nombres que `root`). Qué módulo y cómo integrarlo: su `README.md`.
-- `previews/crt-motifs/` — banco de render de los 8 motivos de loop de 15 s (swarm, splitflap, maze, pipes, defrag,
-  mystify, vector, harmonograph), YA INTEGRADOS: la fuente es `shell/<Kind>.qml` + `MotifBase.qml` (dibujan en
-  `onFrame` con `MShape.qml` — Qt Quick Shapes, NUNCA un Canvas de pantalla entera: ver TRAMPAS); la copia de
-  `previews/` es para renderizar por el vidrio real. Ver su `README.md`.
+- `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar (render offscreen
+  determinista, `./render.py`). Qué módulo y cómo integrarlo: su `README.md`.
+- `previews/crt-motifs/` — banco de render de los 8 motivos de loop de 15 s (swarm, splitflap, maze,
+  pipes, defrag, mystify, vector, harmonograph), YA INTEGRADOS: fuente `shell/<Kind>.qml` +
+  `MotifBase.qml` (Qt Quick Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). Ver
+  su `README.md`.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).
@@ -244,17 +214,15 @@ docs/plans/motif-force.py dunes DP-4 10 --shot t4-dunes   # + captura, y deja to
 
 **NUNCA pescar un motif con palabras clave ni rerollear con `cue drop`.** Así se hacía hasta la
 tanda 4 (`drive-motif.py`, `motif-hunt.py`, hoy OBSOLETOS) y era esperar minutos a que el sorteo
-sacara el dibujo que se quería mirar. El forzado pisa el pool, el hold, el filtro de validez y la
-palabra clave, y se ve aunque no suene nada. La letra sigue dibujándose encima: sirve para mirar
-un motivo CON el verso puesto. Los kinds válidos los lista `fatal crt motif --help` (salen de
-`motifKinds` en `shell.qml`, no de una copia).
+sacara el dibujo buscado. El forzado pisa pool, hold, filtro de validez y palabra clave, y se ve
+aunque no suene nada; la letra sigue dibujándose encima. Kinds válidos: `fatal crt motif --help`.
 
 Autostart: **UNO solo** `exec-once` en `execs.conf` con `sleep 6 && cartelitos restart`. `restart`
 deja estado limpio aunque haya quedado media instancia. No reintroducir un segundo (`docs/TRAMPAS.md`).
 
 ## Dónde está el resto (leer sólo lo que toca)
 
-**Tope de este archivo: 20.000 caracteres.** Es el mapa mental + índice.
+**Tope de este archivo: 19.000 caracteres.** Es el mapa mental + índice.
 
 - `docs/TRAMPAS.md` — Bugs que ya pasaron y por qué. Antes de diagnosticar algo raro, buscá acá. Cada trampa nueva va acá, no a `CLAUDE.md`.
 - `docs/NUMEROS-MEDIDOS.md` — Mediciones de CPU/latencia y cómo se tomaron. Los números nuevos van acá.

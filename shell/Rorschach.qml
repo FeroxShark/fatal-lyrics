@@ -107,12 +107,15 @@ Item {
 
     // Reloj propio: el del tubo va a 20 Hz en las pantallas sin letra y la
     // deriva de la tinta se vería a saltos.
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     property real clock: 0
     property real pending: 0
     FrameAnimation {
         running: blot.running && blot.visible
         onTriggered: {
-            blot.pending += frameTime * Math.max(blot.energy, 0.35);
+            blot.pending += frameTime * Math.max(blot.energy, 0.35) * blot.rate;
             if (blot.pending >= blot.stepMin) {
                 blot.clock += blot.pending;
                 blot.pending = 0;

@@ -3,7 +3,7 @@
 // Los nombres son los de Motif.qml (y los que Crt.qml le pasa): al integrar,
 // el `Component` del Loader de Motif le asigna cada uno igual que a Tunnel o
 // Static. Acá además viven los tres relojes que usan todos:
-//   · `lt` — el reloj del motivo, `clock mod 15`: todo lo que deriva es
+//   · `lt` — el reloj del motivo, `(clock + movOff) mod 15`: todo lo que deriva es
 //     periódico en 15 s. La velocidad NUNCA sale del audio (la trampa del
 //     hiperespacio y del túnel: `clock × velocidad` teletransporta con cada
 //     cambio de volumen); el audio mueve amplitudes, brillos y cuentas.
@@ -12,6 +12,7 @@
 //     rápida (InQuad 140 ms) de Motion.qml.
 import QtQuick
 import "../Ease.js" as E
+import "../Speed.js" as Speed
 
 Item {
     id: base
@@ -30,11 +31,21 @@ Item {
     property real clock: 0
     property real clockAcc: 0
     onTubeClockChanged: if (Math.abs(clock - tubeClock) > 0.25) clock = tubeClock
+    // Tanda 8, slice movimiento: el ritmo de la música (`rate`, 1 = el de siempre) NO
+    // escala `clock` — es el reloj real, y el re-anclaje de arriba lo compara contra el
+    // del tubo: escalado, se despegaría y saltaría un cuarto de segundo cada rato. Lo que
+    // se escala es un DESPLAZAMIENTO aparte, `movOff`, acumulado de a `dt` (`Speed.js`),
+    // que sólo mueve `lt` (lo que deriva). El compás (`bp`, `sinceTick`), los golpes
+    // (`sinceKick`) y la entrada del drop (`dropAmt`) siguen en `clock`: son tiempo real.
+    // En el banco (`tubeClock` -1) `movOff` se asigna de afuera, igual que `clock`.
+    property real rate: 1
+    property real movOff: 0
     FrameAnimation {
         running: base.running && base.tubeClock >= 0 && base.visible
         onTriggered: {
             base.clockAcc += frameTime;
             if (base.clockAcc >= base.stepMin - 0.001) {
+                base.movOff = Speed.advance(base.movOff, base.clockAcc, base.rate);
                 base.clock += base.clockAcc;
                 base.clockAcc = 0;
             }
@@ -49,6 +60,10 @@ Item {
     property real seed: 0
     property real quality: 1
     property bool drop: false
+    // corte seco (`cut` del daemon: la música cae de golpe y vuelve) y flujo de agudos (`hf`,
+    // 0..1): los lee sólo el laberinto, que planta la marcha y mira al costado
+    property bool cut: false
+    property real hf: 0
     property string section: "verse"
     property int tick: 0
     property int beat: 0
@@ -92,7 +107,7 @@ Item {
     readonly property real loopS: 15
     readonly property real span: Math.min(width, height)
     readonly property bool portrait: height > width
-    readonly property real lt: E.wrap(clock, loopS)
+    readonly property real lt: E.wrap(clock + movOff, loopS)
     readonly property real beatS: Math.max(beatMs, 1) / 1000
 
     // `beatN`: el contador de tiempos que usan los motivos, en vez de `tick`.

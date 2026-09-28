@@ -891,3 +891,30 @@ Un tema sin build/drop detectable (Vivaldi, ambient) es `verse` todo el rato; el
 cambiaba con la PARTE, así que la pared no se movía nunca. `Faces.varietyMode` rota la estrofa
 larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log` muestra
 `sec=` y `pattern=`. Ver `docs/tanda8-estado/colores.md`.
+
+## El laberinto camina por pasos y trae huevos (tanda 8, slice laberinto, 2026-09-28)
+
+`Maze.qml` + `Maze.js` (perilla `crt.maze_eggs`). Lo que cuesta caro si se "simplifica":
+
+- **La marcha es un CONTADOR (`walked`), nunca `t · rate`.** En cada tiempo `Maze.js: credit` suma
+  `rate` de crédito y da los pasos enteros; lo fraccionario queda en `acc`. A ritmo 1 exacto
+  `walked == beatN + 1`: la marcha vieja, cuadro por cuadro. Con un reloj escalado el laberinto
+  correría hacia atrás al bajar el `mov` (mismo argumento que "El ritmo de los dibujos").
+- **El corte seco NO pierde pasos:** congela el crédito y lo cobra al volver (máx. 3 de un saque;
+  sin tope, un corte largo lanzaba la cámara por el pasillo). `rate` se limita a 0.25–2.6 dentro de
+  `credit` y en el cobro del corte.
+- **La mirada es un yaw con `OutExpo` entre dos estampas de reloj**, no un `Behavior`: el `Behavior`
+  usa el reloj de pared y no cierra en el banco. El vistazo de agudos se limita por SLOT de pasos
+  (`walked / 4`), no por tiempo: así es determinista.
+- **`Maze.qml` no puede definir `rate`** (ni función ni propiedad): pisa el de `MotifBase` y el
+  `movOff` da NaN (misma trampa que `Mystify`). Un test lo prohíbe.
+- **El rebobinado del banco (`d < 0`) tiene que resetear `doneAct`,** o el huevo que ya se mostró
+  no vuelve a salir en la pasada siguiente y el banco no muestra rata ni poliedro. En el overlay
+  `walked` sólo crece.
+- **En el banco la costura sólo cierra con un huevo FORZADO** (`--egg <tipo>`): sin forzar el plan
+  depende del número de vuelta y la vuelta 0 no es la 1. `walked` arranca en ~6400 en el banco.
+- **El mundo que da vuelta es una rotación de `px` alrededor del centro** al empezar `main` del
+  shader (`roll`), no un giro de cámara: así las paredes, el sprite y el piso giran juntos. La celda
+  del cartel se cierra en `isFree` (una pared de verdad, no un decal en un hueco).
+- **GLSL 100 es no tiene operaciones de bits ni `fwidth`:** el rótulo SALIDA son cinco glifos de 5×5
+  guardados como enteros (`glyph`), y el ancho de línea se pasa a mano (`pxw`).

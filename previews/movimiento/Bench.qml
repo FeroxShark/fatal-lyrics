@@ -7,6 +7,10 @@
 // la partitura del mismo `render.py`. El ritmo sale de `shell/Speed.js` — la MISMA
 // función que llama el overlay —, con la fila de `crtPaceTable` que lee render.py.
 //
+// Ronda 3: el golpe empuja la velocidad. `render.py` pone `hitT`/`hitStrength` y sube
+// `hitN`; el empujón lo calculan `Speed.kickAdd`/`Speed.kickAt` (las MISMAS que el
+// overlay) y entra en el `rate` que integra `Speed.advance`.
+//
 // `mode`:
 //   · "int"  — como el overlay: `movOff += dt · (rate − 1)` (`Speed.advance`)
 //   · "prod" — el control, lo que NO hay que hacer: `movOff = t · (rate − 1)`, o sea
@@ -26,9 +30,26 @@ Item {
     property real t: 0
     property real mov: 0
     property string mode: "int"
-    property var pace: ({ movMin: 0.75, movMax: 1.35 })
+    property var pace: ({ movMin: 0.75, movMax: 1.35, movKick: 0.5 })
 
-    readonly property real rate: mode === "off" ? 1 : Speed.rate(mov, pace.movMin, pace.movMax, 1)
+    // el golpe: `render.py` pone tiempo y fuerza y sube `hitN`
+    property real hitT: 0
+    property real hitStrength: 0
+    property int hitN: 0
+    property real kickV0: 0
+    property real kickT: -1e6
+    onHitNChanged: {
+        kickV0 = Speed.kickAdd(Speed.kickAt(kickV0, hitT - kickT), hitStrength, pace.movKick);
+        kickT = hitT;
+    }
+    readonly property real kick: Speed.kickAt(kickV0, t - kickT)
+    readonly property real baseRate: mode === "off" ? 1 : Speed.rate(mov, pace.movMin, pace.movMax, 1)
+    readonly property real rate: mode === "off" ? 1 : Speed.push(baseRate, kick, 1)
+    // el mismo número, con el reloj `tt` a mano: en `onTChanged` el binding de `kick`
+    // todavía puede tener el `t` viejo, y el integrador tiene que leer el del cuadro
+    function rateAt(tt) {
+        return mode === "off" ? 1 : Speed.push(baseRate, Speed.kickAt(kickV0, tt - kickT), 1);
+    }
     property real movOff: 0
     property real lastT: -1
     // lo que lee render.py: el reloj de dibujo sin envolver (`lt` es esto mod 15)
@@ -37,6 +58,8 @@ Item {
     function reset() {
         movOff = 0;
         lastT = -1;
+        kickV0 = 0;
+        kickT = -1e6;
         m.tickAt = -1e6;
         m.paintedAt = -1e6;
     }
@@ -45,9 +68,9 @@ Item {
     // `onClockChanged`, y con un binding a `t` podía pintar con el `movOff` viejo
     onTChanged: {
         if (mode === "prod")
-            movOff = t * (rate - 1);
+            movOff = t * (rateAt(t) - 1);
         else if (mode === "int" && lastT >= 0)
-            movOff = Speed.advance(movOff, t - lastT, rate);
+            movOff = Speed.advance(movOff, t - lastT, rateAt(t));
         lastT = t;
         m.clock = t;
     }

@@ -32,18 +32,19 @@ layout(std140, binding = 0) uniform buf {
     vec4 ink;
     vec4 hot;
     vec2 res;         // píxeles
-    float lt;         // reloj del loop (0..15), con la fase integrada de la música
+    float lt;         // fase del loop (0..15): la integrada de la música, quieta durante un corte seco
     float gap;        // segundos entre ecos
     float echoes;     // cuántos ecos (≤ 24)
     float nv;         // vértices por polígono (3..6)
     float margin;     // px de borde
     float dropAmt;    // 0..1: el tercer polígono
     float pulse;      // 0..1 el golpe del tiempo
-    float high;       // agudos 0..1: color hacia `hot`, resplandor más ancho
+    float high;       // nivel de agudos 0..1: sólo el ancho del resplandor
     float wpx;        // grosor del núcleo (px)
     float lead0;      // 0..1 cuánto de `hot` lleva cada polígono
     float lead1;
     float lead2;
+    float hf;         // flujo de agudos 0..1 (con la curva de React.fizz): color a `hot` y brillo del resplandor
 };
 
 float tri(float u) { return 1.0 - abs(2.0 * fract(u) - 1.0); }
@@ -93,7 +94,7 @@ vec2 trail(vec2 p, mat4 m0, mat4 m1, float k) {
         float d = polyDist(p, m0, m1, fe * gap, k);
         // núcleo con borde de 1 px + resplandor
         float core = 1.0 - smoothstep(w * 0.5 - 0.5, w * 0.5 + 0.9, d);
-        float glow = 0.30 * exp(-d / glowW);
+        float glow = 0.30 * (1.0 + 0.8 * hf) * exp(-d / glowW);
         float i = fade * (core + glow * (1.0 - 0.4 * a));
         if (i > best) { best = i; age = a; }
     }
@@ -103,7 +104,7 @@ vec2 trail(vec2 p, mat4 m0, mat4 m1, float k) {
 vec3 tint(float age, float phase, float lead) {
     // la deriva de color es periódica en el loop (2 y 3 vueltas de seno)
     float s = 0.5 + 0.5 * sin(6.2831853 * (lt / 15.0 * 2.0 - age * 0.35) + phase);
-    float toHot = clamp(0.18 + 0.35 * s + 0.45 * lead + 0.3 * high, 0.0, 1.0);
+    float toHot = clamp(0.18 + 0.35 * s + 0.45 * lead + 0.4 * hf, 0.0, 1.0);
     vec3 c = mix(ink.rgb, hot.rgb, toHot);
     // los ecos viejos se apagan hacia el fósforo puro, sin ir al blanco
     return mix(c, ink.rgb * 0.75, age * 0.6);

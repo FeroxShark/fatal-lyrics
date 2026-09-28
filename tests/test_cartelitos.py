@@ -3945,6 +3945,44 @@ class TestSplitflapNextWord(unittest.TestCase):
         self.assertFalse(any("OBJECT" in row for row in out), out)
 
 
+class TestSwarmWordText(unittest.TestCase):
+    """Mismo bug hermano que `TestSplitflapNextWord`, tanda 8: `wordText` de
+    `shell/Swarm.qml` le pasaba a `D.clean` el objeto de letra `{t0,t1,text}`
+    entero en vez de `.text` cuando no hay `nextWord` del daemon (letra sin
+    sincronizar, o el hueco antes del primer `show()`). `D.clean` stringifica
+    el objeto letra por letra y la bandada intentaba armar "[OBJECT OBJECT]"."""
+
+    SHELL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shell")
+
+    def _wordtext_src(self):
+        with open(os.path.join(self.SHELL, "Swarm.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        line_text = re.search(r"function lineText\(entry\) \{(.*?)\n    \}", qml, re.S)
+        wordtext = re.search(r"readonly property string wordText:\s*\{(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(wordtext, "no se encontró `wordText` en Swarm.qml")
+        prelude = ("function lineText(entry) {%s}\n" % line_text.group(1)) if line_text else ""
+        return prelude + wordtext.group(1)
+
+    @unittest.skipUnless(shutil.which("node"), "needs node to evaluate the QML binding")
+    def _run(self, lines, lineNo, nextWord):
+        js = ("function D_clean(w) { return String(w || '').toUpperCase(); }\n"
+              "const D = { clean: D_clean };\n"
+              "function wordText(lines, lineNo, nextWord) {%s}\n"
+              "console.log(JSON.stringify(wordText(%s, %s, %s)));\n") % (
+                  self._wordtext_src(), json.dumps(lines), json.dumps(lineNo),
+                  json.dumps(nextWord))
+        res = subprocess.run(["node", "-e", js], capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return json.loads(res.stdout)
+
+    def test_wordtext_reads_its_own_text_field(self):
+        # sin `nextWord` del daemon (letra sin sincronizar): cae al verso que
+        # suena, y ahí tiene que leer `.text`, no el objeto entero
+        out = self._run([{"text": "hola mundo"}], 0, "")
+        self.assertEqual(out, "MUNDO")
+        self.assertNotIn("OBJECT", out)
+
+
 class _FakeInput:
     """Cola de respuestas de teclado para el menú de `fatal config`. Cada
     llamada a input() saca la próxima; si se acaban, sigue devolviendo ''

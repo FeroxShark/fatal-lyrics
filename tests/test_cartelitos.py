@@ -3346,6 +3346,19 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertRegex(qml, r"!crtIntro \|\| !crtScreenOff")
         self.assertIn("screen_off", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
 
+    def test_testcard_knob_is_wired_and_off_by_default(self):
+        # decisión de Ferox 2026-09-28: la carta de ajuste no entra a mitad de tema
+        self.assertIs(c.DEFAULTS["crt"]["testcard"], False)
+        self.assertIn("testcard", config._CONFIG_COMMENTS["crt"])
+        self.assertIn(("crt_testcard", "crt", "testcard"), ipc.CONFIG_EVENT_MAP)
+        qml, _ = self._tube_table()
+        self.assertRegex(qml, r"property bool crtTestcard:\s*false\b")
+        self.assertIn('crt_testcard: "crtTestcard"', qml)
+        # pool del director y sorteo del raro cuelgan de la perilla
+        self.assertRegex(qml, r'kind === "testcard"\)\s*return crtTestcard')
+        self.assertIn('k !== "testcard" || crtTestcard', qml)
+        self.assertIn("testcard", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+
     def test_intro_card_knob_is_wired_end_to_end(self):
         # corrida 6 de la tanda 7: la tarjeta del intro, en los cuatro lugares
         self.assertEqual(c.DEFAULTS["crt"]["intro_card"], "testcard")

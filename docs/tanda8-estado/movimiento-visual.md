@@ -104,3 +104,22 @@ Resultado, pace normal, 721 cuadros a 60 fps:
   de `movimiento.md` (parejo ≈ 0.2, ocupado ≈ 0.75-0.8), no de haberlo visto.
 - Las entradas y el shader quedaron afuera a propósito (arriba). Si Ferox quiere que la ENTRADA de la
   frase también siga el pasaje, es otra discusión (rompe "UN lenguaje de movimiento").
+
+## Ronda 2: "no se nota" (Ferox, con Vivaldi)
+
+Medido en el sistema vivo (`qs.log` + `.1`, 99 muestras de `mov`, Vivaldi): **p1 0.63, p50 0.73,
+p99 0.80**. `mov` vivía en una franja de 0.17 → con el mapeo absoluto (pivote 0.35) el rate salía
+1.0–1.2 fijo. Cambios (sólo VELOCIDAD; no se tocó frecuencia de cambios ni entradas):
+- **Rangos** (`crtPaceTable`): calm 0.60–1.50, normal 0.40–2.20, wild 0.30–2.80.
+- **Percentiles por tema** (`Speed.newStat/observe/span/fit`): histograma de `mov` (40 bins, decae
+  τ=60 s, se reinicia con `crtTrackSeed++`, muestreado a 10 Hz), p5..p95 estirado a todo el rango
+  (franja mínima 0.20 para no amplificar ruido de un tema parejo), mediana → rate 1 (pivote
+  interpolado a 0.5). Arranque: `conf` = masa/20 s mezcla del mapeo absoluto de antes al estirado.
+  Vivaldi: 0.63→~0.4×, 0.72→1×, 0.80→~2×. `crt.mov_speed` = 0 sigue siendo ritmo 1 exacto.
+  Log de 5 s ahora agrega `span lo-hi`.
+- **Radar y lluvia** (`Motif.qml`) llevaban `mclock × velocidad(level, drive)`: aunque `mclock`
+  ya seguía el rate, la velocidad variable teletransportaba la fase. Ahora ángulo (`radar.angle`) y
+  dos fases (`rain.base`, `rain.kph`) ACUMULADAS con `frameTime · … · rate`.
+- Banco (`render.py sheet`, normal): vel. dibujo 0.40–2.20, desvío vs rate **0.0000**; perilla 0: 1.0;
+  `t·rate` de −171× a +170×. (El banco usa `mov` crudo, no los percentiles: prueba fase, no calibración.)
+- Tests: 769 OK.

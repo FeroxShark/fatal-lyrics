@@ -219,3 +219,10 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   cuadro a cuadro (lum. media abs.): integrado 8.98 (máx 15.9), perilla en 0 9.05 (14.8), `t · rate` 12.2
   (23.3). CPU (render + grab, 600 cuadros, dos corridas): perilla en 0 5.38/5.44 ms/cuadro, ritmo andando
   5.48/5.45 — ruido. No medido en el overlay real.
+
+## Distribución real de `mov` (tanda 8, movimiento-visual ronda 2, 2026-09-28)
+
+`qs.log`+`.1` en vivo, Vivaldi/Invierno, 99 muestras (log cada 5 s): p1 0.63 · p5 0.64 · p25 0.67 ·
+p50 0.73 · p75 0.76 · p95 0.78 · p99 0.80. Franja útil 0.17 de 0..1 → por eso el ritmo absoluto casi no
+se notaba (rate 1.0–1.2); ahora se estira por percentiles del tema (`Speed.js`). Un solo tema
+medido: recalibrar con otros géneros si hace falta.

@@ -31,9 +31,29 @@ integrada `lt = clock + movOff`. Número de ecos ≤ 24 con `quality`.
 
 Hoja: `mystify-hoja.png` (cuadros 2, 7, 10 y 13.5 s con el vidrio, `arcade`/`bloodline`).
 
+## 4. `cut` y `hf` reales (slice mystify-señales)
+Ahora llegan por el mismo camino del laberinto: `Crt.qml` → `Motif.qml` (`cut: motif.cut`, `hf: motif.hf` en
+`mystifyC`) → `MotifBase`. Nada nuevo en `Speed.js` ni `audio.py`.
+- **Corte seco (`cut`)**: el dibujo se AGARRA. Los vértices se quedan quietos (hasta 0,6 s de fase; un
+  "corte" que en realidad es una pausa no deja al polígono medio minuto atrás) y la estela se estira (`gap`
+  +130 %). Al volver la música los vértices dan el salto atrasado con el snap de Motion (320 ms) y la estela
+  se recoge. Sin `Behavior`: estampas de reloj (`cutAt`/`backAt` en `clock`, `freezeAt`/`thawAt` en la fase
+  monótona `clock + movOff`, así el corte que cruza el 15 del loop no se va por el camino largo) y las dos
+  cuentas puras de `shell/Mystify.js` (`hold`, `lag`), que llegan a 0 EXACTO — una cola exponencial no
+  cerraría la costura. Un corte que ya está en curso cuando aparece el motivo cuenta desde ahí.
+- **Agudos (`hf`)**: pasa por `React.fizz` (la misma curva que el tubo, umbral 0.12) y reemplaza a `high`
+  en el color (`toHot`) y suma al brillo del resplandor (+80 %). `high` (nivel) queda sólo en el ancho.
+- Hojas: `mystify-corte.png` (10.8 / 11.05 / 11.2 / 11.45 s: antes, agarrado con la estela abierta, el salto
+  al volver, el drop) y `mystify-agudos.png` (1.99 s en calma, 2.109 hi-hat, 2.34 caja, 2.45 s).
+- Costura del banco: `./render.py mystify` → "costura: media 0.000 máx 0". La primera versión daba media
+  16.8: el estado inicial (`backAt`/`thawAt` en 1e9) dejaba al dibujo agarrado hasta el primer corte; sin
+  corte todavía valen -1e6 (test `test_no_cut_yet_means_not_held`).
+- Banco: `previews/crt-motifs/sync-shell.sh` ahora copia también `Mystify`, `mystify.frag(.qsb)`,
+  `Mystify.js` y `React.js`. Tests: `tests/test_mystify.py`.
+- Números a ojo (Ferox los puede tocar): agarre 0,12 s, suelta 0,32 s, atraso máx 0,6 s, estela +130 %,
+  `hf` → color 0,4 y brillo 0,8.
+
 ## Pendiente / no hecho
-- `cut`/`cutf`/`hf` **no llegan a los motivos** (`Motif.qml` no los expone, sólo el tubo). Se usó `high`
-  como agudos y `surge` para la estela; "estela más larga en los cortes" y "color con hf" reales piden
-  pasar `audCut`/`audHf` por `Motif.qml` (archivo que toca otro worker).
 - No se verificó en el overlay vivo (prohibido): recordar reiniciar Fatal Lyrics al integrar, un `.qsb` no
   se recarga en caliente.
+- El `cut` del banco es sintético (`LoopFeed.qml`, 0,28 s); los reales miden 150–400 ms.

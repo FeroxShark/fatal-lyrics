@@ -2078,35 +2078,49 @@ ShellRoot {
     })
     readonly property var crtSetFamilyKeys: Object.keys(crtEntryFamilies)
 
-    // tanda 6, corrida 2: cuatro fuentes OFL para la letra, una por tema (la
-    // elige `crtSetFor`, abajo). `Qt.resolvedUrl` es relativo a este archivo:
-    // funciona instalado (el paquete) o corriendo desde el repo (`qs -p`).
+    // tanda 6, corrida 2 (tanda 8: sin Press Start 2P, cuatro nuevas):
+    // fuentes OFL para la letra, una por tema (la elige `crtSetFor`, abajo).
+    // `Qt.resolvedUrl` es relativo a este archivo: funciona instalado (el
+    // paquete) o corriendo desde el repo (`qs -p`). Plex, Space y Chakra se
+    // cargan en Bold real (la letra va con `font.bold: true`: con la Regular
+    // Qt engorda en sintético); las demás sólo tienen Regular.
     FontLoader { id: fontVt323; source: Qt.resolvedUrl("fonts/VT323-Regular.ttf") }
-    FontLoader { id: fontPress; source: Qt.resolvedUrl("fonts/PressStart2P-Regular.ttf") }
     FontLoader { id: fontShare; source: Qt.resolvedUrl("fonts/ShareTechMono-Regular.ttf") }
+    FontLoader { id: fontPlex; source: Qt.resolvedUrl("fonts/IBMPlexMono-Bold.ttf") }
+    FontLoader { id: fontSpace; source: Qt.resolvedUrl("fonts/SpaceMono-Bold.ttf") }
+    FontLoader { id: fontChakra; source: Qt.resolvedUrl("fonts/ChakraPetch-Bold.ttf") }
+    FontLoader { id: fontSyne; source: Qt.resolvedUrl("fonts/SyneMono-Regular.ttf") }
     FontLoader { id: fontDot; source: Qt.resolvedUrl("fonts/DotGothic16-Regular.ttf") }
     readonly property var crtFontFamilies: ({
-        vt323: fontVt323.name, press: fontPress.name,
-        share: fontShare.name, dot: fontDot.name, system: "",
+        vt323: fontVt323.name, share: fontShare.name, plex: fontPlex.name,
+        space: fontSpace.name, chakra: fontChakra.name, syne: fontSyne.name,
+        dot: fontDot.name, system: "",
     })
-    // El orden en que `crtSetFor` sortea: "dot" no entra, es sólo el camino
-    // de CJK (`crtFontFor`), nunca lo que el set elige para un tema.
-    readonly property var crtFontKeys: ["vt323", "share", "press", "system"]
+    // Qué fuentes puede sacar `crtSetFor` según la familia de entradas del
+    // set (tanda 8): la letra que entra tipeada va en terminal, la que entra
+    // de golpe en algo con filo, la suave en algo más redondo. Toda clave de
+    // `crtFontFamilies` salvo "dot" está en al menos un mazo; "dot" no entra
+    // nunca, es sólo el camino de CJK (`crtFontFor`), no una elección del set.
+    readonly property var crtFontPools: ({
+        typed: ["vt323", "plex", "share"],
+        hard:  ["chakra", "space", "system"],
+        burn:  ["space", "vt323", "chakra"],
+        soft:  ["syne", "share", "plex", "system"],
+    })
     // CJK grueso (hiragana/katakana/kanji/hangul). DotGothic16 no cubre
     // hangul completo: para `가-힯` este regex igual matchea, pero
     // `crtFontFor` ya cae a "" (sistema) ahí a propósito (ver abajo).
     readonly property var crtCjkRe: /[぀-ヿ㐀-䶿一-鿿가-힯]/
     readonly property var crtHangulRe: /[가-힯]/
 
-    // La CLAVE de la fuente de ESTA línea (`vt323|share|press|system|dot|
-    // override`). Separada de `crtFontFor` (que resuelve la clave a nombre
+    // La CLAVE de la fuente de ESTA línea (una de `crtFontFamilies` u
+    // `override`). Separada de `crtFontFor` (que resuelve la clave a nombre
     // de familia) para poder loguearla en `Crt.qml` sin repetir la lógica.
     // Prioridad: `crtFont` (perilla `crt.font`, texto libre tipeado por
     // Ferox) no vacío > CJK → DotGothic16 (salvo hangul, que DotGothic16 no
-    // cubre y cae a sistema) > la del set > sistema. Press Start 2P es
-    // pesada (glifos anchos a pantalla completa): con más de 3 palabras se
-    // cae a `share`, que sigue siendo monoespaciada retro pero no se sale
-    // del cuadro.
+    // cubre y cae a sistema) > la del set > sistema. `wordCount` quedó sin
+    // uso (lo pedía Press Start 2P, que se fue en la tanda 8); la firma se
+    // mantiene porque `Crt.qml` la llama así.
     function crtFontKeyFor(text, wordCount) {
         if (crtFont !== "")
             return "override";
@@ -2117,8 +2131,6 @@ ShellRoot {
             return "dot";
         if (!crtSet)
             return "system";
-        if (crtSet.font === "press" && wordCount > 3)
-            return "share";
         return crtFontFamilies[crtSet.font] !== undefined ? crtSet.font : "system";
     }
 
@@ -2175,7 +2187,9 @@ ShellRoot {
             : schemes.map(s => s.key);
         const schemeKey = schemeKeys[Math.floor(crtHash(seed * 7 + 5) * schemeKeys.length)];
         const scheme = schemes.findIndex(s => s.key === schemeKey);
-        const font = crtFontKeys[Math.floor(crtHash(seed * 7 + 3) * crtFontKeys.length)];
+        // fuente: del mazo de la familia, mismo dado de siempre (`seed*7+3`)
+        const fontPool = crtFontPools[family] || ["system"];
+        const font = fontPool[Math.floor(crtHash(seed * 7 + 3) * fontPool.length)];
         // el tubo del tema, para `crt.tube = auto`: sólo los de color
         const tube = crtTubeAutoKeys[Math.floor(crtHash(seed * 7 + 6) * crtTubeAutoKeys.length)];
         return { motifs: motifs, family: family, scheme: scheme, font: font, tube: tube };

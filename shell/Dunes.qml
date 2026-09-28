@@ -40,6 +40,9 @@ Item {
     // Reloj propio, como el del mar: el del tubo va a 20 Hz en las pantallas
     // sin letra y con eso el paneo se ve a saltos. Avanza con el frameTime real
     // y publica ~70 veces por segundo.
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     property real clock: 0
     property real pending: 0
     FrameAnimation {
@@ -47,7 +50,7 @@ Item {
         onTriggered: {
             sand.pending += frameTime;
             if (sand.pending >= sand.stepMin) {
-                sand.clock += sand.pending;
+                sand.clock += sand.pending * sand.rate;
                 sand.pending = 0;
             }
         }

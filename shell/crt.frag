@@ -194,8 +194,11 @@ void main() {
     // curvature, the figures of the moiré came and went with it. The contrast
     // is now the average of that breathing (0.30 of 0.50), which also takes it
     // down a notch: Ferox found it too marked.
+    // The half pixel puts the crest and the trough ON the pixel centres (at
+    // `sy = n + 0.5`): without it the cosine is zero at every centre and the
+    // comb vanishes.
     float sy = qt_TexCoord0.y * res.y;
-    float sl = 0.5 + 0.30 * cos(sy * 3.14159265);
+    float sl = 0.5 + 0.30 * cos((sy - 0.5) * 3.14159265);
     col *= 1.0 - scanline * 0.55 * sl;
 
     // La máscara del vidrio: RGB triads, the reason CRT text never looks clean.

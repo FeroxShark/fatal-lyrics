@@ -13,7 +13,7 @@
 //     volver la música da el paso atrasado (como mucho tres) de un saque. Mientras
 //     dura, se queda mirando hacia un costado (±24°, OutExpo).
 //   · AGUDOS (`hf`): un golpe de agudos que sube de 0.55 le hace echar un vistazo al
-//     costado (±17°) y volver en 0.55 s. Máximo uno cada cuatro pasos, y el lado
+//     costado (±17°) y volver en 0.55 s. Sólo en los dos primeros pasos de cada cuatro, y el lado
 //     sale de la semilla: no es un tic.
 //   · `drop`: la niebla se abre y la cuadrícula del piso se enciende y late.
 //   · `high` en la subida: la niebla respira con los platillos.
@@ -67,7 +67,8 @@ MotifBase {
         lastBeat = beatN;
         if (d < 0) {                  // el reloj volvió atrás (el banco): corrida entera
             walked += d;
-            sFrom += d;
+            sFrom = walked - 1;       // como si el tiempo acabara de caer: el paso arranca de cero
+            stepAt = clock;
             doneAct = -1e9;           // lo ya mostrado se vuelve a mostrar
             return;
         }
@@ -84,6 +85,7 @@ MotifBase {
         walked = beatN + 1;
         lastBeat = beatN;
         sFrom = beatN;
+        stepAt = clock;           // el primer paso ya está en curso (como el pose viejo)
         started = true;
         refreshEgg();
     }
@@ -93,8 +95,10 @@ MotifBase {
     property real yawTo: 0
     property real yawAt: -1e6
     property real glanceEnd: -1
-    property int glanceSlot: -1
     property bool hfHigh: false
+    // el lado de la mirada sale del tramo de cuatro pasos DENTRO de la vuelta: cada vuelta repite
+    // el reparto, así el loop del banco cierra
+    readonly property int slotNow: Math.floor(M.wrap(walked, M.LOOP_STEPS) / 4)
     readonly property real yaw: E.mix(yawFrom, yawTo, E.outExpo(E.prog(clock, yawAt, 0.32)))
 
     function lookAt(target) {
@@ -107,7 +111,7 @@ MotifBase {
         if (!started) return;
         if (cut) {
             glanceEnd = -1;
-            lookAt(M.side(seed, Math.floor(walked / 4)) * 0.42);
+            lookAt(M.side(seed, slotNow) * 0.42);
         } else {
             lookAt(0);
             const n = Math.floor(acc + 1e-9);
@@ -120,11 +124,11 @@ MotifBase {
             if (hf < 0.3) hfHigh = false;
             else if (hf > 0.55 && !hfHigh) {
                 hfHigh = true;
-                const slot = Math.floor(walked / 4);
-                if (slot !== glanceSlot && clock - yawAt > 0.9) {
-                    glanceSlot = slot;
+                // sólo en los dos primeros pasos de cada cuatro, sin memoria del vistazo anterior
+                // (el preroll del banco es corto: lo que depende de la historia no cierra la costura)
+                if (M.wrap(walked, 4) < 2 && clock - yawAt > 0.9) {
                     glanceEnd = clock + 0.55;
-                    lookAt(M.side(seed, slot) * 0.30);
+                    lookAt(M.side(seed, slotNow) * 0.30);
                 }
             }
             if (glanceEnd > 0 && clock > glanceEnd) {

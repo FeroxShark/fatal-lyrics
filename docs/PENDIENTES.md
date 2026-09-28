@@ -3,6 +3,10 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
+**Decisión de Ferox 2026-09-28: ninguna pantalla finge estar apagada.** Perilla `crt.screen_off` (default `false`): el intro de tema
+(apagado/degauss/estática/tarjeta) y la escena por secciones (`crt.scene`) quedan inertes; `true` los devuelve. No toca el dip del
+corte seco (tanda 8), `fatal crt dark` a mano ni los raros. Sin línea en su config: el default ya apaga todo eso.
+
 **Tanda 8 (hecha 2026-09-28, falta verla con música real).** Seis slices en paralelo sobre lo que Ferox vio con
 música el 2026-09-26 (capturas viejas en `docs/plans/tanda8/`, gitignored); estado de cada uno en
 `docs/tanda8-estado/{shaders,senales,fuentes,sigue,reaccion,colores}.md`: túnel sin costura y vidrio sin moiré (shaders),

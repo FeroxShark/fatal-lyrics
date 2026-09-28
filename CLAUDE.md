@@ -114,10 +114,11 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   <screen|all> on|off` lo prende/apaga por socket, y `crtPredict()` lo reenciende solo antes de
   que llegue la letra ("la letra prende el tubo").
 - `crtSceneFor(section, outro, n, focus)` + `crtSceneApply`/`crtSceneStartOutro`/
-  `crtSceneOutroCheck` (`shell.qml`, perilla `crt.scene = sections | all`) — la sección decide qué
+  `crtSceneOutroCheck` (`crt.scene = sections | all`) — la sección decide qué
   pantallas viven: la estrofa deja sólo el foco prendido, el drop enciende la pared entera y el
   final del tema apaga de a una hacia el foco. Nunca apaga la pantalla que `crtPredict()` ya
   prendió por anticipación. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- `crt.screen_off` (false, Ferox 2026-09-28): sin intro de tema ni escena que apaguen pantallas; el dip del corte seco queda.
 - `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`Advance`/`End`/`Skip` (`shell.qml`,
   perilla `crt.intro`, `crt.intro_card`) — el cambio de tema es un evento: `clear` (why="track")
   apaga la pared, degauss, estática y la tarjeta (título/artista) en la pantalla del próximo foco,
@@ -167,7 +168,6 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   perfil por tema (`_pending`, en memoria): lo que todavía no se ganó el derecho a durar.
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
-- `packaging/PKGBUILD` + `.SRCINFO` — listos, build probado con makepkg.
 - `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`) — la captura
   estéreo se baja a mono ANTES de `AudioAnalyzer.feed` (no descalibra perfiles viejos); el scope
   dibuja Lissajous L/R real. Detalle y números: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.
@@ -184,14 +184,13 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `crt.resting` + `tubeAccum` (`Crt.qml`) — pausa con letra puesta: reloj a 15 fps, pump frenado,
   sin estela; vuelve con el primer `pos`/`aud`. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
 - Guardia de instancia única: el lock guarda el PID del dueño; `stop` mata por pid. Detalle: `docs/TRAMPAS.md`.
-- `tests/` — ~690 tests, stdlib puro.
+- `tests/` — stdlib puro.
 - `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar (render offscreen
   determinista, `./render.py`). Qué módulo y cómo integrarlo: su `README.md`.
 - `previews/crt-motifs/` — banco de los 8 motivos de loop de 15 s, YA INTEGRADOS: `shell/<Kind>.qml` +
   `MotifBase.qml` (Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). Ver su `README.md`.
 
-Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
-tema).
+Cachés: `~/.cache/cartelitos/{lyrics/,audio}` (letras; mapa de energía por tema).
 
 ## Cómo correrlo / testearlo
 

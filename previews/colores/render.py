@@ -61,9 +61,14 @@ def font(path, size):
 def tile(draw, x, y, w, h, face, label=None, text=True, contrast=None):
     draw.rectangle([x, y, x + w - 1, y + h - 1], fill=face["bg"])
     if text:
-        f = font(FONT, int(h * 0.16))
         parts = [(LINE[0] + " ", face["ink"]), (LINE[1], face["hot"]), (" " + LINE[2], face["ink"])]
-        total = sum(draw.textlength(p, font=f) for p, _ in parts)
+        size = int(h * 0.16)
+        while True:
+            f = font(FONT, size)
+            total = sum(draw.textlength(p, font=f) for p, _ in parts)
+            if total <= w * 0.9 or size <= 10:
+                break
+            size -= 1
         cx = x + (w - total) / 2
         cy = y + h * 0.40
         for p, col in parts:
@@ -93,7 +98,7 @@ def sheet():
     for name, colors in COVERS:
         f = js("albumFaces(%s)" % json.dumps(colors))
         rows.append((name, f, colors))
-    tw, th, lw, gap = 480, 200, 230, 8
+    tw, th, lw, gap = 480, 200, 300, 8
     W = lw + 3 * (tw + gap) + gap
     H = 70 + len(rows) * (th + gap) + gap
     img = Image.new("RGB", (W, H), "#101010")
@@ -103,7 +108,7 @@ def sheet():
     y = 70
     for row in rows:
         key, faces = row[0], row[1]
-        d.text((gap, y + 10), key, font=font(FONT, 22), fill="#e8e8e8")
+        d.text((gap, y + 10), key, font=font(FONT, 19), fill="#e8e8e8")
         if len(row) > 2:
             # los colores que mandó la tapa
             for i, col in enumerate(row[2]):
@@ -145,7 +150,7 @@ def simulate(faces, n, sections, r0=0.37):
         if i > 0:
             for k, scr in enumerate(order[:-1]):
                 cur[scr] = nxt[scr]
-                frames.append(("%s → %s, paso %d" % (tag, want, k + 1), list(cur), focus))
+                frames.append(("%s -> %s, paso %d" % (tag, want, k + 1), list(cur), focus))
         frames.append(("%s (%s)" % (tag, want), list(nxt), focus))
         prev = nxt
         mode_now = want
@@ -164,14 +169,14 @@ def strip():
         ("vapor, 2 monitores", fixed["vapor"], 2),
         ("ado, 1 monitor", fixed["ado"], 1),
     ]
-    mw, mh, gap, lw = 150, 84, 6, 330
+    mw, mh, gap, lw = 190, 84, 6, 330
     # cada bloque: una fila por cuadro de la simulación
     sims = [(title, faces, n, simulate(faces, n, song)) for title, faces, n in blocks]
     W = lw + 4 * (mw + gap) + gap
     H = 60 + sum(40 + len(fr) * (mh + gap) for _, _, _, fr in sims) + gap
     img = Image.new("RGB", (W, H), "#101010")
     d = ImageDraw.Draw(img)
-    d.text((gap, 14), "Reparto por parte del tema (face_mode = song) — ▼ = pantalla con la letra",
+    d.text((gap, 14), "Reparto por parte del tema (face_mode = song) — 'letra' = pantalla con la letra",
            font=font(FONT, 22), fill="#e8e8e8")
     y = 60
     for title, faces, n, frames in sims:
@@ -186,7 +191,7 @@ def strip():
                 tile(d, x, y, mw, mh, face, label="abc"[rep[i]], text=False)
                 if i == focus:
                     f = font(FONT, 24)
-                    d.text((x + mw / 2, y + mh / 2), "▼ letra", font=f, fill=face["ink"],
+                    d.text((x + mw / 2, y + mh / 2), "letra", font=f, fill=face["ink"],
                            anchor="mm")
             y += mh + gap
     out = os.path.join(DOCS, "colores-tira.png")

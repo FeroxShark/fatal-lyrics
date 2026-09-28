@@ -524,6 +524,32 @@ def spectral_flux_band(spec, prev_spec, rate, lo_hz=FLUX_LO_HZ, hi_hz=FLUX_HI_HZ
     return sum(max(0.0, a - p) for a, p in zip(amp, prev_amp))
 
 
+# ---- movimiento: cuánto se está moviendo la música AHORA (tanda 8, slice "movimiento")
+# Ferox, escuchando Vivaldi (Invierno, op.8 n.4: cuerdas rápidas y nerviosas, casi
+# sin bajo ni batería): el ritmo de las animaciones se elige por TEMA (pace/mood) y
+# no sigue los cambios DENTRO del tema. `mov` (0..1) junta tres cosas, PESADAS (no
+# un OR): densidad de onsets en TODO el espectro (no sólo el bajo — la clásica no
+# tiene bombo), `hf` (el flujo de agudos que ya existe) y la energía relativa al
+# PROPIO tema (el percentil de `TrackProfile`, no el nivel crudo: así un tema
+# tranquilo entero también tiene sus picos). Pesado y no OR porque un tema fuerte
+# y PAREJO (sin onsets nuevos, sin cambio de brillo) no tiene que quedar clavado
+# arriba sólo por sonar fuerte — con energía a 0.2 de peso, ésa sola no alcanza.
+MOV_FLUX_LO_HZ = 40.0              # casi todo el espectro, incluido el bajo (a
+MOV_FLUX_HI_HZ = AUDIO_RATE / 2.0 - 1.0   # diferencia de la banda de `hf`, que arranca en 125)
+MOV_FLUX_PEAK_DECAY = 0.995        # pico propio del flux de mov: importa la
+MOV_FLUX_PEAK_FLOOR = 1e-6         # densidad de onsets, no el pico puntual
+MOV_ATTACK_THRESH = 0.35           # fracción del pico de flux que ya cuenta como "entró algo"
+MOV_ATTACK_REFRACTORY = 0.05       # onsets cada 50ms como mucho (cuerdas rápidas: hasta ~15/s)
+MOV_RATE_TAU = 1.2                 # ventana del contador de densidad (EMA de impulsos)
+MOV_RATE_REF = 3.0                 # densidad ya "todo movimiento" (unidades de la EMA)
+MOV_W_DENS = 0.5                   # peso: densidad de onsets (todas las bandas)
+MOV_W_HF = 0.3                     # peso: brillo que cambia (ya existe, se reusa)
+MOV_W_ENERGY = 0.2                 # peso: energía relativa al propio tema (percentil)
+MOV_RISE_S = 1.0                   # sube rápido: un pasaje que se acelera se nota en ~1s
+MOV_FALL_S = 3.0                   # baja despacio: no es otro parpadeo (ventana total ~2-4s)
+MOV_MAX_DT = 0.25                  # un hueco más largo que esto no cuenta como tiempo continuo
+
+
 class AudioAnalyzer:
     """PCM crudo → nivel, bandas, centroide (proxy del tono) y golpes.
 
@@ -548,6 +574,14 @@ class AudioAnalyzer:
         self.flux_peak = FLUX_PEAK_FLOOR
         self.hf = 0.0
         self.hf_at = None
+        # movimiento: pico propio del flux banda completa, contador de densidad
+        # de onsets (decae solo) y el valor final ya suavizado
+        self.mov_flux_peak = MOV_FLUX_PEAK_FLOOR
+        self.mov_rate = 0.0
+        self.mov_rate_at = None
+        self.mov_last_attack = None
+        self.mov = 0.0
+        self.mov_at = None
 
     def _smooth_dirt(self, raw, now):
         """EMA asimétrica en el tiempo real (no por bloque): sube con tau 0.5 s, baja con 1.5 s."""
@@ -564,6 +598,38 @@ class AudioAnalyzer:
         tau = FLUX_RISE_S if raw > self.hf else FLUX_FALL_S
         self.hf += (raw - self.hf) * (1.0 - math.exp(-dt / tau))
         return self.hf
+
+    def _mov_step(self, spec, prev_spec, now):
+        """Onsets en TODO el espectro -> densidad 0..1 (ver el comentario largo
+        junto a MOV_FLUX_LO_HZ). Reusa `spec`/`prev_spec`: no hay FFT nueva.
+
+        No es la magnitud de un flujo, es cuántos onsets pasaron por unidad de
+        tiempo: un contador que suma 1 por onset y decae solo (EMA de impulsos,
+        ventana MOV_RATE_TAU), así un tremolo de notas chiquitas pesa tanto como
+        pocos golpes grandes."""
+        raw = spectral_flux_band(spec, prev_spec, self.rate, MOV_FLUX_LO_HZ, MOV_FLUX_HI_HZ)
+        self.mov_flux_peak = max(raw, self.mov_flux_peak * MOV_FLUX_PEAK_DECAY,
+                                 MOV_FLUX_PEAK_FLOOR)
+        norm = min(raw / self.mov_flux_peak, 1.0)
+        attack = norm > MOV_ATTACK_THRESH and (
+            self.mov_last_attack is None or now - self.mov_last_attack > MOV_ATTACK_REFRACTORY)
+        if attack:
+            self.mov_last_attack = now
+        dt = 0.0 if self.mov_rate_at is None else min(max(now - self.mov_rate_at, 0.0), MOV_MAX_DT)
+        self.mov_rate_at = now
+        self.mov_rate *= math.exp(-dt / MOV_RATE_TAU)
+        if attack:
+            self.mov_rate += 1.0
+        return min(self.mov_rate / MOV_RATE_REF, 1.0)
+
+    def _smooth_mov(self, raw, now):
+        """EMA asimétrica de ventana grande: sube en ~1s, baja en ~3s (pedido de
+        Ferox: que no sea otro parpadeo, ventana total ~2-4s)."""
+        dt = 0.0 if self.mov_at is None else min(max(now - self.mov_at, 0.0), MOV_MAX_DT)
+        self.mov_at = now
+        tau = MOV_RISE_S if raw > self.mov else MOV_FALL_S
+        self.mov += (raw - self.mov) * (1.0 - math.exp(-dt / tau))
+        return self.mov
 
     def _cut_step(self, level, now):
         """Corte seco: (cut sostenido, fuerza de vuelta en este frame o 0.0). Ver
@@ -590,8 +656,14 @@ class AudioAnalyzer:
         self.silent_since = None
         return self.cut, 0.0
 
-    def feed(self, pcm, now):
-        """pcm: bytes s16 mono. Devuelve el dict del evento, o None si vino vacío."""
+    def feed(self, pcm, now, pct=None):
+        """pcm: bytes s16 mono. Devuelve el dict del evento, o None si vino vacío.
+
+        `pct`: percentil 0..1 de este momento contra `TrackProfile.rms` del tema
+        (el mismo que ya usa `PeakGate` en `_capture_loop`, `cur_pct`), o `None` si
+        todavía no hay perfil — ahí el término de energía de `mov` cae al `level`
+        crudo (normalizado contra el pico que decae, sigue 0..1, sólo menos
+        preciso que el percentil contra el tema entero)."""
         n = len(pcm) // 2
         if n == 0:
             return None
@@ -646,6 +718,13 @@ class AudioAnalyzer:
         flux_raw = spectral_flux_band(spec, self.prev_spec, self.rate)
         self.flux_peak = max(flux_raw, self.flux_peak * FLUX_PEAK_DECAY, FLUX_PEAK_FLOOR)
         hf = self._smooth_hf(min(flux_raw / self.flux_peak, 1.0), now)
+
+        # `mov`: densidad de onsets banda completa (self.prev_spec, todavía sin
+        # pisar) + hf + energía relativa al tema. Pesado, no OR: ver MOV_W_*.
+        dens = self._mov_step(spec, self.prev_spec, now)
+        erel = level if pct is None else pct
+        mov = self._smooth_mov(
+            MOV_W_DENS * dens + MOV_W_HF * hf + MOV_W_ENERGY * erel, now)
         self.prev_spec = spec
 
         return {
@@ -661,6 +740,7 @@ class AudioAnalyzer:
             "cut": 1 if cut else 0,
             "cutf": round(cutf, 3),
             "hf": round(hf, 3),
+            "mov": round(mov, 3),
         }
 
 
@@ -1246,7 +1326,7 @@ def _capture_loop():
                 # estéreo -> mono ANTES de analizar (downmix_stereo): el analizador
                 # sólo ve el mono de siempre. L/R quedan para el evento `wave`.
                 mono, left, right = downmix_stereo(chunk)
-                ev = an.feed(mono, now)
+                ev = an.feed(mono, now, pct=cur_pct)
                 if not ev:
                     continue
                 if now - last_wave >= 1.0 / WAVE_HZ:

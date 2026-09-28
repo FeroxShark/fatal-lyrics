@@ -177,6 +177,11 @@ ShellRoot {
     // por secciones (estrofa/final que apagan pantallas) no corren: toda la pared
     // dibuja siempre. `fatal crt dark` (a mano) y el dip del corte seco no cambian.
     property bool crtScreenOff: false
+    // decisión de Ferox 2026-09-28: la carta de ajuste a mitad de tema "no hace
+    // nada más que dar info". false (default) = ni el motivo `testcard` entra al
+    // pool ni el raro `testcard` sale sorteado; la tarjeta del intro (crt.intro_card),
+    // `fatal crt motif testcard` y `fatal crt rare testcard` siguen andando.
+    property bool crtTestcard: false
     onCrtScreenOffChanged: {
         if (!crtScreenOff) {
             crtIntroTimer.stop();
@@ -956,7 +961,7 @@ ShellRoot {
             return;
         if (crtHash(serial * 71 + 5) >= pace.rarePerLine * crtRareMult)
             return;
-        const kinds = crtRareKinds;
+        const kinds = crtRareKinds.filter(k => k !== "testcard" || crtTestcard);
         if (kinds.length === 0)
             return;
         const kind = kinds[Math.floor(crtHash(serial * 71 + 13) * kinds.length)];
@@ -2610,6 +2615,8 @@ ShellRoot {
     // muestren el mismo dibujo repartiendo UNA lista entre todas, y una lista
     // distinta por pantalla rompe justo eso.
     function motifAllowed(kind) {
+        if (kind === "testcard")
+            return crtTestcard;
         if (kind === "textsea")
             return crtLines.length > 0;
         // Los ojos miran a la pantalla que tiene la frase: sin frase (o con una
@@ -3488,7 +3495,7 @@ ShellRoot {
         crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
-        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_screen_off: "crtScreenOff", crt_intro_card: "crtIntroCard",
+        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_screen_off: "crtScreenOff", crt_testcard: "crtTestcard", crt_intro_card: "crtIntroCard",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_face_mode: "crtFaceMode",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",

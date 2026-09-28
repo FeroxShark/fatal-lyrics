@@ -232,7 +232,7 @@ ShellRoot {
             cutDepth: 0.35, cutFlash: 0.18, fizzAmt: 0.45, grainMove: 0.55,
             // tanda 8, slice movimiento (`shell/Speed.js`): el ritmo de los dibujos en
             // un pasaje quieto (`mov` 0) y en uno nervioso (`mov` 1); 1 = como estaba
-            movMin: 0.85, movMax: 1.20,
+            movMin: 0.60, movMax: 1.50,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -246,7 +246,7 @@ ShellRoot {
             rarePerLine: 1 / 400, rareGapMs: 120000,
             fxGapMs: 6000,
             cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
-            movMin: 0.75, movMax: 1.35,
+            movMin: 0.40, movMax: 2.20,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -272,7 +272,7 @@ ShellRoot {
             // la tanda 3 no tenía nada de esto; como con `dirtMax`, `wild` se lleva
             // el valor más fuerte y no el cero
             cutDepth: 0.75, cutFlash: 0.45, fizzAmt: 1.0, grainMove: 1.0,
-            movMin: 0.60, movMax: 1.60,
+            movMin: 0.30, movMax: 2.80,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -2046,7 +2046,8 @@ ShellRoot {
         running: root.crtOn && root.audLive
         onTriggered: console.log("crt: dirt " + root.crtDirt.toFixed(2)
             + " mult " + root.crtDirtMult.toFixed(2)
-            + " mov " + root.audMov.toFixed(2) + " rate " + root.crtMovRate.toFixed(2))
+            + " mov " + root.audMov.toFixed(2) + " rate " + root.crtMovRate.toFixed(2)
+            + " span " + root.movSpan.lo.toFixed(2) + "-" + root.movSpan.hi.toFixed(2))
     }
 
     // tanda 8, slice movimiento: el RITMO de los dibujos (motivos y la deriva libre de la
@@ -2057,8 +2058,22 @@ ShellRoot {
     // acumulado de a `dt` (`Crt.qml` `movOff`, `MotifBase.qml`, la física de cada motivo),
     // así un cambio de ritmo cambia la VELOCIDAD y no la posición. El Behavior sólo tapa el
     // escalón de 10 Hz del evento, en la entrada del integrador (en la fase no hace falta).
+    // percentiles del TEMA (`Speed.newStat`): `mov` real vive en una franja angosta (Vivaldi
+    // 0.63–0.80) y se estira a todo el rango; se reinicia en cada tema (`crtTrackSeed++`).
+    property var movStat: Speed.newStat()
+    property var movSpan: Speed.span(movStat)
+    Timer {
+        interval: 100
+        repeat: true
+        running: root.crtOn && root.audLive && root.crtMovAmount > 0
+        onTriggered: {
+            Speed.observe(root.movStat, root.audMov, 0.1);
+            root.movSpan = Speed.span(root.movStat);
+        }
+    }
+    readonly property var movFit: Speed.fit(audMov, movSpan)
     property real crtMovRate: audLive
-        ? Speed.rate(audMov, pace.movMin, pace.movMax, crtMovAmount) : 1
+        ? Speed.rate(movFit.mov, pace.movMin, pace.movMax, crtMovAmount, movFit.pivot) : 1
     Behavior on crtMovRate { NumberAnimation { duration: Motion.levelMs } }
 
     // la primera palabra de la línea que viene ("" si no hay próxima)
@@ -3659,6 +3674,8 @@ ShellRoot {
                             // como tema nuevo.
                             if (ev.why === "track" || ev.why === undefined) {
                                 root.crtTrackSeed++;
+                                root.movStat = Speed.newStat();
+                                root.movSpan = Speed.span(root.movStat);
                                 // tema nuevo: lo que ya salió era del tema
                                 // anterior (el sorteo castiga repetir)
                                 root.crtMotifUsed = ({});

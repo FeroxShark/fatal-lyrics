@@ -226,3 +226,22 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 p50 0.73 · p75 0.76 · p95 0.78 · p99 0.80. Franja útil 0.17 de 0..1 → por eso el ritmo absoluto casi no
 se notaba (rate 1.0–1.2); ahora se estira por percentiles del tema (`Speed.js`). Un solo tema
 medido: recalibrar con otros géneros si hace falta.
+
+- **Mystify: Shapes → un shader por píxel** (`previews/crt-motifs/bench.py`, banco offscreen con la placa real,
+  1080p, sin vidrio, 3 rondas intercaladas, máquina con carga ~13 así que el ruido es ±0.5 ms; el suelo es
+  `motifs/Floor.qml`, un `Item {}` que mide lo que cuesta el grab). Antes (`cf23e81`, 15 tandas de `MShape`,
+  3×22 polilíneas rearmadas en JS por cuadro) → después (`mystify.frag`, cero geometría):
+
+  | ms/cuadro | suelo | antes | después |
+  |---|---|---|---|
+  | lado QML (bindings+JS, sin dibujar) | 0.21 | 0.75 | **0.22** (= suelo) |
+  | pared con grab | 1.5–1.6 | 2.2–3.0 | 1.8–2.0 |
+  | CPU del proceso con grab | 2.7 | 3.7–4.2 | 3.3–3.5 |
+
+  Neto sobre el suelo: pared ~1.0–1.4 → ~0.2–0.5 ms; lado QML ~0.55 → ~0. En el mismo banco
+  (sin vidrio, una corrida) **Mystify NO era el más caro**: swarm 14.9, defrag 7.8, pipes 7.0, vector 4.3,
+  splitflap/harmonograph/mystify 3.1, maze 1.9 (con vidrio: swarm 12.2, defrag 9.8, pipes 6.7, mystify 6.1
+  —el tubo `arcade`, más caro— vector 4.8, harmonograph 3.6, splitflap 3.3, maze 2.1). Los números en vivo del
+  README (24–28 % mystify contra 65 % swarm/defrag) dicen lo mismo. La causa del costo viejo no era un Canvas
+  (ya era Shape) sino tessellar 66 polilíneas de trazo ancho con MSAA 4× en CPU cada cuadro. Ojo: la CPU del
+  banco incluye la espera de la placa en el grab; el costo real del overlay es menor en ambos.

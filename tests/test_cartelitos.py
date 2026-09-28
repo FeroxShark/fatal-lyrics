@@ -3875,6 +3875,76 @@ class TestKnobsAreReachable(unittest.TestCase):
                     self.assertIn(key, cfg[section], f"{section}.{key} no sobrevivió al merge")
 
 
+class TestSplitflapNextWord(unittest.TestCase):
+    """Tanda 8, slice "sigue": la fila SIGUE del motivo `splitflap` (la placa de
+    casilleros) siempre decía "SIGUE:" y nunca mostraba nada después. `nextWord`
+    sólo llega cuando el daemon ya mandó un `show()` con `next` — con letra sin
+    sincronizar (`lyrics_kind == "plain"`) eso no pasa nunca, y en el arranque de
+    una letra sincronizada hay un hueco entre el evento `lyrics` y el primer
+    `show()`. En los dos casos la fila se quedaba con la etiqueta y nada atrás."""
+
+    SHELL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shell")
+
+    def _board_src(self):
+        with open(os.path.join(self.SHELL, "Splitflap.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        line_text = re.search(r"function lineText\(entry\) \{(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(line_text, "no se encontró `lineText` en Splitflap.qml")
+        board = re.search(r"readonly property var board:\s*\{(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(board, "no se encontró `board` en Splitflap.qml")
+        return ("function lineText(entry) {%s}\n" % line_text.group(1)) + board.group(1)
+
+    @unittest.skipUnless(shutil.which("node"), "needs node to evaluate the QML binding")
+    def _run(self, lines, lineNo, nextWord, cols=16):
+        js = ("function D_clean(w) { return String(w || '').toUpperCase(); }\n"
+              "const D = { clean: D_clean };\n"
+              "function pad(s, n, center) {\n"
+              "  s = s.slice(0, n);\n"
+              "  if (!center) return s + ' '.repeat(n - s.length);\n"
+              "  const l = Math.floor((n - s.length) / 2);\n"
+              "  return ' '.repeat(l) + s + ' '.repeat(n - s.length - l);\n"
+              "}\n"
+              "function board(lines, lineNo, nextWord, cols, rowsN) {%s}\n"
+              "const out = board(%s, %s, %s, %s, 6);\n"
+              "console.log(JSON.stringify(out));\n") % (
+                  self._board_src(), json.dumps(lines), json.dumps(lineNo),
+                  json.dumps(nextWord), json.dumps(cols))
+        res = subprocess.run(["node", "-e", js], capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return json.loads(res.stdout)
+
+    def test_the_word_the_daemon_sent_wins(self):
+        # el caso normal: el daemon ya mandó `next`, se muestra tal cual
+        out = self._run([{"text": "hola"}, {"text": "chau mundo"}], 0, "chau")
+        self.assertEqual(out[-1].strip(), "SIGUE: CHAU")
+
+    def test_unsynced_lyrics_fall_back_to_the_next_known_line(self):
+        # letra sin sincronizar: el daemon nunca manda `next` (`nextWord` vacío
+        # para siempre), pero la letra entera ya se conoce por el evento `lyrics`
+        out = self._run([{"text": "hola"}, {"text": "chau mundo"}], -1, "")
+        self.assertNotEqual(out[-1].strip(), "SIGUE:",
+                             "la fila quedó con la etiqueta y nada atrás")
+        self.assertEqual(out[-1].strip(), "SIGUE: HOLA")
+
+    def test_track_start_previews_the_first_line(self):
+        # arranque de tema: llegó `lyrics` pero todavía no el primer `show()`
+        out = self._run([{"text": "primera linea"}], -1, "")
+        self.assertEqual(out[-1].strip(), "SIGUE: PRIMERA")
+
+    def test_with_nothing_known_the_row_stays_blank_not_bare(self):
+        # sin letra en absoluto: nunca "SIGUE:" solo, mejor una fila vacía
+        out = self._run([], -1, "")
+        self.assertEqual(out[-1].strip(), "")
+
+    def test_the_current_line_reads_its_own_text_field(self):
+        # bug hermano en el mismo `board`: la fila del verso le pasaba a
+        # `D.clean` el objeto {t0,t1,text} entero en vez de `.text` (shape
+        # confirmado contra `shell/TextSea.qml`, que sí hace `modelData.text`)
+        out = self._run([{"text": "hola mundo"}], 0, "")
+        self.assertTrue(any("HOLA MUNDO" in row for row in out), out)
+        self.assertFalse(any("OBJECT" in row for row in out), out)
+
+
 class _FakeInput:
     """Cola de respuestas de teclado para el menú de `fatal config`. Cada
     llamada a input() saca la próxima; si se acaban, sigue devolviendo ''

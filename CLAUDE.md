@@ -73,9 +73,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   drop.
 - **El sync a ojo aprende por TEMA antes que por artista.** `fatal sync +/-` corrige el
   tema que suena de una; el offset se le guarda al ARTISTA recién cuando dos temas distintos
-  suyos pidieron lo mismo (`offsets.record(artist, delta, track_id)`). Lo que se guarda es el
-  PROMEDIO de los que votaron, no la suma, y a los que votaron se les descuenta (rebase), así
-  el tema que suena no pega un salto en el mismo golpe que persistió. Se mira y se borra con
+  suyos pidieron lo mismo (`offsets.record(artist, delta, track_id)`). Se guarda el PROMEDIO
+  de los que votaron (no la suma) y a ellos se les descuenta (rebase): el tema que suena no salta. Se mira y se borra con
   `fatal sync show` / `fatal sync reset [<artista>|all]`, que no necesitan el daemon.
 - **En el CRT la letra no se clona.** Hay una pantalla enfocada, la frase sigue en la de al lado y
   el pedazo ya leído queda quemado abajo. Las repeticiones se cortan en el daemon
@@ -118,7 +117,7 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   pantallas viven: la estrofa deja sólo el foco prendido, el drop enciende la pared entera y el
   final del tema apaga de a una hacia el foco. Nunca apaga la pantalla que `crtPredict()` ya
   prendió por anticipación. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
-- `crt.screen_off` (false, Ferox 2026-09-28): sin intro de tema ni escena que apaguen pantallas; el dip del corte seco queda.
+- `crt.screen_off` (false, Ferox 2026-09-28): sin intro ni escena que apaguen pantallas; queda el dip del corte seco.
 - `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`Advance`/`End`/`Skip` (`shell.qml`,
   perilla `crt.intro`, `crt.intro_card`) — el cambio de tema es un evento: `clear` (why="track")
   apaga la pared, degauss, estática y la tarjeta (título/artista) en la pantalla del próximo foco,
@@ -148,8 +147,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `shell/Speed.js` + `crtMovRate`/`movOff` (`crt.mov_speed`, `movMin`/`movMax` en `crtPaceTable`) — la
   deriva de los motivos sigue `mov` del `aud`, INTEGRADA (nunca `t·rate`); entradas, shader y compás no.
   TRAMPAS: "El ritmo de los dibujos". Banco: `previews/movimiento/`.
-- `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
-- `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
+- `shell/HopRay.qml` — el rayo del salto: recorrido, cabeza, cola, degradado.
+- `shell/Maze.qml`/`Maze.js` (`crt.maze_eggs`) — marcha por CONTADOR de pasos (crédito `rate`, se planta en `cut`, mira con `hf`) + huevos raros. TRAMPAS: "El laberinto".
+- `crtEntryTable` + `crtPickEntry` (`shell.qml`) — pesos de las entradas y sorteo.
 - `crtSetFor(seed, mood)` (`shell.qml`, perilla `crt.set`) — el set por tema: familia de entrada,
   scheme y fuente, de una semilla atada a `crtTrackSeed`. Los DIBUJOS no salen del set:
   `crtMotifDraw` sortea con dados cargados por lo que suena. `crt.set = "off"` vuelve al sorteo
@@ -171,9 +171,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`) — la captura
   estéreo se baja a mono ANTES de `AudioAnalyzer.feed` (no descalibra perfiles viejos); el scope
   dibuja Lissajous L/R real. Detalle y números: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.
-- `audio.dirt_from` + `AudioAnalyzer._smooth_dirt` + campo `d` de `aud` → `crtDirt`/`crtDirtMult`
-  (`crt.dirt`) — planitud espectral local (ruido/guitarras) escala SÓLO `noiseAmt`. Detalle:
-  `docs/NUMEROS-MEDIDOS.md`.
+- `audio.dirt_from` + campo `d` de `aud` → `crtDirt`/`crtDirtMult` (`crt.dirt`) — planitud espectral
+  (ruido/guitarras) escala SÓLO `noiseAmt`. Detalle: `docs/NUMEROS-MEDIDOS.md`.
 - `audio._cut_step`/`_smooth_hf` + campos `cut`/`cutf`/`hf` de `aud` (`audio.py`) — `cut`/`cutf`
   marcan un corte seco al bajar de golpe y la fuerza de vuelta; `hf` es flujo espectral, reusa el
   espectro que `dirt` ya calculaba. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
@@ -185,10 +184,8 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   sin estela; vuelve con el primer `pos`/`aud`. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
 - Guardia de instancia única: el lock guarda el PID del dueño; `stop` mata por pid. Detalle: `docs/TRAMPAS.md`.
 - `tests/` — stdlib puro.
-- `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar (render offscreen
-  determinista, `./render.py`). Qué módulo y cómo integrarlo: su `README.md`.
-- `previews/crt-motifs/` — banco de los 8 motivos de loop de 15 s, YA INTEGRADOS: `shell/<Kind>.qml` +
-  `MotifBase.qml` (Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). Ver su `README.md`.
+- `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar. Ver su `README.md`.
+- `previews/crt-motifs/` — banco de motivos de loop de 15 s, YA INTEGRADOS (Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). `./sync-shell.sh` antes de renderizar el laberinto. Ver su `README.md`.
 
 Cachés: `~/.cache/cartelitos/{lyrics/,audio}` (letras; mapa de energía por tema).
 

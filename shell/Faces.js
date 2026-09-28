@@ -96,7 +96,7 @@ function lightFor(h, s, target, lo, hi) {
 // Los L de base son los de la cara de siempre (`faceFromColor`, tanda 2); sólo
 // se corren cuando ese tono no llega al contraste.
 function faceLit(h, s) {
-    const l = Math.max(0.58, lightFor(h, s, 0.34));
+    const l = Math.max(0.58, lightFor(h, s, 0.27));
     const dim = hslToHex(h, s, 0.34);
     return {
         bg: hslToHex(h, s, l),

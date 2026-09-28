@@ -9,6 +9,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import QtQuick
+import "Faces.js" as Faces
 
 ShellRoot {
     id: root
@@ -174,6 +175,10 @@ ShellRoot {
     property string crtIntroCard: "testcard"     // testcard | plain
     property bool crtColorFromPitch: true
     property int crtColorHold: 10
+    // slice "colores" (tanda 8): `song` = el reparto de las caras sigue la parte
+    // del tema (estrofa 2-1, drop todas iguales, puente/raro las tres
+    // distintas, ver `Faces.js`); `classic` = lo de antes, 2-1 al azar
+    property string crtFaceMode: "song"     // song | classic
     // segundos de anticipación con que el color infecta la pantalla siguiente
     // (ver updateInfection más abajo)
     property real crtInfectLead: 0.35
@@ -1195,28 +1200,45 @@ ShellRoot {
         return Qt.vector3d(c.r, c.g, c.b);
     }
 
-    // Una paleta = DOS caras que combinan entre sí: una pantalla prendida (fondo
-    // quemado, letra oscura) y una de tubo apagado (fondo hondo, letra encendida).
-    // Las pantallas alternan entre esas dos y nunca hay tres colores peleándose.
+    // Una paleta = TRES caras que combinan entre sí: una pantalla prendida (`a`,
+    // fondo quemado, letra oscura), una de tubo apagado (`b`, fondo hondo, letra
+    // encendida) y una media (`c`, fondo saturado de luz intermedia, letra casi
+    // blanca). Se separan por LUZ antes que por tono, así tres pantallas de
+    // colores distintos no se pelean. La `c` sale de `Faces.faceMid` con un tono
+    // elegido a mano para que arme con las otras dos (el comentario de cada una);
+    // `tests/test_colores.py` mide el contraste de la letra en las tres.
+    // Con `face_mode = classic` la `c` no se usa nunca.
     readonly property var schemes: [
         { key: "dragons",
           a: { bg: "#f7d21f", ink: "#a51405", hot: "#5e0700", dim: "#c05010", tint: phosphor("#c05010") },
-          b: { bg: "#170604", ink: "#ff8a2b", hot: "#ffe0b0", dim: "#8a4110", tint: phosphor("#ff8a2b") } },
+          b: { bg: "#170604", ink: "#ff8a2b", hot: "#ffe0b0", dim: "#8a4110", tint: phosphor("#ff8a2b") },
+          // fuego: amarillo, naranja y el carmín del final del arco
+          c: { bg: "#bd0a1a", ink: "#fde2e4", hot: "#ffffff", dim: "#f76371", tint: phosphor("#f76371") } },
         { key: "ado",
           a: { bg: "#68d6f2", ink: "#062247", hot: "#010d24", dim: "#1f5c8a", tint: phosphor("#1f5c8a") },
-          b: { bg: "#04162e", ink: "#7fe4ff", hot: "#ffffff", dim: "#2d6f96", tint: phosphor("#7fe4ff") } },
+          b: { bg: "#04162e", ink: "#7fe4ff", hot: "#ffffff", dim: "#2d6f96", tint: phosphor("#7fe4ff") },
+          // cian y azul noche, y el violeta que sigue en la rueda
+          c: { bg: "#5b35ef", ink: "#e7e2fd", hot: "#ffffff", dim: "#9a84f5", tint: phosphor("#9a84f5") } },
         { key: "poison",
           a: { bg: "#c8f224", ink: "#123a06", hot: "#061c02", dim: "#3f7a1a", tint: phosphor("#3f7a1a") },
-          b: { bg: "#04120a", ink: "#9dff3d", hot: "#e8ffc4", dim: "#3f7a1a", tint: phosphor("#9dff3d") } },
+          b: { bg: "#04120a", ink: "#9dff3d", hot: "#e8ffc4", dim: "#3f7a1a", tint: phosphor("#9dff3d") },
+          // el verde tóxico y su violeta de siempre (complementario)
+          c: { bg: "#9117cb", ink: "#f5e2fd", hot: "#ffffff", dim: "#c770ef", tint: phosphor("#c770ef") } },
         { key: "bloodline",
           a: { bg: "#ff2f14", ink: "#2b0600", hot: "#5e0f00", dim: "#8a2c14", tint: phosphor("#8a2c14") },
-          b: { bg: "#12030a", ink: "#ff5c7a", hot: "#ffd6de", dim: "#8a2540", tint: phosphor("#ff5c7a") } },
+          b: { bg: "#12030a", ink: "#ff5c7a", hot: "#ffd6de", dim: "#8a2540", tint: phosphor("#ff5c7a") },
+          // rojo, vino, y la frambuesa entre los dos
+          c: { bg: "#b20e71", ink: "#fde2ee", hot: "#ffffff", dim: "#f260a2", tint: phosphor("#f260a2") } },
         { key: "vapor",
           a: { bg: "#f74fc3", ink: "#2b0126", hot: "#12000f", dim: "#8a1670", tint: phosphor("#8a1670") },
-          b: { bg: "#0d0a2b", ink: "#6ff2ff", hot: "#e6ffff", dim: "#2f5a8a", tint: phosphor("#6ff2ff") } },
+          b: { bg: "#0d0a2b", ink: "#6ff2ff", hot: "#e6ffff", dim: "#2f5a8a", tint: phosphor("#6ff2ff") },
+          // rosa, índigo/cian, y el violeta de la tríada vaporwave
+          c: { bg: "#8612e2", ink: "#f1e2fd", hot: "#ffffff", dim: "#bc76f4", tint: phosphor("#bc76f4") } },
         { key: "bone",
           a: { bg: "#f2e2bc", ink: "#7a2a05", hot: "#3d1302", dim: "#a8642a", tint: phosphor("#a8642a") },
-          b: { bg: "#150c05", ink: "#ffb457", hot: "#ffe6c2", dim: "#8a5a20", tint: phosphor("#ffb457") } },
+          b: { bg: "#150c05", ink: "#ffb457", hot: "#ffe6c2", dim: "#8a5a20", tint: phosphor("#ffb457") },
+          // hueso, marrón, y el óxido del mismo pigmento
+          c: { bg: "#9b4221", ink: "#fde9e2", hot: "#ffffff", dim: "#db7b58", tint: phosphor("#db7b58") } },
     ]
     readonly property var criticalFace: ({ bg: "#ff2a0a", ink: "#26030a", hot: "#5e0500", dim: "#7d1a08",
                                            tint: phosphor("#7d1a08") })
@@ -1224,58 +1246,30 @@ ShellRoot {
     // colores de la tapa del disco (evento "art" del daemon)
     property var artColors: []
 
-    function faceFromColor(hex, lit) {
-        const c = Qt.color(hex);
-        const h = c.hslHue;
-        const sat = Math.min(Math.max(c.hslSaturation, 0.6), 1);
-        if (lit) {
-            const dim = Qt.hsla(h, sat, 0.34, 1);
-            return {
-                bg: Qt.hsla(h, sat, 0.58, 1),
-                ink: Qt.hsla(h, Math.min(sat + 0.15, 1), 0.15, 1),
-                hot: Qt.hsla(h, 1, 0.07, 1),
-                dim: dim,
-                tint: phosphor(dim),
-            };
-        }
-        const ink = Qt.hsla(h, sat, 0.66, 1);
-        return {
-            bg: Qt.hsla(h, sat * 0.9, 0.07, 1),
-            ink: ink,
-            hot: Qt.hsla(h, 0.4, 0.92, 1),
-            dim: Qt.hsla(h, sat, 0.40, 1),
-            tint: phosphor(ink),
-        };
+    // Una cara de `Faces.js` (hex puro, sin Qt) con su `tint` pasado a vec3
+    // para el uniform de crt.frag.
+    function qtFace(f) {
+        return { bg: f.bg, ink: f.ink, hot: f.hot, dim: f.dim, tint: phosphor(f.tint) };
     }
 
-    // La paleta del tema sale de su tapa: el color más presente manda la pantalla
-    // prendida y el segundo la oscura. Si los dos son casi el mismo tono, al
-    // segundo se lo manda al otro lado de la rueda — dos caras del mismo color no
-    // son una paleta, son una pantalla lavada.
+    // La paleta del tema sale de su tapa (`Faces.albumFaces`): el color más
+    // presente manda la pantalla prendida, el segundo la oscura y el tercero la
+    // media. Un tono casi igual a uno que ya está no cuenta como otro color: se
+    // busca el siguiente y, si la tapa no tiene, se deriva del arco más grande
+    // de la rueda. Los grises NO sirven como color de pantalla (no tienen tono
+    // propio: una tapa en blanco y negro terminaba pintando el tubo de verde) y
+    // una tapa sin color da null → paleta de fábrica. La luz de cada cara se
+    // corre lo justo para que la letra llegue al contraste en cualquier tono.
     readonly property var albumScheme: {
         if (!artColors || artColors.length === 0)
             return null;
-        // Los grises NO sirven como color de pantalla: no tienen tono propio y
-        // Qt les devuelve uno cualquiera — una tapa en blanco y negro terminaba
-        // pintando el tubo de verde, que no pintaba nada con el resto.
-        let usable = [];
+        let hex = [];
         for (let i = 0; i < artColors.length; i++)
-            if (Qt.color(artColors[i]).hslSaturation > 0.18)
-                usable.push(artColors[i]);
-        if (usable.length === 0)
-            return null;     // tapa sin color: mejor una paleta de fábrica
-        const first = usable[0];
-        const h1 = Qt.color(first).hslHue;
-        let second = usable.length > 1 ? usable[1] : null;
-        if (second !== null) {
-            const h2 = Qt.color(second).hslHue;
-            const gap = Math.abs(h1 - h2);
-            if (gap < 0.06 || gap > 0.94)
-                second = null;    // casi el mismo tono: no son dos colores
-        }
-        if (second === null)
-            second = Qt.hsla((h1 + 0.45) % 1, 0.75, 0.5, 1).toString();
-        return { key: "album", a: faceFromColor(first, true), b: faceFromColor(second, false) };
+            hex.push(Qt.color(artColors[i]).toString());
+        const f = Faces.albumFaces(hex);
+        if (!f)
+            return null;
+        return { key: "album", a: qtFace(f.a), b: qtFace(f.b), c: qtFace(f.c) };
     }
 
     function currentScheme() {
@@ -1299,18 +1293,12 @@ ShellRoot {
     // Cómo se reparten las dos caras entre las pantallas. Alternar (0,1,0) deja
     // SIEMPRE la del medio distinta y se nota enseguida; acá el reparto cambia
     // por tema y cada varias líneas, y sólo se garantiza que estén las dos caras.
+    // Es el reparto de `classic` y el de arranque de `song` (`Faces.twoTone`).
+    function crtFaceSeed() {
+        return crtTrackSeed * 31 + sectionGen * 13 + Math.floor(crtSerial / 6) * 7;
+    }
     function crtFacePattern() {
-        const n = Math.max(activeCrtScreens.length, 1);
-        if (n === 1)
-            return [0];
-        const seed = crtTrackSeed * 31 + sectionGen * 13 + Math.floor(crtSerial / 6) * 7;
-        // 1..2^n-2 deja afuera "todas iguales" en las dos puntas
-        const combos = Math.pow(2, n) - 2;
-        const bits = 1 + Math.floor(crtHash(seed) * combos);
-        let out = [];
-        for (let i = 0; i < n; i++)
-            out.push((bits >> i) & 1);
-        return out;
+        return Faces.twoTone(Math.max(activeCrtScreens.length, 1), crtHash(crtFaceSeed()));
     }
 
     // Qué cara tiene cada pantalla AHORA. Empieza en el reparto de arriba, pero
@@ -1321,8 +1309,81 @@ ShellRoot {
 
     property double lastFacesAt: 0
     function resetFaces() {
+        faceSteps = [];
         faceIdx = crtFacePattern();
+        crtFaceModeNow = "verse";
         lastFacesAt = Date.now();
+    }
+
+    // ---- slice "colores" (tanda 8): el reparto sigue la parte del tema
+    // (`face_mode = song`). La estrofa es el 2-1 de siempre; el drop pone la
+    // pared entera de UNA cara (el golpe); la subida, el puente (un `quiet`
+    // después del primer drop) y un evento raro, las tres caras distintas.
+    // `crtFaceModeWant` es la parte que suena, `crtFaceModeNow` la que la pared
+    // ya muestra, y entre las dos está el portero (`Faces.gateOk`): entrar a un
+    // evento pasa enseguida, volver a la estrofa espera `color_hold`, y nada
+    // cambia dos veces en menos de 2,5 s.
+    // Tres frenos contra el "flashea todo el tiempo" de la tanda 2 (TRAMPAS):
+    // sólo se reparte cuando cambia el MODO (un `sec` verse→verse no toca nada),
+    // la pantalla de la letra conserva su cara, y el cambio va de a UNA pantalla
+    // por vez (`faceSteps`, desde la de la letra hacia afuera, cada
+    // `Motion.enterMs`) — el fondo de cada una ya lava en 900 ms (`Crt.qml`).
+    property bool crtDropSeen: false
+    readonly property string crtFaceModeWant: crtFaceMode === "song"
+        ? Faces.faceMode(audSection, crtRare.screen >= 0, crtDropSeen) : "verse"
+    property string crtFaceModeNow: "verse"
+    property var faceSteps: []          // [{screen, face}] pendientes
+    property double faceStepAt: 0
+    onAudSectionChanged: if (audSection === "drop") crtDropSeen = true
+    onCrtFaceModeChanged: resetFaces()
+
+    function crtFaceFocus() {
+        const n = activeCrtScreens.length;
+        return (crtShot && crtShot.focus >= 0 && crtShot.focus < n)
+            ? crtShot.focus : Math.floor((Math.max(n, 1) - 1) / 2);
+    }
+    function crtFaceTarget(mode) {
+        return Faces.facePattern(mode, Math.max(activeCrtScreens.length, 1), faceIdx,
+                                 crtFaceFocus(), crtHash(crtFaceSeed()));
+    }
+    // encola el cambio: una pantalla por paso, la de la letra primero
+    function crtFaceStage(next) {
+        const order = Faces.stepOrder(faceIdx, next, crtFaceFocus());
+        let steps = [];
+        for (let k = 0; k < order.length; k++)
+            steps.push({ screen: order[k], face: next[order[k]] });
+        faceSteps = steps;
+        faceStepAt = 0;
+        lastFacesAt = Date.now();
+    }
+    // lo corre el Timer de la infección (60 ms), ANTES que ella: mientras
+    // quedan pasos la infección no mueve nada, así las dos no se pisan
+    function crtFaceTick() {
+        const now = Date.now();
+        if (faceSteps.length > 0) {
+            if (faceIdx.length !== activeCrtScreens.length) {
+                resetFaces();
+                return;
+            }
+            if (now < faceStepAt)
+                return;
+            const st = faceSteps[0];
+            let next = faceIdx.slice();
+            next[st.screen] = st.face;
+            faceIdx = next;
+            faceSteps = faceSteps.slice(1);
+            faceStepAt = now + Motion.enterMs;
+            return;
+        }
+        // con el intro corriendo la pared está apagada: se aplica al terminar
+        if (crtFaceMode !== "song" || crtIntroOn)
+            return;
+        const want = crtFaceModeWant;
+        if (!Faces.gateOk(now, lastFacesAt, crtColorHold * 1000, crtFaceModeNow, want))
+            return;
+        console.log("crt: faces " + crtFaceModeNow + " -> " + want);
+        crtFaceModeNow = want;
+        crtFaceStage(crtFaceTarget(want));
     }
     // El reparto en un PICO, con el piso de `color_hold`. El comentario de acá
     // abajo decía "un par de veces por canción" desde la tanda 2, pero el pico
@@ -1332,7 +1393,16 @@ ShellRoot {
     function resetFacesOnPeak() {
         if (Date.now() - lastFacesAt < crtColorHold * 1000)
             return;
-        resetFaces();
+        if (crtFaceMode !== "song") {
+            resetFaces();
+            return;
+        }
+        // en `song` el pico re-reparte DENTRO de la parte que suena: el drop no
+        // tiene nada que re-repartir (son todas iguales), y un cambio a medio
+        // escalonar no se pisa
+        if (faceSteps.length > 0 || crtFaceModeNow === "chorus")
+            return;
+        crtFaceStage(crtFaceTarget(crtFaceModeNow));
     }
     // Repartir de nuevo las caras da vuelta pantallas ENTERAS: la que estaba
     // clara se va a negra y al revés. Eso no es un cambio de color, es un
@@ -1341,7 +1411,10 @@ ShellRoot {
     // tiempo cuando sube la música". Ahora la pared se repinta en los picos y
     // al cambiar de tema: un par de veces por canción, que es cuando significa
     // algo.
-    onCrtTrackSeedChanged: resetFaces()
+    onCrtTrackSeedChanged: {
+        crtDropSeen = false;
+        resetFaces();
+    }
     onActiveCrtScreensChanged: {
         resetFaces();
         // el reparto guardado habla de pantallas que ya no son las mismas
@@ -1367,6 +1440,9 @@ ShellRoot {
         // a la vez, así que no hay quién le pase el color a quién
         if (!crtOn || sh.mode === "all" || sh.mode === "iown" || sh.chunks.length < 2)
             return;
+        // un cambio de reparto a medio escalonar: la infección espera
+        if (faceSteps.length > 0)
+            return;
         if (faceIdx.length !== activeCrtScreens.length) {
             resetFaces();
             return;
@@ -1384,7 +1460,9 @@ ShellRoot {
             // El color se MUDA, no se copia: la que recibe toma el color de la
             // que traía la frase, y la que lo entregó se queda con el otro. Si
             // sólo se copiara, en tres pasos las tres pantallas terminan del
-            // mismo color y se pierde la pared de dos tonos.
+            // mismo color y se pierde la pared de dos tonos. Por lo mismo la
+            // mudanza no cambia la PARTE (`Faces.faceMode`): el drop sigue
+            // todo igual, el puente sigue con las tres distintas.
             const moving = next[donor];
             next[donor] = next[c.screen];
             next[c.screen] = moving;
@@ -1398,7 +1476,10 @@ ShellRoot {
         interval: 60
         repeat: true
         running: root.crtOn
-        onTriggered: root.updateInfection()
+        onTriggered: {
+            root.crtFaceTick();
+            root.updateInfection();
+        }
     }
 
     function crtFace(i, alarm) {
@@ -1406,7 +1487,8 @@ ShellRoot {
             return criticalFace;
         const sc = currentScheme();
         const idx = (faceIdx.length > i ? faceIdx[i] : crtFacePattern()[i]) || 0;
-        return idx === 0 ? sc.a : sc.b;
+        // una paleta sin `c` (no debería haber) cae en la oscura
+        return [sc.a, sc.b, sc.c || sc.b][idx] || sc.a;
     }
     function crtSchemeKey() {
         return currentScheme().key;
@@ -3340,6 +3422,7 @@ ShellRoot {
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro", crt_intro_card: "crtIntroCard",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
+        crt_face_mode: "crtFaceMode",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",

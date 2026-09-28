@@ -190,3 +190,12 @@ reescrito para usar `sustained()` (fase continua) en vez de `tone()`.
 - `pct=None` como default de `feed()`: reversible, no rompe callers viejos
   (`test_dirt.py`/`test_senales.py` siguen llamando `feed(pcm, t)` sin tercer
   argumento).
+
+## Ronda 3 (2026-09-28): la señal, más rápida y sin saturar
+
+Ferox, con música real: "se ve el cambio pero es mínimo, más sensible al ritmo". Cambió `cartelitos/audio.py`:
+`MOV_ATTACK_THRESH` 0.12 → 0.45 y la densidad pasa a ser compresiva (`1 − exp(−n/MOV_RATE_REF)`); ventana de
+onsets `MOV_RATE_TAU` 0.6 s; término nuevo `MOV_W_BEAT` (densidad de `beat`s, ventana 1.5 s); pesos
+0.35/0.20/0.25/0.20; suavizado `MOV_RISE_S` 0.25 / `MOV_FALL_S` 0.7 (lo de arriba dice 1.0 / 3.0: quedó viejo).
+Tempo local: sigue descartado (`BpmTracker` no lee cuerdas rápidas). Números: `docs/NUMEROS-MEDIDOS.md`.
+

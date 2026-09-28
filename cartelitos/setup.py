@@ -236,6 +236,8 @@ SETTINGS = [
      lambda c: _pick("Let intro and scene darken screens (false = never)", YESNO, c)),
     ("testcard", "crt", "Test card may show up mid-track (pool + rare event)",
      lambda c: _pick("Let the test card appear in the middle of a track (false = never)", YESNO, c)),
+    ("maze_eggs", "crt", "Maze drawing hides rare Easter eggs (smiley, rat, error dialog…)",
+     lambda c: _pick("Rare Easter eggs in the maze drawing, like the Win95 screensaver (false = plain maze)", YESNO, c)),
     ("intro", "crt", "New track is an event (dark, static, title card)",
      lambda c: _pick("A new track goes dark, static, a title/artist card, "
                       "then the first line", YESNO, c)),

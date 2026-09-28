@@ -241,6 +241,11 @@ SETTINGS = [
          ("plain: big title and artist, no drawing", "plain")], c)),
     ("audio", "crt", "React to the music",
      lambda c: _pick("React to what's actually playing", YESNO, c)),
+    ("face_mode", "crt", "How the colours spread over the screens", lambda c: _pick(
+        "How the three faces of the palette spread over your screens", [
+        ("song: verses 2-1, the drop all the same, bridge and rare events "
+         "all different", "song"),
+        ("classic: two faces, 2-1 at random, as before", "classic")], c)),
     ("color_from_pitch", "crt", "Colour follows the register",
      lambda c: _pick("The phosphor leans on the register of what's playing", YESNO, c)),
     ("color_hold", "crt", "Seconds before the colour may change",

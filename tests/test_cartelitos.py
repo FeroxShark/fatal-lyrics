@@ -3025,10 +3025,12 @@ class TestKnobsAreReachable(unittest.TestCase):
     def test_every_face_has_the_five_colour_keys(self):
         # T7.0: ninguna cara traía `tint`, así que el uniform del shader quedaba
         # en cero (halo del bloom, barra que rueda y tinte de la rotura muertos).
-        # Toda cara — scheme a/b, criticalFace y las dos ramas de faceFromColor —
-        # tiene que traer las cinco claves.
+        # Toda cara — scheme a/b/c, criticalFace, las tres de `Faces.js` (la
+        # tapa) y el envoltorio `qtFace` — tiene que traer las cinco claves.
         with open(os.path.join(self.SHELL, "shell.qml"), encoding="utf-8") as f:
             qml = f.read()
+        with open(os.path.join(self.SHELL, "Faces.js"), encoding="utf-8") as f:
+            js = f.read()
         keys = {"bg", "ink", "hot", "dim", "tint"}
 
         def faces(text):
@@ -3037,15 +3039,19 @@ class TestKnobsAreReachable(unittest.TestCase):
 
         schemes = re.search(r"readonly property var schemes: \[(.*?)\n    \]", qml, re.S)
         self.assertIsNotNone(schemes, "no se encontró schemes en shell.qml")
-        found = re.findall(r"\b[ab]: (\{[^{}]*\})", schemes.group(1))
-        self.assertEqual(len(found), 12, "schemes: 6 esquemas x 2 caras")
+        found = re.findall(r"\b[abc]: (\{[^{}]*\})", schemes.group(1))
+        self.assertEqual(len(found), 18, "schemes: 6 esquemas x 3 caras")
         critical = re.search(r"readonly property var criticalFace: \((\{[^{}]*\})\)", qml)
         self.assertIsNotNone(critical, "no se encontró criticalFace en shell.qml")
-        fn = re.search(r"function faceFromColor\(.*?\n    \}\n", qml, re.S)
-        self.assertIsNotNone(fn, "no se encontró faceFromColor en shell.qml")
-        derived = re.findall(r"return (\{[^{}]*\});", fn.group(0))
-        self.assertEqual(len(derived), 2, "faceFromColor: cara prendida y oscura")
-        for face in found + [critical.group(1)] + derived:
+        wrap = re.search(r"function qtFace\(f\) \{\n\s*return (\{[^{}]*\});", qml)
+        self.assertIsNotNone(wrap, "no se encontró qtFace en shell.qml")
+        derived = []
+        for fn in ("faceLit", "faceDark", "faceMid"):
+            body = re.search(r"function %s\(.*?\n\}\n" % fn, js, re.S)
+            self.assertIsNotNone(body, fn)
+            derived += re.findall(r"return (\{[^{}]*\});", body.group(0))
+        self.assertEqual(len(derived), 3, "Faces.js: cara prendida, oscura y media")
+        for face in found + [critical.group(1), wrap.group(1)] + derived:
             self.assertEqual(faces(face), [keys], face)
 
     def test_a_channel_change_is_rare_by_default(self):

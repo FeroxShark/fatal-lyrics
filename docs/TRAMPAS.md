@@ -851,3 +851,32 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   `util.acquire_instance_lock`; overlay: `sh` de `spawn` en `bin/fatal`); `stop` mata por pid,
   nunca por fd, y el fd no se hereda; `start` espera `daemon.ready` (el daemon lo crea tras
   escribir el flag del CRT).
+
+## El ritmo de los dibujos sigue `mov` (tanda 8, slice movimiento-visual, 2026-09-28)
+
+`crtMovRate` (`shell.qml`, `Speed.rate`, perilla `crt.mov_speed`, rango `movMin`/`movMax` en
+`crtPaceTable`) acelera o frena la deriva de los motivos con el campo `mov` del evento `aud`. Lo que
+cuesta caro si se "simplifica":
+
+- **Nunca `t · rate`.** Se integra un desplazamiento aparte, `off += dt · (rate − 1)`
+  (`Speed.advance`), y el reloj de dibujo es `clock + off`. Banco `previews/movimiento/`: a los 240 s
+  de tema, una rampa de `mov` de 4 s con `t · rate` hace correr el dibujo de +63× a −63× (para ATRÁS
+  al bajar); integrado, la velocidad es exactamente el `rate` del cuadro. Con rate = 1 el
+  desplazamiento no se mueve: bit a bit lo de antes.
+- **No escalar `clock` de `MotifBase` ni `tubeTime`.** `clock` hace doble función (dibujo y tiempo):
+  el re-anclaje `|clock − tubeClock| > 0.25 → clock = tubeClock` saltaría un cuarto de segundo cada
+  rato, y `bp`/`sinceTick`/`sinceKick`/`dropAmt` dejarían de estar en el tiempo. `tubeTime` lo leen
+  el zumbido de 60 Hz del shader, el corte, el grano y el vigía de `quality`. Por eso `movOff` existe
+  aparte, en `Crt.qml` (los dos avances de `tubeTime`) y en `MotifBase.qml` (el commit de `clockAcc`),
+  y sólo mueve `lt` / `mclock`.
+- **Los de física propia ya integran:** multiplicar el `dt` que acumulan (`clock += pending · rate`),
+  nunca el reloj. Excepciones medidas: `Tunnel` cuenta su luz con el reloj REAL (`tube.clock +=
+  tube.pending`, fallback del compás); `TextSea` con `bpmLive` va una línea por tiempo y no escucha
+  el ritmo; `Plasma` escala el `dt` del resorte ANTES del tope de 0.05.
+- **El `Behavior` va en la ENTRADA del integrador** (`crtMovRate`, `Motion.levelMs`), no sobre la
+  fase: animar una fase la hace ir y volver.
+- **Pivote 0.35, no 0.5:** un tema fuerte y parejo da `mov` ≈ 0.2; con el pivote al medio correría
+  más lento que antes de punta a punta. Sin `audLive` el ritmo es 1 exacto (no `movMin`).
+- **Entradas afuera a propósito:** `Motion.enterMs` está en ~35 compuertas de tiempo real
+  (`Date.now() − textArrivedAt < Motion.enterMs`, el empalme del aro con la frase). Un test
+  (`test_movimiento_visual.py`) controla que `Ring`/`Motion`/`HopRay`/`WordSlot` no se enteren.

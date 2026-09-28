@@ -118,11 +118,10 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   pantallas viven: la estrofa deja sólo el foco prendido, el drop enciende la pared entera y el
   final del tema apaga de a una hacia el foco. Nunca apaga la pantalla que `crtPredict()` ya
   prendió por anticipación. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
-- `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`crtIntroAdvance`/`crtIntroEnd`/
-  `crtIntroSkip` (`shell.qml`, perilla `crt.intro`, `crt.intro_card`) — el cambio de tema es un
-  evento: `clear` (why="track") apaga la pared, degauss, estática y la tarjeta (título/artista) en
-  la pantalla del próximo foco. La tarjeta NO tiene plazo: la corta `show()`. Detalle del orden y
-  los cortes: `docs/TRAMPAS.md` ("Detalle movido desde CLAUDE.md").
+- `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`Advance`/`End`/`Skip` (`shell.qml`,
+  perilla `crt.intro`, `crt.intro_card`) — el cambio de tema es un evento: `clear` (why="track")
+  apaga la pared, degauss, estática y la tarjeta (título/artista) en la pantalla del próximo foco,
+  sin plazo: la corta `show()`. Detalle: `docs/TRAMPAS.md` ("Detalle movido desde CLAUDE.md").
 - `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`) — la palabra que suena pulsa con la familia
   de entrada del set. Costo y auto-drop de calidad: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla
@@ -145,6 +144,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
 - `crtPaceTable` + `pace` (`shell.qml`) — el presupuesto de eventos de la perilla `pace`, en
   una tabla sola. `crtMotifKinds` / `crtMotifSince` / `crtMotifSeeds` + `crtMotifRefresh()` —
   qué dibuja cada pantalla, desde cuándo y con qué semilla.
+- `shell/Speed.js` + `crtMovRate`/`movOff` (`crt.mov_speed`, `movMin`/`movMax` en `crtPaceTable`) — la
+  deriva de los motivos sigue `mov` del `aud`, INTEGRADA (nunca `t·rate`); entradas, shader y compás no.
+  TRAMPAS: "El ritmo de los dibujos". Banco: `previews/movimiento/`.
 - `shell/HopRay.qml` — el rayo del salto: el recorrido, la cabeza, la cola y el degradado.
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — los pesos de las entradas y el sorteo.
 - `crtSetFor(seed, mood)` (`shell.qml`, perilla `crt.set`) — el set por tema: familia de entrada,
@@ -181,15 +183,12 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   acumulada en QML, no en el shader (TRAMPAS: salta al tocar la velocidad).
 - `crt.resting` + `tubeAccum` (`Crt.qml`) — pausa con letra puesta: reloj a 15 fps, pump frenado,
   sin estela; vuelve con el primer `pos`/`aud`. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
-- Guardia de instancia única: el lock guarda el PID del dueño (daemon: `util.acquire_instance_lock`;
-  overlay: `sh` de `spawn` en `bin/fatal`); `stop` mata por pid, nunca por fd. Detalle: `docs/TRAMPAS.md`.
+- Guardia de instancia única: el lock guarda el PID del dueño; `stop` mata por pid. Detalle: `docs/TRAMPAS.md`.
 - `tests/` — ~690 tests, stdlib puro.
 - `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar (render offscreen
   determinista, `./render.py`). Qué módulo y cómo integrarlo: su `README.md`.
-- `previews/crt-motifs/` — banco de render de los 8 motivos de loop de 15 s (swarm, splitflap, maze,
-  pipes, defrag, mystify, vector, harmonograph), YA INTEGRADOS: fuente `shell/<Kind>.qml` +
-  `MotifBase.qml` (Qt Quick Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). Ver
-  su `README.md`.
+- `previews/crt-motifs/` — banco de los 8 motivos de loop de 15 s, YA INTEGRADOS: `shell/<Kind>.qml` +
+  `MotifBase.qml` (Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). Ver su `README.md`.
 
 Cachés: `~/.cache/cartelitos/lyrics/` (letras) y `~/.cache/cartelitos/audio` (mapa de energía por
 tema).

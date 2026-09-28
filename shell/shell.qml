@@ -133,7 +133,8 @@ ShellRoot {
     // efecto suelto en la pantalla que las muestra (`Crt.qml`, `fxFire`)
     property bool crtWordFx: true
     onCrtWordFxChanged: console.log("crt: word_fx " + crtWordFx)
-    // fase de la barra que rueda: `tt` (el reloj del tubo) sólo empuja la re-evaluación.
+    // fase de la barra que rueda: `tt` (el reloj de dibujo del tubo, `tubeTime + movOff`: la
+    // deriva libre sigue el ritmo de la música) sólo empuja la re-evaluación con compás.
     // Deriva libre = una vuelta cada 1/`rollFreeRate` s. Con compás la vuelta dura los
     // compases (múltiplo de 4 tiempos) más cercanos a ese período: queda en fase con el
     // tiempo sin acelerar (1 vuelta/compás iría 6 veces más rápida y chocaría con "una

@@ -147,8 +147,8 @@ Item {
     //
     // Los 220 ms son los del apagado del aro: más largo y el aro cuenta un
     // tiempo entero con el motivo todavía visible debajo.
-    // señales finas y perilla que sólo lee el laberinto (Maze.qml): corte seco, agudos y
-    // huevos de pascua (`crt.maze_eggs`)
+    // señales finas: corte seco y agudos (los leen el laberinto, Maze.qml, y Mystify.qml) y la
+    // perilla de los huevos de pascua del laberinto (`crt.maze_eggs`)
     property bool cut: false
     property real hf: 0
     property bool eggs: true
@@ -1406,6 +1406,8 @@ Item {
             seed: motif.seed
             quality: motif.quality
             drop: motif.drop
+            cut: motif.cut
+            hf: motif.hf
             section: motif.section
             tick: motif.tick
             beat: motif.beat

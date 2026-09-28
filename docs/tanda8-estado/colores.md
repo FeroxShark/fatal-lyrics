@@ -36,8 +36,16 @@ de antes. Cero corridas en pantalla: sólo tests y renders offscreen.
 - `d0d0b83` `8a16d55` tests: el viejo de las 5 claves ahora pide 6×3 + Faces.js;
   `tests/test_colores.py` (20).
 
+- `3328fa6` cara clara de la tapa menos lavada (luz objetivo 0.27 en vez de 0.34).
+- `c79f716` `83c5d57` banco `previews/colores/render.py` (PIL + Faces.js con node, sin Qt).
+- `4dbffd9` `colores-paletas.png` (6 fijas + 4 tapas, contraste impreso); `9c0bedf`
+  `colores-tira.png` (estrofa→estribillo→puente→raro con 3, 2 y 1 monitores, con los pasos).
+- Suite completa: 744 tests OK. `qmllint shell/shell.qml` rc 0.
+- TRAMPAS ("Tres caras y reparto por sección"), PENDIENTES (moiré validado 2026-09-28 +
+  abiertos de colores), una línea en CLAUDE.md (18.982 bytes).
+
 ## Falta
-Banco `previews/colores/` + PNGs, TRAMPAS/PENDIENTES/CLAUDE.md.
+Nada del slice. Lo único abierto es mirarlo con música real (PENDIENTES, tanda 8).
 
 ## Supuestos
 - "Paleta/cara invertida" (así la llaman TRAMPAS y `tunnel.frag`) = la cara CLARA `a` (fondo

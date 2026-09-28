@@ -128,7 +128,14 @@ float wallAt(float depth, float a, float detail, float soft, float sd) {
     float v = fract(depth);
     // running bond: half a brick of offset on every other course
     float ab = a * 12.0 + 0.5 * mod(course, 2.0);
-    float brick = floor(ab);
+    // The index is taken MOD the bricks in a turn. `ang` comes out of `atan`,
+    // which wraps from +0.5 to -0.5 turns along the negative x axis: `ab` jumps
+    // by exactly 12 there, and `fract(ab)` does not notice, but a bare
+    // `floor(ab)` does — the brick straddling the cut got two different
+    // indices, so two different tones, and the wall showed a horizontal seam
+    // at mid-height on the left (tanda 8). 12 has to stay an integer (and the
+    // same one as in `a * 12.0`) or the seam comes back.
+    float brick = mod(floor(ab), 12.0);
     float u = fract(ab);
 
     // the joint around each brick: dark mortar, the brick face inside it

@@ -213,6 +213,11 @@ ShellRoot {
             rarePerLine: 1 / 600, rareGapMs: 180000,
             // corrida 5b: piso entre dos efectos por palabra en una MISMA pantalla, en ms
             fxGapMs: 12000,
+            // tanda 8 (`shell/React.js`): cuánto baja la luz en un corte seco, cuánto
+            // entra de más al volver (× `cutf`), cuánto se mueven las filas y se
+            // enfrían los claros con los agudos (`hf`), y cuánto mueve la suciedad
+            // al grano de la estática
+            cutDepth: 0.35, cutFlash: 0.18, fizzAmt: 0.45, grainMove: 0.55,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -225,6 +230,7 @@ ShellRoot {
             dirtMin: 1.0, dirtMax: 3.0,
             rarePerLine: 1 / 400, rareGapMs: 120000,
             fxGapMs: 6000,
+            cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -247,6 +253,9 @@ ShellRoot {
             // palabra: se apagan igual con `crt.word_fx = false`. Sólo el piso de la duración
             // del efecto (`fxBusy`) los separa
             fxGapMs: 0,
+            // la tanda 3 no tenía nada de esto; como con `dirtMax`, `wild` se lleva
+            // el valor más fuerte y no el cero
+            cutDepth: 0.75, cutFlash: 0.45, fizzAmt: 1.0, grainMove: 1.0,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -420,6 +429,19 @@ ShellRoot {
     // corrida 7b: qué tan sucio suena (planitud espectral, 0 limpio .. 1 ruido); el
     // daemon ya lo suaviza (~1.5 s), el silencio manda 0
     property real audDirt: 0
+    // tanda 8 (docs/tanda8-estado/senales.md): el corte seco lo sostiene el daemon
+    // hasta que vuelve el nivel; la vuelta llega UNA vez (`cutf` > 0, su fuerza) y
+    // se cuenta, así dos vueltas iguales disparan las dos. `audHf` = los agudos que
+    // cambian (flujo espectral), ya suavizado del otro lado.
+    property bool audCut: false
+    property real audCutF: 0
+    property int audCutGen: 0
+    property real audHf: 0
+    // sin audio vivo no hay corte: si el daemon deja de mandar `aud` en medio de
+    // uno, el tubo no puede quedar clavado a media luz
+    readonly property bool crtCut: audLive && audCut
+    onCrtCutChanged: if (crtOn) console.log("crt: cut " + (crtCut ? "on"
+        : "back " + audCutF.toFixed(2)))
     property int audBeat: 0
     // los picos: no cada golpe, sino los pocos momentos más altos del tema
     property int audPeak: 0
@@ -1906,8 +1928,10 @@ ShellRoot {
     // `noiseAmt` (SÓLO la estática del vidrio, no `rest`: eso lo maneja la tensión).
     // Estado, no animación: el daemon ya suaviza, el Behavior sólo esconde el escalón
     // de 10 Hz. Sin audio vivo vale 0 (multiplicador 1).
+    // Tanda 8: el Behavior era de `holdMs` (1.5 s) ENCIMA de los ~1.5 s del daemon, y la
+    // estática llegaba tres segundos tarde. `levelMs` alcanza para tapar el escalón.
     property real crtDirt: audLive ? audDirt : 0
-    Behavior on crtDirt { NumberAnimation { duration: Motion.holdMs } }
+    Behavior on crtDirt { NumberAnimation { duration: Motion.levelMs } }
     readonly property real crtDirtMult: 1 + (pace.dirtMin
         + (pace.dirtMax - pace.dirtMin) * crtDirt - 1) * crtDirtAmount
     Timer {
@@ -3444,6 +3468,12 @@ ShellRoot {
                             root.audHi = ev.hi;
                             root.audCentroid = ev.c;
                             root.audDirt = ev.d || 0;
+                            root.audHf = ev.hf || 0;
+                            if (ev.cutf > 0) {
+                                root.audCutF = ev.cutf;
+                                root.audCutGen++;
+                            }
+                            root.audCut = !!ev.cut;
                             root.audAt = Date.now();
                             // el centroide se promedia largo: el color tiene que
                             // seguir el registro del tema, no cada sílaba

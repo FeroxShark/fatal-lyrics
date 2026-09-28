@@ -97,10 +97,17 @@ _CONFIG_COMMENTS = {
                    '  "auto"  = a preset picked by the register of the song\n'
                    "  or a preset by name: dragons | ado | poison | bloodline\n"
                    "            | vapor | bone\n"
-                   "Each palette is TWO faces that go together — one lit screen\n"
-                   "(burnt background, dark letters) and one dark tube (deep\n"
-                   "background, glowing letters). Your screens alternate between\n"
-                   "them, so there are never three colours fighting each other.",
+                   "Each palette is THREE faces that go together — a lit screen\n"
+                   "(burnt background, dark letters), a dark tube (deep\n"
+                   "background, glowing letters) and a middle one (saturated\n"
+                   "background, near-white letters). They differ in light first,\n"
+                   "so three colours never fight each other (see face_mode).",
+        "face_mode": "how the faces are spread over your screens:\n"
+                     '  "song"    = it follows the song: verses two faces (2-1),\n'
+                     "              the drop the whole wall in one face, the build,\n"
+                     "              the bridge and rare events all three different\n"
+                     '  "classic" = the old way: two faces, 2-1 at random, never\n'
+                     "              the middle one",
         "split": "how the line is spread over several screens:\n"
                  "mixed = whole phrase, and short lines cut in pieces\n"
                  "whole = never cut | fragment = always cut short lines",
@@ -385,7 +392,7 @@ DEFAULTS = {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "scene": "sections",
         "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
-        "color_from_pitch": True, "color_hold": 10,
+        "face_mode": "song", "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "rare": 1, "ghost_ms": 550,
         "iown": True, "foreshadow": True, "ring": True, "ring_gap": 10,

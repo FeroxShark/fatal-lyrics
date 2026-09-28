@@ -1960,7 +1960,8 @@ PanelWindow {
                     // el drop viaja como booleano: los motivos no pueden sacarlo de
                     // `energy`, que acá arriba ya viene multiplicada por el aviso
                     drop: crt.ctl.audSection === "drop"
-                    // el laberinto planta la marcha en el corte seco y echa vistazos con los agudos
+                    // el laberinto planta la marcha en el corte seco y echa vistazos con los agudos; mystify
+                    // se agarra en el corte y prende el color con los agudos
                     cut: crt.ctl.crtCut
                     hf: crt.ctl.audHf
                     eggs: crt.ctl.crtMazeEggs

@@ -147,6 +147,12 @@ Item {
     //
     // Los 220 ms son los del apagado del aro: más largo y el aro cuenta un
     // tiempo entero con el motivo todavía visible debajo.
+    // señales finas y perilla que sólo lee el laberinto (Maze.qml): corte seco, agudos y
+    // huevos de pascua (`crt.maze_eggs`)
+    property bool cut: false
+    property real hf: 0
+    property bool eggs: true
+
     property real dim: 1
     Behavior on dim { NumberAnimation { duration: Motion.dimMs; easing.type: Easing.OutQuad } }
 
@@ -1298,6 +1304,9 @@ Item {
             seed: motif.seed
             quality: motif.quality
             drop: motif.drop
+            cut: motif.cut
+            hf: motif.hf
+            eggs: motif.eggs
             section: motif.section
             tick: motif.tick
             beat: motif.beat

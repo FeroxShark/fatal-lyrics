@@ -762,3 +762,34 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   hace con un recorrido JS que escribe sólo en las paletas que giran.
 - `tubeTime` en las pantallas sin letra va a 20 Hz (Timer de `Crt.qml`): un motivo que dibuja con él se ve a
   saltos. `MotifBase` lleva su propio reloj (`FrameAnimation`) re-anclado a `tubeClock`.
+
+## Moiré del vidrio, fase de un shader y `D.clean` con el objeto entero (tanda 8, 2026-09-28)
+
+- **Un patrón de período 2 px en coordenadas CURVAS del tubo es moiré garantizado** (`shell/crt.frag`): las
+  scanlines (`cos(fc.y·π + t·1.6)`) estaban justo en Nyquist y la curvatura (`y·(1+k·x²)`) estiraba la
+  frecuencia, dibujando la estrella del centro y los círculos de cada esquina. Una fase `+t` en un peine de
+  2 px NO lo mueve: le hace LATIR el contraste cada ~2 s (las figuras aparecían y se iban). Fix: peine quieto
+  en filas de PANTALLA (no del tubo curvo), contraste fijo. La máscara (trinitron/arcade/pvm) tenía el mismo
+  problema por sus bordes duros — armónicos que pasan Nyquist y aliasean con la curvatura; fix: cada máscara
+  como su fundamental en cosenos, fundida según la frecuencia real en píxeles de pantalla (`keepAt(f)`).
+- `cos(π·y)` evaluado en el centro del píxel (`y = n + 0.5`) da CERO: hay que restar el medio píxel antes.
+- **Medir moiré sobre una imagen de 8 bits: la caja con borde "edge" rompe el peine y marca moiré falso en el
+  borde**; la caja simple deja pasar período 3. Usar 3 cajas + espejo, y medir también la ENVOLVENTE (el
+  contraste de las figuras a gran escala) además del moiré de brillo — un peine casi en Nyquist bate en
+  contraste, no en brillo (`previews/shader-check/moire_map.py`).
+- **Comparar dos cuadros de un shader en `t` distintos está contaminado por su propio parpadeo de 60 Hz**
+  (`crt.frag`): medir cada canal contra el MISMO `t` sin ese canal (p.ej. el golpe de bajo con `pulseOff`),
+  nunca contra un `t` distinto.
+- **`t · velocidad(x)` en un shader con `t` en cientos de segundos: cualquier cambio chico de `x` corre la
+  fase** (el grano de `dirt` en `crt.frag`). Si la fase no puede saltar al tocar la velocidad, hay que
+  ACUMULARLA afuera (QML, `React.grainAdvance`) y mandarla ya acumulada como uniform, no calcularla como
+  producto directo dentro del shader.
+- **`D.clean(entry)` con el objeto de letra `{t0,t1,text,rep}` entero en vez de `.text` da basura**
+  (`D.clean` stringifica el objeto letra por letra): pasó en `shell/Splitflap.qml` (fix: `lineText()`) y
+  sigue SIN corregir en `shell/Swarm.qml` (mismo patrón, no tocado porque no era la causa del bug reportado)
+  — si en algún momento se ve `[OBJECT...]` en el motivo swarm con letra real, es este mismo bug ahí.
+- **`crtNextWord` (la property que llena `nxt=` del daemon) queda `null` todo el tema con letra SIN
+  sincronizar** (`lyrics_kind == "plain"`, común en proveedores que no traen LRC por palabra) y también en el
+  hueco entre el evento `lyrics` y el primer `show()` al arrancar un tema. Cualquier UI que la use necesita
+  un fallback que no dependa del daemon (Splitflap ahora saca la primera palabra de la línea siguiente de
+  `lines`, que ya se conoce de antes).

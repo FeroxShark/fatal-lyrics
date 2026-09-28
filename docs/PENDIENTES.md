@@ -20,6 +20,14 @@ el toque". El resto nadie lo corrió en pantalla con música real todavía. Abie
 - **Tapas amarillas dan una cara `c` oliva** (`Faces.faceMid`): un amarillo no puede tener luminancia 0.11 y
   seguir viéndose amarillo. Si a Ferox no le gusta, correr el tono de `c` en esas tapas en vez de la luz.
 
+- **Calibrar el ritmo de los dibujos con música real** (slice movimiento-visual, `crt.mov_speed`):
+  `movMin`/`movMax` por fila de `crtPaceTable` y `PIVOT` (0.35, `shell/Speed.js`) salen de los números de
+  `docs/tanda8-estado/movimiento.md`, no de haberlo visto (Vivaldi, Invierno). Si molesta:
+  `crt.mov_speed = 0` vuelve al ritmo fijo de antes. Hoja: `docs/tanda8-estado/movimiento-ritmo.png`.
+- **Radar y lluvia de `Motif.qml` todavía hacen `reloj × velocidad`** (pre-existente, no es del ritmo):
+  `rotation: motif.mclock * (38 + 22 * level) * drive` y la `y` de la lluvia con `speed` que depende de
+  `level`/`drive`. Con el tema avanzado, un cambio de `level`/`drive` teletransporta el dibujo. Arreglo:
+  integrar la fase como `stars` (`frameTime * velocidad`).
 - **Umbrales de `cut` calibrados sólo contra el sintetizador** (`CUT_LOW`/`CUT_HIGH`/`CUT_ENTER_S`/
   `CUT_RECENT_S` en `cartelitos/audio.py`): si con música real da falsos positivos en pasajes dinámicos que no
   llegan a silencio real, separar más `CUT_LOW`/`CUT_HIGH` (más lento para entrar, menos falsos positivos).

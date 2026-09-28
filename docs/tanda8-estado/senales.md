@@ -75,6 +75,40 @@ evento puntual como el beat). Nada más cambia ahí: `cut`/`hf` viajan en todos 
   onset de agudos sobre ese bajo lo sube >0.3, y decae a menos de 30% del pico
   al cortarse el onda. Suite completa: 704 tests, OK.
 
+## Fix posterior (encontrado por el slice "movimiento", corregido acá)
+
+`hf` normalizaba contra un pico propio que decae (`flux_peak`, mismo patrón que
+`an.peak`). Bug real, mismo patrón que `mov` ya había pisado y corregido: un
+pasaje fuerte deja el pico viejo alto y un onset flojo posterior (tras bajar el
+volumen) no llega a cruzar el umbral (sordera); y un tono sostenido de fase
+continua hace decaer el pico hasta la fuga espectral del propio Hann, con lo
+que cualquier bloque normaliza cerca de 1.0 (`hf` clavado en vez de caer a 0 —
+el caso de cuerdas nerviosas tipo Vivaldi). Fix: reusa `spectral_flux_ratio`
+(la misma técnica de `mov`, normaliza contra la energía ACTUAL del bloque, no
+contra un pico viejo) sobre la misma banda 125-6000 Hz. Rango y semántica sin
+cambios (0..1, sube en ~50ms, baja en ~400ms) — `shell/React.js` no necesita
+recalibrarse. De paso, `mov` deja de calcular su propio término de brillo
+aparte: ahora reusa el `hf_raw` que ya calcula `feed()` (antes lo evitaba
+justamente para no heredar este sesgo).
+
+Distribución antes/después (aparejo sintético, tono de FASE CONTINUA — con
+`tone()`, que reinicia la fase en cada bloque, el bug no se ve: bloques
+bit-idénticos dan flujo 0 por construcción):
+- Sostenido 220 Hz, amp 0.7, 8 s: `hf` viejo termina en **0.591** (a los 15s,
+  **0.922**: sigue subiendo, no converge a 0). `hf` nuevo: **0.000**.
+- Pasaje fuerte (bajo+platillo grandes) seguido de bajar el volumen (bajo+
+  platillo flojos): pico del onset flojo sobre el piso silencioso, viejo
+  **0.473** de salto, nuevo **0.410** de salto — comparable, ya no sordo.
+  (Con el bug real de `mov` en su propio slice, el salto viejo podía llegar a
+  ser ~0 en vez de sólo algo menor; acá el piso ya estaba bajo por el
+  `FLUX_PEAK_DECAY` corriendo sólo ~20 bloques, por eso la diferencia es más
+  chica que en el caso sostenido.)
+
+Tests de regresión: `tests/test_senales.py`,
+`HfTests.test_a_sustained_in_band_tone_does_not_stay_pinned_near_one` y
+`HfTests.test_a_treble_onset_after_the_track_gets_quiet_still_pulses_hf`.
+Suite completa: 752 tests, OK.
+
 ## Falta / por decidir (default elegido, reversible)
 
 - Nombre de archivo de test: creo `tests/test_senales.py` nuevo (no meto esto en

@@ -213,3 +213,9 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   cambio local de rms 3.8, azul−rojo en claros +25.9 (se distinguen del golpe de bajo). Grano (dirt 0.9,
   motivo arcade): contraste de franjas 0.067 → 0.32. CPU (render offscreen + grab, 300 cuadros, arcade):
   18.5 → 17.6 ms/cuadro, dentro del ruido — no medido en el overlay real. Suite: 718 tests OK.
+- **Ritmo de los dibujos** (`shell/Speed.js`, banco offscreen `previews/movimiento/`, Mystify sin vidrio,
+  1280×720, pace normal, rampa de `mov` 0→1→0 a los 240 s de tema): velocidad del reloj de dibujo integrada
+  0.75–1.35 con desvío 0.0000 contra el `rate` del cuadro; control `t · rate` +63× a −63×. Cambio de imagen
+  cuadro a cuadro (lum. media abs.): integrado 8.98 (máx 15.9), perilla en 0 9.05 (14.8), `t · rate` 12.2
+  (23.3). CPU (render + grab, 600 cuadros, dos corridas): perilla en 0 5.38/5.44 ms/cuadro, ritmo andando
+  5.48/5.45 — ruido. No medido en el overlay real.

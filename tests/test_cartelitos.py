@@ -3469,7 +3469,8 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn("float by = rollPhase;", frag)
         self.assertNotIn("fract(t * 0.085)", frag)
         crt = self._crt_qml()
-        self.assertIn("property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime)", crt)
+        # tanda 8 (movimiento-visual): la deriva libre lee el reloj de dibujo, tubeTime + movOff
+        self.assertIn("property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime + crt.movOff)", crt)
         qml, _ = self._tube_table()
         fn = qml.split("function rollPhaseFor(tt)", 1)[1].split("property real crtRoll", 1)[0]
         # con compás: la vuelta dura N compases (múltiplo de 4 tiempos) cercanos al período

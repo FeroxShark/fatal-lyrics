@@ -36,12 +36,18 @@ MotifBase {
         const l = Math.floor((n - s.length) / 2);
         return " ".repeat(l) + s + " ".repeat(n - s.length - l);
     }
+    // una línea es `{t0,t1,text}` (letra real) o directamente el string
+    // (arnés sintético de previews/crt-motifs): tolera las dos.
+    function lineText(entry) {
+        if (entry === undefined || entry === null) return "";
+        return typeof entry === "string" ? entry : (entry.text || "");
+    }
     // el cartel entero, renglón por renglón
     readonly property var board: {
         const out = [];
         const nl = lines ? lines.length : 0;
         out.push(pad(nl > 0 && lineNo >= 0 ? "VERSO " + (lineNo + 1) + "/" + nl : "FATAL LYRICS", cols, false));
-        const text = nl > 0 && lineNo >= 0 ? D.clean(lines[lineNo % nl]) : "";
+        const text = nl > 0 && lineNo >= 0 ? D.clean(lineText(lines[lineNo % nl])) : "";
         const words = text.split(" ").filter(w => w.length > 0);
         const body = [];
         let cur = "";
@@ -57,7 +63,16 @@ MotifBase {
         for (let r = 0; r < inner; r++)
             out.push(pad(body[r - top] || "", cols, true));
         out.push(pad("", cols, false));
-        out.push(pad("SIGUE: " + D.clean(nextWord), cols, false));
+        // lo que manda el daemon gana; si todavía no llegó (letra sin
+        // sincronizar, o arranque de tema antes del primer `show()`), se
+        // adelanta con la primera palabra de la línea que ya se conoce por
+        // el evento `lyrics`. Si tampoco hay eso, la fila queda en blanco:
+        // nunca "SIGUE:" solo, sin nada atrás.
+        const own = D.clean(nextWord);
+        const upcoming = nl > 0 ? lineText(lines[lineNo >= 0 ? (lineNo + 1) % nl : 0]) : "";
+        const fallback = D.clean(upcoming).split(" ").filter(w => w.length > 0)[0] || "";
+        const nextW = own || fallback;
+        out.push(pad(nextW ? "SIGUE: " + nextW : "", cols, false));
         return out;
     }
 

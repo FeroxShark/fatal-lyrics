@@ -28,11 +28,15 @@ MotifBase {
     id: m
 
     readonly property int count: Math.round(260 * quality)
+    function lineText(entry) {
+        if (entry === undefined || entry === null) return "";
+        return typeof entry === "string" ? entry : (entry.text || "");
+    }
     // la palabra: la que viene; si no hay, la más larga del verso que suena
     readonly property string wordText: {
         if (D.clean(nextWord).length > 0)
             return nextWord;
-        const ln = lines && lines.length > 0 && lineNo >= 0 ? D.clean(lines[lineNo % lines.length]) : "";
+        const ln = lines && lines.length > 0 && lineNo >= 0 ? D.clean(lineText(lines[lineNo % lines.length])) : "";
         let best = "";
         for (const w of ln.split(" "))
             if (w.length > best.length && w.length <= 8) best = w;

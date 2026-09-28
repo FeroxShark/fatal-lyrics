@@ -234,6 +234,8 @@ SETTINGS = [
         ("off: the whole pool every time, as before", "off")], c)),
     ("screen_off", "crt", "Screens may pretend to be off (intro/scene need it)",
      lambda c: _pick("Let intro and scene darken screens (false = never)", YESNO, c)),
+    ("testcard", "crt", "Test card may show up mid-track (pool + rare event)",
+     lambda c: _pick("Let the test card appear in the middle of a track (false = never)", YESNO, c)),
     ("intro", "crt", "New track is an event (dark, static, title card)",
      lambda c: _pick("A new track goes dark, static, a title/artist card, "
                       "then the first line", YESNO, c)),

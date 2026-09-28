@@ -58,14 +58,22 @@ evento puntual como el beat). Nada más cambia ahí: `cut`/`hf` viajan en todos 
 
 ## Hecho
 
-- (en curso) `cartelitos/audio.py`: `spectral_flatness_local` acepta `spec=None`
-  precalculado; `AudioAnalyzer` suma detección de corte/vuelta (`cut`, `cutf`) y
-  flujo de agudos (`hf`); `_capture_loop` fuerza envío en `cutf`.
-- (en curso) tests en `tests/test_dirt.py` o archivo nuevo `tests/test_senales.py`
-  (a definir cuál, ver abajo) cubriendo: silencio real tras sonar fuerte → `cut`;
-  valle de energía (sigue sonando bajo el umbral de corte) → NO `cut`; blip corto
-  (<0.10s) → NO `cut`; vuelta con golpe → `cutf`>0 una sola vez; tono con brillo
-  constante bajo bajo constante → `hf`~0; onset de agudos → `hf` sube y decae.
+- `cartelitos/audio.py` (e5083ee): `spectral_flatness_local` acepta `spec=None`
+  precalculado; `AudioAnalyzer` suma detección de corte/vuelta (`cut`, `cutf`,
+  método `_cut_step`) y flujo de agudos (`hf`, `_smooth_hf` + `spectral_flux_band`
+  a nivel módulo); `_capture_loop` fuerza envío inmediato en `cutf` (mismo trato
+  que ya tenía el beat).
+- `tests/test_senales.py` (f0fa8c5), archivo nuevo: 13 tests — corte seco real
+  (~200ms) marca `cut=1` y la vuelta trae `cutf>0` una sola vez; blip <0.10s NO
+  marca corte; valle de energía que sigue audible (no cerca de silencio) NO marca
+  corte; silencio sin haber sonado fuerte antes (arranque/pausa larga) NO marca
+  corte; un corte mucho después del último momento fuerte (`CUT_RECENT_S`
+  vencido, probado directo contra `_cut_step` porque depende de timing exacto,
+  no de cómo decae `an.peak` con un tono sintético) tampoco marca corte; flujo
+  espectral: tono estable da flux=0, agudo nuevo sobre bajo constante da flux>0,
+  sin espectro previo da 0; `hf`: bajo constante solo asienta cerca de 0, un
+  onset de agudos sobre ese bajo lo sube >0.3, y decae a menos de 30% del pico
+  al cortarse el onda. Suite completa: 704 tests, OK.
 
 ## Falta / por decidir (default elegido, reversible)
 
@@ -83,6 +91,22 @@ evento puntual como el beat). Nada más cambia ahí: `cut`/`hf` viajan en todos 
   `pw-record` a un wav y pasarlo por `AudioAnalyzer.feed` en un script aparte
   (no incluido).
 
-## Números (a completar tras medir)
+## Falta (para el que retome, o para un cierre)
 
-(pendiente de llenar en el próximo commit, con `timeit` sobre `feed()` antes/después)
+- Nada pendiente de código en este slice: `cut`/`cutf`/`hf` están, testeados y
+  medidos. Lo que sigue (usar estos campos en QML) es de OTRO worker/slice.
+- No se hizo captura de audio real (ver "Falta / por decidir" arriba): los
+  umbrales están calibrados sólo contra el sintetizador. Si con música real
+  `cut` tira falsos positivos en pasajes con mucha dinámica (un tema que baja y
+  sube de volumen fuerte sin llegar a silencio real), lo primero para tocar es
+  `CUT_LOW`/`CUT_HIGH` (más separados = menos falsos positivos, más lento para
+  entrar).
+
+## Números (medidos con `timeit` manual, 200 bloques de 32ms con bajo+medio+agudo variable, misma máquina)
+
+- `feed()` ANTES de este slice (commit `0693730`, ya con `dirt`): **0.641 ms/bloque**.
+- `feed()` DESPUÉS (con `cut`+`hf`): **0.662 ms/bloque**.
+- Diferencia: **+0.021 ms/bloque** (~3.3% relativo), o sea ~0.065% de un núcleo
+  extra sobre un hop de 32ms — no se mueve la aguja del ~33% que ya usa el
+  overlay. Esperable: `hf` reusa la FFT que `dirt` ya calculaba (no hay una
+  FFT nueva), y `_cut_step` es aritmética de cuatro comparaciones.

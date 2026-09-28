@@ -60,6 +60,10 @@ Item {
     property real seed: 0
     property real quality: 1
     property bool drop: false
+    // corte seco (`cut` del daemon: la música cae de golpe y vuelve) y flujo de agudos (`hf`,
+    // 0..1): los lee sólo el laberinto, que planta la marcha y mira al costado
+    property bool cut: false
+    property real hf: 0
     property string section: "verse"
     property int tick: 0
     property int beat: 0

@@ -46,6 +46,12 @@ layout(std140, binding = 0) uniform buf {
     // el degauss (tanda 7, corrida 6): 1 = recién arranca, 0 = terminó. Sólo lo mueve el intro de
     // tema; en 0 el shader da EXACTAMENTE lo de antes.
     float degauss;
+    // tanda 8, la reacción fina al audio (`React.js`). Los cuatro en 0 dan EXACTAMENTE
+    // lo de antes.
+    float cutDim;     // 0..1: la luz que se va durante un corte seco
+    float backFlash;  // 0..1: el golpe de vuelta después del corte
+    float fizz;       // 0..1: los agudos — las filas tiemblan de costado y los claros se enfrían
+    float grain;      // 0..1: la suciedad que MUEVE la estática (bandas, deriva, rayas)
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
     vec3 monoTint;    // color del fósforo del tubo monocromo
@@ -122,6 +128,19 @@ void main() {
     uv.x += shove * glitch * 0.09 * step(0.55, pick);
     uv.x += sin(uv.y * 34.0 + t * 5.0) * (0.0006 + glitch * 0.004);
 
+    // Los agudos (tanda 8): el bajo levanta la LUZ de toda la pantalla (`pulse`);
+    // lo que entra arriba —platillo, voz, sinte— mueve otra cosa, la POSICIÓN de
+    // las filas: una onda fina que sube por el barrido y un temblor de a pares de
+    // filas, de uno o dos píxeles. No cambia el brillo medio. Va en filas de la
+    // PANTALLA (no del tubo curvo, que aliasea) y después de tomar las derivadas
+    // de la máscara, como el `shove` del glitch.
+    if (fizz > 0.001) {
+        float fsy = qt_TexCoord0.y * res.y;
+        float jit = hash11(floor(fsy * 0.5) * 1.37 + floor(t * 30.0) * 7.13) * 2.0 - 1.0;
+        float wav = sin(fsy * 0.19 - t * 17.0);
+        uv.x += (0.65 * wav + 0.35 * jit) * fizz * 2.2 / res.x;
+    }
+
     // out of tube: black bezel with a thin phosphor edge
     vec2 e = step(vec2(0.0), uv) * step(uv, vec2(1.0));
     float inside = e.x * e.y;
@@ -171,6 +190,14 @@ void main() {
     if (degauss > 0.001) {
         col = hueTurn(col, degauss * 2.4 * sin(dgd * 15.0 - t * 9.0));
         col += tint * pow(degauss, 6.0) * 0.55 * smoothstep(1.1, 0.0, dgd);
+    }
+
+    // los agudos también enfrían los claros: el bajo es tibio (luz), lo de arriba
+    // es frío. El corrimiento (-r, +b) está pesado para que la luminancia no se
+    // mueva: 0.299·0.05 = 0.114·0.131.
+    if (fizz > 0.001) {
+        float hl = smoothstep(0.30, 0.90, dot(col, vec3(0.299, 0.587, 0.114)));
+        col += vec3(-0.05, 0.0, 0.131) * fizz * hl;
     }
 
     // fósforo de un solo color (tanda 7, corrida 2): P1 verde, P3 ámbar. La
@@ -294,7 +321,27 @@ void main() {
 
     // static, worse mid-glitch
     float n = hash21(fc + floor(t * 60.0));
-    col += (n - 0.5) * (noiseAmt * 0.14 + glitch * 0.22);
+    float namp = noiseAmt * 0.14;
+    // Tanda 8: la suciedad le da MOVIMIENTO al grano. Sin esto era ruido blanco
+    // parejo: más sucio = más ruido, pero siempre la misma nieve quieta. Con
+    // `grain` el ruido analógico se estira en rayas horizontales que derivan de
+    // costado, y lo recorren franjas más cargadas que bajan por la pantalla y
+    // ondulan. Todo es la AMPLITUD de un ruido de media cero: el brillo medio
+    // no se mueve, y el promedio de las franjas da ~1 (pow(·,6) ≈ 0.226).
+    // Franjas de ~400 px con ~100 px de ancho: nada cerca de Nyquist.
+    if (grain > 0.001) {
+        float gsx = qt_TexCoord0.x;
+        float gsy = qt_TexCoord0.y;
+        float slen = 1.0 + 5.0 * grain;
+        float sx = floor((fc.x + t * (40.0 + 110.0 * grain)) / slen);
+        float streak = hash21(vec2(sx, floor(fc.y)) + floor(t * 8.0) * 1.7);
+        n = mix(n, streak, 0.6 * grain);
+        float wob = 0.03 * sin(gsx * 7.0 + t * 2.3) * grain;
+        float ph = gsy * 2.6 - t * (0.35 + 0.9 * grain) + wob;
+        float bandv = pow(0.5 + 0.5 * sin(ph * 6.2831853), 6.0);
+        namp *= 1.0 + grain * (2.2 * bandv - 0.5);
+    }
+    col += (n - 0.5) * (namp + glitch * 0.22);
 
     // block corruption during a burst
     if (glitch > 0.01) {
@@ -314,6 +361,11 @@ void main() {
     col *= 1.0 + pulse * (0.10 + 0.10 * hash11(floor(t * 11.0)));
     // y en los picos, el apagón corto de una tele a la que le falta corriente
     col *= 1.0 - blink * 0.55;
+    // el corte seco (tanda 8): el tema se calló y el tubo se queda sin corriente
+    // — baja todo, estática incluida. Y el golpe de vuelta: la luz entra de más un
+    // instante, también en el negro (un tubo que recupera la tensión se ve).
+    col *= 1.0 - cutDim;
+    col = col * (1.0 + backFlash) + tint * backFlash * 0.06;
 
     // critical state: the whole tube washes red and pulses
     if (alarm > 0.001) {

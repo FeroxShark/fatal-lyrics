@@ -92,8 +92,9 @@ monitor vectorial, harmonógrafo). Ninguno es un espectro de reproductor (regla 
 
 ## Laberinto (`maze`): sync y banderas
 
-`shell/` es la fuente del laberinto. Antes de renderizarlo: `./sync-shell.sh` (copia `Maze`/`MotifBase`
-a `motifs/` con los imports reescritos, más `maze.frag(.qsb)`, `Maze.js` y `Speed.js`).
+`shell/` es la fuente del laberinto y de mystify. Antes de renderizarlos: `./sync-shell.sh` (copia
+`Maze`/`Mystify`/`MotifBase` a `motifs/` con los imports reescritos, más `maze.frag(.qsb)`,
+`mystify.frag(.qsb)`, `Maze.js`, `Mystify.js`, `React.js` y `Speed.js`).
 `./render.py maze --egg smiley|dialog|exit|rat|rock|flip` fuerza un huevo (la costura del loop sólo
 cierra así) y `--rate <r>` fija el ritmo de la marcha. `LoopFeed.qml` da un `cut` y un `hf` sintéticos.
 Estado: `docs/tanda8-estado/laberinto.md`.

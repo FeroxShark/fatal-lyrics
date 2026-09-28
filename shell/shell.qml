@@ -171,7 +171,23 @@ ShellRoot {
     // (la estrofa una, el drop la pared entera, el final se apaga de a una);
     // "all" = todas dibujan siempre, como antes de esta corrida.
     property string crtSceneMode: "sections" // sections | all
-    readonly property bool crtSceneOn: crtSceneMode !== "all"
+    readonly property bool crtSceneOn: crtScreenOff && crtSceneMode !== "all"
+    // decisión de Ferox 2026-09-28: ninguna pantalla finge estar apagada. false
+    // (default) = el intro de tema (apagado/degauss/estática/tarjeta) y la escena
+    // por secciones (estrofa/final que apagan pantallas) no corren: toda la pared
+    // dibuja siempre. `fatal crt dark` (a mano) y el dip del corte seco no cambian.
+    property bool crtScreenOff: false
+    onCrtScreenOffChanged: {
+        if (!crtScreenOff) {
+            crtIntroTimer.stop();
+            crtIntroPhase = "";
+            crtIntroScreen = -1;
+            crtSceneOutroTimer.stop();
+            crtSceneOutroTimer.queue = [];
+            if (crtOn && crtRare.screen < 0)
+                crtSetDark(-1, false);
+        }
+    }
     // tanda 6, corrida 5: el cambio de tema es un evento (apagado, estática,
     // tarjeta con título/artista, primer verso) en vez de un simple cambio
     // de canal. false = el cambio de canal de siempre.
@@ -808,7 +824,7 @@ ShellRoot {
     // ausente); seek/pause no reinician nada acá, igual que no
     // resortean `crtTrackSeed`.
     function crtIntroStart() {
-        if (!crtOn || !crtIntro)
+        if (!crtOn || !crtIntro || !crtScreenOff)
             return;
         crtIntroTimer.stop();
         console.log("crt: intro start");
@@ -3472,7 +3488,7 @@ ShellRoot {
         crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
-        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_intro_card: "crtIntroCard",
+        crt_set: "crtSetMode", crt_intro: "crtIntro", crt_screen_off: "crtScreenOff", crt_intro_card: "crtIntroCard",
         crt_color_from_pitch: "crtColorFromPitch", crt_color_hold: "crtColorHold",
         crt_face_mode: "crtFaceMode",
         crt_infect_lead: "crtInfectLead", crt_alarm_threshold: "crtAlarmThreshold",

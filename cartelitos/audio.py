@@ -277,6 +277,20 @@ BEAT_REFRACTORY = 0.25     # segundos mudos después de un golpe (mismo bombo, 3
 BEAT_SLOW_KEEP = 0.9       # el promedio corto contra el que se compara: memoria...
 BEAT_SLOW_MIX = 0.1        # ...y cuánto entra de cada bloque nuevo
 
+# ---- el corte seco: silencio abrupto, no el `quiet` de sección
+# Ferox, tanda 8: "no reacciona a los silencios secos". Esto es DISTINTO de `sec`
+# (TrackProfile.update): eso es lento, por energía relativa al tema ENTERO, y
+# tarda SECTION_HOLD (4s) en aceptar el cambio. Un corte seco dura 150-400 ms y
+# hay que verlo entrar y salir con esa velocidad. Se arma contra `level` (rms ya
+# normalizado contra el pico que sigue la música, el mismo de siempre), no contra
+# el percentil del tema: un pasaje que YA viene bajito (una quiet de sección)
+# nunca cruzó CUT_HIGH hace poco, así que nunca dispara un corte — sólo dispara
+# cuando el tema estaba sonando fuerte y cayó a casi nada.
+CUT_LOW = 0.06            # level debajo de esto = "no está sonando"
+CUT_HIGH = 0.15           # level arriba de esto = "está sonando" (zona muerta entre medio: histéresis)
+CUT_ENTER_S = 0.10        # bajo sostenido este tiempo antes de declarar el corte (~3 bloques de 32ms)
+CUT_RECENT_S = 1.5        # tiene que haber sonado (level > CUT_HIGH) hace menos de esto
+
 
 _BAND_TABLES = {}
 
@@ -436,9 +450,13 @@ def power_spectrum(samples):
     return [abs(a[k]) ** 2 for k in range(n // 2 + 1)]
 
 
-def spectral_flatness_local(samples, rate):
-    """Planitud espectral local promedio, 0..1 (ver arriba). 0.0 si no hay banda que medir."""
-    spec = power_spectrum(samples)
+def spectral_flatness_local(samples, rate, spec=None):
+    """Planitud espectral local promedio, 0..1 (ver arriba). 0.0 si no hay banda que medir.
+
+    `spec` opcional: el espectro de potencia, si ya se calculó afuera (AudioAnalyzer.feed
+    lo reusa para `hf` — una sola FFT por bloque, no dos)."""
+    if spec is None:
+        spec = power_spectrum(samples)
     if not spec:
         return 0.0
     n = (len(spec) - 1) * 2
@@ -471,6 +489,41 @@ def dirt_from(flat, rms):
     return min(max(x, 0.0), 1.0) * min(max(gate, 0.0), 1.0)
 
 
+# ---- lo que se mueve más allá del bajo: onsets de agudos (tanda 8)
+# Ferox: "la reacción se siente como un parpadeo de los bajos". `c` (centroide) ya
+# dice CUÁNTO brillo hay, pero no CUÁNDO cambia — un platillo, una voz que entra o
+# un synth agudo no mueven el centroide lo bastante rápido como para leerse como
+# un evento. Acá se mide flujo espectral (cuánta energía NUEVA apareció) sólo en
+# la banda 125-6000 Hz (las mismas DIRT_LO_HZ/DIRT_HI_HZ de la suciedad: ahí vive
+# el timbre, no el bombo), medio-rectificado (sólo lo que SUBE cuenta, lo que baja
+# no: un onset es que algo entra, no que algo se apaga). Reusa el `power_spectrum`
+# que YA se calcula para `dirt` — no hay una FFT nueva, `feed()` la calcula una vez
+# y se la pasa a las dos.
+FLUX_LO_HZ = DIRT_LO_HZ
+FLUX_HI_HZ = DIRT_HI_HZ
+FLUX_PEAK_DECAY = 0.97     # pico propio que decae (mismo patrón que LEVEL_PEAK_DECAY,
+FLUX_PEAK_FLOOR = 1e-6     # más rápido: un onset de agudos es más corto que la envolvente del nivel)
+FLUX_RISE_S = 0.05         # sube casi al instante (es un onset)...
+FLUX_FALL_S = 0.4          # ...y baja con cola, para que sea un pulso y no un parpadeo
+
+
+def spectral_flux_band(spec, prev_spec, rate, lo_hz=FLUX_LO_HZ, hi_hz=FLUX_HI_HZ):
+    """Energía NUEVA (medio-rectificada) entre dos espectros de potencia consecutivos,
+    sumada sólo en la banda [lo_hz, hi_hz]. 0.0 si no hay espectro o no hay banda."""
+    if not spec:
+        return 0.0
+    n = (len(spec) - 1) * 2
+    lo = max(1, int(lo_hz * n / rate))
+    hi = min(len(spec) - 1, int(hi_hz * n / rate))
+    if hi <= lo:
+        return 0.0
+    if not prev_spec or len(prev_spec) != len(spec):
+        return 0.0     # primer bloque, o cambió el tamaño: no hay "antes" con qué comparar
+    amp = [math.sqrt(v) for v in spec[lo:hi]]
+    prev_amp = [math.sqrt(v) for v in prev_spec[lo:hi]]
+    return sum(max(0.0, a - p) for a, p in zip(amp, prev_amp))
+
+
 class AudioAnalyzer:
     """PCM crudo → nivel, bandas, centroide (proxy del tono) y golpes.
 
@@ -486,6 +539,15 @@ class AudioAnalyzer:
         self.last_beat = 0.0
         self.dirt = 0.0
         self.dirt_at = None
+        # corte seco: cuándo fue el último bloque "sonando" y desde cuándo estamos bajo
+        self.loud_at = None       # None = todavía no sonó fuerte nunca
+        self.silent_since = None  # None = no estamos en una racha de silencio
+        self.cut = False
+        # flujo de agudos: espectro anterior + pico/EMA propios
+        self.prev_spec = None
+        self.flux_peak = FLUX_PEAK_FLOOR
+        self.hf = 0.0
+        self.hf_at = None
 
     def _smooth_dirt(self, raw, now):
         """EMA asimétrica en el tiempo real (no por bloque): sube con tau 0.5 s, baja con 1.5 s."""
@@ -494,6 +556,39 @@ class AudioAnalyzer:
         tau = DIRT_RISE_S if raw > self.dirt else DIRT_FALL_S
         self.dirt += (raw - self.dirt) * (1.0 - math.exp(-dt / tau))
         return self.dirt
+
+    def _smooth_hf(self, raw, now):
+        """Misma EMA asimétrica que `dirt`, pero rápida: onset de agudos, no textura."""
+        dt = 0.0 if self.hf_at is None else min(max(now - self.hf_at, 0.0), DIRT_MAX_DT)
+        self.hf_at = now
+        tau = FLUX_RISE_S if raw > self.hf else FLUX_FALL_S
+        self.hf += (raw - self.hf) * (1.0 - math.exp(-dt / tau))
+        return self.hf
+
+    def _cut_step(self, level, now):
+        """Corte seco: (cut sostenido, fuerza de vuelta en este frame o 0.0). Ver
+        el comentario largo junto a CUT_LOW en el módulo."""
+        if level > CUT_HIGH:
+            self.loud_at = now
+            if self.cut:
+                self.cut = False
+                self.silent_since = None
+                return False, min(max(level, 0.0), 1.0)   # el golpe de vuelta
+            self.silent_since = None
+            return False, 0.0
+        if level < CUT_LOW:
+            if self.silent_since is None:
+                self.silent_since = now
+            was_loud_recently = (self.loud_at is not None
+                                  and now - self.loud_at <= CUT_RECENT_S)
+            if (not self.cut and was_loud_recently
+                    and now - self.silent_since >= CUT_ENTER_S):
+                self.cut = True
+            return self.cut, 0.0
+        # zona muerta entre CUT_LOW y CUT_HIGH: no toca ni la entrada ni la salida,
+        # así un valle normal no hace parpadear el flag
+        self.silent_since = None
+        return self.cut, 0.0
 
     def feed(self, pcm, now):
         """pcm: bytes s16 mono. Devuelve el dict del evento, o None si vino vacío."""
@@ -542,6 +637,17 @@ class AudioAnalyzer:
             self.last_beat = now
         self.slow = self.slow * BEAT_SLOW_KEEP + rms * BEAT_SLOW_MIX
 
+        cut, cutf = self._cut_step(level, now)
+
+        # UNA FFT por bloque, reusada para `dirt` (planitud) y `hf` (flujo de
+        # agudos): ver el comentario largo junto a FLUX_LO_HZ.
+        spec = power_spectrum(samples)
+        flat = spectral_flatness_local(samples, self.rate, spec=spec)
+        flux_raw = spectral_flux_band(spec, self.prev_spec, self.rate)
+        self.flux_peak = max(flux_raw, self.flux_peak * FLUX_PEAK_DECAY, FLUX_PEAK_FLOOR)
+        hf = self._smooth_hf(min(flux_raw / self.flux_peak, 1.0), now)
+        self.prev_spec = spec
+
         return {
             "cmd": "aud",
             "l": round(level, 3),
@@ -551,7 +657,10 @@ class AudioAnalyzer:
             "c": round(centroid, 3),
             "b": 1 if beat else 0,
             "h": 1 if hard else 0,
-            "d": round(self._smooth_dirt(dirt_from(spectral_flatness_local(samples, self.rate), rms), now), 3),
+            "d": round(self._smooth_dirt(dirt_from(flat, rms), now), 3),
+            "cut": 1 if cut else 0,
+            "cutf": round(cutf, 3),
+            "hf": round(hf, 3),
         }
 
 
@@ -1172,7 +1281,7 @@ def _capture_loop():
                     log(f"peak {gate.count}/{gate.cap}"
                         + (f" ({cur_pct:.0%} of the track)" if cur_pct is not None
                            else " (no map yet)"))
-                if ev["b"] or now - last >= AUDIO_MIN_SEND:
+                if ev["b"] or ev["cutf"] or now - last >= AUDIO_MIN_SEND:
                     last = now
                     ipc.send_soft(ev)
 

@@ -122,6 +122,9 @@ _CONFIG_COMMENTS = {
         "set": "each track picks its own set of four drawings, one family of\n"
                "entrances, a colour scheme and a font; `off` = the whole pool\n"
                "every time, as before",
+        "screen_off": "false (default) = no screen ever pretends to be switched off:\n"
+                      "`intro` and `scene` (which darken screens) are inert and the\n"
+                      "whole wall always draws. true = they work as their own knobs say",
         "intro": "a new track is a whole event: every tube goes dark, static, a\n"
                  "title/artist card, then the first line. false = the old plain\n"
                  "channel-change into the first lyric",
@@ -398,7 +401,7 @@ DEFAULTS = {
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "scene": "sections",
-        "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
+        "screen_off": False, "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
         "face_mode": "song", "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "rare": 1, "ghost_ms": 550,

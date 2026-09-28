@@ -10,7 +10,12 @@
 //     apaga en el tiempo; en el drop los dos se pasan el color de golpe en golpe
 //   · el golpe del tubo (`surge`): los ecos se ABREN y la estela se estira
 //   · `energy`: cuántos ecos (10 en la estrofa, 22 en el drop)
-//   · `high` (agudos): el color se corre hacia `hot` y el resplandor se ensancha
+//   · `hf` (flujo de agudos, con la curva `React.fizz` del tubo): el color se corre hacia
+//     `hot` y el resplandor prende; `high` (nivel de agudos) sólo ensancha el resplandor
+//   · corte seco (`cut`): el dibujo se AGARRA — los vértices se quedan quietos (hasta 0,6 s
+//     de fase) y la estela se estira hacia atrás; al volver la música los vértices dan el
+//     salto atrasado con el snap de Motion y la estela se recoge. Nada de exponenciales:
+//     todo llega a 0 exacto (Mystify.js), así el loop del banco cierra
 //   · `drop`: entra un tercer polígono desde el centro, con el snap de Motion
 //
 // El dibujo vive en `mystify.frag` (por píxel, analítico); acá sólo se reparten
@@ -19,13 +24,15 @@
 // cuadro (antes: 15 tandas de Shapes, 3 × 22 polilíneas reconstruidas en JS).
 import QtQuick
 import "../Ease.js" as E
+import "../Mystify.js" as Hold
+import "../React.js" as React
 
 MotifBase {
     id: m
 
     readonly property real margin: span * 0.07
     readonly property int echoes: Math.round(E.clamp(8 + 9 * (energy - 0.9) / 0.7 + 4, 10, 22) * quality)
-    readonly property real gap: 0.045 * gapMul * (1 + 1.6 * surge)
+    readonly property real gap: 0.045 * gapMul * (1 + 1.6 * surge + 1.3 * cutK)
     // cada aparición es otra: de 3 a 6 vértices y la estela más o menos abierta
     readonly property int nv: 3 + Math.floor(E.hash(seed * 5.13 + 0.7) * 4)
     readonly property real gapMul: 0.7 + 0.8 * E.hash(seed * 2.71 + 0.3)
@@ -48,6 +55,42 @@ MotifBase {
         return Qt.matrix4x4(...a);
     }
 
+    // ---- corte seco -----------------------------------------------------------
+    // Estampas, no historia: `cutAt`/`backAt` en `clock`, `freezeAt`/`thawAt` en la fase
+    // monótona `clock + movOff` (la de `lt` sin envolver a los 15 s). Mientras el corte dura
+    // `backAt`/`thawAt` valen 1e9. Nada se llama `lt`/`rate`/`movOff` (TRAMPAS: pisan MotifBase).
+    property bool started: false
+    property real cutAt: -1e6
+    property real backAt: 1e9
+    property real freezeAt: 0
+    property real thawAt: 1e9
+    function markCut() {
+        cutAt = clock;
+        backAt = 1e9;
+        freezeAt = clock + movOff;
+        thawAt = 1e9;
+    }
+    onCutChanged: {
+        if (!started) return;
+        if (cut) {
+            markCut();
+        } else {
+            backAt = clock;
+            thawAt = clock + movOff;
+        }
+    }
+    // un corte ya en curso al aparecer el motivo cuenta desde ahora
+    Component.onCompleted: {
+        started = true;
+        if (cut) markCut();
+    }
+    // agarre 0..1: entra rápido (0,12 s), suelta con el snap de Motion (`enterMs`, 320 ms)
+    readonly property real cutK: Hold.hold(clock, cutAt, backAt, 0.12, 0.32)
+    // atraso de fase: hasta 0,6 s con los vértices quietos; al soltar, el salto atrasado
+    readonly property real cutLag: Hold.lag(clock + movOff, freezeAt, thawAt, 0.6)
+    // la fase que va al shader: `lt` (viva) menos lo que se quedó quieta
+    readonly property real ltShow: E.wrap(lt - cutK * cutLag, loopS)
+
     readonly property real beatHot: 1 - E.outQuad(bp)
     function lead(p) { return drop ? (beatN + p) % 2 === 0 : p === 0; }
     function leadK(p) { return lead(p) ? 0.55 + 0.45 * beatHot : 0; }
@@ -63,7 +106,7 @@ MotifBase {
         property color ink: m.colour
         property color hot: m.hot
         property variant res: Qt.vector2d(width, height)
-        property real lt: m.lt
+        property real lt: m.ltShow
         property real gap: m.gap
         property real echoes: m.echoes
         property real nv: m.nv
@@ -71,6 +114,7 @@ MotifBase {
         property real dropAmt: m.dropAmt
         property real pulse: m.beatHot
         property real high: m.high
+        property real hf: React.fizz(m.hf, 1)
         property real wpx: m.span * (0.0034 + 0.0016 * m.beatHot)
         property real lead0: m.leadK(0)
         property real lead1: m.leadK(1)

@@ -128,6 +128,10 @@ _CONFIG_COMMENTS = {
         "testcard": "false (default) = the test card never shows up mid-track (not in\n"
                     "the drawing pool, not as a rare event); the intro title card\n"
                     "and the forced `fatal crt motif|rare testcard` still work",
+        "maze_eggs": "true (default) = the `maze` drawing hides rare Easter eggs like the\n"
+                     "Win95 screensaver: a smiley, an error dialog or an EXIT sign on a wall,\n"
+                     "a rat crossing, a polyhedron that flips the world (which also flips at a\n"
+                     "drop). false = the plain maze",
         "intro": "a new track is a whole event: every tube goes dark, static, a\n"
                  "title/artist card, then the first line. false = the old plain\n"
                  "channel-change into the first lyric",
@@ -404,7 +408,7 @@ DEFAULTS = {
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
         "split": "mixed", "director": True, "focus": "roam", "scene": "sections",
-        "screen_off": False, "testcard": False, "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
+        "screen_off": False, "testcard": False, "maze_eggs": True, "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
         "face_mode": "song", "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
         "pace": "normal", "rare": 1, "ghost_ms": 550,

@@ -43,6 +43,9 @@ Item {
 
     // Reloj propio: el del tubo va a 20 Hz en las pantallas sin letra, y el
     // ruido se cuantiza igual adentro del shader.
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     property real clock: 0
     property real pending: 0
     FrameAnimation {
@@ -50,7 +53,7 @@ Item {
         onTriggered: {
             snow.pending += frameTime;
             if (snow.pending >= Math.max(snow.stepMin, 0.028)) {
-                snow.clock += snow.pending;
+                snow.clock += snow.pending * snow.rate;
                 snow.pending = 0;
             }
         }

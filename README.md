@@ -616,15 +616,19 @@ rm -rf ~/.config/cartelitos   # optional: delete config
 
 ## Fonts
 
-The CRT lyric line ships with four bundled fonts, one per theme (`shell/fonts/`), each
-released under the SIL Open Font License 1.1 (full text alongside each font as
-`LICENSE-<name>.txt`), sourced from [Google Fonts](https://github.com/google/fonts):
+The CRT lyric line ships with bundled fonts, one per theme picked from a pool that
+depends on the theme's entrance family (`shell/fonts/`), each released under the SIL Open
+Font License 1.1 (full text alongside each font as `LICENSE-<name>.txt`), sourced from
+[Google Fonts](https://github.com/google/fonts):
 
 - [VT323](https://github.com/google/fonts/tree/main/ofl/vt323) by Peter Hull
-- [Press Start 2P](https://github.com/google/fonts/tree/main/ofl/pressstart2p) by CodeMan38
 - [Share Tech Mono](https://github.com/google/fonts/tree/main/ofl/sharetechmono) by Carrois Type Design
+- [IBM Plex Mono](https://github.com/google/fonts/tree/main/ofl/ibmplexmono) by IBM Corp. (Bold)
+- [Space Mono](https://github.com/google/fonts/tree/main/ofl/spacemono) by Colophon Foundry (Bold)
+- [Chakra Petch](https://github.com/google/fonts/tree/main/ofl/chakrapetch) by Cadson Demak (Bold)
+- [Syne Mono](https://github.com/google/fonts/tree/main/ofl/synemono) by Bonjour Monde
 - [DotGothic16](https://github.com/google/fonts/tree/main/ofl/dotgothic16) by JAPAN FONTWORKS,
-  used as the fallback for CJK lyrics that the other three can't render
+  used as the fallback for CJK lyrics that the others can't render
 
 ## License
 

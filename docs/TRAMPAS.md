@@ -873,10 +873,22 @@ cuesta caro si se "simplifica":
   nunca el reloj. Excepciones medidas: `Tunnel` cuenta su luz con el reloj REAL (`tube.clock +=
   tube.pending`, fallback del compás); `TextSea` con `bpmLive` va una línea por tiempo y no escucha
   el ritmo; `Plasma` escala el `dt` del resorte ANTES del tope de 0.05.
-- **El `Behavior` va en la ENTRADA del integrador** (`crtMovRate`, `Motion.levelMs`), no sobre la
-  fase: animar una fase la hace ir y volver.
-- **Pivote 0.35, no 0.5:** un tema fuerte y parejo da `mov` ≈ 0.2; con el pivote al medio correría
-  más lento que antes de punta a punta. Sin `audLive` el ritmo es 1 exacto (no `movMin`).
+- **`crtMovRate` NO lleva `Behavior`** (ronda 3; antes `Motion.levelMs`, 420 ms): se comía el empujón
+  del golpe (0.42 s) y sumaba una cola encima del suavizado del daemon (sube 0.25 s / baja 0.7 s). Si
+  hiciera falta suavizar algo, va en la ENTRADA del integrador, jamás sobre la fase: animar una fase la
+  hace ir y volver.
+- **El mapa es por TRES percentiles (10 / mediana / 90), no un estirado lineal p5..p95** (ronda 3): con
+  un `mov` sesgado (pulso 0.56-0.71 casi todo el tema, un final calmo 0.2-0.3) el punto medio de la franja
+  cae debajo de la mediana y el tema queda pegado a `movMax` (54 % del pasaje en ×2.2, medido). Con la
+  mediana en ritmo 1, cada mitad estirada por su lado y `MIN_HALF` = 0.10 (un tema parejo no amplifica
+  ruido) se usan los dos extremos. `x^p` con p < 1 NO: pendiente infinita en el pivote, justo donde
+  `mov` pasa más tiempo. Pivote SIN historial (`PIVOT` 0.45, < 10 s de tema): más arriba de 0.2 (tema
+  fuerte y parejo) y debajo de 0.6-0.7 (pulso). Sin `audLive` el ritmo es 1 exacto (no `movMin`).
+- **El empujón del golpe** (`crtMovKick`, `Speed.kickAt/kickAdd/push`, `movKick` por fila) MULTIPLICA el
+  ritmo base y entra en `crtMovRate`, o sea en la velocidad que integra `Speed.advance`: nunca es un salto
+  de fase. Un `FrameAnimation` lo avanza SÓLO mientras dura (`running = false` al llegar a 0). En el
+  banco, `onTChanged` lee `rateAt(t)`, no el binding `rate`: con `kick` dependiente de `t`, el binding
+  todavía tiene el `t` viejo en ese handler (dio un "desvío" de 1.11 que era sólo orden de evaluación).
 - **Un método del hijo PISA la propiedad heredada.** `Mystify` tenía `function rate(p, v, axis)`;
   con `property real rate` nueva en `MotifBase`, `base.rate` leía la FUNCIÓN y `movOff` daba NaN en el
   overlay (el dibujo desaparece). El banco no lo veía (`tubeClock` −1 apaga ese `FrameAnimation`) ni

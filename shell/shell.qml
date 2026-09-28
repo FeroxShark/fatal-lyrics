@@ -10,6 +10,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import QtQuick
 import "Faces.js" as Faces
+import "Speed.js" as Speed
 
 ShellRoot {
     id: root
@@ -112,6 +113,11 @@ ShellRoot {
     // 1 = el rango entero de la fila de `pace` (`dirtMin`..`dirtMax`)
     property real crtDirtAmount: 1.0
     onCrtDirtAmountChanged: console.log("crt: dirt_amount " + crtDirtAmount)
+    // tanda 8, slice movimiento: cuánto sigue el RITMO de los dibujos a cómo se mueve la
+    // música ahora (`audMov`, `crtMovRate` más abajo). 0 = apagado (ritmo 1 siempre, lo
+    // de antes), 1 = el rango entero de la fila de `pace` (`movMin`..`movMax`)
+    property real crtMovAmount: 1.0
+    onCrtMovAmountChanged: console.log("crt: mov_speed " + crtMovAmount)
     // tanda 7, corrida 4b: el quemado del estribillo (`Crt.qml`, `burn*`). 0 = no
     // se dibuja ni se acumula; 1 = el techo de contraste (10 % de luminancia,
     // 5 % con el default 0.5). Es un multiplicador del shader, así que la perilla
@@ -223,6 +229,9 @@ ShellRoot {
             // enfrían los claros con los agudos (`hf`), y cuánto mueve la suciedad
             // al grano de la estática
             cutDepth: 0.35, cutFlash: 0.18, fizzAmt: 0.45, grainMove: 0.55,
+            // tanda 8, slice movimiento (`shell/Speed.js`): el ritmo de los dibujos en
+            // un pasaje quieto (`mov` 0) y en uno nervioso (`mov` 1); 1 = como estaba
+            movMin: 0.85, movMax: 1.20,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -236,6 +245,7 @@ ShellRoot {
             rarePerLine: 1 / 400, rareGapMs: 120000,
             fxGapMs: 6000,
             cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
+            movMin: 0.75, movMax: 1.35,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -261,6 +271,7 @@ ShellRoot {
             // la tanda 3 no tenía nada de esto; como con `dirtMax`, `wild` se lleva
             // el valor más fuerte y no el cero
             cutDepth: 0.75, cutFlash: 0.45, fizzAmt: 1.0, grainMove: 1.0,
+            movMin: 0.60, movMax: 1.60,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -442,6 +453,10 @@ ShellRoot {
     property real audCutF: 0
     property int audCutGen: 0
     property real audHf: 0
+    // tanda 8, slice movimiento (docs/tanda8-estado/movimiento.md): cuánto se mueve la
+    // música AHORA (densidad de ataques + brillo que cambia + energía relativa al tema),
+    // 0..1, ya suavizado del otro lado (sube ~1 s, baja ~3 s). Lo usa `crtMovRate`.
+    property real audMov: 0
     // sin audio vivo no hay corte: si el daemon deja de mandar `aud` en medio de
     // uno, el tubo no puede quedar clavado a media luz
     readonly property bool crtCut: audLive && audCut
@@ -2021,8 +2036,21 @@ ShellRoot {
         repeat: true
         running: root.crtOn && root.audLive
         onTriggered: console.log("crt: dirt " + root.crtDirt.toFixed(2)
-            + " mult " + root.crtDirtMult.toFixed(2))
+            + " mult " + root.crtDirtMult.toFixed(2)
+            + " mov " + root.audMov.toFixed(2) + " rate " + root.crtMovRate.toFixed(2))
     }
+
+    // tanda 8, slice movimiento: el RITMO de los dibujos (motivos y la deriva libre de la
+    // barra que rueda) alrededor del `pace` del tema. `shell/Speed.js` tiene el mapeo y
+    // el integrador; esto es sólo el número. Sin audio vivo vale 1 EXACTO (no el `movMin`
+    // del silencio): sin captura no se sabe cómo se mueve nada, y el tubo es el de antes.
+    // Nunca se usa como `t · crtMovRate`: los relojes de dibujo le suman un desplazamiento
+    // acumulado de a `dt` (`Crt.qml` `movOff`, `MotifBase.qml`, la física de cada motivo),
+    // así un cambio de ritmo cambia la VELOCIDAD y no la posición. El Behavior sólo tapa el
+    // escalón de 10 Hz del evento, en la entrada del integrador (en la fase no hace falta).
+    property real crtMovRate: audLive
+        ? Speed.rate(audMov, pace.movMin, pace.movMax, crtMovAmount) : 1
+    Behavior on crtMovRate { NumberAnimation { duration: Motion.levelMs } }
 
     // la primera palabra de la línea que viene ("" si no hay próxima)
     readonly property string crtNextWord: {
@@ -3416,7 +3444,7 @@ ShellRoot {
         crt_curvature: "crtCurvature", crt_scanlines: "crtScanlines", crt_chroma: "crtChroma",
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
-        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_dirt: "crtDirtAmount", crt_burnin: "crtBurnin",
+        crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_dirt: "crtDirtAmount", crt_mov_speed: "crtMovAmount", crt_burnin: "crtBurnin",
         crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
@@ -3552,6 +3580,7 @@ ShellRoot {
                             root.audCentroid = ev.c;
                             root.audDirt = ev.d || 0;
                             root.audHf = ev.hf || 0;
+                            root.audMov = ev.mov || 0;
                             if (ev.cutf > 0) {
                                 root.audCutF = ev.cutf;
                                 root.audCutGen++;

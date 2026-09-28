@@ -50,6 +50,10 @@ QtObject {
         + 0.25 * riserAmt + 0.3 * bass * 0.6 + (dropOn ? 0.12 : 0))
     readonly property real low: E.clamp01(0.2 + 0.7 * kickEnv + 0.35 * bass)
     readonly property real high: E.clamp01(0.12 + 0.5 * hatEnv + 0.45 * snareEnv + 0.4 * riserAmt)
+    // corte seco sintético: el silencio justo antes del drop (el clásico), 23,2 → 23,8 tiempos
+    readonly property bool cut: lt >= L.b(23.2) && lt < L.b(23.8)
+    // flujo de agudos: los platillos y la caja
+    readonly property real hf: E.clamp01(1.1 * hatEnv + 0.9 * snareEnv + 0.4 * crashEnv - 0.05)
     readonly property real pitch: E.clamp01(0.35 + 0.4 * riserAmt + (dropOn ? 0.1 : 0))
     // contadores: suben en cada tiempo (tick, beat) y en cada compás (kick, el
     // golpe del tubo, que en el overlay pasa como mucho cada `hitGapMs`)

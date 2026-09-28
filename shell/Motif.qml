@@ -512,6 +512,15 @@ Item {
                 width: motif.span * 0.72
                 height: width
 
+                // ángulo de la aguja ACUMULADO (grados): antes era `mclock · velocidad` y
+                // la velocidad (level, drive) cambia con la música, así que a reloj grande
+                // cada cambio teletransportaba la aguja. Integra ritmo (`rate`) y música.
+                property real angle: 0
+                FrameAnimation {
+                    running: radar.visible && motif.spinning
+                    onTriggered: radar.angle += frameTime * (38 + 22 * motif.level) * motif.drive * motif.rate
+                }
+
                 Repeater {
                     model: radar.visible ? 4 : 0
 
@@ -548,7 +557,7 @@ Item {
                     anchors.centerIn: parent
                     width: radar.width
                     height: radar.height
-                    rotation: motif.mclock * (38 + 22 * motif.level) * motif.drive
+                    rotation: radar.angle
 
                     Rectangle {
                         x: parent.width / 2
@@ -597,13 +606,26 @@ Item {
 
             readonly property int columns: Math.max(6, Math.round(width / (motif.span * 0.09)))
 
+            // dos fases ACUMULADAS (la velocidad de cada columna es base + k·0.12 y las dos
+            // partes siguen a la música): nunca `mclock · speed` (teletransporta al cambiar
+            // level/drive). `base` lleva 0.35 + 0.5·level; `kph` lleva el escalón por columna.
+            property real base: 0
+            property real kph: 0
+            FrameAnimation {
+                running: rain.visible && motif.spinning
+                onTriggered: {
+                    const k = frameTime * motif.drive * motif.rate;
+                    rain.base += k * (0.35 + 0.5 * motif.level);
+                    rain.kph += k;
+                }
+            }
+
             Repeater {
                 model: rain.visible ? rain.columns : 0
 
                 Text {
                     id: drop
                     required property int index
-                    readonly property real speed: (0.35 + (index % 5) * 0.12 + motif.level * 0.5) * motif.drive
                     x: index * rain.width / rain.columns
                     width: rain.width / rain.columns
                     text: {
@@ -619,7 +641,7 @@ Item {
                     font.family: "monospace"
                     horizontalAlignment: Text.AlignHCenter
                     lineHeight: 0.95
-                    y: ((motif.mclock * speed * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
+                    y: (((rain.base + rain.kph * (index % 5) * 0.12) * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
                 }
             }
         }

@@ -60,7 +60,7 @@ qInstallMessageHandler(_qt_log)
 
 
 class Stage:
-    def __init__(self, kind, tube, scheme, portrait=False, glass=True):
+    def __init__(self, kind, tube, scheme, portrait=False, glass=True, egg="", rate=1.0):
         self.w, self.h = (1080, 1920) if portrait else (1920, 1080)
         self.app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
         self.view = QQuickView()
@@ -76,6 +76,8 @@ class Stage:
         self.root.setProperty("tube", tube)
         self.root.setProperty("scheme", scheme)
         self.root.setProperty("glassOn", glass)
+        self.root.setProperty("egg", egg)
+        self.root.setProperty("rate", rate)
         self.root.setProperty("kind", kind)
         # precalentamiento: los relojes capturados (último tiempo, drop) se
         # arman con el loop anterior, como si el tema viniera sonando
@@ -238,6 +240,8 @@ def main():
     ap.add_argument("--portrait", action="store_true")
     ap.add_argument("--flat", action="store_true", help="sin vidrio (el motivo pelado)")
     ap.add_argument("--stills", help="tiempos separados por coma")
+    ap.add_argument("--egg", default="", help="laberinto: huevo forzado (smiley|dialog|exit|rat|rock|flip)")
+    ap.add_argument("--rate", type=float, default=1.0, help="laberinto: ritmo de la música (1 = normal)")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     wav = os.path.join(OUT, "loop.wav")
@@ -264,7 +268,7 @@ def main():
     kind = a.kind
     tube, scheme = MOTIFS.get(kind, ("trinitron", "ado"))
     tube, scheme = a.tube or tube, a.scheme or scheme
-    st = Stage(kind, tube, scheme, a.portrait, not a.flat)
+    st = Stage(kind, tube, scheme, a.portrait, not a.flat, a.egg, a.rate)
     if a.stills:
         tag = kind + ("-portrait" if a.portrait else "") + ("-flat" if a.flat else "")
         for p in render_stills(st, [float(x) for x in a.stills.split(",")], os.path.join(OUT, "stills"), tag):

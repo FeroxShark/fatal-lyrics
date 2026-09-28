@@ -5,6 +5,32 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/), grouped
 by theme rather than by individual commit. This project doesn't cut versioned
 releases (AUR tracks `-git`), so entries are dated instead of numbered.
 
+## 2026-09-28 — tanda 8: glass without moiré, new audio signals, fonts, splitflap fix
+
+Five parallel slices closing out what Ferox reported after watching tanda 7 with real
+music (2026-09-26). Full state of each in `docs/tanda8-estado/`.
+
+- Fixed the tunnel/tube motif's visible seam (`shell/tunnel.frag`) and the CRT glass's
+  moiré (star in the center, rings in each corner): both were period-2-pixel patterns
+  in curved tube coordinates hitting Nyquist. Scanlines moved to static screen-space
+  rows; every phosphor mask now blends by its actual on-screen frequency.
+- Added `cut`/`cutf`/`hf` fields to the `aud` socket event (`cartelitos/audio.py`):
+  sustained dry-cut detection with a one-frame "hit" on the return, and a treble
+  spectral-flux channel independent of the bass, so the CRT can react to more than
+  the beat.
+- Replaced Press Start 2P (disliked, blocky) with four new OFL-licensed fonts (IBM
+  Plex Mono, Space Mono, Chakra Petch, Syne Mono), pooled per entry family instead of
+  a single shared font.
+- Fixed the splitflap motif's "SIGUE:" row staying permanently empty for
+  unsynced/plain lyrics and at track start, plus a sibling bug where the verse row
+  stringified the whole lyric-line object instead of its `.text` (same bug still
+  present, untouched, in `Swarm.qml`).
+- Added visual reaction to the new audio signals (`shell/React.js` + `crt.frag`):
+  tube dims on a dry cut and flashes back on the return, treble jitters row position
+  and cools highlight color, and the dirt-noise grain now drifts instead of sitting
+  static — each on its own axis so nothing doubles up as another per-screen
+  animation. Nothing has been watched on-screen with real music yet.
+
 ## 2026-08 — package split, portability, config table-driven
 
 The daemon moved from a single `cartelitos.py` script into a real package,

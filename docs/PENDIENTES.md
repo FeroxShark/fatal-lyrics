@@ -35,8 +35,9 @@ el toque". El resto nadie lo corrió en pantalla con música real todavía. Abie
   seguir viéndose amarillo. Si a Ferox no le gusta, correr el tono de `c` en esas tapas en vez de la luz.
 
 - **Calibrar el ritmo de los dibujos con música real** (slice movimiento-visual, `crt.mov_speed`):
-  `movMin`/`movMax` por fila de `crtPaceTable` y `PIVOT` (0.35, `shell/Speed.js`) salen de los números de
-  `docs/tanda8-estado/movimiento.md`, no de haberlo visto (Vivaldi, Invierno). Si molesta:
+  `movMin`/`movMax`/`movKick` por fila de `crtPaceTable`, `PIVOT` (0.45), `MIN_HALF` y `P_LO`/`P_HI`
+  (`shell/Speed.js`) salen de una réplica offline de UN tema (ronda 3, `docs/NUMEROS-MEDIDOS.md`), no de
+  haberlo visto en vivo con varios géneros (el daemon no se reinició para medir `qs.log`). Si molesta:
   `crt.mov_speed = 0` vuelve al ritmo fijo de antes. Hoja: `docs/tanda8-estado/movimiento-ritmo.png`.
 - **Radar y lluvia de `Motif.qml` todavía hacen `reloj × velocidad`** (pre-existente, no es del ritmo):
   `rotation: motif.mclock * (38 + 22 * level) * drive` y la `y` de la lluvia con `speed` que depende de

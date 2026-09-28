@@ -23,18 +23,34 @@ de antes. Cero corridas en pantalla: sólo tests y renders offscreen.
 - Banco `previews/colores/render.py` → `docs/tanda8-estado/colores-*.png`.
 
 ## Hecho
-(nada todavía)
+- `895650e` `shell/Faces.js`: contraste WCAG, `faceLit`/`faceDark`/`faceMid` (la luz se corre
+  lo justo para que la letra llegue a 4.5 en cualquier tono), `albumFaces` (3 de la tapa;
+  tono repetido no cuenta, falta → medio del arco más grande), `checkScheme`, `faceMode`,
+  `gateOk`, `twoTone` (el 2-1 de siempre), `facePattern` (degradado por n), `stepOrder`.
+- `48d75af` `shell.qml`: cara `c` en las 6 paletas (tono elegido a mano, comentario por
+  qué arma), `albumScheme` vía `Faces.albumFaces` + `qtFace`, `crtFace` indexa [a,b,c],
+  `crtFaceMode`, `crtFaceModeWant/Now`, `crtDropSeen`, `faceSteps` (una pantalla cada
+  `Motion.enterMs`, desde la de la letra), `crtFaceTick` en el Timer de la infección ANTES
+  de ella, la infección espera si hay pasos, `resetFacesOnPeak` re-reparte dentro de la parte.
+- `0485e6f` `83e5979` `df07a43` perilla `crt.face_mode` en config/ipc/setup.
+- `d0d0b83` `8a16d55` tests: el viejo de las 5 claves ahora pide 6×3 + Faces.js;
+  `tests/test_colores.py` (20).
 
 ## Falta
-Todo lo del plan.
+Banco `previews/colores/` + PNGs, TRAMPAS/PENDIENTES/CLAUDE.md.
 
 ## Supuestos
-- "Cara invertida" = la cara oscura (`b`: fondo hondo, letra encendida) frente a la clara
-  (`a`). La tercera (`c`) es una cara MEDIA: fondo saturado de luminancia intermedia, letra
-  oscura o clara según cuál tenga más contraste. Así las 3 se separan por luz, no sólo por tono.
-- Secciones: el daemon manda `quiet|verse|build|drop` (energía) y cada línea trae `rep.chorus`
-  (letra). estribillo = línea `chorus` o sección `drop`; puente = `build`, o `quiet` DESPUÉS de
-  haber pasado un estribillo en el tema; raro = `crtRare` corriendo.
+- "Paleta/cara invertida" (así la llaman TRAMPAS y `tunnel.frag`) = la cara CLARA `a` (fondo
+  claro, letra oscura: el CRT al revés). La oscura es `b`. La tercera (`c`) es una cara MEDIA:
+  fondo saturado de luminancia intermedia (Y≈0.11), letra casi blanca del mismo tono — separa
+  por LUZ, no sólo por tono, y el texto pasa 4.5 de contraste en las tres.
+- Secciones: sólo la del daemon (`quiet|verse|build|drop`, ya sin rebotes). estribillo =
+  `drop`; puente = `build`, o `quiet` DESPUÉS del primer drop del tema (antes es intro/estrofa
+  floja); raro = `crtRare` corriendo. NO se usa `rep.chorus` por línea: flapea línea a línea.
+- Degradado: n=1 verse [a], drop su cara, puente [c]; n=2 verse 1-1 de a/b, drop iguales,
+  puente foco + media. El foco (pantalla con la letra) conserva su cara en todos los cambios.
+- Portero: entrar a drop/puente/raro pasa ya (el golpe no espera 10 s y un raro dura 3-6 s);
+  volver a verse espera `color_hold`; piso 2,5 s entre dos cambios.
 
 ## Cómo retomar
 Leer este archivo y `git log --oneline -- docs/tanda8-estado/colores.md shell/Faces.js`.

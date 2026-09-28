@@ -794,3 +794,40 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
   hueco entre el evento `lyrics` y el primer `show()` al arrancar un tema. Cualquier UI que la use necesita
   un fallback que no dependa del daemon (Splitflap ahora saca la primera palabra de la línea siguiente de
   `lines`, que ya se conoce de antes).
+
+## Detalle movido: mapa técnico (poda CLAUDE.md, tanda 8, 2026-09-28)
+
+- **Timing del rayo del salto (`hop`, `shell/HopRay.qml`):** 360 ms + 150 de cola; 200 + 150 si es
+  a la pantalla de al lado (mitad de camino, misma velocidad).
+- **`shell/Crt.qml`, dos pasadas:** `stage` → `signal.frag` (la señal, perilla `crt.composite`,
+  compuesta) → `crt.frag` (el vidrio: fósforo, scanlines, rotura). Un `.qsb` c/u. `crtTubeTable`
+  (`shell.qml`, perilla `crt.tube`, corrida 2): cada tubo es una fila con las perillas sueltas +
+  `maskType`/`maskPitch`/`mono`/`monoTint` (uniforms de `crt.frag`); default `auto` (`crtSetFor`:
+  uno de color por tema); `custom` = look de siempre, el único que obedece las sueltas. **Estela**
+  (corrida 3, `crt.persistence`): `signalTex` es `recursive`, `signal.frag` guarda
+  `max(señal, prev*decay - piso)`; `trailOn` exige `trailQ` (= `crtQuality >= 1` con 150 ms de
+  retraso: el resize y `recursive` nunca cambian en el mismo cuadro, ver moiré/timing de shader más
+  abajo), el `dt` sale de `frameSwapped`. Vida media = persistence × 220 ms.
+- **`crtTension`/`crtClimaxT`:** `rep` `{n,k,chorus}` (`lyrics.repeat_map`) viaja en
+  `lyrics.lines[i]`, `show` y `next`. La tensión sube con `posAbs` hasta `crtClimaxT` (última
+  ocurrencia de la línea más repetida), un escalón mientras suena un `chorus`, baja en el outro.
+  Multiplica UN camino: `rest` de `Crt.qml` y `hitGap`; rango `tensionMin/Max` en `crtPaceTable`.
+- **`crtSceneFor(section, outro, n, focus)`:** sobre el primitivo `crtSetDark`, la estrofa deja una
+  sola pantalla prendida (la del foco), el drop enciende la pared entera (portero `sceneGapMs` de
+  `crtPaceTable` salteado a propósito, siempre pasa) y el final del tema (umbral de
+  `posAbs/posLen`, no lo manda el daemon) apaga de a una hacia el foco, una cada `Motion.holdMs`,
+  con un timer único reapuntado (mismo patrón que `crtRelightTimer`).
+- **`cartelitos/mood.py`:** `mood_for` usa léxico chico es/en para valence, rms absoluto calibrado
+  contra `~/.cache/cartelitos/audio` para energy — determinístico, sin red ni IA.
+- **`audio._cut_step`/`_smooth_hf`:** `cut` (sostenido) marca un corte seco tras sonar fuerte y
+  sale solo al volver a cruzar `CUT_HIGH`; `cutf` (un frame) es la fuerza del golpe de vuelta y
+  fuerza envío inmediato como el beat; `hf` es flujo espectral en la banda de `dirt`
+  (125–6000 Hz), reusa el mismo espectro que `dirt` ya calculaba (sin FFT nueva).
+- **`crt.resting` + `tubeAccum`:** pausa con letra puesta (`!musicLive` + `Motion.holdMs`): reloj
+  15 fps, pump frenado, sin estela (log `crt: rest N on|off`); vuelve con el primer `pos`/`aud`.
+  `tubeTime` con tope de 60. El daemon real manda `aud` si suena CUALQUIER cosa: para medir la
+  pausa hay que bajarlo.
+- **Guardia de instancia única:** el lock guarda el PID del dueño (daemon:
+  `util.acquire_instance_lock`; overlay: `sh` de `spawn` en `bin/fatal`); `stop` mata por pid,
+  nunca por fd, y el fd no se hereda; `start` espera `daemon.ready` (el daemon lo crea tras
+  escribir el flag del CRT).

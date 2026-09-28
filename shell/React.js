@@ -72,3 +72,16 @@ function fizz(hf, amt) {
 function grain(dirt, pump, move) {
     return clamp01(dirt) * move * (0.55 + 0.45 * clamp01(pump));
 }
+
+// La fase de las franjas del grano, ACUMULADA: la velocidad depende de `grain`, y
+// `t·velocidad(grain)` en el shader salta cada vez que `grain` se mueve (con `t` en
+// cientos de segundos, un cambio de 0.01 corre las franjas media pantalla de golpe:
+// el banco lo mostró como un zigzag). Se suma de a `dt` y se envuelve en 64
+// vueltas (el shader la usa entera para la deriva de las rayas).
+function grainSpeed(g) { return 0.35 + 0.9 * g; }   // franjas por segundo
+function grainAdvance(phase, dt, g) {
+    if (dt <= 0 || dt > 0.5)
+        return phase;          // un salto del reloj (pausa, reinicio) no corre las franjas
+    const p = phase + dt * grainSpeed(g);
+    return p >= 64 ? p - 64 : p;
+}

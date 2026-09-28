@@ -819,6 +819,16 @@ PanelWindow {
         ? React.fizz(crt.ctl.audHf, crt.ctl.pace.fizzAmt) * (crt.focused ? 1 : 0.6) : 0
     readonly property real grainNow: crt.live && !crt.tubeDark
         ? React.grain(crt.ctl.crtDirt * crt.ctl.crtDirtAmount, crt.pump, crt.ctl.pace.grainMove) : 0
+    // la fase de las franjas se ACUMULA (React.grainAdvance): con `t·velocidad` en el
+    // shader, cada cambio de `grain` las hacía saltar. El tope de `tubeTime` da un dt
+    // negativo, que grainAdvance ignora.
+    property real grainPhase: 0
+    property real grainLastT: 0
+    onTubeTimeChanged: {
+        if (grainNow > 0.001)
+            grainPhase = React.grainAdvance(grainPhase, tubeTime - grainLastT, grainNow);
+        grainLastT = tubeTime;
+    }
 
     // ------------------------------------------------------- glitch bursts
     property real glitchAmt: 0
@@ -2948,6 +2958,7 @@ PanelWindow {
         property real backFlash: crt.backFlashNow
         property real fizz: crt.fizzNow
         property real grain: crt.grainNow
+        property real grainPhase: crt.grainPhase
         property real glitch: Math.min(crt.glitchAmt, 1)
         // La barra que rueda va atada al verso: arranca con el peso de
         // siempre y llega al doble sobre el final de la línea, así el

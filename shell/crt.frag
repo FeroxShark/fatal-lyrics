@@ -52,6 +52,7 @@ layout(std140, binding = 0) uniform buf {
     float backFlash;  // 0..1: el golpe de vuelta después del corte
     float fizz;       // 0..1: los agudos — las filas tiemblan de costado y los claros se enfrían
     float grain;      // 0..1: la suciedad que MUEVE la estática (bandas, deriva, rayas)
+    float grainPhase; // vueltas de las franjas, 0..64, acumuladas en QML (`React.grainAdvance`)
     vec2 res;         // surface size in pixels
     vec3 tint;        // phosphor colour of this screen
     vec3 monoTint;    // color del fósforo del tubo monocromo
@@ -333,11 +334,13 @@ void main() {
         float gsx = qt_TexCoord0.x;
         float gsy = qt_TexCoord0.y;
         float slen = 1.0 + 5.0 * grain;
-        float sx = floor((fc.x + t * (40.0 + 110.0 * grain)) / slen);
+        // la deriva va con la misma fase que las franjas (120 px por franja): una
+        // velocidad multiplicada por `t` acá saltaría cada vez que `grain` cambia
+        float sx = floor((fc.x + grainPhase * 120.0) / slen);
         float streak = hash21(vec2(sx, floor(fc.y)) + floor(t * 8.0) * 1.7);
         n = mix(n, streak, 0.6 * grain);
         float wob = 0.03 * sin(gsx * 7.0 + t * 2.3) * grain;
-        float ph = gsy * 2.6 - t * (0.35 + 0.9 * grain) + wob;
+        float ph = gsy * 2.6 - grainPhase + wob;
         float bandv = pow(0.5 + 0.5 * sin(ph * 6.2831853), 6.0);
         namp *= 1.0 + grain * (2.2 * bandv - 0.5);
     }

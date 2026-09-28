@@ -123,3 +123,31 @@ p99 0.80**. `mov` vivía en una franja de 0.17 → con el mapeo absoluto (pivote
 - Banco (`render.py sheet`, normal): vel. dibujo 0.40–2.20, desvío vs rate **0.0000**; perilla 0: 1.0;
   `t·rate` de −171× a +170×. (El banco usa `mov` crudo, no los percentiles: prueba fase, no calibración.)
 - Tests: 769 OK.
+
+## Ronda 3: "se ve el cambio pero es mínimo; más sensible al ritmo" (Ferox, con música real)
+
+Cambios (números y método, incluido el aviso de que el daemon NO se reinició: `docs/NUMEROS-MEDIDOS.md`,
+"`mov` ronda 3"). Los dos lados:
+- **Señal** (`cartelitos/audio.py`, commit aparte): densidad de onsets sin saturar (umbral 0.45,
+  compresiva), término nuevo de densidad de golpes, suavizado **0.25 s / 0.7 s** (era 1.0 / 3.0).
+- **Curva** (`Speed.span`/`fit`): tres percentiles del tema — 10 / **mediana** / 90 — en vez de un estirado
+  lineal p5..p95. La mediana es el ritmo 1 (pivote 0.5); cada mitad se estira por su lado, con un ancho
+  mínimo `MIN_HALF` = 0.10 (un tema parejo no amplifica ruido). Es lo que hace que un tema SESGADO (pulso
+  todo el rato y un final calmo) no quede pegado al máximo. Sin historial (< 10 s, `STAT_WARM`) sigue el
+  mapeo absoluto con `PIVOT` 0.45 (era 0.35: con la densidad sin saturar el pulso ronda 0.6-0.7).
+- **Empujón del golpe** (`Speed.kickAt/kickAdd/kickStrength/push`, `crtMovKick` en `shell.qml`,
+  `movKick` por fila de `crtPaceTable`: calm 0.4 / normal 0.7 / wild 1.0): cada `b` del evento `aud` suma un
+  empujón (el `h`, más fuerte) que decae en 0.42 s. Entra en `crtMovRate`, o sea en la VELOCIDAD que
+  integran los relojes de dibujo: nunca salta la fase. Con la perilla en 0, o sin audio vivo, no hay
+  empujón (ritmo 1 exacto).
+- **Sin Behavior en `crtMovRate`** (era `levelMs`, 420 ms): se comía justo el empujón, y el suavizado del
+  daemon (sube 0.25 s) ya tapa el escalón de 10 Hz del evento.
+- Banco: partitura nueva `fast` (`./render.py sheet --score fast` → `movimiento-ritmo-golpes.png`): sube
+  en 0.4 s, golpes cada 0.5 s (el cuarto fuerte), cae en 1 s. Desvío máximo contra el `rate` 0.0000, perilla
+  en 0 = 1.0 exacto, `t · rate` de +16381× a −1272×. `./render.py sheet` (lenta) regenerada.
+- Tests: `test_movimiento_visual.py` (36 con `test_movimiento.py`): tema sesgado (mediana = ritmo 1, ambos
+  extremos alcanzados), tema parejo sin ruido amplificado, `kickAt` OutQuad a 0, tope de golpes encimados,
+  `push`, y un golpe cambia velocidad, no posición.
+
+Falta: recalibrar `MIN_HALF`, `movKick` y los pesos con otros géneros (un solo tema en la réplica offline).
+

@@ -31,13 +31,76 @@ function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
 //   mov PIVOT  → 1
 //   mov 1      → hi  (`movMax`)
 // `amount` (perilla `crt.mov_speed`, 0..1) escala la desviación desde 1: 0 = apagado.
-function rate(mov, lo, hi, amount) {
+function rate(mov, lo, hi, amount, pivot) {
     const m = clamp01(mov);
-    const r = m < PIVOT
-        ? lo + (1 - lo) * (m / PIVOT)
-        : 1 + (hi - 1) * ((m - PIVOT) / (1 - PIVOT));
+    const pv = pivot > 0 && pivot < 1 ? pivot : PIVOT;
+    const r = m < pv
+        ? lo + (1 - lo) * (m / pv)
+        : 1 + (hi - 1) * ((m - pv) / (1 - pv));
     const a = amount > 0 ? amount : 0;
     return 1 + (r - 1) * a;
+}
+
+// ---- percentiles del TEMA. `mov` real (Vivaldi, Invierno; qs.log, 99 muestras) vive en
+// 0.63–0.80: una franja de 0.17 dentro de 0..1. Con el mapeo absoluto el ritmo se movía
+// 1.0–1.2 y no se veía. Se guarda un histograma de `mov` del tema (decae con
+// STAT_TAU_S) y se estira p5..p95 a TODO el rango; la mediana queda en el pivote (ritmo 1).
+var STAT_BINS = 40;
+var STAT_TAU_S = 60;      // el tema "olvida" lento: la parte de hace 2 min pesa 13%
+var STAT_WARM = 20;       // masa (s) para confiar del todo en los percentiles
+var MIN_SPAN = 0.20;      // una franja más angosta se ensancha (tema parejo: no amplifica ruido)
+
+function newStat() {
+    const h = [];
+    for (let i = 0; i < STAT_BINS; i++) h.push(0);
+    return { h: h, mass: 0 };
+}
+
+// `dt` s reales con `mov` vigente. Un `dt` raro no suma (mismo criterio que `advance`).
+function observe(st, mov, dt) {
+    if (!(dt > 0) || dt > 0.5)
+        return st;
+    const k = Math.exp(-dt / STAT_TAU_S);
+    for (let i = 0; i < STAT_BINS; i++) st.h[i] *= k;
+    const b = Math.min(STAT_BINS - 1, Math.floor(clamp01(mov) * STAT_BINS));
+    st.h[b] += dt;
+    st.mass = st.mass * k + dt;
+    return st;
+}
+
+function percentile(st, p) {
+    if (!(st.mass > 0)) return 0.5;
+    const target = st.mass * p;
+    let acc = 0;
+    for (let i = 0; i < STAT_BINS; i++) {
+        const c = st.h[i];
+        if (acc + c >= target)
+            return (i + (c > 0 ? (target - acc) / c : 0.5)) / STAT_BINS;
+        acc += c;
+    }
+    return 1;
+}
+
+// {lo, hi, conf}: la franja p5..p95 (ya ensanchada a MIN_SPAN) y cuánto confiar (0..1).
+function span(st) {
+    let lo = percentile(st, 0.05), hi = percentile(st, 0.95);
+    if (hi - lo < MIN_SPAN) {
+        const mid = (lo + hi) / 2;
+        lo = mid - MIN_SPAN / 2;
+        hi = mid + MIN_SPAN / 2;
+    }
+    return { lo: lo, hi: hi, conf: clamp01(st.mass / STAT_WARM) };
+}
+
+// `mov` reescalado al tema: 0.5 = el medio de su franja. Con `conf` 0 vale `mov` tal cual
+// (mapeo absoluto de siempre, pivote PIVOT); con 1 es el estirado con el pivote en 0.5.
+function fit(mov, sp) {
+    const m = clamp01(mov);
+    const nm = clamp01((m - sp.lo) / (sp.hi - sp.lo));
+    return {
+        mov: m + (nm - m) * sp.conf,
+        pivot: PIVOT + (0.5 - PIVOT) * sp.conf
+    };
 }
 
 // Un paso del integrador: lo que se suma al desplazamiento en `dt` segundos reales.

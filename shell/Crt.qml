@@ -13,6 +13,7 @@ import Quickshell
 import Quickshell.Wayland
 import QtQuick
 import "React.js" as React
+import "Speed.js" as Speed
 
 PanelWindow {
     id: crt
@@ -1337,6 +1338,13 @@ PanelWindow {
     property real tubeTime: 0
     property real tubeAccum: 0
     readonly property real tubeStep: 1 / 60 - 0.001
+    // Tanda 8, slice movimiento: lo que el ritmo de la música (`ctl.crtMovRate`) le
+    // corrió a los relojes de DIBUJO, acumulado de a `dt` a la misma cadencia que
+    // `tubeTime` (`Speed.advance`). El reloj de dibujo es `tubeTime + movOff`: el de la
+    // deriva libre de la barra que rueda y el de los motivos que no llevan física propia
+    // (radar, lluvia). `tubeTime` NO se escala: lo leen el shader (el zumbido de 60 Hz es
+    // de la red eléctrica, no de la música), el corte, el grano y el vigía de `quality`.
+    property real movOff: 0
     // ---- IOWN (T3.B5): la palabra se ancla, no se desliza
     // En qué pantalla está la palabra ahora mismo, refrescado por cuadro; y el
     // "punto → raya → palabra" con el que entra en cada una, que es el mismo
@@ -1390,6 +1398,7 @@ PanelWindow {
             crt.tubeAccum += frameTime;
             if (crt.tubeAccum >= crt.tubeStep) {
                 crt.tubeTime += crt.tubeAccum;
+                crt.movOff = Speed.advance(crt.movOff, crt.tubeAccum, crt.ctl.crtMovRate);
                 crt.tubeAccum = 0;
             }
             // el IOWN se mueve por cuadro: con el muestreo de 80 ms del reloj
@@ -1431,7 +1440,10 @@ PanelWindow {
         interval: crt.deepSleep ? 200 : crt.resting ? 66 : 50
         repeat: true
         running: crt.visible && (!crt.showsText || crt.resting) && (!crt.standby || crt.deepSleep)
-        onTriggered: crt.tubeTime += interval / 1000
+        onTriggered: {
+            crt.tubeTime += interval / 1000;
+            crt.movOff = Speed.advance(crt.movOff, interval / 1000, crt.ctl.crtMovRate);
+        }
     }
 
     // Encuadre: la pantalla con la letra se acerca y abre el cuadro; la que no,
@@ -1968,6 +1980,11 @@ PanelWindow {
                     // bajito, cuando pasa se tiene que ver acompañado.
                     kick: crt.surgeGen
                     clock: crt.tubeTime
+                    // tanda 8, slice movimiento: el ritmo de la música, y lo que ya le
+                    // corrió al reloj de dibujo. `clock` sigue siendo el real: con él
+                    // miden el compás, los golpes y el re-anclaje de los de loop
+                    rate: crt.ctl.crtMovRate
+                    movOff: crt.movOff
                     bg: crt.pal.bg
                     spinning: crt.visible && (crt.idle || crt.instrumental || crt.motifForced)
                 }
@@ -2970,7 +2987,9 @@ PanelWindow {
         // fase de la barra, en vueltas (0..1). Con el compás medido y `crt.beat_lock` da una
         // vuelta cada 4 tiempos, anclada a la grilla del daemon; si no, la deriva libre de
         // siempre (0.085 vueltas/s). Se cuenta en QML (precisión doble), no con `t` en el shader.
-        property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime)
+        // La deriva libre corre con el ritmo de la música (`movOff`, tanda 8); la de compás
+        // sale de `Date.now()` en `rollPhaseFor` y no se entera.
+        property real rollPhase: crt.ctl.rollPhaseFor(crt.tubeTime + crt.movOff)
         property real alarm: (crt.alarmLine || crt.chanFlash) ? 1 : crt.fxAlarmAmt
         property real vignette: crt.ctl.tubeVignette
         // el titileo llega desde el audio, no del reloj del shader

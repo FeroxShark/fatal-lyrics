@@ -150,7 +150,7 @@ def simulate(faces, n, sections, r0=0.37):
         if i > 0:
             for k, scr in enumerate(order[:-1]):
                 cur[scr] = nxt[scr]
-                frames.append(("%s -> %s, paso %d" % (tag, want, k + 1), list(cur), focus))
+                frames.append(("%s: %s -> %s, paso %d" % (tag, mode_now, want, k + 1), list(cur), focus))
         frames.append(("%s (%s)" % (tag, want), list(nxt), focus))
         prev = nxt
         mode_now = want

@@ -57,6 +57,9 @@ Item {
 
     // dónde está la columna, medida en líneas
     property real scroll: 0
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     FrameAnimation {
         running: sea.running && sea.visible && sea.lines.length > 0
         onTriggered: {
@@ -67,7 +70,9 @@ Item {
                 return;
             const dt = sea.pending;
             sea.pending = 0;
-            sea.scroll += dt * 1000 / sea.stepMs;
+            // con compás, una línea por tiempo: eso es el pulso del tema y no se
+            // escala; sin compás, la marea corre con el ritmo de la música (`rate`)
+            sea.scroll += dt * 1000 / sea.stepMs * (sea.bpmLive ? 1 : sea.rate);
             // el tirón hacia el verso que suena: es una corrección lenta, no un
             // salto — la columna nunca deja de subir parejo
             if (sea.synced && sea.lineNo >= 0)

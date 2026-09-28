@@ -82,9 +82,37 @@ Si Ferox lo quiere igual, es un slice aparte.
   método `_mov_step` (densidad de onsets banda completa) + `_smooth_mov` (EMA
   asimétrica), `feed()` con parámetro nuevo `pct=None` y campo `mov` en el evento;
   `_capture_loop` pasa `pct=cur_pct` al llamado a `feed()`.
-- `tests/test_movimiento.py`, archivo nuevo.
+- `tests/test_movimiento.py`, archivo nuevo: 7 tests — pasaje que acelera sin
+  cambiar volumen sube `mov`; trémolo agudo sin nada de bajo también lo sube
+  (>0.4); silencio lo mantiene en 0.0 todo el tiempo; tema fuerte y PAREJO con
+  `pct=1.0` (peor caso) queda bajo 0.35, lejos de clavarse arriba; sin `pct`
+  (perfil desconocido) no explota y sigue en 0..1; sube apreciablemente
+  (>0.15) en el primer segundo de un pasaje ocupado; y al cortarse ese pasaje
+  sigue por encima del 40% de su pico un segundo después (baja más lento de lo
+  que subió). Suite completa: 731 tests, OK.
 
-(el resto de esta sección se completa a medida que se commitea cada bloque)
+## Cómo lo va a usar el otro worker (no es tarea mía, pero para que no adivine)
+
+- `mov` es un reemplazo/complemento de "energía global del tema" para decidir
+  la VELOCIDAD de lo que ya se dibuja (cuántos cuadros de una animación, cada
+  cuánto puede repetirse un evento dentro del presupuesto de `pace`), no una
+  animación nueva ni otra regla de "una animación por pantalla": sigue siendo
+  UN número que ya viaja en el evento `aud` de siempre, como `l`/`c`/`hf`.
+  Con `pace` (`crtPaceTable`) fijando el TECHO de cuántas cosas pueden pasar
+  por minuto, `mov` puede modular DENTRO de ese techo qué tan seguido se llega
+  a él en cada momento — sin agregar otro parpadeo, porque ya viene suavizado.
+
+## Números (medidos con `timeit` manual, 200 bloques de 32ms, bajo+medio+agudo variable, misma máquina)
+
+- `feed()` sin el cálculo de `mov` (`_mov_step` parcheado a no-op, mismo proceso
+  para que sea comparable): **0.690 ms/bloque**.
+- `feed()` con `mov` completo: **0.728-0.702 ms/bloque** según la corrida (ruido
+  de medición normal en esta máquina).
+- Diferencia: **+0.02 a +0.04 ms/bloque** (~5-6% relativo), o sea bien por
+  debajo del ~33% de un núcleo que ya usa el overlay con audio prendido.
+  Esperable: no hay FFT nueva, sólo un tercer `spectral_flux_band` sobre una
+  banda más ancha (~el doble de bins que la de `hf`) reusando el mismo
+  `spec`/`prev_spec`.
 
 ## Falta / por decidir (default elegido, reversible)
 

@@ -42,6 +42,13 @@ class TestCableado(unittest.TestCase):
         self.assertIn("React.fizz(m.hf, 1)", src)
         self.assertIn("property real lt: m.ltShow", src)
 
+    def test_no_cut_yet_means_not_held(self):
+        # el arranque es "ya volvió hace mucho": con backAt/thawAt en 1e9 el dibujo nacía agarrado
+        # y la costura del loop del banco daba media 16
+        src = read("Mystify.qml")
+        self.assertRegex(src, r"property real backAt: -1e6")
+        self.assertRegex(src, r"property real thawAt: -1e6")
+
     def test_no_animation_or_behavior_in_the_motif(self):
         # el banco exige que cada cuadro sea función pura del reloj y de las estampas
         src = re.sub(r"//[^\n]*", "", read("Mystify.qml"))
@@ -110,6 +117,11 @@ class TestMystifyJs(unittest.TestCase):
         just_after = self.run_js("hold(100.0601, 100, 100.06, 0.12, 0.32)")
         self.assertTrue(0 < up < 1)
         self.assertAlmostEqual(up, just_after, places=2)
+
+    def test_the_initial_state_before_any_cut_is_neither_held_nor_lagging(self):
+        # cutAt/backAt/freezeAt/thawAt = -1e6 / -1e6 / 0 / -1e6, como los deja Mystify.qml
+        self.assertEqual(self.run_js("hold(3000, -1e6, -1e6, 0.12, 0.32)"), 0)
+        self.assertEqual(self.run_js("lag(3000, 0, -1e6, 0.6)"), 0)
 
     def test_lag_grows_while_cut_holds_then_stops_and_is_capped(self):
         self.assertEqual(self.run_js("lag(50, 50, 1e9, 0.6)"), 0)

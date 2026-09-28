@@ -7,6 +7,11 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 (apagado/degauss/estática/tarjeta) y la escena por secciones (`crt.scene`) quedan inertes; `true` los devuelve. No toca el dip del
 corte seco (tanda 8), `fatal crt dark` a mano ni los raros. Sin línea en su config: el default ya apaga todo eso.
 
+**Laberinto (tanda 8, 2026-09-28):** la marcha sigue la música (contador de pasos con crédito `rate`, se planta en el corte seco, mira de
+costado con los agudos) y trae huevos de pascua raros (`crt.maze_eggs`, default `true`). Estado en `docs/tanda8-estado/laberinto.md`.
+Falta: verlo con música de verdad (los `cut`/`hf` del banco son sintéticos), decidir si giran también en los kicks y si el 22 % por
+vuelta / el 40 % de vuelta en el drop es mucho o poco.
+
 **Decisión de Ferox 2026-09-28: la carta de ajuste no aparece a mitad de tema** ("no hace nada más que dar info"). Perilla
 `crt.testcard` (default `false`): el motivo `testcard` sale del pool del director (`motifAllowed`) y el raro `testcard` del sorteo
 (`crtRareRoll`); `true` los devuelve. Siguen andando la tarjeta del intro (`crt.intro_card`, hoy inerte salvo `screen_off = true`)

@@ -57,7 +57,11 @@ Item {
     // lo que el motivo lee del root, con los nombres de Motif.qml
     readonly property var contract: ["clock", "level", "low", "high", "pitch", "energy", "drop",
         "section", "tick", "beat", "kick", "beatMs", "bpmLive", "surge", "nextWord", "lineNo",
-        "lines", "linesSynced", "waveL", "waveR"]
+        "lines", "linesSynced", "waveL", "waveR", "cut", "hf"]
+    // huevo de pascua forzado del laberinto (smiley|dialog|exit|rat|rock|flip); vacío = sin huevos
+    property string egg: ""
+    // ritmo de la música (1 = el de siempre) que se le pasa al motivo, para probar la marcha
+    property real rate: 1
 
     Item {
         id: face
@@ -88,6 +92,9 @@ Item {
                     it.hot = Qt.binding(() => stage.pal.hot);
                     if ("bg" in it) it.bg = Qt.binding(() => stage.pal.bg);
                     if ("seed" in it) it.seed = 0.37;
+                    if ("eggs" in it) it.eggs = Qt.binding(() => stage.egg !== "");
+                    if ("egg" in it) it.egg = Qt.binding(() => stage.egg);
+                    if (typeof it.rate === "number") it.rate = Qt.binding(() => stage.rate);   // Mystify tiene una `function rate`
                     if ("fontFamily" in it) it.fontFamily = vt323.name;
                     if ("pixelFamily" in it) it.pixelFamily = pixel.name;
                 }

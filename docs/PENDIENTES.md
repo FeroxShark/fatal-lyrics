@@ -3,7 +3,7 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
-**Tanda 8 (hecha 2026-09-28, falta verla con música real).** Cinco slices en paralelo sobre lo que Ferox vio con
+**Tanda 8 (hecha 2026-09-28, falta verla con música real).** Seis slices en paralelo sobre lo que Ferox vio con
 música el 2026-09-26 (capturas viejas en `docs/plans/tanda8/`, gitignored); estado de cada uno en
 `docs/tanda8-estado/{shaders,senales,fuentes,sigue,reaccion,colores}.md`: túnel sin costura y vidrio sin moiré (shaders),
 campos `cut`/`cutf`/`hf` nuevos en el evento `aud` (señales), cuatro fuentes libres reemplazando Press Start 2P

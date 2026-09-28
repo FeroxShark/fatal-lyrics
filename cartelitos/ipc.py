@@ -72,7 +72,7 @@ CONFIG_EVENT_MAP = (
     ("crt_focus", "crt", "focus"), ("crt_scene", "crt", "scene"), ("crt_set", "crt", "set"),
     ("crt_intro", "crt", "intro"), ("crt_intro_card", "crt", "intro_card"),
     ("crt_color_from_pitch", "crt", "color_from_pitch"),
-    ("crt_color_hold", "crt", "color_hold"),
+    ("crt_color_hold", "crt", "color_hold"), ("crt_face_mode", "crt", "face_mode"),
     ("crt_infect_lead", "crt", "infect_lead"), ("crt_alarm_threshold", "crt", "alarm_threshold"),
     ("crt_channel_switch", "crt", "channel_switch"), ("crt_iown", "crt", "iown"),
     ("crt_foreshadow", "crt", "foreshadow"), ("crt_ring", "crt", "ring"),

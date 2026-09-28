@@ -256,8 +256,9 @@ ShellRoot {
             // al grano de la estática
             cutDepth: 0.35, cutFlash: 0.18, fizzAmt: 0.45, grainMove: 0.55,
             // tanda 8, slice movimiento (`shell/Speed.js`): el ritmo de los dibujos en
-            // un pasaje quieto (`mov` 0) y en uno nervioso (`mov` 1); 1 = como estaba
-            movMin: 0.60, movMax: 1.50,
+            // un pasaje quieto (`mov` 0) y en uno nervioso (`mov` 1); 1 = como estaba.
+            // `movKick`: cuánto empuja la velocidad un golpe (× ritmo, decae en 0.42 s)
+            movMin: 0.60, movMax: 1.50, movKick: 0.40,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -271,7 +272,7 @@ ShellRoot {
             rarePerLine: 1 / 400, rareGapMs: 120000,
             fxGapMs: 6000,
             cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
-            movMin: 0.40, movMax: 2.20,
+            movMin: 0.40, movMax: 2.20, movKick: 0.70,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -297,7 +298,7 @@ ShellRoot {
             // la tanda 3 no tenía nada de esto; como con `dirtMax`, `wild` se lleva
             // el valor más fuerte y no el cero
             cutDepth: 0.75, cutFlash: 0.45, fizzAmt: 1.0, grainMove: 1.0,
-            movMin: 0.30, movMax: 2.80,
+            movMin: 0.30, movMax: 2.80, movKick: 1.00,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -481,7 +482,7 @@ ShellRoot {
     property real audHf: 0
     // tanda 8, slice movimiento (docs/tanda8-estado/movimiento.md): cuánto se mueve la
     // música AHORA (densidad de ataques + brillo que cambia + energía relativa al tema),
-    // 0..1, ya suavizado del otro lado (sube ~1 s, baja ~3 s). Lo usa `crtMovRate`.
+    // 0..1, ya suavizado del otro lado (sube ~0.25 s, baja ~0.7 s). Lo usa `crtMovRate`.
     property real audMov: 0
     // sin audio vivo no hay corte: si el daemon deja de mandar `aud` en medio de
     // uno, el tubo no puede quedar clavado a media luz
@@ -2072,7 +2073,8 @@ ShellRoot {
         onTriggered: console.log("crt: dirt " + root.crtDirt.toFixed(2)
             + " mult " + root.crtDirtMult.toFixed(2)
             + " mov " + root.audMov.toFixed(2) + " rate " + root.crtMovRate.toFixed(2)
-            + " span " + root.movSpan.lo.toFixed(2) + "-" + root.movSpan.hi.toFixed(2))
+            + " span " + root.movSpan.lo.toFixed(2) + "-" + root.movSpan.mid.toFixed(2)
+            + "-" + root.movSpan.hi.toFixed(2))
     }
 
     // tanda 8, slice movimiento: el RITMO de los dibujos (motivos y la deriva libre de la
@@ -2081,10 +2083,13 @@ ShellRoot {
     // del silencio): sin captura no se sabe cómo se mueve nada, y el tubo es el de antes.
     // Nunca se usa como `t · crtMovRate`: los relojes de dibujo le suman un desplazamiento
     // acumulado de a `dt` (`Crt.qml` `movOff`, `MotifBase.qml`, la física de cada motivo),
-    // así un cambio de ritmo cambia la VELOCIDAD y no la posición. El Behavior sólo tapa el
-    // escalón de 10 Hz del evento, en la entrada del integrador (en la fase no hace falta).
-    // percentiles del TEMA (`Speed.newStat`): `mov` real vive en una franja angosta (Vivaldi
-    // 0.63–0.80) y se estira a todo el rango; se reinicia en cada tema (`crtTrackSeed++`).
+    // así un cambio de ritmo cambia la VELOCIDAD y no la posición.
+    // Ronda 3 ("más sensible al ritmo"): SIN Behavior. Era `levelMs` (420 ms) encima del
+    // suavizado del daemon, y se comía justo el empujón del golpe; el escalón de 10 Hz del
+    // evento ya lo tapa el suavizado de `mov` (sube 0.25 s) y, en la fase, el integrador.
+    // percentiles del TEMA (`Speed.newStat`): `mov` real vive en una franja angosta y sesgada
+    // (con pulso 0.55–0.70, final que se calma 0.2–0.3); tres percentiles (10/50/90) la llevan
+    // a todo el rango con la mediana en ritmo 1. Se reinicia en cada tema (`crtTrackSeed++`).
     property var movStat: Speed.newStat()
     property var movSpan: Speed.span(movStat)
     Timer {
@@ -2097,9 +2102,34 @@ ShellRoot {
         }
     }
     readonly property var movFit: Speed.fit(audMov, movSpan)
+    // el empujón del golpe: se suma con `Speed.kickAdd` en cada `b` del evento `aud` (el `h`
+    // pesa más) y decae solo en `Speed.KICK_S` (OutQuad, `Speed.kickAt`). Es VELOCIDAD: entra
+    // en `crtMovRate`, que después integran los relojes de dibujo. Un FrameAnimation lo
+    // avanza sólo mientras dura (no corre en un pasaje sin golpes).
+    property real movKickV0: 0
+    property double movKickAt: 0
+    property real crtMovKick: 0
+    function movKickHit(strength) {
+        if (!(crtMovAmount > 0) || !audLive)
+            return;
+        movKickV0 = Speed.kickAdd(Speed.kickAt(movKickV0, (Date.now() - movKickAt) / 1000),
+                                  strength, pace.movKick);
+        movKickAt = Date.now();
+        crtMovKick = movKickV0;
+        movKickTick.running = true;
+    }
+    FrameAnimation {
+        id: movKickTick
+        running: false
+        onTriggered: {
+            root.crtMovKick = Speed.kickAt(root.movKickV0, (Date.now() - root.movKickAt) / 1000);
+            if (root.crtMovKick <= 0)
+                running = false;
+        }
+    }
     property real crtMovRate: audLive
-        ? Speed.rate(movFit.mov, pace.movMin, pace.movMax, crtMovAmount, movFit.pivot) : 1
-    Behavior on crtMovRate { NumberAnimation { duration: Motion.levelMs } }
+        ? Speed.push(Speed.rate(movFit.mov, pace.movMin, pace.movMax, crtMovAmount, movFit.pivot),
+                     crtMovKick, crtMovAmount) : 1
 
     // la primera palabra de la línea que viene ("" si no hay próxima)
     readonly property string crtNextWord: {
@@ -3642,8 +3672,10 @@ ShellRoot {
                             // seguir el registro del tema, no cada sílaba
                             root.pitchAvg = root.pitchAvg * 0.96 + ev.c * 0.04;
                             root.pitchRef = root.pitchRef * 0.998 + ev.c * 0.002;
-                            if (ev.b)
+                            if (ev.b) {
                                 root.audBeat++;
+                                root.movKickHit(Speed.kickStrength(!!ev.h));
+                            }
                             // el pico lo elige el daemon (es el que sabe dónde
                             // cae este momento dentro de la canción entera)
                             if (ev.pk) {

@@ -47,6 +47,15 @@ Item {
     // viva, pero no pega un salto en cada bombo
     property real beatAmt: 1
     property real clock: 0         // reloj del tubo, en segundos
+    // tanda 8, slice movimiento (`shell/Speed.js`): el RITMO de los dibujos según cómo
+    // se mueve la música ahora (1 = el de siempre) y lo que ese ritmo ya le corrió al
+    // reloj de dibujo, acumulado en Crt.qml. `mclock` es el reloj de DIBUJO de los que
+    // no llevan física propia; `clock` sigue siendo el real (compás, golpes). La física
+    // propia (agua, arena, plasma...) y los de loop reciben `rate` y lo multiplican por
+    // su `frameTime`: integran ellos, nunca `t · rate`.
+    property real rate: 1
+    property real movOff: 0
+    readonly property real mclock: clock + movOff
     property color bg: "#04162e" // la cara del tubo (los motivos de loop pintan paletas y paredes con ella)
     property bool spinning: true   // false = quieto (pantalla apagada)
     // el tubo apagado (tanda 6, corrida 0): a diferencia de `spinning`, esto
@@ -539,7 +548,7 @@ Item {
                     anchors.centerIn: parent
                     width: radar.width
                     height: radar.height
-                    rotation: motif.clock * (38 + 22 * motif.level) * motif.drive
+                    rotation: motif.mclock * (38 + 22 * motif.level) * motif.drive
 
                     Rectangle {
                         x: parent.width / 2
@@ -610,7 +619,7 @@ Item {
                     font.family: "monospace"
                     horizontalAlignment: Text.AlignHCenter
                     lineHeight: 0.95
-                    y: ((motif.clock * speed * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
+                    y: ((motif.mclock * speed * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
                 }
             }
         }
@@ -643,7 +652,7 @@ Item {
             property real travel: 0
             FrameAnimation {
                 running: stars.visible && motif.spinning
-                onTriggered: stars.travel += frameTime * stars.speed
+                onTriggered: stars.travel += frameTime * stars.speed * motif.rate
             }
 
             // T4.3b: eran 46 y en la cara clara del tubo se leían como cuatro
@@ -977,6 +986,7 @@ Item {
 
         Ocean {
             colour: motif.colour
+            rate: motif.rate
             crest: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1000,6 +1010,7 @@ Item {
 
         Dunes {
             colour: motif.colour
+            rate: motif.rate
             crest: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1044,6 +1055,7 @@ Item {
 
         Rorschach {
             colour: motif.colour
+            rate: motif.rate
             hot: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1066,6 +1078,7 @@ Item {
 
         Plasma {
             colour: motif.colour
+            rate: motif.rate
             hot: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1089,6 +1102,7 @@ Item {
 
         Tunnel {
             colour: motif.colour
+            rate: motif.rate
             hot: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1112,6 +1126,7 @@ Item {
 
         Static {
             colour: motif.colour
+            rate: motif.rate
             hot: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1135,6 +1150,7 @@ Item {
 
         TextSea {
             colour: motif.colour
+            rate: motif.rate
             hot: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1154,6 +1170,7 @@ Item {
 
         Pond {
             colour: motif.colour
+            rate: motif.rate
             crest: motif.hot
             level: motif.level
             stepMin: motif.stepMin
@@ -1182,6 +1199,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1214,6 +1232,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1246,6 +1265,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1278,6 +1298,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1310,6 +1331,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1342,6 +1364,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1374,6 +1397,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low
@@ -1406,6 +1430,7 @@ Item {
             hot: motif.hot
             bg: motif.bg
             tubeClock: motif.clock
+            rate: motif.rate
             stepMin: motif.stepMin
             level: motif.level
             low: motif.low

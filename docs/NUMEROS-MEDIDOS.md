@@ -245,3 +245,52 @@ medido: recalibrar con otros géneros si hace falta.
   README (24–28 % mystify contra 65 % swarm/defrag) dicen lo mismo. La causa del costo viejo no era un Canvas
   (ya era Shape) sino tessellar 66 polilíneas de trazo ancho con MSAA 4× en CPU cada cuadro. Ojo: la CPU del
   banco incluye la espera de la placa en el grab; el costo real del overlay es menor en ambos.
+
+## `mov` ronda 3: "se ve el cambio pero es mínimo" (tanda 8, 2026-09-28)
+
+Pedido de Ferox con música real: más notorio, más sensible al ritmo. **Aviso de método:** el daemon
+NO se reinició (Fatal Lyrics prendido), así que la distribución de `qs.log` en vivo de la ronda 2 no se
+pudo repetir con el `mov` nuevo. Se usó como proxy una réplica offline: captura real de 98 s (Home / X,
+`parec` → `AudioAnalyzer.feed` con el código nuevo → 800 eventos `aud`) → el `Speed.js` real en node
+(`observe` a 10 Hz, como el overlay). Un tema, un género: recalibrar con otros.
+
+- **Qué estaba mal en la señal:** el término de densidad de onsets estaba saturado
+  (`MOV_ATTACK_THRESH` 0.12 contaba como onset el ruido de una textura densa y el término se pegaba a 1) y
+  la cadena era lenta: suavizado 1.0 s sube / 3.0 s baja + Behavior de 420 ms en `crtMovRate` + estirado
+  lineal por p5..p95. Ahora: umbral 0.45, densidad compresiva `1 − exp(−n/REF)` (no un tope duro), término
+  nuevo de densidad de golpes (`MOV_W_BEAT`, ventana 1.5 s), pesos 0.35/0.20/0.25/0.20
+  (onsets/golpes/brillo/energía), suavizado **0.25 s sube / 0.7 s baja**.
+- **`mov` en la captura (Home / X):** música con pulso, 28–68 s, entre 0.56 y 0.71 (mediana 0.63); un final
+  que se calma desde 68 s (0.2–0.4) y silencio. Con la señal vieja (umbral 0.12) el pasaje con pulso quedaba
+  pegado arriba, sin margen. `mov` cae de 0.62 a 0.40 en el primer segundo de la calma y a ≤ 0.3 a los 4 s.
+- **Curva** (mismos eventos, `Speed.js` viejo vs nuevo, pace normal 0.4–2.2; ritmo por cuadro de `aud`):
+
+  | ventana | mapeo | p5 | p25 | p50 | p75 | p95 | cerca de movMin | cerca de movMax |
+  |---|---|---|---|---|---|---|---|---|
+  | música 30–68 s | p5..p95 lineal | 1.55 | 1.79 | 1.94 | 2.09 | 2.20 | 1 % | 54 % |
+  | música 30–68 s | cuantiles 10/50/90 | 0.90 | 1.10 | 1.48 | 1.73 | 2.06 | 1 % | 11 % |
+  | todo 26–80 s | p5..p95 lineal | 0.40 | 0.94 | 1.84 | 2.01 | 2.19 | 17 % | 39 % |
+  | todo 26–80 s | cuantiles 10/50/90 | 0.40 | 0.78 | 1.19 | 1.62 | 2.03 | 25 % | 8 % |
+
+  ("cerca" = a menos de 15 % del rango de un extremo.) El estirado lineal p5..p95 con el pivote en el punto
+  medio de la franja sesgada dejaba el tema pegado al máximo (54 % del pasaje con pulso en ×2.2: NO se
+  distinguía un compás del siguiente); con la mediana en ritmo 1 el pasaje habitual se reparte entre ×0.9 y
+  ×2.06 y la calma toca `movMin` (0.4). Un `x^p` con p < 1 se descartó (pendiente infinita en el pivote:
+  amplifica justo el ruido donde `mov` pasa más tiempo); el smoothstep sobre la franja también (empujaba de
+  nuevo a los extremos sin corregir el sesgo).
+- **Latencia de la respuesta** (banco `previews/movimiento/render.py sheet --score fast`, partitura de `mov`
+  con el suavizado nuevo, ritmo BASE sin golpes): sube al 90 % del pasaje nervioso en **0.33 s** y baja al
+  90 % del calmo en **0.78 s** (antes ~1 s / ~3 s + 0.42 s de Behavior). En la captura, la calma del final
+  lleva el ritmo a `movMin` en ~1.3 s.
+- **Empujón del golpe** (`Speed.kickAt/kickAdd/push`, `movKick` por fila: calm 0.4 / normal 0.7 / wild 1.0):
+  golpe común pesa 0.4, fuerte (`h`) 1.0, tope 1.5 · `movKick` si se encima; decae en 0.42 s (OutQuad,
+  `Speed.KICK_S`). Multiplica el ritmo base: pace normal, base ×1.59 (nervioso) → ×2.70 con un golpe fuerte,
+  y vuelve. Banco (721 cuadros a 60 fps, T0 = 240 s): velocidad del reloj de dibujo integrada 0.60–2.70,
+  **desvío máximo contra el `rate` del cuadro 0.0000**, perilla en 0 = 1.0 exacto; el control `t · rate`
+  llega a +16381× / −1272×. Partitura lenta (rampas de 4 s, sin golpes): integrado 0.40–2.20, desvío 0.0000,
+  control ±200×. Cambio de imagen cuadro a cuadro (lum. media abs.): integrado 8.22 (máx 15.9), perilla en 0
+  9.05 (14.8), control 11.7 (22.4). Sin muestrear CPU de nuevo: lo agregado en el overlay es un
+  `FrameAnimation` que sólo corre 0.42 s después de cada golpe y dos multiplicaciones por cuadro.
+- **No hecho:** tempo local. `BpmTracker` está armado para golpes tipo bombo (histograma de intervalos entre
+  `beat`); en un pasaje de cuerdas rápidas no da. La densidad de onsets + la de golpes (últimos 0.6 / 1.5 s)
+  cubre lo que se pidió sin un estimador nuevo.

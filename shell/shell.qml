@@ -1348,6 +1348,7 @@ ShellRoot {
     readonly property string crtFaceModeWant: crtFaceMode === "song"
         ? Faces.faceMode(audSection, crtRare.screen >= 0, crtDropSeen) : "verse"
     property string crtFaceModeNow: "verse"
+    property int faceTurn: 0            // cuántas veces la estrofa larga se turnó
     property var faceSteps: []          // [{screen, face}] pendientes
     property double faceStepAt: 0
     onAudSectionChanged: if (audSection === "drop") crtDropSeen = true
@@ -1394,12 +1395,16 @@ ShellRoot {
         // con el intro corriendo la pared está apagada: se aplica al terminar
         if (crtFaceMode !== "song" || crtIntroOn)
             return;
-        const want = crtFaceModeWant;
+        const want = Faces.varietyMode(crtFaceModeWant, now - lastFacesAt, faceTurn);
         if (!Faces.gateOk(now, lastFacesAt, crtColorHold * 1000, crtFaceModeNow, want))
             return;
-        console.log("crt: faces " + crtFaceModeNow + " -> " + want);
+        if (want !== crtFaceModeWant)
+            faceTurn++;
         crtFaceModeNow = want;
-        crtFaceStage(crtFaceTarget(want));
+        const target = crtFaceTarget(want);
+        console.log("crt: faces " + crtFaceModeNow + " sec=" + audSection
+                    + " pattern=" + JSON.stringify(target));
+        crtFaceStage(target);
     }
     // El reparto en un PICO, con el piso de `color_hold`. El comentario de acá
     // abajo decía "un par de veces por canción" desde la tanda 2, pero el pico
@@ -1418,7 +1423,10 @@ ShellRoot {
         // escalonar no se pisa
         if (faceSteps.length > 0 || crtFaceModeNow === "chorus")
             return;
-        crtFaceStage(crtFaceTarget(crtFaceModeNow));
+        const target = crtFaceTarget(crtFaceModeNow);
+        console.log("crt: faces " + crtFaceModeNow + " sec=" + audSection
+                    + " pattern=" + JSON.stringify(target) + " (peak)");
+        crtFaceStage(target);
     }
     // Repartir de nuevo las caras da vuelta pantallas ENTERAS: la que estaba
     // clara se va a negra y al revés. Eso no es un cambio de color, es un

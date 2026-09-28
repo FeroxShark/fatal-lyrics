@@ -116,6 +116,21 @@ class TestFacesJs(unittest.TestCase):
                     ' faceMode("drop", true, true)]')
         self.assertEqual(v, ["verse", "chorus", "wild", "verse", "wild", "wild", "wild"])
 
+    def test_a_long_verse_rotates_the_wall_instead_of_staying_two_one(self):
+        # Vivaldi / un tema sin build ni drop detectable: la parte es `verse`
+        # todo el rato y la pared se quedaba en 2-1 para siempre
+        after = self.js("VARIETY_AFTER_MS")
+        v = self.js('[varietyMode("verse", %d, 0), varietyMode("verse", %d, 1),'
+                    ' varietyMode("verse", %d, 2), varietyMode("verse", 1000, 0),'
+                    ' varietyMode("chorus", %d, 0), varietyMode("wild", %d, 0)]'
+                    % (after, after, after, after * 3, after * 3))
+        self.assertEqual(v, ["wild", "chorus", "wild", "verse", "chorus", "wild"])
+
+    def test_overlay_wires_the_variety_and_logs_section_and_pattern(self):
+        qml = read("shell.qml")
+        self.assertIn("Faces.varietyMode(", qml)
+        self.assertRegex(qml, r'console\.log\("crt: faces [^\n]*audSection')
+
     def test_the_gate_lets_events_in_and_makes_the_verse_wait(self):
         hold = 10000
         v = self.js('[gateOk(1e6, 1e6 - 3000, %d, "verse", "chorus"),'

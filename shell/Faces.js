@@ -203,6 +203,19 @@ function faceMode(section, rare, dropSeen) {
     return "verse";
 }
 
+// Un tema sin build ni drop detectable (clásica, ambient, un drone) es `verse`
+// todo el rato, y la pared se quedaba en 2-1 para siempre. Si la parte lleva
+// `VARIETY_AFTER_MS` sin repartirse, la estrofa se turna con un momento de tres
+// caras distintas y uno de las tres iguales (`turn` cuenta cuántas van). Sólo
+// toca `verse`: las partes con evento propio ya reparten distinto.
+const VARIETY_AFTER_MS = 24000;
+const VARIETY_KINDS = ["wild", "chorus"];
+function varietyMode(mode, sinceMs, turn) {
+    if (mode !== "verse" || sinceMs < VARIETY_AFTER_MS)
+        return mode;
+    return VARIETY_KINDS[((turn % 2) + 2) % 2];
+}
+
 // El portero. Entrar a un EVENTO (el drop, el puente, un raro) pasa: el golpe
 // no puede esperar diez segundos, y un raro dura menos que eso. Volver a la
 // estrofa espera el `color_hold` entero. Y ningún cambio antes de `floorMs`

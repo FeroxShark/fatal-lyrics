@@ -885,3 +885,9 @@ cuesta caro si se "simplifica":
 - **Entradas afuera a propósito:** `Motion.enterMs` está en ~35 compuertas de tiempo real
   (`Date.now() − textArrivedAt < Motion.enterMs`, el empalme del aro con la frase). Un test
   (`test_movimiento_visual.py`) controla que `Ring`/`Motion`/`HopRay`/`WordSlot` no se enteren.
+
+## Estrofa eterna = 2-1 eterno (caras, 2026-09-28)
+Un tema sin build/drop detectable (Vivaldi, ambient) es `verse` todo el rato; el reparto sólo
+cambiaba con la PARTE, así que la pared no se movía nunca. `Faces.varietyMode` rota la estrofa
+larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log` muestra
+`sec=` y `pattern=`. Ver `docs/tanda8-estado/colores.md`.

@@ -62,3 +62,14 @@ Nada del slice. Lo único abierto es mirarlo con música real (PENDIENTES, tanda
 
 ## Cómo retomar
 Leer este archivo y `git log --oneline -- docs/tanda8-estado/colores.md shell/Faces.js`.
+
+## Bug 2026-09-28: "siempre 2 y 1" con Vivaldi (clásica, sin letra sincronizada)
+Diagnóstico con el sistema vivo: config OK (`face_mode` no está en el TOML del usuario →
+default `song`, el overlay real `~/cartelitos` tiene Faces.js y el reparto cableado). El
+`sec` del daemon sí llega (no depende de la letra: `_song_pos` sale del player). Pero
+`section:` sólo loguea quiet/verse/build, casi nunca `drop` (percentil ≥ 0.86 de SU tema),
+y `quiet` antes del primer drop cuenta como estrofa → `faceMode` = `verse` → 2-1 eterno.
+No aparecía ningún log de caras porque no había ningún cambio de parte que loguear.
+Causa = DISEÑO, no cableado. Fix: `Faces.varietyMode`: `verse` con ≥24 s sin repartirse se
+turna con `wild` (3 distintas) y `chorus` (3 iguales); vuelve a estrofa por el portero
+(`color_hold`). Log DEBUG: `crt: faces <modo> sec=<sección> pattern=[..]` (y `(peak)`).

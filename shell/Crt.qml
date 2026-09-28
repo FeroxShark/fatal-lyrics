@@ -820,8 +820,8 @@ PanelWindow {
     readonly property real grainNow: crt.live && !crt.tubeDark
         ? React.grain(crt.ctl.crtDirt * crt.ctl.crtDirtAmount, crt.pump, crt.ctl.pace.grainMove) : 0
     // la fase de las franjas se ACUMULA (React.grainAdvance): con `t·velocidad` en el
-    // shader, cada cambio de `grain` las hacía saltar. El tope de `tubeTime` da un dt
-    // negativo, que grainAdvance ignora.
+    // shader, cada cambio de `grain` las hacía saltar. Un dt raro (el reloj parado
+    // en deepSleep y retomado) lo ignora grainAdvance.
     property real grainPhase: 0
     property real grainLastT: 0
     onTubeTimeChanged: {

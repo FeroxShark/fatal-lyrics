@@ -29,7 +29,7 @@ def pace_rows():
 
 
 class TestReaccionWiring(unittest.TestCase):
-    def test_every_glass_uniform_is_fed_by_crt_qml(self):
+    def test_new_glass_uniforms_are_fed_by_crt_qml(self):
         # un uniform que el ShaderEffect no declara queda en 0 sin avisar
         frag = read("crt.frag")
         block = re.search(r"uniform buf \{(.*?)\};", frag, re.S).group(1)

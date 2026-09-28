@@ -12,6 +12,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import "React.js" as React
 
 PanelWindow {
     id: crt
@@ -785,6 +786,39 @@ PanelWindow {
             crt.surgeGen++;      // acá y en las otras: la pared entera acompaña
         }
     }
+
+    // ---- tanda 8: la reacción fina (`React.js`). Los momentos se anotan en el reloj
+    // del tubo (`tubeTime`), así el dim y el fogonazo son funciones puras de ese reloj
+    // — las mismas que dibuja el banco offscreen (`previews/reaccion/`).
+    property real cutAt: -1
+    property real backAt: -1
+    property real backForce: 0
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible
+        function onCrtCutChanged() {
+            if (crt.ctl.crtCut)
+                crt.cutAt = crt.tubeTime;
+        }
+        function onAudCutGenChanged() {
+            crt.backAt = crt.tubeTime;
+            crt.backForce = crt.ctl.audCutF;
+        }
+    }
+    // el tubo que la escena apagó no se entera; la perilla del parpadeo gradúa los
+    // tres (con flicker 0 el vidrio queda quieto, como con el golpe del bajo)
+    readonly property bool reactOn: crt.live && !crt.tubeDark && crt.ctl.crtFlicker > 0.01
+    readonly property real cutDimNow: reactOn
+        ? React.cutDim(crt.tubeTime, crt.cutAt, crt.ctl.crtCut, crt.ctl.pace.cutDepth,
+                       Motion.exitMs, Motion.holdMs, Motion.levelMs) : 0
+    readonly property real backFlashNow: reactOn
+        ? React.backFlash(crt.tubeTime, crt.backAt, crt.backForce, crt.ctl.pace.cutFlash,
+                          Motion.enterMs) : 0
+    // los agudos pesan como el golpe: menos en la pantalla sin foco
+    readonly property real fizzNow: reactOn
+        ? React.fizz(crt.ctl.audHf, crt.ctl.pace.fizzAmt) * (crt.focused ? 1 : 0.6) : 0
+    readonly property real grainNow: crt.live && !crt.tubeDark
+        ? React.grain(crt.ctl.crtDirt * crt.ctl.crtDirtAmount, crt.pump, crt.ctl.pace.grainMove) : 0
 
     // ------------------------------------------------------- glitch bursts
     property real glitchAmt: 0
@@ -2910,6 +2944,10 @@ PanelWindow {
             * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
         property real tubeLevel: crt.tubeLevel
         property real degauss: crt.degauss
+        property real cutDim: crt.cutDimNow
+        property real backFlash: crt.backFlashNow
+        property real fizz: crt.fizzNow
+        property real grain: crt.grainNow
         property real glitch: Math.min(crt.glitchAmt, 1)
         // La barra que rueda va atada al verso: arranca con el peso de
         // siempre y llega al doble sobre el final de la línea, así el

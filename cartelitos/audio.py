@@ -565,9 +565,9 @@ def spectral_flux_ratio(spec, prev_spec, rate, lo_hz, hi_hz, floor=MOV_FLUX_RATI
 # ---- movimiento: cuánto se está moviendo la música AHORA (tanda 8, slice "movimiento")
 # Ferox, escuchando Vivaldi (Invierno, op.8 n.4: cuerdas rápidas y nerviosas, casi
 # sin bajo ni batería): el ritmo de las animaciones se elige por TEMA (pace/mood) y
-# no sigue los cambios DENTRO del tema. `mov` (0..1) junta tres cosas, PESADAS (no
+# no sigue los cambios DENTRO del tema. `mov` (0..1) junta cuatro cosas, PESADAS (no
 # un OR): densidad de onsets en TODO el espectro (no sólo el bajo — la clásica no
-# tiene bombo), brillo que cambia (mismo concepto y misma banda que `hf`, 125-6000
+# tiene bombo), densidad de golpes (`beat`, ronda 3), brillo que cambia (mismo concepto y misma banda que `hf`, 125-6000
 # Hz) y la energía relativa al PROPIO tema (el percentil de `TrackProfile`, no el
 # nivel crudo: así un tema tranquilo entero también tiene sus picos). Pesado y no
 # OR porque un tema fuerte y PAREJO (sin onsets nuevos, sin cambio de brillo) no
@@ -582,19 +582,28 @@ def spectral_flux_ratio(spec, prev_spec, rate, lo_hz, hi_hz, floor=MOV_FLUX_RATI
 # falta: los dos slices comparten la misma técnica invariante a escala.
 MOV_FLUX_LO_HZ = 40.0              # casi todo el espectro, incluido el bajo (a
 MOV_FLUX_HI_HZ = AUDIO_RATE / 2.0 - 1.0   # diferencia de la banda de brillo, que arranca en 125)
-MOV_ATTACK_THRESH = 0.12           # fracción de la energía ACTUAL de la banda que ya
+# Ronda 3 (Ferox, música real: "se ve el cambio pero es mínimo"): con 0.12 el
+# detector contaba ~14 onsets/s en CUALQUIER pasaje con sonido (mediana del ratio
+# 0.33, tope físico del refractario 20/s) y la densidad quedaba clavada en 1.0:
+# `mov` vivía en una franja de 0.1 y no había nada que acelerar o frenar. Barrido
+# sobre una captura real de 98 s (docs/NUMEROS-MEDIDOS.md, "mov ronda 3"): con 0.45
+# el pasaje ocupado da ~7-9 onsets/s y el flojo ~1-3.
+MOV_ATTACK_THRESH = 0.45           # fracción de la energía ACTUAL de la banda que ya
                                     # cuenta como "entró algo" (spectral_flux_ratio, no
                                     # un pico que decae: ver el porqué junto a esa función)
 MOV_ATTACK_REFRACTORY = 0.05       # onsets cada 50ms como mucho (cuerdas rápidas: hasta ~15/s)
-MOV_RATE_TAU = 1.2                 # ventana del contador de densidad (EMA de impulsos)
-MOV_RATE_REF = 3.0                 # densidad ya "todo movimiento" (unidades de la EMA)
+MOV_RATE_TAU = 0.6                 # ventana del contador de onsets (EMA de impulsos): corta, sigue el pasaje
+MOV_RATE_REF = 4.2                 # su valor (= onsets/s · TAU) donde la densidad ya vale 0.63: ~7 onsets/s
+MOV_BEAT_TAU = 1.5                 # los golpes son más ralos que los onsets: ventana de 1-2 s
+MOV_BEAT_REF = 3.75                # ídem, ~2.5 golpes/s (un tema con bombo)
 MOV_BRIGHT_RISE_S = FLUX_RISE_S    # mismo ritmo que `hf`: sube casi al instante...
 MOV_BRIGHT_FALL_S = FLUX_FALL_S    # ...baja con cola (pulso, no parpadeo)
-MOV_W_DENS = 0.5                   # peso: densidad de onsets (todas las bandas)
-MOV_W_BRIGHT = 0.3                 # peso: brillo que cambia (concepto de `hf`, invariante a escala)
-MOV_W_ENERGY = 0.2                 # peso: energía relativa al propio tema (percentil)
-MOV_RISE_S = 1.0                   # sube rápido: un pasaje que se acelera se nota en ~1s
-MOV_FALL_S = 3.0                   # baja despacio: no es otro parpadeo (ventana total ~2-4s)
+MOV_W_DENS = 0.35                  # peso: densidad de onsets (todas las bandas)
+MOV_W_BEAT = 0.20                  # peso: densidad de golpes (ronda 3: el término rápido del pulso)
+MOV_W_BRIGHT = 0.25                # peso: brillo que cambia (concepto de `hf`, invariante a escala)
+MOV_W_ENERGY = 0.20                # peso: energía relativa al propio tema (percentil)
+MOV_RISE_S = 0.25                  # ronda 3: sube casi al instante (antes 1.0 s)...
+MOV_FALL_S = 0.7                   # ...y baja en ~1 s (antes 3.0): un pasaje que se calma se ve
 MOV_MAX_DT = 0.25                  # un hueco más largo que esto no cuenta como tiempo continuo
 
 
@@ -626,6 +635,7 @@ class AudioAnalyzer:
         self.mov_rate = 0.0
         self.mov_rate_at = None
         self.mov_last_attack = None
+        self.mov_beat_rate = 0.0
         self.mov_bright = 0.0
         self.mov_bright_at = None
         self.mov = 0.0
@@ -662,14 +672,16 @@ class AudioAnalyzer:
         self.mov_bright += (raw - self.mov_bright) * (1.0 - math.exp(-dt / tau))
         return self.mov_bright
 
-    def _mov_step(self, spec, prev_spec, now):
-        """Onsets en TODO el espectro -> densidad 0..1 (ver el comentario largo
-        junto a MOV_FLUX_LO_HZ). Reusa `spec`/`prev_spec`: no hay FFT nueva.
+    def _mov_step(self, spec, prev_spec, now, beat=False):
+        """Onsets en TODO el espectro + golpes -> (densidad de onsets, densidad de
+        golpes), cada una 0..1 (ver el comentario largo junto a MOV_FLUX_LO_HZ).
+        Reusa `spec`/`prev_spec`: no hay FFT nueva.
 
-        No es la magnitud de un flujo, es cuántos onsets pasaron por unidad de
-        tiempo: un contador que suma 1 por onset y decae solo (EMA de impulsos,
+        No es la magnitud de un flujo, es cuántos eventos pasaron por unidad de
+        tiempo: un contador que suma 1 por evento y decae solo (EMA de impulsos,
         ventana MOV_RATE_TAU), así un tremolo de notas chiquitas pesa tanto como
-        pocos golpes grandes."""
+        pocos golpes grandes. Se comprime con `1 - exp(-x/ref)` (no un tope duro):
+        un pasaje muy ocupado sigue distinguiéndose de uno sólo ocupado."""
         ratio = spectral_flux_ratio(spec, prev_spec, self.rate, MOV_FLUX_LO_HZ, MOV_FLUX_HI_HZ)
         attack = ratio > MOV_ATTACK_THRESH and (
             self.mov_last_attack is None or now - self.mov_last_attack > MOV_ATTACK_REFRACTORY)
@@ -678,13 +690,18 @@ class AudioAnalyzer:
         dt = 0.0 if self.mov_rate_at is None else min(max(now - self.mov_rate_at, 0.0), MOV_MAX_DT)
         self.mov_rate_at = now
         self.mov_rate *= math.exp(-dt / MOV_RATE_TAU)
+        self.mov_beat_rate *= math.exp(-dt / MOV_BEAT_TAU)
         if attack:
             self.mov_rate += 1.0
-        return min(self.mov_rate / MOV_RATE_REF, 1.0)
+        if beat:
+            self.mov_beat_rate += 1.0
+        return (1.0 - math.exp(-self.mov_rate / MOV_RATE_REF),
+                1.0 - math.exp(-self.mov_beat_rate / MOV_BEAT_REF))
 
     def _smooth_mov(self, raw, now):
-        """EMA asimétrica de ventana grande: sube en ~1s, baja en ~3s (pedido de
-        Ferox: que no sea otro parpadeo, ventana total ~2-4s)."""
+        """EMA asimétrica: sube en ~0.25s, baja en ~0.7s. Ronda 3 (Ferox: "tiene que
+        ser más notorio, más sensible al ritmo"): antes 1 s/3 s, y con eso un pasaje
+        nervioso corto ni llegaba a mover el número."""
         dt = 0.0 if self.mov_at is None else min(max(now - self.mov_at, 0.0), MOV_MAX_DT)
         self.mov_at = now
         tau = MOV_RISE_S if raw > self.mov else MOV_FALL_S
@@ -782,11 +799,12 @@ class AudioAnalyzer:
         # pisar) + brillo que cambia (mismo `hf_raw` de arriba: misma banda que
         # `hf`, ya invariante a escala) + energía relativa al tema. Pesado, no
         # OR: ver MOV_W_*.
-        dens = self._mov_step(spec, self.prev_spec, now)
+        dens, pulse = self._mov_step(spec, self.prev_spec, now, beat)
         bright = self._smooth_mov_bright(hf_raw, now)
         erel = level if pct is None else pct
         mov = self._smooth_mov(
-            MOV_W_DENS * dens + MOV_W_BRIGHT * bright + MOV_W_ENERGY * erel, now)
+            MOV_W_DENS * dens + MOV_W_BEAT * pulse + MOV_W_BRIGHT * bright
+            + MOV_W_ENERGY * erel, now)
         self.prev_spec = spec
 
         return {

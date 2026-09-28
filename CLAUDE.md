@@ -152,8 +152,9 @@ Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de s
   `crtMotifDraw` sortea con dados cargados por lo que suena. `crt.set = "off"` vuelve al sorteo
   plano. Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
 - `crtFontPools` (`shell.qml`) — mazo de fuentes por familia de entrada, elegido con el mismo dado
-  que la fuente del set. Reemplaza `crtFontKeys`/Press Start 2P (sacada del repo, a Ferox no le
-  gustaba): plex, space, chakra, syne, vt323, share, system — créditos en `shell/fonts/README.md`.
+  que la fuente del set (sin Press Start 2P, no le gustaba): plex, space, chakra, syne, vt323,
+  share, system — créditos: `shell/fonts/README.md`.
+- `shell/Faces.js` + `crt.face_mode` — tres caras por paleta, la sección las reparte. TRAMPAS: "Tres caras".
 - `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright/contrast
   determinísticos, sin red ni IA (`feedback_ia_sin_creditos`). El daemon lo manda por el socket
   como evento `mood`, hasta dos veces por tema. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").

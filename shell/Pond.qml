@@ -32,6 +32,9 @@ Item {
     // Reloj propio: el del tubo va a 20 Hz en las pantallas sin letra y un
     // temblor a 20 Hz es una animación rota. Avanza con el frameTime real y
     // publica ~70 veces por segundo.
+    // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
+    // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
+    property real rate: 1
     property real clock: 0
     property real pending: 0
     FrameAnimation {
@@ -39,7 +42,7 @@ Item {
         onTriggered: {
             dish.pending += frameTime;
             if (dish.pending >= dish.stepMin) {
-                dish.clock += dish.pending;
+                dish.clock += dish.pending * dish.rate;
                 dish.pending = 0;
             }
         }

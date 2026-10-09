@@ -9,9 +9,11 @@ Movido textual desde `CLAUDE.md` (2026-10-07). Las tres REGLAS (una animación p
 - **La config es un TOML con hot-reload**, no un wizard. `~/.config/cartelitos/config.toml` viaja
   del daemon al overlay por el socket; el daemon vigila el mtime y aplica en vivo. Nada necesita
   `fatal restart`. Un TOML roto conserva la config anterior.
-  `fatal config` es un menú de UNA pantalla: se tipea el número de lo que se quiere cambiar y se
-  vuelve al menú (`u` deshace, `d` demo, `q` sale). **No volver al wizard lineal** — con 24
-  preguntas seguidas, equivocarse obligaba a empezar de cero.
+  **Todas las opciones están en la ventana de Ajustes** (`fatal ajustes`, `shell/settings.qml`):
+  cinco pestañas, cada cambio se aplica al tocarlo, "Undo changes" vuelve a como estaba al abrir.
+  `fatal config` / `fatal setup` abren la misma ventana. Hubo un menú de terminal (`setup.py`,
+  y antes un wizard lineal de 24 preguntas); Ferox lo sacó (2026-10-09): **no volver a abrir
+  opciones en una terminal**. Lo único que queda sólo en el TOML es `[system] not_a_game`.
 - **El interruptor del CRT es un ARCHIVO**, no el socket: `$XDG_RUNTIME_DIR/cartelitos-crt`, que
   el QML vigila. Así apaga aunque el daemon esté colgado.
 - **El tubo sabe dónde va a caer la línea SIGUIENTE.** El daemon manda una línea por vez, así que

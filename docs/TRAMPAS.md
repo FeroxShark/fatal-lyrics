@@ -95,8 +95,9 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   (queda prendido con el tubo apagado). Con la resta contra `lastBeatAt`, re-anclar es asignar
   una property.
 - **Una perilla nueva son CUATRO lugares, no tres:** `DEFAULTS` + `_CONFIG_COMMENTS`
-  (`config.py`), `CONFIG_EVENT_MAP` (`ipc.py`), `_configEventMap` (`shell.qml`) y `SETTINGS`
-  (`setup.py`) — sin este último la perilla existe pero no aparece en `fatal config`.
+  (`config.py`), `CONFIG_EVENT_MAP` (`ipc.py`), `_configEventMap` (`shell.qml`) y una fila en
+  `GROUPS` (`settings.py`) — sin esta última la perilla existe pero no aparece en la ventana de
+  Ajustes, que es la única pantalla de opciones (un test lo exige).
   **Excepción: las de `[keys]` son TRES.** No viajan al overlay (las aplica Hyprland desde el
   daemon), así que meterlas en los dos mapas de eventos sería una property muerta en
   `shell.qml`. Lo fija `test_the_key_binds_do_not_travel_to_the_overlay`: no "arreglarlo".

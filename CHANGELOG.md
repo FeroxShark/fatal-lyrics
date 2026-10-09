@@ -5,6 +5,20 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/), grouped
 by theme rather than by individual commit. This project doesn't cut versioned
 releases (AUR tracks `-git`), so entries are dated instead of numbered.
 
+## 2026-10-09 — Every option in the Settings window
+
+- The Settings window now holds every option, in five tabs (Dialogs, Behavior,
+  CRT, CRT scenes, CRT glass): the dialog lifetime, album sleeve, player, lead
+  time, Hyprland keys, screens and CRT screen order, font and every CRT knob that
+  used to be terminal-only. New row kinds: text fields, monitor pickers and an
+  orderable screen list (with **Show numbers**). Also **Undo changes** and
+  **Forget this artist** (sync).
+- Removed the terminal menu (`cartelitos/setup.py`) and the window's "All
+  options…" button that opened it in a terminal. `fatal config` and `fatal setup`
+  now open the Settings window. Dropped `[system] terminals` (only used to pick
+  that terminal).
+- The app launcher entry gained a **Settings** action (`fatal ajustes`).
+
 ## 2026-10-09 — Settings window, short tray
 
 - Added `fatal ajustes` (alias `fatal settings`): a Win95 property sheet

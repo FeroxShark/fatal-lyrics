@@ -81,12 +81,15 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   `config.py` porque la escribe el propio daemon, no Ferox a mano. Adentro vive también el
   perfil por tema (`_pending`, en memoria): lo que todavía no se ganó el derecho a durar.
 - `cartelitos/settings.py` + `shell/settings.qml` — la ventana de Ajustes (`fatal ajustes`, otro
-  proceso Quickshell, capa `cartelitos-settings`). `GROUPS` es el esquema: la ventana lo pide con
-  `--settings-json` y dibuja lo que venga, así que una opción nueva es una fila ahí. Lo que se
+  proceso Quickshell, capa `cartelitos-settings`; `fatal config` es alias). Es la ÚNICA pantalla
+  de opciones: `TABS` + `GROUPS` son el esquema (pestaña, columna, filas de tipo toggle / choice /
+  slider / screens / order / text, más los botones `crt` y `sync`), la ventana lo pide con
+  `--settings-json` y dibuja lo que venga, así que una opción nueva es una fila ahí. `coerce`
+  valida cada valor antes del TOML (`_toml_val` no escapa: nada de comillas ni barras). Lo que se
   toca vuelve por `$XDG_RUNTIME_DIR/cartelitos-settings` (`<serie> seccion.clave=<json>`), que
   vigila `watch_settings` en el daemon; sin daemon, `--settings-set` escribe el TOML directo.
-  Reemplazó a `tune.qml` y a los submenús de la bandeja (`tray.py` quedó en Ajustes / CRT /
-  karaoke / Quit).
+  Reemplazó a `tune.qml`, a los submenús de la bandeja (`tray.py` quedó en Ajustes / CRT /
+  karaoke / Quit) y al menú de terminal `setup.py` (borrado 2026-10-09).
 - `[keys] sync_forward` / `sync_back` / `crt_toggle` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync y del tubo. Las aplica Hyprland desde el daemon; al overlay sólo viaja el
   rótulo armado con ellas (`system.keys_hint()`, campo `keys_hint` del evento `config`): el

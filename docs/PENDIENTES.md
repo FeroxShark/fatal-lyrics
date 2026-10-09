@@ -95,7 +95,7 @@ y 6 (círculo aburrido) siguen abiertos.**
   `normal` ~33 %, `pausa` 25 -> 16 % con el reposo. Sigue sin haber música real en el aparejo (sintético).
   Seguimiento abierto: el tope de 60 fps no baja el `normal` (la `FrameAnimation` sigue al refresco nativo);
   si se quiere bajar de verdad, reloj a 60 por `Timer` en vez de `FrameAnimation`, con `frameSwapped` para `frameAvgMs`.
-- README: falta la captura del menú de bandeja y la de `fatal config`. Receta del GIF:
+- README: falta la captura del menú de bandeja y la de la ventana de Ajustes. Receta del GIF:
   `wf-recorder -o <salida>` + ffmpeg `palettegen(max_colors=96)` / `paletteuse`. No hay gifsicle.
 - **La tanda 4 quedó COMPLETA** (`docs/plans/2026-09-04-crt-tanda4.md`,
   `docs/plans/2026-09-04-estado-tras-tanda4.md`): corrida 1 (sacar el overscan), 2 (el aro es un

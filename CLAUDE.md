@@ -20,7 +20,8 @@ de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` s
 - **Dos procesos, no uno**: daemon Python + overlay Quickshell, por socket Unix. Diagnóstico mira
   **los dos PIDs** (`fatal status`: ON / HALF / OFF). Detalle: `docs/CONCEPTOS.md`.
 - **Config = TOML con hot-reload** (`~/.config/cartelitos/config.toml`). Nada necesita
-  `fatal restart`. `fatal config` es menú de UNA pantalla: **no volver al wizard lineal**.
+  `fatal restart`. **Todas las opciones viven en la ventana de Ajustes** (`fatal ajustes`;
+  `fatal config` es alias): nada de menús de terminal. Perilla nueva = fila en `settings.GROUPS`.
 - **REGLA: una animación por pantalla.** Textual de Ferox: "no quiero que ninguna animación se
   superponga con ninguna". En cada pantalla hay UNA cosa a la vez — o el motivo, o el aro, o la
   letra con su entrada, o el instrumental. Por eso el aro apaga el motivo de su pantalla (`dim` a

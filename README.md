@@ -281,7 +281,8 @@ Either way there are two exits that never depend on the overlay: a compositor
 keybind, and the command itself.
 
 ```
-bind = SUPER SHIFT, C, exec, fatal crt toggle   # Hyprland
+bind = SUPER SHIFT, C, exec, fatal crt toggle   # Hyprland (hyprlang .conf)
+hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("fatal crt toggle"))   -- Hyprland 0.56+ (Lua config)
 ```
 
 It is **opt-in** and never turns itself on. The switch is a file in

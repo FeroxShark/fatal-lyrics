@@ -272,13 +272,48 @@ def _fatal_bin():
                         "bin", "fatal")
 
 
-def key_bind_commands(old, new):
+_hypr_lua_cache = None
+
+
+def _hypr_lua():
+    """¿El Hyprland que corre lee su config en Lua (0.56+)?
+
+    Con el parser de Lua `hyprctl keyword` ya no hace nada: contesta "keyword
+    can't work with non-legacy parsers. Use eval." con código de salida 0, así
+    que un bind por `keyword` fallaba MUDO. Se pregunta una vez con un `eval`
+    inofensivo: el Lua contesta "ok", el hyprlang de antes no conoce `eval`."""
+    global _hypr_lua_cache
+    if _hypr_lua_cache is None:
+        try:
+            out = subprocess.run(["hyprctl", "eval", "return 0"],
+                                 capture_output=True, text=True, timeout=2)
+            _hypr_lua_cache = out.returncode == 0 and out.stdout.strip() == "ok"
+        except (OSError, subprocess.SubprocessError):
+            _hypr_lua_cache = False
+    return _hypr_lua_cache
+
+
+def _lua_str(s):
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _lua_keys(hypr):
+    """"Super+Alt, Right" (sintaxis hyprlang, la de la perilla) a
+    "SUPER + ALT + Right", la del Lua: ahí los modificadores van en mayúsculas
+    — "Super" lo toma por una tecla y falla con `Unknown keysym`."""
+    mods, _, key = hypr.partition(",")
+    parts = [m.upper() for m in mods.replace("+", " ").split()]
+    return " + ".join(parts + [key.strip()])
+
+
+def key_bind_commands(old, new, lua=False):
     """Los `hyprctl` que hay que correr para pasar de `old` a `new`.
 
     Devolver la lista en vez de correrla es lo que hace testeable el orden
     (unbind antes que bind, siempre) sin shellear en los tests. `old`/`new` son
     los dicts de la sección [keys]; `old` en None es el arranque, donde lo que
-    ya vale el default no se toca."""
+    ya vale el default no se toca. `lua` elige el dialecto: `hyprctl eval` con
+    `hl.unbind`/`hl.bind` (Hyprland 0.56+) o el `hyprctl keyword` de antes."""
     out = []
     first = old is None
     for key, arg in SYNC_KEYS:
@@ -292,19 +327,27 @@ def key_bind_commands(old, new):
         # el anterior sale SIEMPRE, incluso el del default: si no, el atajo
         # viejo sigue vivo y dos binds mandan el mismo gesto dos veces
         gone = DEFAULTS_KEYS.get(key) if first else was
+        cmd = f"{_fatal_bin()} sync {arg}"
+        if lua:
+            if gone:
+                out.append(["hyprctl", "eval", f"hl.unbind({_lua_str(_lua_keys(gone))})"])
+            if want:
+                out.append(["hyprctl", "eval",
+                            f"hl.bind({_lua_str(_lua_keys(want))}, "
+                            f"hl.dsp.exec_cmd({_lua_str(cmd)}))"])
+            continue
         if gone:
             out.append(["hyprctl", "keyword", "unbind", gone])
         if want:
-            out.append(["hyprctl", "keyword", "bind",
-                        f"{want}, exec, {_fatal_bin()} sync {arg}"])
+            out.append(["hyprctl", "keyword", "bind", f"{want}, exec, {cmd}"])
     return out
 
 
-def apply_key_binds(old, new, run=None):
+def apply_key_binds(old, new, run=None, lua=None):
     """Aplica los binds de [keys]. Devuelve los comandos que corrió."""
-    cmds = key_bind_commands(old, new)
-    if not cmds or not _hyprland():
+    if not key_bind_commands(old, new) or not _hyprland():
         return []
+    cmds = key_bind_commands(old, new, _hypr_lua() if lua is None else lua)
     runner = run or (lambda argv: subprocess.run(
         argv, capture_output=True, timeout=2, check=False))
     for argv in cmds:

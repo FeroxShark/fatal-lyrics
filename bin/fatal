@@ -362,7 +362,7 @@ cmd_restart() {
 # monitores rompía el boot), pero mirando la cosa en vez de adivinar cuánto
 # tarda. Tope de 20 s: sin hyprctl, o fuera de Hyprland, sigue de largo.
 wait_monitors() {
-    command -v hyprctl >/dev/null 2>&1 || return 0
+    [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1 || return 0
     for _ in $(seq 1 40); do
         hyprctl -j monitors 2>/dev/null | grep -q '"name"' && return 0
         sleep 0.5
@@ -379,13 +379,15 @@ wait_monitors() {
 # SIGTERM (systemctl stop, con KillMode=process) baja todo con `stop`, que no
 # toca lo que qs haya lanzado (un navegador, un xdg-open).
 run() {
-    trap 'stop; exit 0' TERM INT HUP
+    local nap=
+    trap 'stop; [ -n "$nap" ] && kill "$nap" 2>/dev/null; exit 0' TERM INT HUP
     wait_monitors
     start || exit 1
     command -v systemd-notify >/dev/null 2>&1 &&
         systemd-notify --ready --pid=$$ 2>/dev/null
     while running "$D_PID" "$DAEMON" && instance_busy "$QS_LOCK"; do
-        sleep 2 & wait $!
+        sleep 2 & nap=$!
+        wait "$nap"
     done
     echo "fatal: half of it died ($(status_line | head -1)), letting systemd restart it" >&2
     exit 1

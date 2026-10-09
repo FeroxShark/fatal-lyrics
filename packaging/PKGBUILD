@@ -27,7 +27,7 @@ package() {
   install -Dm644 shell/Motif.qml "$pkgdir/usr/share/fatal-lyrics/shell/Motif.qml"
   install -Dm644 shell/Ocean.qml "$pkgdir/usr/share/fatal-lyrics/shell/Ocean.qml"
   install -Dm644 shell/Pond.qml "$pkgdir/usr/share/fatal-lyrics/shell/Pond.qml"
-  install -Dm644 shell/tune.qml "$pkgdir/usr/share/fatal-lyrics/shell/tune.qml"
+  install -Dm644 shell/settings.qml "$pkgdir/usr/share/fatal-lyrics/shell/settings.qml"
   # los shaders van precompilados (.qsb); los .frag viajan como fuente
   install -Dm644 shell/crt.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag.qsb"
   install -Dm644 shell/crt.frag "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag"

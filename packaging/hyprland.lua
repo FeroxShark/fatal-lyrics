@@ -9,7 +9,7 @@
 -- ~/.local/bin en el PATH.
 --
 -- Reglas de ventana no hacen falta: todo lo que dibuja fatal-lyrics son capas layer-shell en
--- Overlay (namespaces cartelitos, cartelitos-np, cartelitos-crt, cartelitos-tune), sin foco
+-- Overlay (namespaces cartelitos, cartelitos-np, cartelitos-crt, cartelitos-settings), sin foco
 -- ni zona exclusiva, y cada una se pone sola en su monitor.
 
 local FATAL = os.getenv("HOME") .. "/.local/bin/fatal"

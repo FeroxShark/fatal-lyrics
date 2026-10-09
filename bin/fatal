@@ -4,7 +4,7 @@
 SELF="$(readlink -f "$0")"
 BASE="${CARTELITOS_HOME:-$(dirname "$(dirname "$SELF")")}"
 QML="$BASE/shell/shell.qml"
-TUNE_QML="$BASE/shell/tune.qml"
+SETTINGS_QML="$BASE/shell/settings.qml"
 DAEMON="$BASE/cartelitos.py"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/cartelitos/config.toml"
 
@@ -393,12 +393,16 @@ run() {
     exit 1
 }
 
-tune() {
-    if [ ! -f "$TUNE_QML" ]; then
-        echo "can't find the sliders in $BASE" >&2
+# La ventana de Ajustes (shell/settings.qml). Le pasa dónde está todo: la
+# ventana le pide a cartelitos.py qué dibujar (`--settings-json`) y llama a este mismo
+# binario para el tubo, el sync y la demo. `-n`: si ya hay una abierta, no se
+# abre otra encima.
+settings() {
+    if [ ! -f "$SETTINGS_QML" ]; then
+        echo "can't find the settings window in $BASE" >&2
         exit 1
     fi
-    exec qs -p "$TUNE_QML"
+    FATAL_BIN="$SELF" FATAL_DAEMON="$DAEMON" exec qs -n -p "$SETTINGS_QML"
 }
 
 crt_state() { [ "$(cat "$CRT" 2>/dev/null)" = "1" ] && echo on || echo off; }
@@ -516,6 +520,6 @@ case "${1:-toggle}" in
     crt)       shift; crt "$@" ;;
     sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
-    tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|run|status|config|edit|demo|tune|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
+    ajustes|settings|tune|sliders) settings ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|run|status|ajustes|config|edit|demo|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
 esac

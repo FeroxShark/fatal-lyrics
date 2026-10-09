@@ -2740,6 +2740,22 @@ class TestSyncKeyBinds(unittest.TestCase):
         self.assertEqual([cmd[1] for cmd in cmds], ["eval", "eval"])
         self.assertEqual(cmds[0][2], 'hl.unbind("SUPER + ALT + Right")')
         self.assertTrue(cmds[1][2].startswith('hl.bind("SUPER + F5", hl.dsp.exec_cmd("/'))
+        self.assertTrue(cmds[1][2].endswith('/bin/fatal sync +"))'))
+
+    def test_lua_modifiers_go_uppercase(self):
+        # "Super" en minúscula el Lua lo toma por una tecla: Unknown keysym
+        self.assertEqual(system._lua_keys("Super+Alt, Right"), "SUPER + ALT + Right")
+        self.assertEqual(system._lua_keys("SUPER SHIFT, C"), "SUPER + SHIFT + C")
+
+    def test_a_failing_hyprctl_does_not_take_the_daemon_down(self):
+        real = system._hyprland
+        system._hyprland = lambda: True
+        self.addCleanup(lambda: setattr(system, "_hyprland", real))
+
+        def boom(argv):
+            raise OSError("no hyprctl here")
+        system.apply_key_binds(None, {"sync_forward": "Super, F5",
+                                      "sync_back": self.D["sync_back"]}, run=boom, lua=False)
 
     def test_the_crt_key_is_bound_like_the_sync_ones(self):
         new = dict(self.D, crt_toggle="Super+Shift, U")
@@ -2787,23 +2803,6 @@ class TestKeysHint(unittest.TestCase):
     def test_it_travels_in_the_config_event(self):
         self.assertEqual(ipc._config_event()["keys_hint"],
                          system.keys_hint(config.CFG["keys"]))
-        self.assertTrue(cmds[1][2].endswith('/bin/fatal sync +"))'))
-
-    def test_lua_modifiers_go_uppercase(self):
-        # "Super" en minúscula el Lua lo toma por una tecla: Unknown keysym
-        self.assertEqual(system._lua_keys("Super+Alt, Right"), "SUPER + ALT + Right")
-        self.assertEqual(system._lua_keys("SUPER SHIFT, C"), "SUPER + SHIFT + C")
-
-    def test_a_failing_hyprctl_does_not_take_the_daemon_down(self):
-        real = system._hyprland
-        system._hyprland = lambda: True
-        self.addCleanup(lambda: setattr(system, "_hyprland", real))
-
-        def boom(argv):
-            raise OSError("no hyprctl here")
-        system.apply_key_binds(None, {"sync_forward": "Super, F5",
-                                      "sync_back": self.D["sync_back"]}, run=boom, lua=False)
-
 
 class TestRepeatMap(unittest.TestCase):
     """El estribillo existe: qué líneas se repiten y cuál ocurrencia es cada una

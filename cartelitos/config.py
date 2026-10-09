@@ -23,7 +23,7 @@ def _toml_val(v):
 
 # Comentario de cada perilla del TOML de ejemplo. No vive en DEFAULTS porque
 # DEFAULTS es sólo valores (lo que se aplica); esto es sólo prosa (lo que se
-# lee en `fatal config`). Un string con "\n" es un comentario de varias
+# lee en el TOML de ejemplo). Un string con "\n" es un comentario de varias
 # líneas, alineado bajo la primera. Perder esta prosa por generar el TOML
 # a mano sería peor que el problema que estamos resolviendo, así que separar
 # valores (DEFAULTS) de texto (esto) es lo que permite generar el archivo
@@ -73,8 +73,6 @@ _CONFIG_COMMENTS = {
         "not_a_game": "fullscreen windows that never count as \"a game\" for game_pause\n"
                        "(a fullscreen video or browser tab is exactly when the lyrics\n"
                        "should keep going); matched as a substring of the window class",
-        "terminals": "terminal emulators to try, in order, when opening the full menu —\n"
-                     "checked after $TERMINAL, which always wins if it's set",
     },
     "keys": {
         "sync_forward": "keys that nudge the lyric forward 0.1 s (Hyprland syntax:\n"
@@ -330,7 +328,7 @@ _CONFIG_COMMENTS = {
 # Encabezado de archivo y, para alguna sección, un bloque de comentario antes
 # de la primera clave (hoy sólo [crt], que necesita explicar el modo entero).
 _CONFIG_HEADER = ("# fatal-lyrics — configuration\n"
-                   "# Saving this file applies the changes right away. Menu: fatal config")
+                   "# Saving this file applies the changes right away. Window: fatal ajustes")
 _SECTION_INTRO = {
     "keys": "# The only keys fatal-lyrics binds by itself, and only when you change them\n"
             "# from what is written here: the default pair is what the shipped Hyprland\n"
@@ -402,8 +400,6 @@ DEFAULTS = {
         "not_a_game": ["chrome", "chromium", "firefox", "zen", "brave", "vivaldi",
                        "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid",
                        "haruna", "totem", "spotify", "netflix", "youtube"],
-        "terminals": ["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole",
-                      "gnome-terminal", "xterm"],
     },
     "keys": {
         "sync_forward": "Super+Alt, Right", "sync_back": "Super+Alt, Left",

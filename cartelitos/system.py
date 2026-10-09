@@ -1,4 +1,4 @@
-"""Todo lo que le pregunta al sistema: playerctl, hyprctl, la terminal."""
+"""Todo lo que le pregunta al sistema: playerctl, hyprctl."""
 import json
 import os
 import shutil
@@ -139,7 +139,7 @@ def _monitors():
     """Monitores conectados.
 
     REQUIERE HYPRLAND: sale de `hyprctl monitors -j`. Fuera de Hyprland devuelve
-    lista vacía (el setup pide el monitor a mano) y _hyprland() avisa una vez."""
+    lista vacía (en Ajustes no aparecen monitores para marcar) y _hyprland() avisa una vez."""
     if not _hyprland():
         return []
     try:
@@ -235,20 +235,6 @@ def health_lines():
     """Las mismas líneas que muestra `fatal status`, listas para imprimir."""
     return [f"{what} not found → {consequence}"
             for what, consequence in missing_tools()]
-
-
-def _terminal():
-    """Terminal para abrir el menú completo. $TERMINAL primero: en un repo público
-    no se puede asumir la de nadie. El resto de la lista (el orden de
-    preferencia) sale de config.CFG["system"]["terminals"], configurable en
-    config.toml."""
-    names = [os.environ.get("TERMINAL"), *config.CFG["system"]["terminals"]]
-    for name in names:
-        if name:
-            found = shutil.which(name)
-            if found:
-                return found
-    return None
 
 
 # ------------------------------------------------------ los binds del sync

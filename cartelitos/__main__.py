@@ -2,7 +2,7 @@
 import json
 import sys
 
-from . import daemon, motifs, offsets, settings, setup, system
+from . import daemon, motifs, offsets, settings, system
 
 
 def _sync_reset(who):
@@ -70,12 +70,6 @@ def run(argv=None):
         sys.exit(0)
     if "--settings-set" in argv:
         sys.exit(settings.set_cli(argv[argv.index("--settings-set") + 1:]))
-    if "--setup" in argv:
-        try:
-            setup.setup()
-        except (KeyboardInterrupt, EOFError):
-            print("\nok, bye")
-        sys.exit(0)
     try:
         daemon.main()
     except KeyboardInterrupt:

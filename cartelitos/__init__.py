@@ -14,7 +14,7 @@ de acá) NO cambia lo que lee el resto — estos nombres son una copia de la
 referencia. Para pisar un global hay que hacerlo en su módulo:
 `cartelitos.config.CFG`, `cartelitos.lyrics.CACHE_DIR`, etc.
 """
-from . import art, audio, config, daemon, ipc, lyrics, mood, offsets, setup, system, tray, util
+from . import art, audio, config, daemon, ipc, lyrics, mood, offsets, settings, system, tray, util
 
 from .util import (
     DAEMON_PID_PATH, FIELD_SEP, LOG_MAX, LOG_PATH, QS_LOG_PATH, QS_PID_PATH,
@@ -46,7 +46,7 @@ from .art import album_colors, parse_histogram, send_album_colors
 from .system import (
     OPTIONAL_TOOLS, gaming, health_lines, is_game_window,
     missing_tools, playerctl_state,
-    _daemon_pid, _monitors, _monitors_lr, _players, _terminal, _tray_available,
+    _daemon_pid, _monitors, _monitors_lr, _players, _tray_available,
 )
 
 from .ipc import (
@@ -83,10 +83,5 @@ from .tray import TRAY_TOGGLES, start_tray
 
 from .settings import SETTINGS_PATH, watch_settings
 
-from .setup import (
-    BOLD, DIM, OFF, SETTINGS, YEL, YESNO, _ask_crt_order, _ask_int, _ask_num,
-    _ask_key, _ask_player, _ask_screens, _ask_text, _demo, _fmt, _menu, _pick,
-)
-# el menú en sí es `cartelitos.setup.setup()`: acá `setup` es el módulo
 
 from .daemon import HANG_AFTER, POLL, POLL_IDLE, main

@@ -513,13 +513,14 @@ case "${1:-toggle}" in
     # medio muerto cuenta como apagado: así el toggle lo levanta entero en vez
     # de rematar la mitad que seguía viva
     toggle)    running "$D_PID" "$DAEMON" && running "$QS_PID" "$QML" && cmd_stop || cmd_start ;;
-    config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
     # con "$@" y no con "$2" "$3": `crt motif <kind> --screen <n>` son cuatro
     crt)       shift; crt "$@" ;;
     sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
-    ajustes|settings|tune|sliders) settings ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|run|status|ajustes|config|edit|demo|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
+    # todas las opciones viven en la ventana de Ajustes: `config` y `setup`
+    # (el menú de terminal que había antes) abren la ventana
+    ajustes|settings|config|setup|tune|sliders) settings ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|run|status|ajustes|edit|demo|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
 esac

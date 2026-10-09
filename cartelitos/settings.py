@@ -220,12 +220,14 @@ GROUPS = [
         _slider("crt", "curvature", "Curvature", "0 = flat panel", 0.0, 3.0),
         _slider("crt", "scanlines", "Scanlines", "depth of the comb", 0.0, 1.0),
         _slider("crt", "bloom", "Phosphor glow", "around the letters", 0.0, 3.0),
+        _slider("crt", "vignette", "Corners", "how dark", 0.0, 1.5),
+        _slider("crt", "persistence", "Phosphor trail", "what moves lingers", 0.0, 1.0),
+    ]},
+    {"title": "Signal", "tab": 4, "column": 2, "rows": [
         _slider("crt", "noise", "Static", "grain on the glass", 0.0, 1.0),
         _slider("crt", "chroma", "Colour shift", "RGB misalignment", 0.0, 1.0),
         _slider("crt", "roll", "Rolling bar", "a bright band", 0.0, 1.0),
-        _slider("crt", "vignette", "Corners", "how dark", 0.0, 1.5),
         _slider("crt", "composite", "Analog signal", "0 RGB · 1 VHS", 0.0, 1.0),
-        _slider("crt", "persistence", "Phosphor trail", "what moves lingers", 0.0, 1.0),
     ]},
     {"title": "Restlessness", "tab": 4, "column": 1, "rows": [
         _slider("crt", "intensity", "Restlessness", "signal breaks, static", 0.0, 2.0),

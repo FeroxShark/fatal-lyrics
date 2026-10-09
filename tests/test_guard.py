@@ -142,7 +142,8 @@ class FatalGuardTests(unittest.TestCase):
         os.symlink(shutil.which("sleep"), self.fake_quickshell)
         self.env = dict(os.environ, CARTELITOS_HOME=self.home, XDG_RUNTIME_DIR=self.run_dir,
                         PATH=os.path.join(self.tmp, "bin") + os.pathsep + os.environ["PATH"],
-                        HOME=self.tmp, XDG_CONFIG_HOME=os.path.join(self.tmp, "cfg"))
+                        HOME=self.tmp, XDG_CONFIG_HOME=os.path.join(self.tmp, "cfg"),
+                        FATAL_NO_UNIT="1")
         self.addCleanup(self.fatal, "stop")
 
     def fatal(self, *args, **env):
@@ -354,3 +355,85 @@ class FatalGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FAKE_SYSTEMCTL = r"""#!/bin/sh
+# systemctl de mentira: anota cada llamada y contesta según $UNIT_STATE
+echo "$*" >> "$SYSTEMCTL_LOG"
+case "$*" in
+    *" cat "*) [ "$UNIT_STATE" = none ] && exit 1; exit 0 ;;
+    *is-active*) [ "$UNIT_STATE" = active ] && exit 0; exit 3 ;;
+esac
+exit 0
+"""
+
+
+class FatalUnitTests(unittest.TestCase):
+    """Con la unit instalada, on/off/restart van por `systemctl --user`
+    (packaging/fatal-lyrics.service). Un systemctl de mentira en el PATH: no
+    toca la unit de verdad."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        bindir = os.path.join(self.tmp, "bin")
+        os.makedirs(bindir)
+        self.run_dir = os.path.join(self.tmp, "xdg")
+        os.makedirs(self.run_dir)
+        sc = os.path.join(bindir, "systemctl")
+        with open(sc, "w") as f:
+            f.write(FAKE_SYSTEMCTL)
+        os.chmod(sc, 0o755)
+        self.log = os.path.join(self.tmp, "calls")
+        # CARTELITOS_HOME vacío: si algo cae al camino a mano, `start` falla
+        # (no encuentra los archivos) en vez de levantar algo
+        self.env = dict(os.environ, CARTELITOS_HOME=os.path.join(self.tmp, "nada"),
+                        XDG_RUNTIME_DIR=self.run_dir, SYSTEMCTL_LOG=self.log,
+                        PATH=bindir + os.pathsep + os.environ["PATH"],
+                        HOME=self.tmp, XDG_CONFIG_HOME=os.path.join(self.tmp, "cfg"))
+        self.env.pop("FATAL_NO_UNIT", None)
+
+    def fatal(self, *args, state="inactive"):
+        return subprocess.run([FATAL, *args], capture_output=True, text=True, timeout=60,
+                              env=dict(self.env, UNIT_STATE=state))
+
+    def calls(self):
+        try:
+            with open(self.log) as f:
+                return [l.strip() for l in f if " cat " not in l and "is-active" not in l]
+        except OSError:
+            return []
+
+    def test_on_starts_the_unit(self):
+        out = self.fatal("on")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(self.calls(), ["--user start fatal-lyrics.service"])
+
+    def test_off_stops_an_active_unit(self):
+        self.fatal("off", state="active")
+        self.assertEqual(self.calls(), ["--user stop fatal-lyrics.service"])
+
+    def test_off_with_the_unit_inactive_does_not_call_stop(self):
+        out = self.fatal("off")
+        self.assertIn("fatal OFF", out.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_restart_keeps_the_tube_and_goes_through_the_unit(self):
+        crt = os.path.join(self.run_dir, "cartelitos-crt")
+        with open(crt, "w") as f:
+            f.write("1")
+        out = self.fatal("restart", state="active")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(self.calls(), ["--user stop fatal-lyrics.service",
+                                        "--user start fatal-lyrics.service"])
+        with open(crt) as f:
+            self.assertEqual(f.read(), "1")
+
+    def test_without_the_unit_nothing_goes_to_systemctl(self):
+        self.fatal("restart", state="none")
+        self.assertEqual(self.calls(), [])
+
+    def test_no_unit_env_skips_systemctl(self):
+        self.env["FATAL_NO_UNIT"] = "1"
+        self.fatal("on")
+        self.assertEqual(self.calls(), [])

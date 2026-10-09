@@ -307,9 +307,14 @@ restart() {
 # la MISMA instancia, y los procesos quedan dentro del cgroup de la unit en vez
 # de en el de la terminal que los lanzó. Sin la unit (otro compositor, sin
 # systemd, el paquete sin instalar) todo sigue como siempre, a mano.
+# Ojo: `stop` (la función) es el apagado a mano y NO pasa por la unit: es lo
+# que corre `run` adentro de ella. La puerta de la línea de comandos es cmd_*.
 UNIT=fatal-lyrics.service
 
 unit_known() {
+    # FATAL_NO_UNIT: los tests (y quien pruebe otra copia del repo) no tienen
+    # que tocar la instancia real de la sesión a través de la unit
+    [ -z "${FATAL_NO_UNIT:-}" ] || return 1
     command -v systemctl >/dev/null 2>&1 &&
         systemctl --user cat "$UNIT" >/dev/null 2>&1
 }

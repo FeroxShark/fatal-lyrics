@@ -477,17 +477,27 @@ ShellRoot {
                                                 id: sliderRow
                                                 Column {
                                                     spacing: 2
+                                                    // nombre, para qué es y el número, en una línea:
+                                                    // diez sliders con la pista abajo de cada uno
+                                                    // estiraban la columna al doble que las otras
                                                     Item {
                                                         width: parent.width
                                                         height: sliderName.implicitHeight
                                                         Label95 { id: sliderName; text: rowItem.modelData.label }
+                                                        Hint95 {
+                                                            anchors { left: sliderName.right; leftMargin: 6; right: sliderNum.left
+                                                                      rightMargin: 6; baseline: sliderName.baseline }
+                                                            text: rowItem.modelData.hint
+                                                            wrapMode: Text.NoWrap
+                                                            elide: Text.ElideRight
+                                                        }
                                                         Label95 {
+                                                            id: sliderNum
                                                             anchors.right: parent.right
                                                             text: (root.vals[rowItem.rid] ?? 0).toFixed(2)
                                                             font.family: "monospace"
                                                         }
                                                     }
-                                                    Hint95 { width: parent.width; text: rowItem.modelData.hint }
                                                     Item {
                                                         id: track
                                                         readonly property var spec: rowItem.modelData

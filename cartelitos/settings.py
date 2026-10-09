@@ -68,18 +68,16 @@ GROUPS = [
             ("Mouse (cursor hidden)", "mouse"), ("Keyboard (any key)", "keyboard")]),
     ]},
     {"title": "CRT fine-tuning", "column": 2, "rows": [
-        _slider("crt", "word_flash", "Word flash", "how much each word jolts as it lands", 0.0, 1.0),
-        _slider("crt", "flicker", "Beating", "how hard the picture beats on the peaks", 0.0, 1.0),
+        _slider("crt", "word_flash", "Word flash", "how much each word jolts", 0.0, 1.0),
+        _slider("crt", "flicker", "Beating", "how hard it beats on peaks", 0.0, 1.0),
         _slider("crt", "intensity", "Restlessness", "signal breaks, static", 0.0, 1.5),
         _slider("crt", "camera", "Framing", "how much the shot moves", 0.0, 2.0),
         _slider("crt", "bloom", "Phosphor glow", "light around the letters", 0.0, 2.0),
         _slider("crt", "scanlines", "Scanlines", "depth of the comb", 0.0, 1.0),
         _slider("crt", "noise", "Static", "grain on the glass", 0.0, 1.0),
         _slider("crt", "water_amp", "Water", "sea swell and pond shiver", 0.0, 1.0),
-        _slider("crt", "infect_lead", "Colour lead",
-                "how early the colour jumps to the next screen", 0.0, 0.5),
-        _slider("crt", "alarm_threshold", "Alarm rarity",
-                "how rare the red \"critical\" screen is", 0.0, 1.0),
+        _slider("crt", "infect_lead", "Colour lead", "how early the colour jumps", 0.0, 0.5),
+        _slider("crt", "alarm_threshold", "Alarm rarity", "how rare the red screen is", 0.0, 1.0),
     ]},
 ]
 

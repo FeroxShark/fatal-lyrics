@@ -20,6 +20,9 @@ chmod +x "$REPO_DIR/bin/fatal" "$REPO_DIR/cartelitos.py"
 mkdir -p "$HOME/.local/share/applications"
 sed "s|Exec=fatal|Exec=$HOME/.local/bin/fatal|" "$REPO_DIR/packaging/fatal.desktop" \
     > "$HOME/.local/share/applications/fatal.desktop"
+ICONS="$HOME/.local/share/icons/hicolor/scalable/apps"
+mkdir -p "$ICONS"
+install -m644 "$REPO_DIR/packaging/fatal-lyrics.svg" "$ICONS/fatal-lyrics.svg"
 command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/.local/share/applications"
 
 # clean up legacy symlinks from older versions
@@ -29,4 +32,8 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$HOME/
 
 echo "installed. Play something on Spotify and run: fatal"
 echo "config: auto-created at ~/.config/cartelitos/config.toml (edit with: fatal config)"
+if command -v hyprctl >/dev/null && [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua" ]; then
+    echo "Hyprland (Lua config): keybinds + autostart + layer rule live in packaging/hyprland.lua; load it from hyprland.lua with"
+    echo "    dofile(\"$REPO_DIR/packaging/hyprland.lua\")"
+fi
 echo "system tray (icon + quit button): optional, install gtk3 + libayatana-appindicator"

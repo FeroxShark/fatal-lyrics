@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
-from cartelitos import audio, config, ipc, lyrics, offsets, setup, system, tray, util  # noqa: E402
+from cartelitos import audio, config, ipc, lyrics, offsets, settings, setup, system, tray, util  # noqa: E402
 from cartelitos import __main__ as main  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2939,31 +2939,117 @@ class TestSplitRepeats(unittest.TestCase):
         self.assertNotIn("segs", sent[1])
 
 
-class TestTuneChannel(unittest.TestCase):
-    """El panel de sliders es OTRO proceso escribiendo un archivo: no se le cree
-    nada de lo que manda."""
+class TestSettingsChannel(unittest.TestCase):
+    """La ventana de Ajustes es OTRO proceso escribiendo un archivo: no se le
+    cree nada de lo que manda, y cada cambio se aplica una sola vez."""
 
     def test_a_normal_line_goes_through(self):
-        self.assertEqual(c.parse_tune("flicker=0.250\n"), {"flicker": 0.25})
+        self.assertEqual(settings.parse("5 crt.flicker=0.25\n"), [(5, "crt", "flicker", 0.25)])
 
-    def test_several_lines_at_once(self):
-        got = c.parse_tune("flicker=0.1\nnoise=0.5\n")
-        self.assertEqual(got, {"flicker": 0.1, "noise": 0.5})
+    def test_every_kind_is_parsed(self):
+        got = settings.parse('1 display.karaoke=false\n2 effects.glitch="soft"\n'
+                             '3 display.scale=1.5\n')
+        self.assertEqual(got, [(1, "display", "karaoke", False),
+                               (2, "effects", "glitch", "soft"),
+                               (3, "display", "scale", 1.5)])
 
-    def test_a_key_that_is_not_a_setting_is_ignored(self):
-        self.assertEqual(c.parse_tune("rm=1\nplayer=vlc\nflicker=0.3"), {"flicker": 0.3})
+    def test_a_key_that_is_not_in_the_window_is_ignored(self):
+        got = settings.parse('1 system.player="vlc"\n2 crt.font="x"\n3 rm=1\n4 crt.noise=0.3')
+        self.assertEqual(got, [(4, "crt", "noise", 0.3)])
 
-    def test_garbage_values_are_ignored(self):
-        self.assertEqual(c.parse_tune("flicker=mucho\nnoise=\n"), {})
+    def test_garbage_does_not_crash(self):
+        for junk in ("", "sin igual\n\n", "x crt.noise=0.3", "1 crt.noise=mucho",
+                     "1 crt.noise=", "1 display.karaoke=1", '1 effects.glitch="nuke"'):
+            self.assertEqual(settings.parse(junk), [], junk)
 
-    def test_junk_does_not_crash(self):
-        self.assertEqual(c.parse_tune(""), {})
-        self.assertEqual(c.parse_tune("sin igual\n\n"), {})
+    def test_sliders_are_clamped_and_snapped_to_their_step(self):
+        scale = settings.ROWS["display.scale"]
+        self.assertEqual(settings.coerce(scale, 9), 3.0)
+        self.assertEqual(settings.coerce(scale, 0), 0.5)
+        self.assertEqual(settings.coerce(scale, 1.26), 1.3)
+        self.assertEqual(settings.coerce(settings.ROWS["crt.noise"], 0.123456), 0.12)
+
+    def test_a_bool_is_not_a_number(self):
+        # True es un int en Python: sin el chequeo un toggle mal mandado
+        # dejaría `noise = 1.0` en el TOML
+        self.assertIsNone(settings.coerce(settings.ROWS["crt.noise"], True))
+        self.assertIsNone(settings.coerce(settings.ROWS["display.karaoke"], 0))
+
+    def test_pending_keeps_the_last_value_of_each_key(self):
+        # un arrastre de slider deja varias líneas de la misma clave
+        text = "3 crt.noise=0.3\n1 crt.noise=0.1\n2 crt.bloom=1.0\n"
+        self.assertEqual(settings.pending(text, 0),
+                         ({("crt", "noise"): 0.3, ("crt", "bloom"): 1.0}, 3))
+
+    def test_pending_skips_what_was_already_applied(self):
+        text = "3 crt.noise=0.3\n4 crt.bloom=1.0\n"
+        self.assertEqual(settings.pending(text, 3), ({("crt", "bloom"): 1.0}, 4))
+        self.assertEqual(settings.pending(text, 4), ({}, 4))
+
+    def test_set_cli_writes_the_toml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.toml")
+            old = config.CONFIG_PATH
+            config.CONFIG_PATH = path
+            self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
+            self.assertEqual(settings.set_cli(['effects.glitch="soft"', "crt.noise=0.4"]), 0)
+            got = config.load_config()
+            self.assertEqual(got["effects"]["glitch"], "soft")
+            self.assertEqual(got["crt"]["noise"], 0.4)
+            self.assertEqual(settings.set_cli(["crt.font=1"]), 1)
+
+    def test_the_snapshot_is_json(self):
+        with mock.patch.object(system, "_daemon_pid", return_value=None):
+            snap = json.loads(json.dumps(settings.snapshot()))
+        self.assertEqual(set(snap["values"]), set(settings.ROWS))
+        self.assertFalse(snap["daemon"])
+
+
+class TestSettingsSchema(unittest.TestCase):
+    """Lo que dibuja la ventana sale de settings.GROUPS: una fila que no es una
+    perilla de verdad mueve el control y nada más."""
+
+    SHELL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shell")
+
+    def test_every_row_is_a_real_knob_of_the_right_type(self):
+        for row_id, row in settings.ROWS.items():
+            section, _, key = row_id.partition(".")
+            self.assertIn(key, c.DEFAULTS.get(section, {}), row_id)
+            default = c.DEFAULTS[section][key]
+            if row["kind"] == "toggle":
+                self.assertIsInstance(default, bool, row_id)
+            elif row["kind"] == "choice":
+                self.assertIn(default, [o["value"] for o in row["options"]], row_id)
+            else:
+                self.assertNotIsInstance(default, bool, row_id)
+                self.assertTrue(row["min"] <= default <= row["max"], row_id)
+                self.assertEqual(settings.coerce(row, default), default, row_id)
+
+    def test_every_option_the_tray_had_is_in_the_window(self):
+        # la bandeja se achicó a cambio de esto: nada de lo que tenía se pierde
+        for row_id in ("display.karaoke", "behavior.now_playing", "effects.tearing",
+                       "display.scale", "display.spawn_area", "effects.glitch",
+                       "crt.palette", "crt.split", "crt.exit_on", "crt.flicker",
+                       "crt.word_flash", "crt.water_amp"):
+            self.assertIn(row_id, settings.ROWS)
+        kinds = {row["kind"] for g in settings.GROUPS for row in g["rows"]}
+        self.assertTrue({"crt", "sync"} <= kinds)
+
+    def test_the_tray_is_short(self):
+        self.assertLessEqual(len(tray.TRAY_TOGGLES), 3)
+
+    def test_the_window_and_the_daemon_agree_on_the_wiring(self):
+        with open(os.path.join(self.SHELL, "settings.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        for needle in ("--settings-json", "--settings-set", "cartelitos-settings"):
+            self.assertIn(needle, qml)
+        self.assertTrue(settings.SETTINGS_PATH.endswith("cartelitos-settings"))
 
 
 class TestKnobsAreReachable(unittest.TestCase):
     """Una perilla nueva se agrega hoy en tres lugares: DEFAULTS (valor),
-    CONFIG_EVENT_MAP (si el overlay la necesita) y, si tiene slider, tune.qml.
+    CONFIG_EVENT_MAP (si el overlay la necesita) y, si se toca en vivo,
+    settings.GROUPS (la ventana de Ajustes).
     El TOML de ejemplo (DEFAULT_CONFIG) ya NO es un cuarto lugar: se genera
     solo a partir de DEFAULTS + un dict de comentarios (_CONFIG_COMMENTS), así
     que sólo hace falta agregar el comentario ahí si se quiere prosa — la
@@ -3026,21 +3112,21 @@ class TestKnobsAreReachable(unittest.TestCase):
         "infect_lead",       # décimas de segundo de adelanto del color: se toca a mano
         "alarm_threshold",   # cada cuánto sale el rojo: idem
         "font",              # texto libre, no hay editor de fuentes en el menú
-        "noise", "chroma", "roll", "vignette",   # el panel de `fatal tune` los mueve en vivo
+        "noise", "chroma", "roll", "vignette",   # del shader: noise está en Ajustes, el resto a mano
     }
 
     def test_every_crt_knob_can_be_reached_by_hand(self):
         # el cuarto lugar de una perilla nueva. Sin esto la perilla existe,
         # llega al overlay y hace lo suyo, pero no aparece en `fatal config`:
         # así se perdió cascade_style durante tres fases
-        with open(os.path.join(self.SHELL, "tune.qml"), encoding="utf-8") as f:
-            sliders = set(re.findall(r'\{\s*key:\s*"([a-z_]+)"', f.read()))
+        window = {row_id.partition(".")[2] for row_id in settings.ROWS
+                  if row_id.startswith("crt.")}
         menu = {key for key, section, _, _ in setup.SETTINGS if section == "crt"}
         for key in c.DEFAULTS["crt"]:
             if key in self.MENU_EXEMPT:
                 continue
-            self.assertTrue(key in menu or key in sliders,
-                            f"crt.{key} no está ni en SETTINGS ni en tune.qml: "
+            self.assertTrue(key in menu or key in window,
+                            f"crt.{key} no está ni en SETTINGS ni en la ventana de Ajustes: "
                             "nadie la va a encontrar")
 
     def test_the_exempt_list_has_no_ghosts(self):
@@ -3181,17 +3267,16 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertEqual(overlay, sent,
                           "shell.qml y CONFIG_EVENT_MAP no leen las mismas perillas")
 
-    def test_every_slider_is_a_numeric_crt_key(self):
-        # el panel escribe `clave=valor` y parse_tune descarta lo que no es un
-        # número de [crt]: un slider con otra clave mueve la barra y nada más
-        with open(os.path.join(self.SHELL, "tune.qml"), encoding="utf-8") as f:
-            qml = f.read()
-        keys = re.findall(r'\{\s*key:\s*"([a-z_]+)"', qml)
-        self.assertTrue(keys, "no se encontró ningún slider en tune.qml")
-        for key in keys:
-            self.assertIn(key, c.DEFAULTS["crt"], f"el slider {key} no es una opción de [crt]")
-            self.assertIsInstance(c.DEFAULTS["crt"][key], (int, float))
-            self.assertEqual(c.parse_tune(f"{key}=0.5"), {key: 0.5})
+    def test_every_slider_is_a_numeric_key(self):
+        # la ventana manda el número tal cual y coerce lo encaja en el rango:
+        # un slider sobre una clave que no es número mueve la barra y nada más
+        sliders = [r for r in settings.ROWS.values() if r["kind"] == "slider"]
+        self.assertTrue(sliders, "la ventana de Ajustes no tiene ningún slider")
+        for row in sliders:
+            section, _, key = row["id"].partition(".")
+            self.assertIsInstance(c.DEFAULTS[section][key], (int, float))
+            self.assertEqual(settings.parse(f"1 {row['id']}=0.5"),
+                             [(1, section, key, settings.coerce(row, 0.5))])
 
     def test_composite_knob_is_wired_end_to_end(self):
         # corrida 1 de la tanda 7: la perilla viaja daemon -> overlay -> shader.
@@ -3927,7 +4012,7 @@ class TestKnobsAreReachable(unittest.TestCase):
 
     def test_editing_a_multiline_commented_key_survives_on_the_generated_toml(self):
         # el camino real: `fatal edit` crea el config con DEFAULT_CONFIG (el
-        # generado), y `fatal tune`/el menú despues reescriben una clave
+        # generado), y la ventana de Ajustes/el menú despues reescriben una clave
         # puntual con _save_config. "flicker" y "palette" tienen los
         # comentarios más largos (varias líneas): si el regex de _save_config
         # se llevara puesto el comentario, sería acá donde se vería

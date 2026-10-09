@@ -149,8 +149,8 @@ What the tube does:
   typed out with a block cursor, tiled across the tube — or **cut in pieces
   across your monitors**, `TA` on one screen and `KE` on the next.
 - **Your monitors in order**: the pieces follow your screens left to right.
-  By default it reads the layout the compositor already knows; `fatal config`
-  also lets you name the order yourself, for any number of screens.
+  By default it reads the layout the compositor already knows; the Settings
+  window also lets you set the order by hand, for any number of screens.
 - **It knows where it is inside the song.** Loud and quiet are measured against
   *that* track, not against a fixed number — the loudest moment of a lofi tune
   still counts as its drop, and an average bar of a metal song doesn't. The tube
@@ -307,7 +307,7 @@ no capture, no textures, no timers. `quality` trades resolution for load, and
 - **Game-pause and monitor listing are Hyprland-only.** They shell out to
   `hyprctl`, which has no equivalent on Sway, river or the rest of wlroots.
   Off Hyprland, `game_pause` silently stays off and the monitor list comes
-  back empty (you pick monitors by name yourself in `fatal config`); a
+  back empty (you type monitor names into `config.toml` yourself); a
   warning is logged once. A generic wlroots fallback (`wlr-randr` /
   `swaymsg -t get_outputs` for monitors, `wlr-foreign-toplevel` for the
   active window) is a possible future direction, not implemented today.
@@ -368,8 +368,7 @@ fatal            # toggle on/off
 fatal on|off     # explicit
 fatal restart    # restart it
 fatal status     # ON / OFF, plus anything optional that's missing and what it costs you
-fatal config     # settings menu — every option on one screen, applies live
-fatal setup      # same as `fatal config` (first-run alias)
+fatal ajustes    # the Settings window: every option, live (aliases: settings, config, setup)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 fatal demo       # throws a few fake dialogs, to try settings without music
 fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
@@ -377,7 +376,6 @@ fatal crt setup           # a number on each screen, to write down [crt] order
 fatal crt motif <kind> [--screen <name|index|all>]   # force one screen's drawing right away
 fatal crt motif off       # give the roll back to chance
 fatal crt rare <kind> [--screen <name|index|all>]    # force a rare event (bsod|nosignal|testcard) right away
-fatal ajustes    # the Settings window: every everyday option, live (alias: fatal settings)
 fatal sync + | -          # nudge the lyric 0.1 s forward/back, live
 fatal sync show           # the artist offsets it has learned so far
 fatal sync reset [<artist>|all]   # forget one (default: the artist playing) or all
@@ -387,7 +385,7 @@ fatal sync reset [<artist>|all]   # forget one (default: the artist playing) or 
 
 On first run it creates `~/.config/cartelitos/config.toml` with defaults.
 
-**Nothing needs a restart.** Saving the config — from the menu or from your
+**Nothing needs a restart.** Saving the config — from the Settings window or from your
 own editor — is picked up within about a second and applied to the dialogs
 already on screen. If the file has a typo, the running config is kept as is
 and the error goes to `$XDG_RUNTIME_DIR/cartelitos/daemon.log`; nothing gets
@@ -395,24 +393,23 @@ reset. Logs (and the PID files next to them) live under
 `$XDG_RUNTIME_DIR/cartelitos/`, and are rotated at 5 MB keeping one `.1` backup,
 so a daemon that runs for weeks can't fill your tmpfs.
 
-`fatal config` opens a menu with every setting and its current value on one
-screen. Type a number to change that one thing, and you're back at the menu —
-no walking through questions you don't care about. Changed rows are marked
-and show what the value was when you opened it, `u` puts everything back, and
-`d` throws a few fake dialogs so you can see your changes even with nothing
-playing. It detects your monitors and MPRIS players on its own.
-
-Prefer a text editor? `fatal edit` opens the raw TOML — same live apply.
-
-And for the settings you only understand by moving them while the music plays,
-`fatal ajustes` (or **Settings…** in the tray) opens a Win95 property sheet with
-every everyday option on one screen, grouped and with a one-line hint each: the
-dialogs (karaoke, album art, tearing, size, spawn zone, glitch), the lyric sync
-nudge, the CRT switch with its colours, pace, line split and exit key, and the
-CRT fine-tuning sliders — how hard it beats, how restless the tube is, the glow,
-the scanlines. Every change lands in the config while you move it, so the tube
+Every option lives in one place: `fatal ajustes` (also `fatal config`,
+**Settings…** in the tray, or the **Settings** action of the app launcher entry)
+opens a Win95 property sheet with five tabs — *Dialogs*, *Behavior*, *CRT*,
+*CRT scenes*, *CRT glass* — each option grouped and with a one-line hint. Check
+boxes, option buttons and sliders apply as you move them; text fields (the
+player, the Hyprland keys, the CRT font) save on Enter. It lists your monitors
+and MPRIS players on its own, sets the CRT screen order with ▲/▼ (and **Show
+numbers** puts a big number on each screen to tell them apart), nudges or
+forgets the learned lyric sync, and **Undo changes** puts back everything you
+touched since the window opened. Every change lands in the config, so the tube
 follows along and the value is still there next time. With the daemon off the
-window still opens and saves; the change shows up when you turn it on.
+window still opens and saves; the change shows up when you turn it on. Nothing
+opens a terminal.
+
+Prefer a text editor? `fatal edit` opens the raw TOML — same live apply. The
+only thing that lives just there is `[system] not_a_game`, a list of window
+classes.
 
 ### Syncing by eye
 
@@ -492,7 +489,7 @@ comments and alignment alone, and round-trips the generated sample TOML),
 live config reloading, the lyrics cache, the race where a slow lookup for a
 track you already skipped could overwrite the current one, the daemon's main
 loop (via a dependency-injected `DaemonLoop`), the tray's fallback when `gi`
-isn't available, and the `fatal config` TUI's validation/retry paths. No
+isn't available, and the Settings window's validation of what it writes. No
 dependencies beyond the standard library.
 
 GitHub Actions runs the same command on Python 3.11, 3.12 and 3.13 for every
@@ -525,7 +522,6 @@ because there is nothing to install.
 | `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
 | `behavior` | `game_pause`         | Auto-pause when a window goes fullscreen (any game, no process list needed; **Hyprland-only**, see [Known Limitations](#known-limitations)) | `true` |
 | `system`   | `not_a_game`         | Fullscreen window classes that never count as "a game" for `game_pause` (browsers, video/music players), matched as a substring | `["chrome", "chromium", "firefox", "zen", "brave", "vivaldi", "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid", "haruna", "totem", "spotify", "netflix", "youtube"]` |
-| `system`   | `terminals`          | Terminal emulators to try, in order, when opening the full menu (checked after `$TERMINAL`) | `["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole", "gnome-terminal", "xterm"]` |
 | `crt`      | `enabled`            | Start with the tube on (live switch: `fatal crt on/off`)           | `false`     |
 | `crt`      | `screens`            | Screens the tube takes: `"all"`, a name, a list, or `"same"` as the dialogs | `"all"` |
 | `crt`      | `order`              | Screens left to right (decides where each piece of a split line lands): `"auto"` or a list | `"auto"` |
@@ -611,11 +607,10 @@ package:
 | `settings`  | the Settings window's schema and the watcher that applies its changes |
 | `lyrics`    | lrclib + NetEase clients, on-disk cache, line splitting into beats    |
 | `art`       | album-cover colours (ImageMagick, optional)                           |
-| `system`    | playerctl / hyprctl / terminal lookups, daemon PID, optional-tool check |
+| `system`    | playerctl / hyprctl lookups, daemon PID, optional-tool check            |
 | `ipc`       | the Unix socket and every event sent to the overlay                   |
 | `audio`     | capture, DSP (RMS/DFT/beats/peaks) and the per-track energy profile    |
 | `tray`      | system-tray icon (GTK + AyatanaAppIndicator3, optional)               |
-| `setup`     | the interactive `fatal config` menu                                   |
 | `daemon`    | the main loop                                                         |
 
 Mutable globals (`CFG`, `CACHE_DIR`, `CRT_PATH`, …) are re-exported from

@@ -7,7 +7,13 @@ de Win95**. Tiene un segundo modo, el **CRT**, donde cada monitor se vuelve un t
 catódicos con la letra adentro.
 
 Repo **público**: `https://github.com/FeroxShark/fatal-lyrics`. El binario de sistema es
-`~/.local/bin/cartelitos` (symlink acá). El launcher es relocatable, con `qs -p`.
+`~/.local/bin/fatal` (symlink a `bin/fatal`; `install.sh` lo pone junto con el `.desktop` y el
+ícono). El launcher es relocatable, con `qs -p`.
+
+Sistema (2026-10): CachyOS + **Hyprland 0.56 con config en Lua** — `hyprctl keyword` ya no hace
+nada (contesta "Use eval" con código 0): todo va por `hyprctl eval`. Monitores: `DP-2` izq,
+vertical (x=0) · `HDMI-A-1` principal (x=1080, ahí van los carteles) · `DP-1` der (x=3000, panel
+de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` son del setup viejo.
 
 ## Reglas duras
 
@@ -53,10 +59,10 @@ python3 -m unittest discover -s tests
 ### Para VER un motif
 
 ```bash
-fatal crt motif dunes --screen DP-4    # esa pantalla, ese dibujo, ya
+fatal crt motif dunes --screen DP-2    # esa pantalla, ese dibujo, ya
 fatal crt motif tunnel --screen all    # toda la pared (rompe la unicidad a propósito)
 fatal crt motif off                    # vuelve el sorteo normal
-docs/plans/motif-force.py dunes DP-4 10 --shot t4-dunes   # + captura, y deja todo como estaba
+docs/plans/motif-force.py dunes DP-2 10 --shot t4-dunes   # + captura, y deja todo como estaba
 ```
 
 **NUNCA pescar un motif con palabras clave ni rerollear con `cue drop`.** Así se hacía hasta la
@@ -64,8 +70,10 @@ tanda 4 (`drive-motif.py`, `motif-hunt.py`, hoy OBSOLETOS) y era esperar minutos
 sacara el dibujo buscado. El forzado pisa pool, hold, filtro de validez y palabra clave, y se ve
 aunque no suene nada; la letra sigue dibujándose encima. Kinds válidos: `fatal crt motif --help`.
 
-Autostart: **UNO solo** `exec-once` en `execs.conf` con `sleep 6 && cartelitos restart`. `restart`
-deja estado limpio aunque haya quedado media instancia. No reintroducir un segundo (`docs/TRAMPAS.md`).
+Hyprland: binds, autostart y `no_anim` de las capas viven en `packaging/hyprland.lua`, que se carga
+con `dofile` desde `~/.config/hypr/hyprland.lua`. Autostart: **UNO solo**, ahí, con `sleep 6 &&
+fatal restart`. `restart` deja estado limpio aunque haya quedado media instancia. No reintroducir
+un segundo (`docs/TRAMPAS.md`).
 
 ## Dónde está el resto (leer sólo lo que toca)
 

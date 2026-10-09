@@ -514,6 +514,19 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
 `execs.conf` veía sus pidfiles y hacía no-op → boot roto. Queda UNO solo, en `execs.conf`, con
 `sleep 6 && cartelitos restart`. No reintroducir un segundo.
 
+Desde Hyprland 0.56 (config en Lua, 2026-10) ese UNO vive en `packaging/hyprland.lua`
+(`hl.on("hyprland.start", ...)` con `sleep 6 && fatal restart`), cargado con `dofile`. Sigue
+siendo uno solo: no sumar otro `exec_cmd` en `hyprland.lua`.
+
+## Hyprland 0.56 en Lua: `hyprctl keyword` falla MUDO
+
+Con la config en Lua, `hyprctl keyword ...` contesta "keyword can't work with non-legacy parsers.
+Use eval." con código de salida **0**: un rebind de `[keys]` parecía andar y la tecla no existía.
+Va `hyprctl eval 'hl.bind("SUPER + ALT + Right", hl.dsp.exec_cmd("..."))'` (y `hl.unbind`).
+Los modificadores en MAYÚSCULA: `"Super + Alt + F12"` falla con `Unknown keysym: "Super"`.
+`system._hypr_lua()` lo detecta una vez con `hyprctl eval "return 0"` (el Lua contesta `ok`).
+Las layer rules comparan el namespace ENTERO: `"^cartelitos.*$"`, no `"^cartelitos"`.
+
 ## Drivers de la tensión: el `clear` del daemon y el reinicio
 
 - Con el reproductor pausado el daemon manda `clear` (why=track) a los ~15 s ("long pause:

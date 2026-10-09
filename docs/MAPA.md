@@ -81,7 +81,13 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   `config.py` porque la escribe el propio daemon, no Ferox a mano. Adentro vive también el
   perfil por tema (`_pending`, en memoria): lo que todavía no se ganó el derecho a durar.
 - `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
-  teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon.
+  teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon. Con config Lua
+  (0.56+, `system._hypr_lua()`) van como `hyprctl eval 'hl.bind(...)'` y los modificadores en
+  mayúscula (`_lua_keys`); con hyprlang, `hyprctl keyword`.
+- `packaging/` — `fatal.desktop` + `fatal-lyrics.svg` (ícono, Win95) para el lanzador, que
+  `install.sh` copia a `~/.local/share`; `hyprland.lua` (binds Super+Shift+Y / Super+Alt+flechas,
+  autostart, `no_anim` de las capas `cartelitos*`) para el `dofile` de la config de Hyprland;
+  `PKGBUILD`. Pantallas de Ferox hoy: DP-2 · HDMI-A-1 (carteles) · DP-1 (widgets, fuera del CRT).
 - `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`) — la captura
   estéreo se baja a mono ANTES de `AudioAnalyzer.feed` (no descalibra perfiles viejos); el scope
   dibuja Lissajous L/R real. Detalle y números: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.

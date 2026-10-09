@@ -41,7 +41,7 @@ fi
 [ -f "$HOME/.local/share/applications/cartelitos.desktop" ] && rm "$HOME/.local/share/applications/cartelitos.desktop"
 
 echo "installed. Play something on Spotify and run: fatal"
-echo "config: auto-created at ~/.config/cartelitos/config.toml (edit with: fatal config)"
+echo "config: auto-created at ~/.config/cartelitos/config.toml (every option: fatal ajustes)"
 if command -v hyprctl >/dev/null && [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua" ]; then
     echo "Hyprland (Lua config): keybinds + layer rule live in packaging/hyprland.lua; load it from hyprland.lua with"
     echo "    dofile(\"$REPO_DIR/packaging/hyprland.lua\")"

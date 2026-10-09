@@ -8,3 +8,8 @@ Icon=fatal-lyrics
 Terminal=false
 Categories=AudioVideo;Utility;
 Keywords=lyrics;letras;spotify;windows;cartelitos;fatal-lyrics;
+Actions=settings;
+
+[Desktop Action settings]
+Name=Settings
+Exec=fatal ajustes

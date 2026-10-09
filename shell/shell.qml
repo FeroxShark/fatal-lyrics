@@ -3524,7 +3524,7 @@ ShellRoot {
     SequentialAnimation {
         id: keysHintAnim
         NumberAnimation {
-            target: root; property: "keysHintOpacity"; to: 0.9
+            target: root; property: "keysHintOpacity"; to: 1
             duration: Motion.enterMs; easing.type: Easing.OutExpo
         }
         // con el ajuste, lo que importa es el número: se lee en menos
@@ -4822,39 +4822,47 @@ ShellRoot {
                 WlrLayershell.namespace: "cartelitos-keys"
                 exclusionMode: ExclusionMode.Ignore
                 color: "transparent"
+                // arriba al medio, pero no pegado al borde: ahí suele vivir la
+                // barra del escritorio, y el rótulo encima de la hora no se lee
                 anchors.top: true
-                margins.top: Math.round(10 * root.cfgScale)
-                implicitWidth: keysCol.implicitWidth + 24
-                implicitHeight: keysCol.implicitHeight + 8
+                margins.top: 56
+                implicitWidth: keysTip.width
+                implicitHeight: keysTip.height
 
                 Region { id: keysNoInput }
                 mask: keysNoInput
 
-                Column {
-                    id: keysCol
-                    anchors.centerIn: parent
-                    spacing: 2
+                // el tooltip amarillo de Win95: es lo que en ese sistema
+                // decía "esta tecla hace tal cosa", y se lee sobre cualquier
+                // fondo (texto suelto con borde no, sobre un wallpaper)
+                Rectangle {
+                    id: keysTip
+                    width: keysCol.implicitWidth + 16
+                    height: keysCol.implicitHeight + 8
+                    color: "#ffffe1"
+                    border.color: "#000000"
+                    border.width: 1
                     opacity: root.keysHintOpacity
 
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: root.keysHint
-                        color: "#ffffff"
-                        style: Text.Outline
-                        styleColor: "#000000"
-                        font.pixelSize: Math.max(10, Math.round(12 * root.cfgScale))
-                        font.letterSpacing: 2
-                    }
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        visible: root.keysHintSync
-                        text: "sync " + root.syncLabel()
-                        color: "#ffffff"
-                        style: Text.Outline
-                        styleColor: "#000000"
-                        font.pixelSize: Math.max(10, Math.round(12 * root.cfgScale))
-                        font.bold: true
-                        font.letterSpacing: 2
+                    Column {
+                        id: keysCol
+                        anchors.centerIn: parent
+                        spacing: 1
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: root.keysHint
+                            color: "#000000"
+                            font.pixelSize: Math.max(11, Math.round(12 * root.cfgScale))
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            visible: root.keysHintSync
+                            text: "sync " + root.syncLabel()
+                            color: "#000080"
+                            font.pixelSize: Math.max(11, Math.round(12 * root.cfgScale))
+                            font.bold: true
+                        }
                     }
                 }
             }

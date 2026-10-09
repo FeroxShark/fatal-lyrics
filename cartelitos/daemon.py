@@ -13,6 +13,7 @@ from . import ipc
 from . import lyrics as lyr
 from . import mood
 from . import offsets
+from . import settings
 from . import system
 from . import tray
 from .util import acquire_instance_lock, instance_lock_holder, log, mark_ready
@@ -119,7 +120,8 @@ class DaemonLoop:
 
     def __init__(self, *, gaming=None, playerctl_state=None, ipc=ipc, config=config,
                  audio=audio, art=art, lyr=lyr, offsets=offsets, tray=tray, log=log,
-                 sleep=time.sleep, monotonic=time.monotonic, system=system):
+                 sleep=time.sleep, monotonic=time.monotonic, system=system,
+                 settings=settings):
         self._gaming = gaming or system.gaming
         self._playerctl_state = playerctl_state or system.playerctl_state
         self._system = system
@@ -130,6 +132,7 @@ class DaemonLoop:
         self._lyr = lyr
         self._offsets = offsets
         self._tray = tray
+        self._settings = settings
         self._log = log
         self._sleep = sleep
         self._monotonic = monotonic
@@ -392,8 +395,9 @@ class DaemonLoop:
         return self.voice_active
 
     def sync(self, delta):
-        """Gesto de ajuste fino (T0.13): keybind, menú de bandeja o el
-        watcher del archivo de sync (otro proceso) llaman acá.
+        """Gesto de ajuste fino (T0.13): el keybind, `fatal sync` y los botones
+        de la ventana de Ajustes escriben el archivo de sync, y su watcher
+        llama acá.
 
         La cuenta la lleva offsets.record(), no este método: se aplica al tema
         que suena de una, y se guarda para el artista recién cuando DOS temas
@@ -418,7 +422,7 @@ class DaemonLoop:
 
     def _watch_sync(self):
         """Vigila SYNC_PATH (lo escribe `fatal sync +/-`, otro proceso) y
-        aplica el ajuste acá — mismo mecanismo de archivo que crt/tune,
+        aplica el ajuste acá — mismo mecanismo de archivo que crt/Ajustes,
         porque el daemon vivo no es alcanzable de otra forma desde afuera."""
         last = None
         try:
@@ -498,11 +502,11 @@ class DaemonLoop:
         # default no se toca, porque ese bind ya vive en la config de Hyprland
         # y escribirlo de nuevo sería tener el mismo atajo dos veces.
         self._system.apply_key_binds(None, self._config.CFG["keys"])
-        self._tray.start_tray(sync=self.sync)
+        self._tray.start_tray()
         self._ipc.send(self._ipc._config_event())
         threading.Thread(target=self._config.watch_config, daemon=True, name="config").start()
         threading.Thread(target=self._audio.audio_loop, daemon=True, name="audio").start()
-        threading.Thread(target=self._config.watch_tune, daemon=True, name="tune").start()
+        threading.Thread(target=self._settings.watch_settings, daemon=True, name="settings").start()
         threading.Thread(target=self._watch_sync, daemon=True, name="sync").start()
         # T5.1: el hilo del micrófono existe siempre, pero no abre nada mientras
         # `sing` esté apagada (que es el default): dormita mirando la perilla

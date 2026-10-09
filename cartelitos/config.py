@@ -531,66 +531,11 @@ def apply_config():
     return True
 
 
-TUNE_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-tune")
-
-
-def parse_tune(text):
-    """Líneas `clave=valor` que manda el panel de sliders. Devuelve sólo las
-    claves que existen en [crt] y con el número bien formado: es un archivo que
-    escribe otro proceso, no se le cree nada."""
-    out = {}
-    for line in text.splitlines():
-        if "=" not in line:
-            continue
-        key, _, raw = line.partition("=")
-        key = key.strip()
-        if key not in DEFAULTS["crt"]:
-            continue
-        try:
-            value = float(raw.strip())
-        except ValueError:
-            continue
-        out[key] = value
-    return out
-
-
-def watch_tune():
-    """Aplica lo que mueve el panel de sliders (`fatal tune`).
-
-    Va por archivo y no por el socket porque el socket lo sirve el overlay: el
-    panel es otro proceso y sólo tiene que dejar el valor escrito. El daemon lo
-    pasa a la config, así el cambio queda para la próxima vez."""
-    # Se anota lo que YA estaba al arrancar: así lo que quedó de una sesión
-    # anterior no se aplica, pero el primer movimiento del slider sí (antes se
-    # perdía el primer arrastre, que es justo el que uno prueba).
-    try:
-        last = os.stat(TUNE_PATH).st_mtime_ns
-    except OSError:
-        last = None
-    while True:
-        time.sleep(0.35)
-        try:
-            stamp = os.stat(TUNE_PATH).st_mtime_ns
-        except OSError:
-            continue
-        if stamp == last:
-            continue
-        last = stamp
-        try:
-            with open(TUNE_PATH) as f:
-                changes = parse_tune(f.read())
-        except OSError:
-            continue
-        for key, value in changes.items():
-            log(f"tune: crt.{key} = {value}")
-            set_option(key, "crt", value)
-
-
 # ------------------------------------------------- interruptor del karaoke
 # `fatal sing on|off|toggle` es OTRO proceso y no puede tocar el CFG vivo: deja
-# el pedido en un archivo y el daemon lo pasa a la config (mismo camino que
-# `fatal tune`). A diferencia del CRT, acá el archivo NO es el estado: el estado
-# es la perilla del TOML, que es lo que viaja al overlay y lo que sobrevive al
+# el pedido en un archivo y el daemon lo pasa a la config (mismo camino que la
+# ventana de Ajustes, cartelitos/settings.py). A diferencia del CRT, acá el
+# archivo NO es el estado: el estado es la perilla del TOML, que es lo que viaja al overlay y lo que sobrevive al
 # reinicio. Este archivo es sólo el timbre.
 SING_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-sing")
 

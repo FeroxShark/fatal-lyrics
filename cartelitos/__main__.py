@@ -1,7 +1,8 @@
 """Punto de entrada: `python3 -m cartelitos` (y lo que llama bin/fatal)."""
+import json
 import sys
 
-from . import daemon, motifs, offsets, setup, system
+from . import daemon, motifs, offsets, settings, setup, system
 
 
 def _sync_reset(who):
@@ -62,6 +63,13 @@ def run(argv=None):
         sys.exit(motifs.dark_cli(argv[argv.index("--crt-dark") + 1:]))
     if "--crt-rare" in argv:
         sys.exit(motifs.rare_cli(argv[argv.index("--crt-rare") + 1:]))
+    # la ventana de Ajustes (shell/settings.qml) lee de acá qué dibujar y con
+    # qué valores, y escribe por acá cuando no hay daemon que aplique
+    if "--settings-json" in argv:
+        print(json.dumps(settings.snapshot()))
+        sys.exit(0)
+    if "--settings-set" in argv:
+        sys.exit(settings.set_cli(argv[argv.index("--settings-set") + 1:]))
     if "--setup" in argv:
         try:
             setup.setup()

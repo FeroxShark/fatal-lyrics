@@ -23,9 +23,9 @@ from .util import (
 
 from .config import (
     CFG, CONFIG_DIR, CONFIG_PATH, CRT_PATH, DEFAULT_CONFIG, DEFAULTS,
-    SING_PATH, TUNE_PATH, apply_config, crt_on, load_config, parse_sing,
-    parse_tune, read_config,
-    reload_config, set_crt, set_option, watch_config, watch_sing, watch_tune,
+    SING_PATH, apply_config, crt_on, load_config, parse_sing,
+    read_config,
+    reload_config, set_crt, set_option, watch_config, watch_sing,
     _save_config, _toml_val,
 )
 
@@ -79,7 +79,9 @@ from .offsets import (
     reset_all as offset_reset_all, track_get as offset_track_get,
 )
 
-from .tray import SCALE_STEP, TRAY_CHOICES, TRAY_TOGGLES, start_tray
+from .tray import TRAY_TOGGLES, start_tray
+
+from .settings import SETTINGS_PATH, watch_settings
 
 from .setup import (
     BOLD, DIM, OFF, SETTINGS, YEL, YESNO, _ask_crt_order, _ask_int, _ask_num,

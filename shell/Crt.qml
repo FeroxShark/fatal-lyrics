@@ -2555,7 +2555,12 @@ PanelWindow {
                 top: parent.top
                 topMargin: Math.round(crt.pad * 0.75)
             }
-            text: crt.grabKeyboard ? "ANY KEY RETURNS" : "MOVE THE MOUSE TO RETURN"
+            // y abajo las teclas (sync y tubo), las de [keys]: las mismas que
+            // el rótulo de los carteles, en mayúsculas como todo el tubo
+            text: (crt.grabKeyboard ? "ANY KEY RETURNS" : "MOVE THE MOUSE TO RETURN")
+                + (crt.ctl.keysHint !== "" ? "\n" + crt.ctl.keysHint.toUpperCase() : "")
+            horizontalAlignment: Text.AlignHCenter
+            lineHeight: 1.6
             color: crt.pal.ink
             font.family: crt.fontFamily
             font.pixelSize: Math.max(9, Math.round(crt.shortSide * 0.013))
@@ -2569,6 +2574,17 @@ PanelWindow {
                 NumberAnimation { target: hint; property: "opacity"; to: 0.6; duration: 250 }
                 PauseAnimation { duration: 3200 }
                 NumberAnimation { target: hint; property: "opacity"; to: 0.08; duration: 2500 }
+            }
+
+            // tema nuevo (o `fatal demo`): se vuelve a leer, como al prender.
+            // El ajuste del sync no la rearma: ése ya tiene su rótulo propio
+            // en la pantalla enfocada (`syncHint`), y dos a la vez no.
+            Connections {
+                target: crt.ctl
+                function onKeysHintGenChanged() {
+                    if (crt.visible && !crt.ctl.keysHintSync)
+                        hintIntro.restart();
+                }
             }
         }
 

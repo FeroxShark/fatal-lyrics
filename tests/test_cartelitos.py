@@ -1587,6 +1587,8 @@ class TestConfigEvent(unittest.TestCase):
         expected = {"cmd": "config"}
         for event_key, section, cfg_key in ipc.CONFIG_EVENT_MAP:
             expected[event_key] = config.CFG[section][cfg_key]
+        # lo único que no es una perilla: el rótulo armado con [keys]
+        expected["keys_hint"] = system.keys_hint(config.CFG["keys"])
         self.assertEqual(ev, expected)
 
 
@@ -2738,6 +2740,53 @@ class TestSyncKeyBinds(unittest.TestCase):
         self.assertEqual([cmd[1] for cmd in cmds], ["eval", "eval"])
         self.assertEqual(cmds[0][2], 'hl.unbind("SUPER + ALT + Right")')
         self.assertTrue(cmds[1][2].startswith('hl.bind("SUPER + F5", hl.dsp.exec_cmd("/'))
+
+    def test_the_crt_key_is_bound_like_the_sync_ones(self):
+        new = dict(self.D, crt_toggle="Super+Shift, U")
+        cmds = system.key_bind_commands(None, new)
+        self.assertEqual(cmds[0], ["hyprctl", "keyword", "unbind", self.D["crt_toggle"]])
+        self.assertTrue(cmds[1][3].startswith("Super+Shift, U, exec, /"))
+        self.assertTrue(cmds[1][3].endswith("/bin/fatal crt toggle"), cmds[1][3])
+
+    def test_a_keys_dict_without_the_crt_key_leaves_it_alone(self):
+        # un [keys] de antes del CRT: la perilla que falta es la de fábrica, no
+        # "" — leerla vacía desbindearía la tecla del tubo sin que nadie la toque
+        old = {"sync_forward": "Super, F5", "sync_back": self.D["sync_back"]}
+        cmds = system.key_bind_commands(None, old) + system.key_bind_commands(old, dict(old))
+        self.assertFalse(any("crt" in " ".join(cmd) or self.D["crt_toggle"] in cmd
+                             for cmd in cmds), cmds)
+
+
+class TestKeysHint(unittest.TestCase):
+    """El rótulo de las teclas que la letra muestra al empezar un tema: sale de
+    [keys], así que si cambia un bind cambia el texto."""
+
+    def test_the_default_keys(self):
+        self.assertEqual(system.keys_hint(c.DEFAULTS["keys"]),
+                         "Super+Alt+→ / ←  sync ±0.1 s   ·   Super+Shift+Y  CRT")
+
+    def test_a_changed_bind_changes_the_text(self):
+        hint = system.keys_hint(dict(c.DEFAULTS["keys"], sync_forward="Super, F5",
+                                     sync_back="Super, F6"))
+        self.assertTrue(hint.startswith("Super+F5 / F6  sync ±0.1 s"), hint)
+
+    def test_different_modifiers_are_both_written(self):
+        hint = system.keys_hint({"sync_forward": "Super, F5", "sync_back": "Ctrl+Alt, F6",
+                                 "crt_toggle": ""})
+        self.assertEqual(hint, "Super+F5 / Ctrl+Alt+F6  sync ±0.1 s")
+
+    def test_an_empty_key_is_left_out(self):
+        hint = system.keys_hint({"sync_forward": "", "sync_back": "super alt, left",
+                                 "crt_toggle": "F9"})
+        self.assertEqual(hint, "Super+Alt+←  sync -0.1 s   ·   F9  CRT")
+
+    def test_no_keys_no_hint(self):
+        self.assertEqual(system.keys_hint({"sync_forward": "", "sync_back": "",
+                                           "crt_toggle": ""}), "")
+
+    def test_it_travels_in_the_config_event(self):
+        self.assertEqual(ipc._config_event()["keys_hint"],
+                         system.keys_hint(config.CFG["keys"]))
         self.assertTrue(cmds[1][2].endswith('/bin/fatal sync +"))'))
 
     def test_lua_modifiers_go_uppercase(self):

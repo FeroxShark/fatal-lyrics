@@ -83,6 +83,18 @@ ShellRoot {
     // dejan el mismo número y el segundo no se vería.
     property int syncGen: 0
 
+    // ---- el rótulo de las teclas: el atajo del sync (y el del tubo) escrito
+    // chico, unos segundos al empezar un tema — igual que la salida del tubo
+    // en Crt.qml. Sin esto el sync no existe para nadie que no lea el README.
+    // El texto lo arma el daemon con [keys] (`system.keys_hint`): si cambia el
+    // bind, cambia el rótulo.
+    property string keysHint: ""
+    // el timbre, igual que `syncGen`: sube al empezar un tema, en el demo y
+    // con cada ajuste del sync sin tubo (ahí con el offset abajo)
+    property int keysHintGen: 0
+    property bool keysHintSync: false
+    property real keysHintOpacity: 0
+
     // ---- modo CRT: el tubo full-bleed que tapa cada monitor (opt-in)
     property bool crtOn: false
     property string crtScreens: "all"    // igual que `screen`, pero para el tubo ("same" = el mismo)
@@ -3470,6 +3482,10 @@ ShellRoot {
                 + " offset=" + syncLabel().replace(/\s+/g, " "));
             return;      // lo dibuja Crt.qml, en la pantalla enfocada
         }
+        // el rótulo de las teclas vuelve un toque, con el acumulado: el que
+        // ajusta a ojo ve cuánto lleva y cuál es la otra tecla
+        keysHintSync = true;
+        keysHintGen++;
         // sin tubo, el cartel de Windows de siempre. El texto es el que
         // mandaba el daemon hasta la tanda 2 (el escalón, no el acumulado):
         // es un cartel más entre otros y ahí el número corto se lee mejor.
@@ -3494,6 +3510,29 @@ ShellRoot {
         npDocked = false;
         npSerial++;
         npDockTimer.restart();
+        keysHintSync = false;
+        keysHintGen++;
+    }
+
+    // Va en el root y no adentro de la ventana del rótulo: la ventana se
+    // mapea recién cuando la opacidad pasa de cero, y una animación que
+    // viviera adentro de una ventana sin mapear no tendría quién la avance.
+    // Entra como todo (`enterMs`, OutExpo) y se apaga con `burnFadeMs`, no con
+    // `exitMs`: no es algo que se va para dejarle lugar a otra cosa, es una
+    // marca que se apaga sin llamar la atención (como la ayuda del tubo).
+    onKeysHintGenChanged: keysHintAnim.restart()
+    SequentialAnimation {
+        id: keysHintAnim
+        NumberAnimation {
+            target: root; property: "keysHintOpacity"; to: 0.9
+            duration: Motion.enterMs; easing.type: Easing.OutExpo
+        }
+        // con el ajuste, lo que importa es el número: se lee en menos
+        PauseAnimation { duration: root.keysHintSync ? 1500 : 3200 }
+        NumberAnimation {
+            target: root; property: "keysHintOpacity"; to: 0
+            duration: Motion.burnFadeMs; easing.type: Easing.InOutQuad
+        }
     }
 
     // botón "No" (si troll_no): duplica el cartel, el original queda
@@ -3549,6 +3588,9 @@ ShellRoot {
             const prop = map[key];
             root[prop] = ev[key] ?? root[prop];
         }
+        // no es una perilla (el mapa de arriba es perilla por perilla): es el
+        // texto que el daemon arma con las de [keys]
+        keysHint = ev.keys_hint ?? keysHint;
         // la config decide cómo se reparte una línea (director, focus, split,
         // iown): lo que se anticipó con la config vieja ya no es lo que va a
         // pasar. Se tira y la línea que suena se vuelve a repartir sola.
@@ -3705,6 +3747,10 @@ ShellRoot {
                             root.syncArtist = ev.artist || "";
                             root.syncGen++;
                             root.syncNotice();
+                        } else if (ev.cmd === "keys_hint") {
+                            // `fatal demo`: el rótulo como al empezar un tema
+                            root.keysHintSync = false;
+                            root.keysHintGen++;
                         } else if (ev.cmd === "mood") {
                             // corrida 3: sólo actualiza `crtMood`; `crtSet`
                             // lee `crtMoodLocked`, que se congela en show()
@@ -4760,6 +4806,55 @@ ShellRoot {
                             if (!dragging)
                                 root.dismiss(win.modelData.serial);
                         }
+                    }
+                }
+            }
+
+            // El rótulo de las teclas, arriba al medio. Ventana propia y chica,
+            // sin input (el mouse pasa siempre: es para leer), y sólo mapeada
+            // mientras se ve. Con el tubo prendido lo dibuja Crt.qml, debajo
+            // de su propia ayuda.
+            PanelWindow {
+                id: keysWin
+                visible: !root.crtOn && root.keysHint !== "" && root.keysHintOpacity > 0.01
+                screen: perScreen.scr
+                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.namespace: "cartelitos-keys"
+                exclusionMode: ExclusionMode.Ignore
+                color: "transparent"
+                anchors.top: true
+                margins.top: Math.round(10 * root.cfgScale)
+                implicitWidth: keysCol.implicitWidth + 24
+                implicitHeight: keysCol.implicitHeight + 8
+
+                Region { id: keysNoInput }
+                mask: keysNoInput
+
+                Column {
+                    id: keysCol
+                    anchors.centerIn: parent
+                    spacing: 2
+                    opacity: root.keysHintOpacity
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.keysHint
+                        color: "#ffffff"
+                        style: Text.Outline
+                        styleColor: "#000000"
+                        font.pixelSize: Math.max(10, Math.round(12 * root.cfgScale))
+                        font.letterSpacing: 2
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: root.keysHintSync
+                        text: "sync " + root.syncLabel()
+                        color: "#ffffff"
+                        style: Text.Outline
+                        styleColor: "#000000"
+                        font.pixelSize: Math.max(10, Math.round(12 * root.cfgScale))
+                        font.bold: true
+                        font.letterSpacing: 2
                     }
                 }
             }

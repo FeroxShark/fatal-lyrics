@@ -387,6 +387,8 @@ SETTINGS = [
      lambda c: _ask_key("Keys that nudge the lyric forward 0.1 s", c)),
     ("sync_back", "keys", "Push the lyric back 0.1 s",
      lambda c: _ask_key("Keys that push the lyric back 0.1 s", c)),
+    ("crt_toggle", "keys", "Turn the CRT mode on / off",
+     lambda c: _ask_key("Keys that turn the CRT mode on and off", c)),
 ]
 
 DIM, BOLD, YEL, OFF = "\033[2m", "\033[1m", "\033[33m", "\033[0m"

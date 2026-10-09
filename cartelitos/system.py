@@ -260,7 +260,11 @@ def _terminal():
 # UNBIND del anterior, BIND del nuevo. Volver al valor de fábrica también pasa
 # por acá — si sólo se actuara "cuando difiere del default", volver dejaría la
 # tecla muerta hasta el próximo reload de Hyprland, porque el unbind ya se hizo.
-SYNC_KEYS = (("sync_forward", "+"), ("sync_back", "-"))
+# perilla de [keys] -> lo que corre el bind. El del CRT entró después (con el
+# rótulo de las teclas en la letra): para que el rótulo salga de la config, la
+# tecla del tubo tenía que estar en la config, y entonces se bindea igual.
+BIND_KEYS = (("sync_forward", "sync +"), ("sync_back", "sync -"),
+             ("crt_toggle", "crt toggle"))
 # de fábrica; se lee de config para que haya UN solo lugar con el valor
 DEFAULTS_KEYS = config.DEFAULTS["keys"]
 
@@ -316,9 +320,11 @@ def key_bind_commands(old, new, lua=False):
     `hl.unbind`/`hl.bind` (Hyprland 0.56+) o el `hyprctl keyword` de antes."""
     out = []
     first = old is None
-    for key, arg in SYNC_KEYS:
-        want = (new.get(key) or "").strip()
-        was = None if first else (old.get(key) or "").strip()
+    for key, arg in BIND_KEYS:
+        # una perilla que falta es la de fábrica (un dict de [keys] de antes
+        # del CRT): leerla como "" sería desbindear la tecla del tubo
+        want = (new.get(key, DEFAULTS_KEYS.get(key)) or "").strip()
+        was = None if first else (old.get(key, DEFAULTS_KEYS.get(key)) or "").strip()
         if first:
             if want == DEFAULTS_KEYS.get(key):
                 continue        # el bind del usuario ya hace esto
@@ -327,7 +333,7 @@ def key_bind_commands(old, new, lua=False):
         # el anterior sale SIEMPRE, incluso el del default: si no, el atajo
         # viejo sigue vivo y dos binds mandan el mismo gesto dos veces
         gone = DEFAULTS_KEYS.get(key) if first else was
-        cmd = f"{_fatal_bin()} sync {arg}"
+        cmd = f"{_fatal_bin()} {arg}"
         if lua:
             if gone:
                 out.append(["hyprctl", "eval", f"hl.unbind({_lua_str(_lua_keys(gone))})"])
@@ -341,6 +347,46 @@ def key_bind_commands(old, new, lua=False):
         if want:
             out.append(["hyprctl", "keyword", "bind", f"{want}, exec, {cmd}"])
     return out
+
+
+_ARROWS = {"right": "→", "left": "←", "up": "↑", "down": "↓"}
+
+
+def _pretty_keys(hypr):
+    """"Super+Alt, Right" a ("Super+Alt+", "→"): los modificadores con la
+    mayúscula de siempre y las flechas como flechas. Separados para poder
+    escribir "Super+Alt+→ / ←" cuando los dos sync comparten modificadores."""
+    mods, _, key = (hypr or "").partition(",")
+    if not key.strip():          # sin coma: un bind pelado, sin modificadores
+        mods, key = "", mods
+    parts = [m.capitalize() for m in mods.replace("+", " ").split()]
+    key = key.strip()
+    key = _ARROWS.get(key.lower(), key.upper() if len(key) == 1 else key)
+    return ("+".join(parts) + "+" if parts else ""), key
+
+
+def keys_hint(keys):
+    """El rótulo de las teclas que la letra muestra unos segundos al empezar
+    un tema: "Super+Alt+→ / ←  sync ±0.1 s   ·   Super+Shift+Y  CRT".
+
+    Sale de [keys] y no de un texto fijo: si alguien cambia el bind, el rótulo
+    cambia con él (la config es la que manda los binds, ver arriba). Una tecla
+    vacía no aparece; sin ninguna, "" y el overlay no dibuja nada. Fuera de
+    Hyprland igual se manda: las perillas dicen qué teclas habría."""
+    get = lambda k: (keys.get(k, DEFAULTS_KEYS.get(k)) or "").strip()
+    fwd, back, crt = get("sync_forward"), get("sync_back"), get("crt_toggle")
+    out = []
+    if fwd and back:
+        (fm, fk), (bm, bk) = _pretty_keys(fwd), _pretty_keys(back)
+        both = fm + fk + " / " + (bk if fm == bm else bm + bk)
+        out.append(both + "  sync ±0.1 s")
+    elif fwd or back:
+        m, k = _pretty_keys(fwd or back)
+        out.append(m + k + "  sync " + ("+" if fwd else "-") + "0.1 s")
+    if crt:
+        m, k = _pretty_keys(crt)
+        out.append(m + k + "  CRT")
+    return "   ·   ".join(out)
 
 
 def apply_key_binds(old, new, run=None, lua=None):

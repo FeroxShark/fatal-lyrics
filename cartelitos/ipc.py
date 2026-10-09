@@ -7,6 +7,7 @@ import time
 
 from . import config
 from . import lyrics
+from . import system
 
 SOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos.sock")
 
@@ -101,6 +102,8 @@ def _config_event():
     ev = {"cmd": "config"}
     for event_key, section, cfg_key in CONFIG_EVENT_MAP:
         ev[event_key] = cfg[section][cfg_key]
+    # no es una perilla: es el texto armado con las de [keys]
+    ev["keys_hint"] = system.keys_hint(cfg["keys"])
     return ev
 
 
@@ -307,6 +310,9 @@ DEMO_LINES = [
 
 
 def _demo_burst():
+    # el rótulo de las teclas sale igual que al empezar un tema: el demo es
+    # "así se ve", y eso también se ve al empezar
+    send({"cmd": "keys_hint"})
     for i, line in enumerate(DEMO_LINES):
         show(line, "fatal-lyrics — demo")
         if i < len(DEMO_LINES) - 1:

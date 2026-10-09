@@ -83,6 +83,9 @@ _CONFIG_COMMENTS = {
                         "what the shipped keybinds already use, so leaving them alone\n"
                         "never fights your own config. \"\" = no key, use fatal sync +",
         "sync_back": "...and the ones that push it back 0.1 s",
+        "crt_toggle": "keys that turn the CRT mode on and off (same syntax and same\n"
+                      "rule: only touched if you change it). The lyric shows these\n"
+                      "keys for a few seconds when a song starts",
     },
     "crt": {
         "enabled": "true = start with the tube on",
@@ -332,7 +335,7 @@ _SECTION_INTRO = {
     "keys": "# The only keys fatal-lyrics binds by itself, and only when you change them\n"
             "# from what is written here: the default pair is what the shipped Hyprland\n"
             "# keybinds already run, so the out-of-the-box case touches nothing.\n"
-            "# Hyprland only. Anywhere else, use: fatal sync + | -",
+            "# Hyprland only. Anywhere else, use: fatal sync + | -  and  fatal crt toggle",
     "crt": "# CRT mode: every screen becomes one big cathode ray tube showing the lyric.\n"
            "# It covers the whole desktop, so it is opt-in and toggled by hand:\n"
            "#   fatal crt on | off | toggle     (works even if the daemon is dead)",
@@ -404,6 +407,7 @@ DEFAULTS = {
     },
     "keys": {
         "sync_forward": "Super+Alt, Right", "sync_back": "Super+Alt, Left",
+        "crt_toggle": "Super+Shift, Y",
     },
     "crt": {
         "enabled": False, "screens": "all", "order": "auto", "palette": "album",
@@ -516,8 +520,9 @@ def apply_config():
     # círculo. Acá ya está todo cargado y sale gratis. Lo mismo system.
     from . import ipc
     from . import system
-    # las teclas del sync no viajan al overlay: las aplica Hyprland. Se pasa el
-    # valor anterior porque cambiar un bind es unbind del viejo + bind del nuevo
+    # las teclas las aplica Hyprland (al overlay sólo viaja el rótulo, en el
+    # evento de config). Se pasa el valor anterior porque cambiar un bind es
+    # unbind del viejo + bind del nuevo
     if CFG["keys"] != was_keys:
         system.apply_key_binds(was_keys, CFG["keys"])
     ipc.send(ipc._config_event())

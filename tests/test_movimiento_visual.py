@@ -57,11 +57,11 @@ class TestMovPaceTable(unittest.TestCase):
 
 class TestMovKnob(unittest.TestCase):
     def test_mov_speed_travels_from_the_toml_to_the_overlay(self):
-        from cartelitos import config, ipc, setup
+        from cartelitos import config, ipc, settings
         self.assertEqual(config.DEFAULTS["crt"]["mov_speed"], 1.0)
         self.assertIn("mov_speed", config._CONFIG_COMMENTS["crt"])
         self.assertIn(("crt_mov_speed", "crt", "mov_speed"), ipc.CONFIG_EVENT_MAP)
-        self.assertIn("mov_speed", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.mov_speed", settings.ROWS)
         qml = read("shell.qml")
         self.assertRegex(qml, r"property real crtMovAmount:\s*1\.0\b")
         self.assertIn('crt_mov_speed: "crtMovAmount"', qml)

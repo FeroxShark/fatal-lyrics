@@ -4,7 +4,7 @@ tema. Ver docs/tanda8-estado/colores.md.
 Se testean las funciones puras de `shell/Faces.js` (con node, si está): contraste de
 la letra en las tres caras (fijas y de la tapa), qué parte del tema es, el portero,
 el reparto por modo con 1-4 pantallas y el orden del escalonado; y el cableado de la
-perilla `crt.face_mode` (config → ipc → setup → shell.qml).
+perilla `crt.face_mode` (config → ipc → Ajustes → shell.qml).
 """
 import json
 import os
@@ -240,11 +240,9 @@ class TestFaceModeKnob(unittest.TestCase):
         self.assertIn('crt_face_mode: "crtFaceMode"', qml)
         self.assertIn('property string crtFaceMode: "song"', qml)
 
-    def test_the_menu_offers_both(self):
-        src = self.src("setup.py")
-        item = re.search(r'\("face_mode", "crt".*?\], c\)\)', src, re.S)
-        self.assertIsNotNone(item)
-        self.assertEqual(sorted(re.findall(r'"(song|classic)"\)', item.group(0))),
+    def test_the_settings_window_offers_both(self):
+        from cartelitos import settings
+        self.assertEqual(sorted(o["value"] for o in settings.ROWS["crt.face_mode"]["options"]),
                          ["classic", "song"])
 
     def test_shell_imports_faces_and_steps_the_change(self):

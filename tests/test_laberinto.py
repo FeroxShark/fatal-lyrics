@@ -16,7 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHELL = os.path.join(ROOT, "shell")
 sys.path.insert(0, ROOT)
 
-from cartelitos import config, ipc, setup  # noqa: E402
+from cartelitos import config, ipc, settings  # noqa: E402
 
 
 def read(name):
@@ -32,7 +32,7 @@ class TestPerilla(unittest.TestCase):
         qml = read("shell.qml")
         self.assertRegex(qml, r"property bool crtMazeEggs:\s*true\b")
         self.assertIn('crt_maze_eggs: "crtMazeEggs"', qml)
-        self.assertIn("maze_eggs", {k for k, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.maze_eggs", settings.ROWS)
         self.assertIn("eggs: crt.ctl.crtMazeEggs", read("Crt.qml"))
 
 

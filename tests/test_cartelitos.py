@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cartelitos as c  # noqa: E402
 # Los globals se parchean en SU módulo: `config.CFG` es una copia de la
 # referencia y pisarla no cambia lo que lee el resto del paquete.
-from cartelitos import audio, config, ipc, lyrics, offsets, settings, setup, system, tray, util  # noqa: E402
+from cartelitos import audio, config, ipc, lyrics, offsets, settings, system, tray, util  # noqa: E402
 from cartelitos import __main__ as main  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1592,65 +1592,6 @@ class TestConfigEvent(unittest.TestCase):
         self.assertEqual(ev, expected)
 
 
-class TestCrtOrder(unittest.TestCase):
-    """El orden de las pantallas decide dónde cae cada pedazo de una línea
-    partida, así que una entrada mal escrita no puede pasar como buena."""
-
-    MONS = [("DP-4", "vertical, at x=0"), ("HDMI-A-2", "at x=1080"),
-            ("DP-5", "at x=3000")]
-
-    def setUp(self):
-        self._mons = system._monitors_lr
-        system._monitors_lr = lambda: list(self.MONS)
-        self.addCleanup(lambda: setattr(system, "_monitors_lr", self._mons))
-        self._input = builtins.input
-        self.addCleanup(lambda: setattr(builtins, "input", self._input))
-
-    def answer(self, *lines):
-        """Responde el menú sin teclado. El "enter to go back" de los errores
-        cuenta como una respuesta más."""
-        it = iter(lines)
-        builtins.input = lambda *a, **k: next(it, "")
-
-    def test_numbers_become_names_in_that_order(self):
-        self.answer("3,2,1")
-        self.assertEqual(c._ask_crt_order("auto"), ["DP-5", "HDMI-A-2", "DP-4"])
-
-    def test_spaces_work_too(self):
-        self.answer("2 1 3")
-        self.assertEqual(c._ask_crt_order("auto"), ["HDMI-A-2", "DP-4", "DP-5"])
-
-    def test_a_means_automatic(self):
-        self.answer("a")
-        self.assertEqual(c._ask_crt_order(["DP-5"]), "auto")
-
-    def test_enter_keeps_what_was_there(self):
-        self.answer("")
-        self.assertIsNone(c._ask_crt_order("auto"))
-
-    def test_a_number_out_of_range_changes_nothing(self):
-        self.answer("9", "")
-        self.assertIsNone(c._ask_crt_order("auto"))
-
-    def test_garbage_changes_nothing(self):
-        self.answer("left,right", "")
-        self.assertIsNone(c._ask_crt_order("auto"))
-
-    def test_the_same_screen_twice_changes_nothing(self):
-        self.answer("1,1,2", "")
-        self.assertIsNone(c._ask_crt_order("auto"))
-
-    def test_a_partial_order_is_allowed(self):
-        # las que no nombró van al final solas: nadie se queda sin tubo
-        self.answer("3")
-        self.assertEqual(c._ask_crt_order("auto"), ["DP-5"])
-
-    def test_one_screen_has_no_order_to_pick(self):
-        system._monitors_lr = lambda: [("DP-4", "at x=0")]
-        self.answer("")
-        self.assertIsNone(c._ask_crt_order("auto"))
-
-
 def tone(freq, seconds=0.032, rate=16000, amp=0.5):
     """PCM s16 mono de un tono puro, para probar el análisis sin tarjeta de sonido."""
     import math
@@ -2569,8 +2510,6 @@ class TestNotAGameConfigurable(unittest.TestCase):
             self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old_path))
             cfg = c.read_config()
             self.assertEqual(cfg["system"]["not_a_game"], ["obs", "discord"])
-            # el resto de las claves de [system] siguen ahí (merge sobre DEFAULTS)
-            self.assertEqual(cfg["system"]["terminals"], config.DEFAULTS["system"]["terminals"])
 
 
 class TestCompositorDetection(unittest.TestCase):
@@ -2954,7 +2893,7 @@ class TestSettingsChannel(unittest.TestCase):
                                (3, "display", "scale", 1.5)])
 
     def test_a_key_that_is_not_in_the_window_is_ignored(self):
-        got = settings.parse('1 system.player="vlc"\n2 crt.font="x"\n3 rm=1\n4 crt.noise=0.3')
+        got = settings.parse('1 system.player="vlc"\n2 system.not_a_game=["x"]\n3 rm=1\n4 crt.noise=0.3')
         self.assertEqual(got, [(4, "crt", "noise", 0.3)])
 
     def test_garbage_does_not_crash(self):
@@ -3000,10 +2939,69 @@ class TestSettingsChannel(unittest.TestCase):
             self.assertEqual(settings.set_cli(["crt.font=1"]), 1)
 
     def test_the_snapshot_is_json(self):
-        with mock.patch.object(system, "_daemon_pid", return_value=None):
+        with mock.patch.object(system, "_daemon_pid", return_value=None), \
+                mock.patch.object(system, "_monitors_lr", return_value=[("DP-2", "1080x1920")]), \
+                mock.patch.object(system, "_players", return_value=["spotify"]):
             snap = json.loads(json.dumps(settings.snapshot()))
         self.assertEqual(set(snap["values"]), set(settings.ROWS))
         self.assertFalse(snap["daemon"])
+        self.assertEqual(snap["tabs"], settings.TABS)
+        self.assertEqual(snap["monitors"], [{"name": "DP-2", "info": "1080x1920"}])
+        self.assertEqual(snap["players"], ["spotify"])
+        # la ventana ya no abre ninguna terminal: no tiene por qué saber cuál hay
+        self.assertNotIn("terminal", snap)
+
+    def test_an_int_slider_writes_an_int(self):
+        # `max_dialogs = 3.0` en el TOML: el overlay lo lee como property int
+        # y no pasa nada, pero el archivo queda mintiendo sobre el tipo
+        row = settings.ROWS["display.max_dialogs"]
+        self.assertEqual(settings.coerce(row, 3.4), 3)
+        self.assertIsInstance(settings.coerce(row, 3.4), int)
+        self.assertEqual(settings.coerce(settings.ROWS["effects.max_lifetime"], 62), 60)
+
+    def test_screens_take_a_special_a_name_or_a_list(self):
+        row = settings.ROWS["display.screen"]
+        self.assertEqual(settings.coerce(row, "auto"), "auto")
+        self.assertEqual(settings.coerce(row, "HDMI-A-1"), "HDMI-A-1")
+        self.assertEqual(settings.coerce(row, ["DP-2", "DP-1"]), ["DP-2", "DP-1"])
+        self.assertEqual(settings.coerce(settings.ROWS["crt.screens"], "same"), "same")
+        for junk in ([], ["DP-2", "DP-2"], ["DP 2"], [1], 'a"b', "", None, True):
+            self.assertIsNone(settings.coerce(row, junk), junk)
+
+    def test_the_order_is_auto_or_a_list_of_names(self):
+        row = settings.ROWS["crt.order"]
+        self.assertEqual(settings.coerce(row, "auto"), "auto")
+        self.assertEqual(settings.coerce(row, ["HDMI-A-1", "DP-2"]), ["HDMI-A-1", "DP-2"])
+        for junk in ("all", "DP-2", [], ["DP-2", "DP-2"]):
+            self.assertIsNone(settings.coerce(row, junk), junk)
+
+    def test_text_cannot_break_the_toml(self):
+        # _toml_val escribe el string entre comillas sin escapar nada
+        player = settings.ROWS["behavior.player"]
+        self.assertEqual(settings.coerce(player, " vlc "), "vlc")
+        for junk in ('sp"otify', "a\\b", "a\nb", "", "x" * 81, 3):
+            self.assertIsNone(settings.coerce(player, junk), repr(junk))
+        self.assertEqual(settings.coerce(settings.ROWS["crt.font"], ""), "")
+
+    def test_a_key_needs_its_comma_or_nothing(self):
+        # sin coma Hyprland lo lee como un bind sin modificadores: atajo mudo
+        row = settings.ROWS["keys.crt_toggle"]
+        self.assertEqual(settings.coerce(row, "Super+Shift, Y"), "Super+Shift, Y")
+        self.assertEqual(settings.coerce(row, ""), "")
+        self.assertIsNone(settings.coerce(row, "Super+Shift Y"))
+
+    def test_set_cli_writes_a_list_the_toml_can_read_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "config.toml")
+            old = config.CONFIG_PATH
+            config.CONFIG_PATH = path
+            self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
+            config.load_config()
+            self.assertEqual(settings.set_cli(['crt.order=["HDMI-A-1","DP-2"]',
+                                               'keys.crt_toggle="Super, F9"']), 0)
+            got = config.load_config()
+            self.assertEqual(got["crt"]["order"], ["HDMI-A-1", "DP-2"])
+            self.assertEqual(got["keys"]["crt_toggle"], "Super, F9")
 
 
 class TestSettingsSchema(unittest.TestCase):
@@ -3021,10 +3019,38 @@ class TestSettingsSchema(unittest.TestCase):
                 self.assertIsInstance(default, bool, row_id)
             elif row["kind"] == "choice":
                 self.assertIn(default, [o["value"] for o in row["options"]], row_id)
-            else:
+            elif row["kind"] == "slider":
                 self.assertNotIsInstance(default, bool, row_id)
                 self.assertTrue(row["min"] <= default <= row["max"], row_id)
-                self.assertEqual(settings.coerce(row, default), default, row_id)
+                self.assertIs(isinstance(default, int), bool(row.get("int")), row_id)
+            self.assertEqual(settings.coerce(row, default), default, row_id)
+
+    def test_every_group_sits_on_a_real_tab_and_column(self):
+        for g in settings.GROUPS:
+            self.assertIn(g["tab"], range(len(settings.TABS)), g["title"])
+            self.assertIn(g["column"], range(3), g["title"])
+        # una pestaña vacía sería un botón que lleva a una hoja en blanco
+        self.assertEqual({g["tab"] for g in settings.GROUPS}, set(range(len(settings.TABS))))
+
+    def test_no_terminal_anywhere_in_the_options(self):
+        # Ferox: "me gustaría que esté todo en el panel de configuración y ya
+        # está". Ni la ventana ni el lanzador abren una terminal, y `fatal
+        # config` (el menú de terminal de antes) abre la ventana
+        root = os.path.dirname(self.SHELL)
+        with open(os.path.join(self.SHELL, "settings.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        self.assertNotIn('"-e"', qml)
+        self.assertNotIn("terminal", qml.lower().replace("no abre ninguna terminal", "")
+                         .replace("menú de terminal", ""))
+        with open(os.path.join(root, "bin", "fatal"), encoding="utf-8") as f:
+            launcher = f.read()
+        self.assertRegex(launcher, r"\n\s+ajustes\|settings\|config\|setup\|[a-z|]*\) settings ;;")
+        self.assertNotIn("--setup", launcher)
+        with open(os.path.join(root, "packaging", "fatal.desktop"), encoding="utf-8") as f:
+            desktop = f.read()
+        self.assertIn("Terminal=false", desktop)
+        self.assertIn("Exec=fatal ajustes", desktop)
+        self.assertFalse(os.path.exists(os.path.join(root, "cartelitos", "setup.py")))
 
     def test_every_option_the_tray_had_is_in_the_window(self):
         # la bandeja se achicó a cambio de esto: nada de lo que tenía se pierde
@@ -3045,6 +3071,11 @@ class TestSettingsSchema(unittest.TestCase):
         for needle in ("--settings-json", "--settings-set", "cartelitos-settings"):
             self.assertIn(needle, qml)
         self.assertTrue(settings.SETTINGS_PATH.endswith("cartelitos-settings"))
+
+
+def _options(row_id):
+    """Los valores que ofrece una fila de botones de opción de la ventana de Ajustes."""
+    return [o["value"] for o in settings.ROWS[row_id]["options"]]
 
 
 class TestKnobsAreReachable(unittest.TestCase):
@@ -3076,7 +3107,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertEqual(c.DEFAULT_CONFIG, config._render_default_config(c.DEFAULTS))
 
     def test_every_crt_key_has_a_comment(self):
-        # no es obligatorio, pero una perilla sin prosa en `fatal config` es
+        # no es obligatorio, pero una perilla sin prosa en el TOML es
         # una perilla que nadie sabe que existe
         for key in c.DEFAULTS["crt"]:
             self.assertIn(key, config._CONFIG_COMMENTS["crt"],
@@ -3092,12 +3123,11 @@ class TestKnobsAreReachable(unittest.TestCase):
             self.assertIn(key, config._CONFIG_COMMENTS["keys"],
                           f"keys.{key} no tiene comentario en _CONFIG_COMMENTS")
 
-    def test_every_keys_knob_is_in_the_menu(self):
-        # [keys] no viaja al overlay (lo aplica Hyprland), así que el menú es
-        # el ÚNICO lugar donde alguien la descubre sin abrir el TOML
-        menu = {key for key, section, _, _ in setup.SETTINGS if section == "keys"}
+    def test_every_keys_knob_is_in_the_settings_window(self):
+        # [keys] no viaja al overlay (lo aplica Hyprland), así que la ventana
+        # es el ÚNICO lugar donde alguien la descubre sin abrir el TOML
         for key in c.DEFAULTS["keys"]:
-            self.assertIn(key, menu, f"keys.{key} no está en `fatal config`")
+            self.assertIn(f"keys.{key}", settings.ROWS, f"keys.{key} no está en la ventana de Ajustes")
 
     def test_the_key_binds_do_not_travel_to_the_overlay(self):
         # a propósito: los binds los aplica Hyprland desde el daemon. Una clave
@@ -3106,46 +3136,37 @@ class TestKnobsAreReachable(unittest.TestCase):
                 if section == "keys"}
         self.assertEqual(sent, set())
 
-    # Las perillas de [crt] que NO están en el menú de `fatal config`, a
-    # propósito. Cualquier otra que falte es la falla que este test busca: la
-    # perilla existe, viaja al overlay, y nadie que no lea el TOML se entera.
-    MENU_EXEMPT = {
-        "infect_lead",       # décimas de segundo de adelanto del color: se toca a mano
-        "alarm_threshold",   # cada cuánto sale el rojo: idem
-        "font",              # texto libre, no hay editor de fuentes en el menú
-        "noise", "chroma", "roll", "vignette",   # del shader: noise está en Ajustes, el resto a mano
-    }
+    # Lo ÚNICO que no está en la ventana de Ajustes, a propósito: una lista de
+    # clases de ventana, que se edita en el TOML. Cualquier otra perilla que
+    # falte es la falla que este test busca: existe, viaja al overlay, y nadie
+    # que no lea el TOML se entera.
+    TOML_ONLY = {"system.not_a_game"}
 
-    def test_every_crt_knob_can_be_reached_by_hand(self):
-        # el cuarto lugar de una perilla nueva. Sin esto la perilla existe,
-        # llega al overlay y hace lo suyo, pero no aparece en `fatal config`:
-        # así se perdió cascade_style durante tres fases
-        window = {row_id.partition(".")[2] for row_id in settings.ROWS
-                  if row_id.startswith("crt.")}
-        menu = {key for key, section, _, _ in setup.SETTINGS if section == "crt"}
-        for key in c.DEFAULTS["crt"]:
-            if key in self.MENU_EXEMPT:
-                continue
-            self.assertTrue(key in menu or key in window,
-                            f"crt.{key} no está ni en SETTINGS ni en la ventana de Ajustes: "
-                            "nadie la va a encontrar")
+    def test_every_knob_is_in_the_settings_window(self):
+        # el cuarto lugar de una perilla nueva: ya no hay menú de terminal, así
+        # que la que no tiene fila en settings.GROUPS no la encuentra nadie.
+        # Así se perdió cascade_style durante tres fases
+        for section, values in c.DEFAULTS.items():
+            for key in values:
+                row_id = f"{section}.{key}"
+                if row_id in self.TOML_ONLY:
+                    continue
+                self.assertIn(row_id, settings.ROWS,
+                              f"{row_id} no está en la ventana de Ajustes: nadie la va a encontrar")
 
-    def test_the_exempt_list_has_no_ghosts(self):
+    def test_the_toml_only_list_has_no_ghosts(self):
         # una perilla que se borra tiene que salir también de la lista de
         # excepciones, o la excepción tapa la próxima que se olvide
-        for key in self.MENU_EXEMPT:
-            self.assertIn(key, c.DEFAULTS["crt"], f"{key} ya no es una perilla de [crt]")
+        for row_id in self.TOML_ONLY:
+            section, _, key = row_id.partition(".")
+            self.assertIn(key, c.DEFAULTS[section], f"{row_id} ya no es una perilla")
+            self.assertNotIn(row_id, settings.ROWS)
 
     def test_hop_offers_every_mode_the_overlay_knows(self):
         # el menú es el único lugar donde alguien descubre los modos de una
         # perilla que no es sí/no: si falta uno, el overlay lo entiende pero
         # nadie lo va a escribir nunca
-        editor = next(fn for key, section, _, fn in setup.SETTINGS
-                      if key == "hop" and section == "crt")
-        picked = set()
-        for n in range(1, 5):
-            _FakeInput(self, str(n))
-            picked.add(editor("both"))
+        picked = set(_options("crt.hop"))
         self.assertEqual(picked, {"corridor", "interference", "both", "off"})
         self.assertIn(c.DEFAULTS["crt"]["hop"], picked)
 
@@ -3153,12 +3174,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         # `pace` es un enum como `hop`: el menú es el único lugar donde alguien
         # descubre que existe `calm` o `wild`. Si el menú ofrece menos modos de
         # los que el overlay entiende, esos modos no los va a escribir nadie.
-        editor = next(fn for key, section, _, fn in setup.SETTINGS
-                      if key == "pace" and section == "crt")
-        picked = set()
-        for n in range(1, 4):
-            _FakeInput(self, str(n))
-            picked.add(editor("normal"))
+        picked = set(_options("crt.pace"))
         self.assertEqual(picked, {"calm", "normal", "wild"})
         self.assertIn(c.DEFAULTS["crt"]["pace"], picked)
         # y los mismos tres tienen que estar en la tabla del overlay: un modo
@@ -3346,7 +3362,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r'property string crtTube:\s*"auto"')
         self.assertIn('crt_tube: "crtTube"', qml)
-        self.assertIn("tube", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.tube", settings.ROWS)
 
     def test_every_tube_has_every_column(self):
         _, rows = self._tube_table()
@@ -3368,12 +3384,7 @@ class TestKnobsAreReachable(unittest.TestCase):
 
     def test_tube_menu_comes_from_the_table(self):
         _, rows = self._tube_table()
-        editor = next(fn for key, section, _, fn in setup.SETTINGS
-                      if key == "tube" and section == "crt")
-        picked = []
-        for n in range(1, len(rows) + 2):
-            _FakeInput(self, str(n))
-            picked.append(editor("custom"))
+        picked = _options("crt.tube")
         self.assertEqual(set(picked), set(rows) | {"auto"},
                          "el menú de `tube` no coincide con crtTubeTable (+ auto)")
         self.assertEqual(len(picked), len(set(picked)))
@@ -3395,7 +3406,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, rows = self._tube_table()
         self.assertRegex(qml, r"property real crtPersistence:\s*0\.35\b")
         self.assertIn('crt_persistence: "crtPersistence"', qml)
-        self.assertIn("persistence", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.persistence", settings.ROWS)
         # `custom` lee la perilla suelta; los demás traen su número
         self.assertRegex(qml, r"tubePersistence:\s*crtTubeRow\.persistence !== null \? crtTubeRow\.persistence : crtPersistence")
         self.assertEqual(rows["custom"]["persistence"], "null")
@@ -3408,7 +3419,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r"property real crtTensionAmount:\s*1\.0\b")
         self.assertIn('crt_tension: "crtTensionAmount"', qml)
-        self.assertIn("tension", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.tension", settings.ROWS)
 
     def test_dirt_knob_is_wired_end_to_end(self):
         # corrida 7b de la tanda 7: la suciedad del audio, en los cuatro lugares
@@ -3418,7 +3429,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r"property real crtDirtAmount:\s*1\.0\b")
         self.assertIn('crt_dirt: "crtDirtAmount"', qml)
-        self.assertIn("dirt", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.dirt", settings.ROWS)
         with open(os.path.join(os.path.dirname(self.SHELL), "README.md"), encoding="utf-8") as f:
             self.assertIn("`dirt`", f.read())
 
@@ -3460,7 +3471,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r"property real crtBurnin:\s*0\.5\b")
         self.assertIn('crt_burnin: "crtBurnin"', qml)
-        self.assertIn("burnin", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.burnin", settings.ROWS)
 
     def test_beat_lock_knob_is_wired_end_to_end(self):
         # corrida 5a de la tanda 7: los glitches en el pulso del tema, en los cuatro lugares
@@ -3470,7 +3481,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r"property bool crtBeatLock:\s*true\b")
         self.assertIn('crt_beat_lock: "crtBeatLock"', qml)
-        self.assertIn("beat_lock", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.beat_lock", settings.ROWS)
 
     def test_word_fx_knob_is_wired_end_to_end(self):
         # corrida 5b de la tanda 7: los efectos por palabra, en los cuatro lugares
@@ -3480,7 +3491,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r"property bool crtWordFx:\s*true\b")
         self.assertIn('crt_word_fx: "crtWordFx"', qml)
-        self.assertIn("word_fx", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.word_fx", settings.ROWS)
 
     def test_screen_off_knob_is_wired_and_off_by_default(self):
         # decisión de Ferox 2026-09-28: ninguna pantalla finge estar apagada
@@ -3493,7 +3504,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         # escena e intro cuelgan de la perilla
         self.assertIn("crtScreenOff && crtSceneMode", qml)
         self.assertRegex(qml, r"!crtIntro \|\| !crtScreenOff")
-        self.assertIn("screen_off", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.screen_off", settings.ROWS)
 
     def test_testcard_knob_is_wired_and_off_by_default(self):
         # decisión de Ferox 2026-09-28: la carta de ajuste no entra a mitad de tema
@@ -3506,7 +3517,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         # pool del director y sorteo del raro cuelgan de la perilla
         self.assertRegex(qml, r'kind === "testcard"\)\s*return crtTestcard')
         self.assertIn('k !== "testcard" || crtTestcard', qml)
-        self.assertIn("testcard", {key for key, section, _, _ in setup.SETTINGS if section == "crt"})
+        self.assertIn("crt.testcard", settings.ROWS)
 
     def test_intro_card_knob_is_wired_end_to_end(self):
         # corrida 6 de la tanda 7: la tarjeta del intro, en los cuatro lugares
@@ -3516,12 +3527,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         qml, _ = self._tube_table()
         self.assertRegex(qml, r'property string crtIntroCard:\s*"testcard"')
         self.assertIn('crt_intro_card: "crtIntroCard"', qml)
-        editor = next(fn for key, section, _, fn in setup.SETTINGS
-                      if key == "intro_card" and section == "crt")
-        picked = []
-        for n in (1, 2):
-            _FakeInput(self, str(n))
-            picked.append(editor("testcard"))
+        picked = _options("crt.intro_card")
         self.assertEqual(set(picked), {"testcard", "plain"})
 
     def test_degauss_phase_sits_between_off_and_static(self):
@@ -4166,40 +4172,16 @@ class TestSwarmWordText(unittest.TestCase):
 
 
 class _FakeInput:
-    """Cola de respuestas de teclado para el menú de `fatal config`. Cada
-    llamada a input() saca la próxima; si se acaban, sigue devolviendo ''
-    (como si el usuario apretara enter) — así un test no cuelga esperando
-    una respuesta que se olvidó de poner en la cola."""
+    """Cola de respuestas de teclado para lo que pregunta en la terminal
+    (`fatal sync reset all`). Cada llamada a input() saca la próxima; si se
+    acaban, sigue devolviendo '' (como si el usuario apretara enter) — así un
+    test no cuelga esperando una respuesta que se olvidó de poner en la cola."""
 
     def __init__(self, case, *answers):
         self._it = iter(answers)
         self._old = builtins.input
         case.addCleanup(lambda: setattr(builtins, "input", self._old))
         builtins.input = lambda *a, **k: next(self._it, "")
-
-
-class TestAskKey(unittest.TestCase):
-    """El editor de las teclas del sync. Se TIPEA el atajo: `fatal config`
-    corre en una terminal y ahí no hay forma de capturar la tecla apretada sin
-    agarrarle el teclado al compositor."""
-
-    def test_a_shortcut_is_taken_as_typed(self):
-        _FakeInput(self, "Super+Ctrl, F5")
-        self.assertEqual(c._ask_key("t", "Super+Alt, Right"), "Super+Ctrl, F5")
-
-    def test_enter_keeps_the_current_one(self):
-        _FakeInput(self, "")
-        self.assertIsNone(c._ask_key("t", "Super+Alt, Right"))
-
-    def test_a_dash_means_no_key_at_all(self):
-        _FakeInput(self, "-")
-        self.assertEqual(c._ask_key("t", "Super+Alt, Right"), "")
-
-    def test_without_a_comma_it_refuses_instead_of_binding_something_mute(self):
-        # Hyprland lo leería como un bind sin modificadores y el atajo queda
-        # mudo sin decir nada: se avisa acá, que es donde se puede corregir
-        _FakeInput(self, "Super+Alt Right", "")
-        self.assertIsNone(c._ask_key("t", "Super+Alt, Right"))
 
 
 class TestSyncCli(unittest.TestCase):
@@ -4271,365 +4253,6 @@ class TestSyncCli(unittest.TestCase):
     def test_reset_all_with_nothing_saved_does_not_even_ask(self):
         # sin la guarda, pediría confirmación para borrar cero cosas
         self.assertEqual(main._sync_reset("all"), 0)
-
-
-class TestPick(unittest.TestCase):
-    """`_pick` es la base de casi todo el menú: si acepta un número fuera de
-    rango o basura sin volver a preguntar, cualquier perilla queda mal."""
-
-    OPTIONS = [("uno", "u"), ("dos", "d"), ("tres", "t")]
-
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_valid_selection_returns_its_value(self):
-        self.answer("2")
-        self.assertEqual(c._pick("t", self.OPTIONS, "u"), "d")
-
-    def test_empty_keeps_the_current_value(self):
-        self.answer("")
-        self.assertIsNone(c._pick("t", self.OPTIONS, "u"))
-
-    def test_invalid_selection_retries_until_a_good_one(self):
-        self.answer("nope", "0", "99", "1")
-        self.assertEqual(c._pick("t", self.OPTIONS, "u"), "u")
-
-    def test_out_of_range_number_is_rejected_not_accepted(self):
-        # "0" y "99" no son índices válidos (1..len(options)): tienen que
-        # volver a preguntar, no devolver cualquier cosa
-        self.answer("0", "")
-        self.assertIsNone(c._pick("t", self.OPTIONS, "u"))
-
-
-class TestAskNum(unittest.TestCase):
-    """`_ask_num` es el que más perillas de [crt] usa (scale, curvature,
-    bloom...); un límite mal chequeado ahí se nota en pantalla."""
-
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_valid_number_in_range(self):
-        self.answer("1.5")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.5)
-
-    def test_comma_decimal_is_accepted(self):
-        self.answer("1,5")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.5)
-
-    def test_empty_keeps_the_current_value(self):
-        self.answer("")
-        self.assertIsNone(c._ask_num("t", 1.0, 0.5, 3.0))
-
-    def test_below_range_retries_then_accepts_a_good_value(self):
-        self.answer("0.1", "1.0")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.0)
-
-    def test_above_range_retries_then_accepts_a_good_value(self):
-        self.answer("99", "2.0")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 2.0)
-
-    def test_non_numeric_retries_instead_of_crashing(self):
-        self.answer("abc", "1.0")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 1.0)
-
-    def test_boundaries_are_inclusive(self):
-        self.answer("0.5")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 0.5)
-        self.answer("3.0")
-        self.assertEqual(c._ask_num("t", 1.0, 0.5, 3.0), 3.0)
-
-    def test_just_outside_the_boundary_is_rejected(self):
-        self.answer("3.0000001", "")
-        self.assertIsNone(c._ask_num("t", 1.0, 0.5, 3.0))
-
-
-class TestAskInt(unittest.TestCase):
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_valid_int_in_range(self):
-        self.answer("5")
-        self.assertEqual(c._ask_int("t", 0, 0, 50), 5)
-
-    def test_empty_keeps_the_current_value(self):
-        self.answer("")
-        self.assertIsNone(c._ask_int("t", 0, 0, 50))
-
-    def test_a_float_string_is_not_a_valid_int_and_retries(self):
-        self.answer("1.5", "1")
-        self.assertEqual(c._ask_int("t", 0, 0, 50), 1)
-
-    def test_out_of_range_retries_then_accepts(self):
-        self.answer("-1", "51", "25")
-        self.assertEqual(c._ask_int("t", 0, 0, 50), 25)
-
-    def test_boundaries_are_inclusive(self):
-        self.answer("0")
-        self.assertEqual(c._ask_int("t", 5, 0, 50), 0)
-        self.answer("50")
-        self.assertEqual(c._ask_int("t", 5, 0, 50), 50)
-
-
-class TestAskText(unittest.TestCase):
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_text_is_returned_stripped(self):
-        self.answer("  hola  ")
-        self.assertEqual(c._ask_text("t", "viejo"), "hola")
-
-    def test_empty_keeps_the_current_value(self):
-        self.answer("")
-        self.assertIsNone(c._ask_text("t", "viejo"))
-
-
-class TestAskScreens(unittest.TestCase):
-    """`_ask_screens` arma sus propias opciones a partir de los monitores
-    reales: si el mock no está bien encadenado, cualquier respuesta numérica
-    apunta a la pantalla equivocada."""
-
-    MONS = [("DP-4", "1920x1080 horizontal"), ("DP-5", "2560x1440 horizontal")]
-
-    def setUp(self):
-        self._old_monitors = system._monitors
-        system._monitors = lambda: list(self.MONS)
-        self.addCleanup(lambda: setattr(system, "_monitors", self._old_monitors))
-
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_auto_is_the_first_option(self):
-        self.answer("1")
-        self.assertEqual(c._ask_screens("all"), "auto")
-
-    def test_all_is_the_second_option(self):
-        self.answer("2")
-        self.assertEqual(c._ask_screens("auto"), "all")
-
-    def test_a_single_named_screen(self):
-        self.answer("3")
-        self.assertEqual(c._ask_screens("auto"), "DP-4")
-
-    def test_several_lets_you_pick_more_than_one(self):
-        # con 2+ monitores aparece la opción "several" al final de la lista
-        self.answer(str(len(self.MONS) + 3), "1,2")
-        self.assertEqual(c._ask_screens("auto"), ["DP-4", "DP-5"])
-
-    def test_several_with_garbage_numbers_returns_none(self):
-        # los tokens que no son índices válidos se descartan en silencio;
-        # si TODOS son basura no queda nada para elegir
-        self.answer(str(len(self.MONS) + 3), "x,y")
-        self.assertIsNone(c._ask_screens("auto"))
-
-    def test_several_with_a_mix_of_good_and_bad_tokens_drops_the_bad_ones_silently(self):
-        # a diferencia de `_ask_crt_order` (que valida TODOS los tokens con
-        # `all(...)` y reintenta si alguno es basura), acá el filtro es por
-        # token: "1,x" no es un error, es "me quedo con el 1 y listo". No es
-        # un bug de validación (no cuela ningún valor fuera de rango), pero
-        # el usuario que tipeó dos pantallas se queda con una sin aviso —
-        # comportamiento real, pineado a propósito, no corregido.
-        self.answer(str(len(self.MONS) + 3), "1,x")
-        self.assertEqual(c._ask_screens("auto"), ["DP-4"])
-
-    def test_with_a_single_monitor_there_is_no_several_option(self):
-        system._monitors = lambda: [self.MONS[0]]
-        # opciones: 1) auto, 2) all, 3) DP-4 -- "4" no existe, tiene que reintentar
-        self.answer("4", "2")
-        self.assertEqual(c._ask_screens("auto"), "all")
-
-
-class TestAskPlayer(unittest.TestCase):
-    def setUp(self):
-        self._old_players = system._players
-        self.addCleanup(lambda: setattr(system, "_players", self._old_players))
-
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_no_players_falls_back_to_free_text(self):
-        system._players = lambda: []
-        self.answer("spotify")
-        self.assertEqual(c._ask_player("old"), "spotify")
-
-    def test_picks_a_detected_player_by_number(self):
-        system._players = lambda: ["spotify", "firefox"]
-        self.answer("2")
-        self.assertEqual(c._ask_player("spotify"), "firefox")
-
-    def test_other_falls_back_to_manual_text(self):
-        system._players = lambda: ["spotify"]
-        self.answer("2", "vlc")   # 2) other (type it in)
-        self.assertEqual(c._ask_player("spotify"), "vlc")
-
-
-def _row_for(settings, target_key):
-    """Reproduce la numeración de `_menu`: sólo cuenta filas con sección
-    (los separadores como "— screen —" no tienen número)."""
-    n = 0
-    for key, section, _, _ in settings:
-        if section is None:
-            continue
-        n += 1
-        if key == target_key:
-            return n
-    raise AssertionError(f"{target_key} no está en SETTINGS")
-
-
-class TestSetupMenu(unittest.TestCase):
-    """El loop de `setup()`: elegir una fila, editarla, cancelar sin tocar
-    nada, deshacer. Usa un CONFIG_PATH temporal para no rozar el config real
-    ni depender del resto de las perillas (pantallas, player MPRIS...)."""
-
-    TEST_SETTINGS = [
-        ("karaoke", "display", "Karaoke", lambda cur: c._pick("Karaoke", c.YESNO, cur)),
-        ("scale", "display", "Dialog scale",
-         lambda cur: c._ask_num("Dialog scale", cur, 0.5, 3.0)),
-    ]
-
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.path = os.path.join(tmp.name, "config.toml")
-        with open(self.path, "w") as f:
-            f.write(c.DEFAULT_CONFIG)
-        self._old_path = config.CONFIG_PATH
-        config.CONFIG_PATH = self.path
-        self.addCleanup(lambda: setattr(config, "CONFIG_PATH", self._old_path))
-
-        self._old_settings = c.setup.SETTINGS
-        c.setup.SETTINGS = self.TEST_SETTINGS
-        self.addCleanup(lambda: setattr(c.setup, "SETTINGS", self._old_settings))
-
-        # el menú imprime pantallas enteras a cada paso; silenciarlo evita
-        # ensuciar la salida de `unittest discover` sin cambiar el chequeo.
-        # Se guarda la referencia porque algunos tests necesitan confirmar
-        # POR QUÉ se llegó a un resultado (ej: que el valor fue rechazado y
-        # no que la fila nunca se seleccionó), no sólo el estado final.
-        self.out = io.StringIO()
-        patcher = mock.patch("sys.stdout", self.out)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def _read_saved(self):
-        import tomllib
-        with open(self.path, "rb") as f:
-            return tomllib.load(f)
-
-    def test_quit_immediately_changes_nothing(self):
-        self.answer("q")
-        c.setup.setup()
-        saved = self._read_saved()
-        self.assertEqual(saved["display"]["karaoke"], False)   # default
-        self.assertEqual(saved["display"]["scale"], 1.0)       # default
-
-    def test_invalid_row_number_retries_instead_of_crashing(self):
-        # "99" no es una fila válida (sólo hay 2 en TEST_SETTINGS): tiene que
-        # volver al menú, no reventar ni aplicar nada
-        self.answer("99", "q")
-        c.setup.setup()
-        saved = self._read_saved()
-        self.assertEqual(saved["display"]["karaoke"], False)
-
-    def test_a_valid_edit_is_saved_to_disk(self):
-        # fila 1 = karaoke, opción 1 de YESNO = "yes" -> True (el default es
-        # False, así que este edit sí mueve la aguja)
-        self.answer("1", "1", "q")   # fila 1 (karaoke), opción 1 = "yes"
-        c.setup.setup()
-        saved = self._read_saved()
-        self.assertEqual(saved["display"]["karaoke"], True)
-
-    def test_out_of_range_number_during_an_edit_does_not_get_saved(self):
-        # fila 2 = scale, 10 está fuera de [0.5, 3.0]: _ask_num tiene que
-        # reintentar en vez de guardar un valor inválido; enter cancela.
-        # Sin el assert de stdout esto pasaría igual aunque la fila nunca
-        # se hubiera seleccionado (el "" final también cancela desde el
-        # menú principal) — así que se confirma que SE LLEGÓ a _ask_num y
-        # que rechazó el 10, no sólo que scale terminó en el default.
-        self.answer("2", "10", "", "q")
-        c.setup.setup()
-        self.assertIn("a number between 0.5 and 3.0", self.out.getvalue())
-        saved = self._read_saved()
-        self.assertEqual(saved["display"]["scale"], 1.0)   # sigue en el default
-
-    def test_undo_reverts_a_saved_change(self):
-        self.answer("1", "1", "u", "q")   # editar karaoke a yes, después deshacer
-        c.setup.setup()
-        # sin este assert, si el edit nunca se hubiera guardado, "u" habría
-        # impreso "nothing to undo" y el resultado final sería idéntico
-        self.assertIn("1 setting(s) back to how you found them", self.out.getvalue())
-        saved = self._read_saved()
-        self.assertEqual(saved["display"]["karaoke"], False)
-
-    def test_undo_with_nothing_changed_does_not_crash(self):
-        self.answer("u", "q")
-        c.setup.setup()   # no debe explotar ni escribir nada raro
-        self.assertIn("nothing to undo", self.out.getvalue())
-        saved = self._read_saved()
-        self.assertEqual(saved["display"]["karaoke"], False)
-
-    def test_ctrl_c_mid_edit_returns_to_the_menu_without_saving(self):
-        # setup() envuelve la llamada al editor en
-        # `except (KeyboardInterrupt, EOFError): continue` — es la otra
-        # forma de "cancelación" además del enter vacío, y con su propio
-        # modo de falla posible (guardar un valor a medio construir, o
-        # que el Ctrl-C se lleve puesto todo el menú en vez de sólo el edit)
-        settings = self.TEST_SETTINGS + [
-            ("player", "behavior", "Player",
-             lambda cur: (_ for _ in ()).throw(KeyboardInterrupt())),
-        ]
-        c.setup.SETTINGS = settings
-        row = _row_for(settings, "player")
-        self.answer(str(row), "q")
-        c.setup.setup()   # no tiene que propagar el KeyboardInterrupt
-        saved = self._read_saved()
-        self.assertEqual(saved["behavior"]["player"], config.DEFAULTS["behavior"]["player"])
-
-    def test_eof_mid_edit_also_returns_to_the_menu_without_saving(self):
-        settings = self.TEST_SETTINGS + [
-            ("player", "behavior", "Player",
-             lambda cur: (_ for _ in ()).throw(EOFError())),
-        ]
-        c.setup.SETTINGS = settings
-        row = _row_for(settings, "player")
-        self.answer(str(row), "q")
-        c.setup.setup()
-        saved = self._read_saved()
-        self.assertEqual(saved["behavior"]["player"], config.DEFAULTS["behavior"]["player"])
-
-
-class TestSetupDeathAgeWarning(unittest.TestCase):
-    """death_age_min > death_age_max es un estado válido para cada perilla
-    por separado (1..50) pero sin sentido juntas: setup() tiene que avisar,
-    no guardarlo en silencio."""
-
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.path = os.path.join(tmp.name, "config.toml")
-        with open(self.path, "w") as f:
-            f.write(c.DEFAULT_CONFIG)
-        self._old_path = config.CONFIG_PATH
-        config.CONFIG_PATH = self.path
-        self.addCleanup(lambda: setattr(config, "CONFIG_PATH", self._old_path))
-
-    def answer(self, *lines):
-        _FakeInput(self, *lines)
-
-    def test_pushing_min_above_max_warns_in_the_next_screen(self):
-        row = _row_for(c.setup.SETTINGS, "death_age_min")
-        # default: death_age_min=3, death_age_max=7 -> 8 lo deja arriba del máximo
-        self.answer(str(row), "8", "q")
-        out = io.StringIO()
-        with mock.patch("sys.stdout", out):
-            c.setup.setup()
-        self.assertIn("heads up", out.getvalue())
-        import tomllib
-        with open(self.path, "rb") as f:
-            saved = tomllib.load(f)
-        self.assertEqual(saved["effects"]["death_age_min"], 8)
 
 
 class TestLogRotation(unittest.TestCase):
@@ -4906,48 +4529,6 @@ class TestTrayFallback(unittest.TestCase):
         created[0].join(timeout=5)
         self.assertFalse(created[0].is_alive(),
                           "el hilo de la bandeja se quedó colgado")
-
-
-class TestTerminalPreference(unittest.TestCase):
-    """La lista de terminals que prueba _terminal() (después de $TERMINAL) era
-    fija en system.py; ahora sale de config.CFG["system"]["terminals"]. Sin
-    tocar la config nueva, el orden de preferencia tiene que ser el de
-    siempre."""
-
-    OLD_ORDER = ["kitty", "alacritty", "foot", "wezterm", "ghostty", "konsole",
-                 "gnome-terminal", "xterm"]
-
-    def setUp(self):
-        self.env = dict(os.environ)
-        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(self.env)))
-        os.environ.pop("TERMINAL", None)
-        self.old_terminals = list(config.CFG["system"]["terminals"])
-        self.addCleanup(lambda: config.CFG["system"].__setitem__("terminals", self.old_terminals))
-        self.old_which = system.shutil.which
-        self.addCleanup(lambda: setattr(system.shutil, "which", self.old_which))
-
-    def test_default_order_matches_the_old_hardcoded_list(self):
-        self.assertEqual(config.DEFAULTS["system"]["terminals"], self.OLD_ORDER)
-
-    def test_untouched_config_picks_the_same_terminal_as_before(self):
-        # sólo "foot" existe: con la lista de siempre, gana igual que antes
-        system.shutil.which = lambda n: "/usr/bin/foot" if n == "foot" else None
-        self.assertEqual(system._terminal(), "/usr/bin/foot")
-
-    def test_terminal_env_var_still_wins_over_the_config_list(self):
-        os.environ["TERMINAL"] = "myterm"
-        system.shutil.which = lambda n: "/usr/bin/" + n
-        self.assertEqual(system._terminal(), "/usr/bin/myterm")
-
-    def test_a_user_can_reorder_the_preference_via_config(self):
-        config.CFG["system"]["terminals"] = ["xterm", "kitty"]
-        system.shutil.which = lambda n: "/usr/bin/" + n if n in ("xterm", "kitty") else None
-        self.assertEqual(system._terminal(), "/usr/bin/xterm")
-
-    def test_nothing_found_returns_none(self):
-        config.CFG["system"]["terminals"] = ["madeup-term"]
-        system.shutil.which = lambda n: None
-        self.assertIsNone(system._terminal())
 
 
 class _patched_tray:

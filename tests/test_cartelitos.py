@@ -2992,6 +2992,7 @@ class TestSettingsChannel(unittest.TestCase):
             old = config.CONFIG_PATH
             config.CONFIG_PATH = path
             self.addCleanup(lambda: setattr(config, "CONFIG_PATH", old))
+            config.load_config()   # crea el TOML, como al importar el módulo
             self.assertEqual(settings.set_cli(['effects.glitch="soft"', "crt.noise=0.4"]), 0)
             got = config.load_config()
             self.assertEqual(got["effects"]["glitch"], "soft")

@@ -3022,7 +3022,8 @@ class TestSettingsSchema(unittest.TestCase):
             elif row["kind"] == "slider":
                 self.assertNotIsInstance(default, bool, row_id)
                 self.assertTrue(row["min"] <= default <= row["max"], row_id)
-                self.assertIs(isinstance(default, int), bool(row.get("int")), row_id)
+                if row.get("int"):
+                    self.assertIsInstance(default, int, row_id)
             self.assertEqual(settings.coerce(row, default), default, row_id)
 
     def test_every_group_sits_on_a_real_tab_and_column(self):

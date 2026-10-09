@@ -26,7 +26,7 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   imprime con el daemon muerto: si no, es la letra de la sesión anterior.
 - **El daemon vivo no es alcanzable desde afuera salvo por archivo.** El socket Unix es
   unidireccional (daemon → overlay); un proceso corto como `bin/fatal` no puede escribirle nada al
-  daemon por ahí. Mismo mecanismo que `crt`/`tune`: un archivo en `$XDG_RUNTIME_DIR` que un hilo
+  daemon por ahí. Mismo mecanismo que `crt`/`ajustes`: un archivo en `$XDG_RUNTIME_DIR` que un hilo
   del daemon vigila por mtime (`cartelitos-sync`, para el gesto de T0.13). El menú de bandeja es
   la excepción: corre DENTRO del proceso del daemon, así que llama directo a un método sin pasar
   por ningún archivo.
@@ -142,7 +142,7 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   dejan el mismo offset acumulado y el segundo no se vería nunca.
 - **`cartelitos-sing` es un TIMBRE, no el estado** (al revés que `cartelitos-crt`): el estado es
   la perilla `[behavior] sing` del TOML, que es la que viaja al overlay y sobrevive al reinicio.
-  `fatal sing` sólo deja el pedido escrito y el daemon lo pasa a la config (igual que `fatal tune`).
+  `fatal sing` sólo deja el pedido escrito y el daemon lo pasa a la config (igual que la ventana de `fatal ajustes`, `cartelitos-settings`).
 - **Si la entrada por default es un `.monitor`, el karaoke no graba.** Lo que entraría por ahí es
   la propia música y el modo diría "está cantando" cada vez que suena un tema.
 - **Oscurecer el tubo con `stage.opacity` funciona porque `crt.frag` ya multiplica por

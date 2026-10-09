@@ -80,6 +80,13 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
   `config.py` porque la escribe el propio daemon, no Ferox a mano. Adentro vive también el
   perfil por tema (`_pending`, en memoria): lo que todavía no se ganó el derecho a durar.
+- `cartelitos/settings.py` + `shell/settings.qml` — la ventana de Ajustes (`fatal ajustes`, otro
+  proceso Quickshell, capa `cartelitos-settings`). `GROUPS` es el esquema: la ventana lo pide con
+  `--settings-json` y dibuja lo que venga, así que una opción nueva es una fila ahí. Lo que se
+  toca vuelve por `$XDG_RUNTIME_DIR/cartelitos-settings` (`<serie> seccion.clave=<json>`), que
+  vigila `watch_settings` en el daemon; sin daemon, `--settings-set` escribe el TOML directo.
+  Reemplazó a `tune.qml` y a los submenús de la bandeja (`tray.py` quedó en Ajustes / CRT /
+  karaoke / Quit).
 - `[keys] sync_forward` / `sync_back` / `crt_toggle` (`config.py`) + `system.key_bind_commands()` — las
   teclas del sync y del tubo. Las aplica Hyprland desde el daemon; al overlay sólo viaja el
   rótulo armado con ellas (`system.keys_hint()`, campo `keys_hint` del evento `config`): el

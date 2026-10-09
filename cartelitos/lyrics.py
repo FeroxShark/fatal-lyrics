@@ -372,7 +372,7 @@ def purge_cache(now):
 # ------------------------------------------------------------ estado visible
 # `fatal status` corre en OTRO proceso y no tiene forma de preguntarle nada al
 # daemon: el socket va sólo de acá para el overlay. Mismo mecanismo de archivo
-# que crt/tune pero al revés — lo escribe el daemon y lo lee el CLI.
+# que crt/ajustes pero al revés — lo escribe el daemon y lo lee el CLI.
 STATE_PATH = os.path.join(RUN_DIR, "lyrics")
 
 

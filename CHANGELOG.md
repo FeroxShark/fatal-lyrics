@@ -5,6 +5,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/), grouped
 by theme rather than by individual commit. This project doesn't cut versioned
 releases (AUR tracks `-git`), so entries are dated instead of numbered.
 
+## 2026-10-09 — Settings window, short tray
+
+- Added `fatal ajustes` (alias `fatal settings`): a Win95 property sheet
+  (`shell/settings.qml`) with every everyday option grouped in three columns, a
+  one-line hint per row, live apply and persistence. Its schema lives in
+  `cartelitos/settings.py`; changes travel through `$XDG_RUNTIME_DIR/cartelitos-settings`
+  and the daemon writes them to the TOML. Without the daemon it still saves.
+- The tray menu went from ~23 rows to six: status, Settings…, CRT mode, Karaoke, Quit.
+  Glitch, spawn zone, size, album art, tearing, palette, split, exit key, the CRT
+  sliders and the sync nudge moved to the window.
+- Removed `fatal tune` (`shell/tune.qml`): its sliders are the window's
+  "CRT fine-tuning" group. `fatal tune` still opens the new window.
+
 ## 2026-09-28 — tanda 8: glass without moiré, new audio signals, fonts, splitflap fix
 
 Five parallel slices closing out what Ferox reported after watching tanda 7 with real

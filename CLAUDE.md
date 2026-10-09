@@ -51,8 +51,9 @@ de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` s
 ```bash
 fatal on | off | restart | status
 fatal demo                 # SIGUSR1: carteles falsos, sin música
+fatal ajustes              # ventana Win95 con todas las opciones (la bandeja es corta)
 fatal crt toggle           # también Super+Shift+Y
-fatal sync + | -           # ajuste fino ±0.1s, también Super+Alt+Right/Left o el menú de bandeja
+fatal sync + | -           # ajuste fino ±0.1s, también Super+Alt+Right/Left o la ventana de Ajustes
 python3 -m unittest discover -s tests
 ```
 

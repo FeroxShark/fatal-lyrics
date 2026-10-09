@@ -377,7 +377,7 @@ fatal crt setup           # a number on each screen, to write down [crt] order
 fatal crt motif <kind> [--screen <name|index|all>]   # force one screen's drawing right away
 fatal crt motif off       # give the roll back to chance
 fatal crt rare <kind> [--screen <name|index|all>]    # force a rare event (bsod|nosignal|testcard) right away
-fatal tune       # sliders for the CRT settings you want to move while it plays
+fatal ajustes    # the Settings window: every everyday option, live (alias: fatal settings)
 fatal sync + | -          # nudge the lyric 0.1 s forward/back, live
 fatal sync show           # the artist offsets it has learned so far
 fatal sync reset [<artist>|all]   # forget one (default: the artist playing) or all
@@ -404,18 +404,22 @@ playing. It detects your monitors and MPRIS players on its own.
 
 Prefer a text editor? `fatal edit` opens the raw TOML — same live apply.
 
-And for the handful of CRT settings you only understand by moving them while the
-music plays — how hard it beats, how restless the tube is, the glow, the
-scanlines — `fatal tune` (or **Sliders…** in the tray) opens a small panel of
-sliders. Each one writes straight into the config, so the tube follows along and
-the value is still there next time.
+And for the settings you only understand by moving them while the music plays,
+`fatal ajustes` (or **Settings…** in the tray) opens a Win95 property sheet with
+every everyday option on one screen, grouped and with a one-line hint each: the
+dialogs (karaoke, album art, tearing, size, spawn zone, glitch), the lyric sync
+nudge, the CRT switch with its colours, pace, line split and exit key, and the
+CRT fine-tuning sliders — how hard it beats, how restless the tube is, the glow,
+the scanlines. Every change lands in the config while you move it, so the tube
+follows along and the value is still there next time. With the daemon off the
+window still opens and saves; the change shows up when you turn it on.
 
 ### Syncing by eye
 
 Lyrics files are not always in time with the master you happen to be playing.
 `fatal sync +` and `fatal sync -` shift the lyric by 0.1 s while the song
 plays — bound to <kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>→</kbd> /
-<kbd>←</kbd> by default, and also in the tray menu. With the tube up, the
+<kbd>←</kbd> by default, and also in the Settings window. With the tube up, the
 focused screen types the accumulated offset small for a second and a half
 (`+0.3 s · Frank Sinatra`); without it, you get a dialog.
 
@@ -451,12 +455,10 @@ still works.
 
 ### From the tray
 
-While it's running there's a tray icon, and its menu carries the settings
-you actually reach for mid-song: glitch level and spawn zone as submenus,
-size as bigger/smaller/reset, and one-click toggles for karaoke, album art
-and tearing — plus the demo dialogs and a way into the full menu. Each item
-shows its current value in its own label, so you can see how things are set
-without opening anything.
+While it's running there's a tray icon with a short menu: **Settings…** (the
+window above), the CRT switch, karaoke and Quit. Each toggle shows its current
+value in its own label, so you can see how things are set without opening
+anything.
 
 The tray needs `gtk3` and `libayatana-appindicator`. Without them the daemon
 runs exactly the same, just without an icon.
@@ -605,7 +607,8 @@ package:
 | Module      | What's in it                                                        |
 |-------------|---------------------------------------------------------------------|
 | `util`      | `log()` + rotation, runtime paths (PID/log), `UA`, `FIELD_SEP`        |
-| `config`    | defaults, TOML read/write, live reload, CRT switch, sliders watcher   |
+| `config`    | defaults, TOML read/write, live reload, CRT switch                    |
+| `settings`  | the Settings window's schema and the watcher that applies its changes |
 | `lyrics`    | lrclib + NetEase clients, on-disk cache, line splitting into beats    |
 | `art`       | album-cover colours (ImageMagick, optional)                           |
 | `system`    | playerctl / hyprctl / terminal lookups, daemon PID, optional-tool check |

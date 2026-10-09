@@ -1,13 +1,16 @@
 // fatal-lyrics — la ventana de Ajustes.
 //
-// `fatal ajustes` (o "Settings…" en la bandeja) abre esto: todas las opciones
-// que antes colgaban del menú de la bandeja, más los sliders del tubo, en UNA
-// ventana con la misma pinta que los carteles — un diálogo de Win95.
+// `fatal ajustes` (o `fatal config`, o "Settings…" en la bandeja y en el
+// lanzador) abre esto: TODAS las opciones de Fatal, en pestañas, en UNA ventana
+// con la misma pinta que los carteles — un diálogo de Win95. No hay otra
+// pantalla de opciones: el menú de terminal que había antes se fue, y esta
+// ventana no abre ninguna terminal.
 //
-// Qué se dibuja no vive acá: lo dice cartelitos/settings.py (GROUPS), que esta
-// ventana pide con `cartelitos.py --settings-json` al abrir y cada vez que el
-// TOML cambia (la bandeja o un editor también lo tocan). Acá hay un widget por
-// tipo de fila y nada más, así que una opción nueva no se agrega en este archivo.
+// Qué se dibuja no vive acá: lo dice cartelitos/settings.py (TABS y GROUPS), que
+// esta ventana pide con `cartelitos.py --settings-json` al abrir y cada vez que
+// el TOML cambia (la bandeja o un editor también lo tocan). Acá hay un widget
+// por tipo de fila y nada más, así que una opción nueva no se agrega en este
+// archivo.
 //
 // Lo que se toca se escribe en $XDG_RUNTIME_DIR/cartelitos-settings, una línea
 // `<serie> <seccion.clave>=<json>` por perilla; el daemon la valida, la pasa a
@@ -28,13 +31,19 @@ ShellRoot {
     readonly property string daemonPy: Quickshell.env("FATAL_DAEMON") || ""
     readonly property string runDir: Quickshell.env("XDG_RUNTIME_DIR")
 
+    property var tabs: []
     property var groups: []
     property var vals: ({})
     property bool crtOn: false
     property var keys: ({})
-    property string terminal: ""
+    property var monitors: []
+    property var players: []
     property bool daemonUp: true
     property string status: ""
+    property int tab: 0
+
+    // los valores con que abrió la ventana: "Undo changes" vuelve a éstos
+    property var opening: null
 
     // perillas recién tocadas acá: hasta que la config las confirme, un
     // refresco que llegue en el medio no las pisa (si no, el slider salta para
@@ -59,40 +68,92 @@ ShellRoot {
             return;
         }
         // los grupos una sola vez: rearmar los Repeater cortaría un arrastre
-        if (root.groups.length === 0)
+        if (root.groups.length === 0) {
+            root.tabs = d.tabs;
             root.groups = d.groups;
+        }
+        if (root.opening === null)
+            root.opening = d.values;
         const now = Date.now();
         let v = {};
         for (const id in d.values)
             v[id] = (root.held[id] || 0) > now ? root.vals[id] : d.values[id];
         root.vals = v;
         root.keys = d.keys;
-        root.terminal = d.terminal;
+        if (JSON.stringify(d.monitors) !== JSON.stringify(root.monitors))
+            root.monitors = d.monitors;
+        if (JSON.stringify(d.players) !== JSON.stringify(root.players))
+            root.players = d.players;
         root.daemonUp = d.daemon;
     }
 
     function commit(id, value, final) {
-        let v = Object.assign({}, root.vals);
-        v[id] = value;
-        root.vals = v;
-        let h = Object.assign({}, root.held);
-        h[id] = Date.now() + 2000;
-        root.held = h;
+        let c = {};
+        c[id] = value;
+        root.commitMany(c, final);
         root.status = `${id} = ${JSON.stringify(value)}`;
+    }
+
+    // varias perillas de una: "Undo changes" las devuelve todas en una sola
+    // escritura, no una por perilla
+    function commitMany(changes, final) {
+        let v = Object.assign({}, root.vals);
+        let h = Object.assign({}, root.held);
+        const ids = Object.keys(changes);
+        for (const id of ids) {
+            v[id] = changes[id];
+            h[id] = Date.now() + 2000;
+        }
+        root.vals = v;
+        root.held = h;
         if (!root.daemonUp) {
             // sin daemon nadie lee el archivo: se escribe el TOML directo, una
             // vez por gesto (al soltar el slider, no en cada pixel)
             if (final)
-                Quickshell.execDetached(["python3", root.daemonPy, "--settings-set",
-                                         `${id}=${JSON.stringify(value)}`]);
+                Quickshell.execDetached(["python3", root.daemonPy, "--settings-set"]
+                    .concat(ids.map(id => `${id}=${JSON.stringify(changes[id])}`)));
             return;
         }
-        root.serial = Math.max(root.serial + 1, Date.now());
-        let q = root.queue.filter(e => e.id !== id);
-        q.push({ s: root.serial, id: id, v: value });
-        root.queue = q.slice(-40);
+        let q = root.queue.filter(e => !(e.id in changes));
+        for (const id of ids) {
+            root.serial = Math.max(root.serial + 1, Date.now());
+            q.push({ s: root.serial, id: id, v: changes[id] });
+        }
+        root.queue = q.slice(-120);
         pipe.setText(root.queue.map(e => `${e.s.toFixed(0)} ${e.id}=${JSON.stringify(e.v)}`)
                      .join("\n") + "\n");
+    }
+
+    // lo tocado desde que se abrió la ventana, con el valor de entonces
+    readonly property var undo: {
+        let c = {};
+        if (root.opening === null)
+            return c;
+        for (const id in root.opening)
+            if (JSON.stringify(root.vals[id]) !== JSON.stringify(root.opening[id]))
+                c[id] = root.opening[id];
+        return c;
+    }
+
+    // el mismo control que hace settings.coerce, para avisar ANTES: el daemon
+    // tira un valor inválido sin decir nada
+    function textProblem(row, t) {
+        if (t.length > 80)
+            return "too long";
+        if (/["\\\x00-\x1f]/.test(t))
+            return "no quotes or backslashes";
+        if (row.check === "name" && t.trim() === "")
+            return "can't be empty";
+        if (row.check === "key" && t.trim() !== "" && t.indexOf(",") < 0)
+            return "a key needs its comma: MODS, KEY (e.g. SUPER SHIFT, Y)";
+        return "";
+    }
+
+    // lo que está guardado en una fila de pantallas, como lista de nombres
+    function screenList(row, v) {
+        if (Array.isArray(v))
+            return v.slice();
+        return typeof v === "string" && !row.specials.some(o => o.value === v) ? [v] : [];
     }
 
     function run(args, what) {
@@ -313,6 +374,36 @@ ShellRoot {
         wrapMode: Text.WordWrap
     }
 
+    // campo de texto hundido. Guarda con Enter o al salir del campo; Escape
+    // deshace lo tipeado
+    component Field95: Rectangle {
+        id: field
+        property alias text: input.text
+        property alias input: input
+        signal done()
+        signal undone()
+        implicitHeight: 21
+        color: "#ffffff"
+        Bevel { sunken: true }
+        TextInput {
+            id: input
+            anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
+            verticalAlignment: TextInput.AlignVCenter
+            clip: true
+            color: "#000000"
+            selectionColor: "#000080"
+            selectedTextColor: "#ffffff"
+            font.pixelSize: 12
+            selectByMouse: true
+            onEditingFinished: field.done()
+            Keys.onEscapePressed: {
+                field.undone();
+                focus = false;
+            }
+        }
+    }
+
+
     // ------------------------------------------------------------ la ventana
 
     PanelWindow {
@@ -326,6 +417,7 @@ ShellRoot {
         implicitHeight: frame.height
 
         Item {
+            id: keyItem
             anchors.fill: parent
             focus: true
             Keys.onEscapePressed: Qt.quit()
@@ -334,10 +426,19 @@ ShellRoot {
         Rectangle {
             id: frame
             readonly property int colW: 300
-            width: 3 * colW + 2 * 10 + 2 * 12
+            width: 3 * colW + 2 * 10 + 2 * 12 + 2 * 10
             height: body.y + body.height + 12
             color: "#c0c0c0"
             Bevel {}
+
+            // un click fuera de un campo de texto lo suelta (y el campo guarda)
+            MouseArea {
+                anchors.fill: parent
+                onPressed: m => {
+                    keyItem.forceActiveFocus();
+                    m.accepted = false;
+                }
+            }
 
             // barra de título
             Rectangle {
@@ -386,215 +487,506 @@ ShellRoot {
                 width: frame.width - 24
                 spacing: 12
 
-                Row {
-                    spacing: 10
+                // pestañas y su hoja: la elegida se pega a la hoja, como en
+                // las Propiedades de pantalla de Win95
+                Item {
+                    width: parent.width
+                    height: tabStrip.height + sheet.height - 2
 
-                    Repeater {
-                        model: 3
+                    Rectangle {
+                        id: sheet
+                        y: tabStrip.height - 2
+                        width: parent.width
+                        height: flick.height + 20
+                        color: "#c0c0c0"
+                        Bevel {}
 
-                        Column {
-                            id: col
-                            required property int index
-                            width: frame.colW
-                            spacing: 12
+                        // todas las páginas, una encima de otra: la hoja mide
+                        // lo que la más alta, así cambiar de pestaña no cambia
+                        // el tamaño de la ventana. Si no entra en la pantalla,
+                        // se scrollea con la rueda
+                        Flickable {
+                            id: flick
+                            x: 10
+                            y: 10
+                            width: parent.width - 20
+                            height: Math.min(pages.tallest, (win.screen ? win.screen.height : 1080) - 190)
+                            contentWidth: width
+                            contentHeight: pages.tallest
+                            clip: true
+                            interactive: contentHeight > height
+                            boundsBehavior: Flickable.StopAtBounds
 
-                            Repeater {
-                                model: root.groups.filter(g => g.column === col.index)
+                            Item {
+                                id: pages
+                                width: flick.width
+                                property real tallest: 0
+                                property var heights: []
+                                function note(i, h) {
+                                    let hs = heights.slice();
+                                    hs[i] = h;
+                                    heights = hs;
+                                    tallest = Math.max(0, ...hs.filter(x => x !== undefined));
+                                }
 
-                                Group95 {
-                                    id: group
-                                    required property var modelData
-                                    width: col.width
-                                    title: modelData.title
+                                Repeater {
+                                    model: root.tabs.length
 
-                                    Repeater {
-                                        model: group.modelData.rows
+                                    // opacity y no visible: una página invisible
+                                    // deja de medirse (Column saltea los hijos que
+                                    // no se ven) y la hoja cambiaría de alto
+                                    Row {
+                                        id: page
+                                        required property int index
+                                        spacing: 10
+                                        opacity: page.index === root.tab ? 1 : 0
+                                        enabled: page.index === root.tab
+                                        onImplicitHeightChanged: pages.note(page.index, implicitHeight)
+                                        Component.onCompleted: pages.note(page.index, implicitHeight)
 
-                                        Item {
-                                            id: rowItem
-                                            required property var modelData
-                                            readonly property string rid: modelData.id
-                                            width: group.width - 22
-                                            height: loader.item ? loader.item.implicitHeight : 0
+                                        Repeater {
+                                            model: 3
 
-                                            Loader {
-                                                id: loader
-                                                width: parent.width
-                                                sourceComponent: ({
-                                                    toggle: toggleRow, choice: choiceRow,
-                                                    slider: sliderRow, crt: crtRow, sync: syncRow,
-                                                })[rowItem.modelData.kind] || null
-                                            }
+                                            Column {
+                                                id: col
+                                                required property int index
+                                                width: frame.colW
+                                                spacing: 12
 
-                                            // casilla: la perilla on/off
-                                            Component {
-                                                id: toggleRow
-                                                Item {
-                                                    implicitHeight: toggleText.implicitHeight
-                                                    Check95 {
-                                                        y: 1
-                                                        checked: root.vals[rowItem.rid] === true
-                                                    }
-                                                    Column {
-                                                        id: toggleText
-                                                        x: 20
-                                                        width: parent.width - 20
-                                                        Label95 { text: rowItem.modelData.label }
-                                                        Hint95 { width: parent.width; text: rowItem.modelData.hint }
-                                                    }
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        onClicked: root.commit(rowItem.rid, root.vals[rowItem.rid] !== true, true)
-                                                    }
-                                                }
-                                            }
+                                                Repeater {
+                                                    model: root.groups.filter(g => g.tab === page.index && g.column === col.index)
 
-                                            // botones de opción: todas a la vista, una elegida
-                                            Component {
-                                                id: choiceRow
-                                                Column {
-                                                    spacing: 3
-                                                    Label95 { text: rowItem.modelData.label }
-                                                    Hint95 { width: parent.width; text: rowItem.modelData.hint }
-                                                    Flow {
-                                                        width: parent.width
-                                                        spacing: 2
+                                                    Group95 {
+                                                        id: group
+                                                        required property var modelData
+                                                        width: col.width
+                                                        title: modelData.title
+
                                                         Repeater {
-                                                            model: rowItem.modelData.options
-                                                            Radio95 {
+                                                            model: group.modelData.rows
+
+                                                            Item {
+                                                                id: rowItem
                                                                 required property var modelData
-                                                                text: modelData.label
-                                                                checked: root.vals[rowItem.rid] === modelData.value
-                                                                onClicked: root.commit(rowItem.rid, modelData.value, true)
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                                                readonly property string rid: modelData.id
+                                                                width: group.width - 22
+                                                                height: loader.item ? loader.item.implicitHeight : 0
 
-                                            // trackbar: click o arrastre en cualquier punto
-                                            Component {
-                                                id: sliderRow
-                                                Column {
-                                                    spacing: 2
-                                                    // nombre, para qué es y el número, en una línea:
-                                                    // diez sliders con la pista abajo de cada uno
-                                                    // estiraban la columna al doble que las otras
-                                                    Item {
-                                                        width: parent.width
-                                                        height: sliderName.implicitHeight
-                                                        Label95 { id: sliderName; text: rowItem.modelData.label }
-                                                        Hint95 {
-                                                            anchors { left: sliderName.right; leftMargin: 6; right: sliderNum.left
-                                                                      rightMargin: 6; baseline: sliderName.baseline }
-                                                            text: rowItem.modelData.hint
-                                                            wrapMode: Text.NoWrap
-                                                            elide: Text.ElideRight
-                                                        }
-                                                        Label95 {
-                                                            id: sliderNum
-                                                            anchors.right: parent.right
-                                                            text: (root.vals[rowItem.rid] ?? 0).toFixed(2)
-                                                            font.family: "monospace"
-                                                        }
-                                                    }
-                                                    Item {
-                                                        id: track
-                                                        readonly property var spec: rowItem.modelData
-                                                        readonly property real frac: Math.max(0, Math.min(1,
-                                                            ((root.vals[spec.id] ?? spec.min) - spec.min) / (spec.max - spec.min)))
-                                                        width: parent.width
-                                                        height: 22
-                                                        Rectangle {
-                                                            x: 5
-                                                            y: 9
-                                                            width: track.width - 10
-                                                            height: 4
-                                                            color: "#c0c0c0"
-                                                            Bevel { sunken: true }
-                                                        }
-                                                        Rectangle {
-                                                            x: 5 + track.frac * (track.width - 10) - width / 2
-                                                            y: 0
-                                                            width: 11
-                                                            height: 21
-                                                            color: "#c0c0c0"
-                                                            Bevel {}
-                                                        }
-                                                        MouseArea {
-                                                            anchors.fill: parent
-                                                            preventStealing: true
-                                                            function apply(mx, final) {
-                                                                const s = track.spec;
-                                                                const f = Math.max(0, Math.min((mx - 5) / (track.width - 10), 1));
-                                                                root.commit(s.id, root.snap(s.min + f * (s.max - s.min), s.step), final);
-                                                            }
-                                                            onPressed: m => apply(m.x, false)
-                                                            onPositionChanged: m => {
-                                                                if (pressed)
-                                                                    apply(m.x, false);
-                                                            }
-                                                            onReleased: m => apply(m.x, true)
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                                                Loader {
+                                                                    id: loader
+                                                                    width: parent.width
+                                                                    sourceComponent: ({
+                                                                        toggle: toggleRow, choice: choiceRow,
+                                                                        slider: sliderRow, crt: crtRow, sync: syncRow,
+                                                                        text: textRow, screens: screensRow, order: orderRow,
+                                                                    })[rowItem.modelData.kind] || null
+                                                                }
 
-                                            // el tubo: no es una perilla, es el interruptor en vivo
-                                            Component {
-                                                id: crtRow
-                                                Item {
-                                                    implicitHeight: crtText.implicitHeight
-                                                    Check95 { y: 1; checked: root.crtOn }
-                                                    Column {
-                                                        id: crtText
-                                                        x: 20
-                                                        width: parent.width - 20
-                                                        Label95 { text: rowItem.modelData.label }
-                                                        Hint95 {
-                                                            width: parent.width
-                                                            text: rowItem.modelData.hint
-                                                                  + (root.keys.crt_toggle ? ` · ${root.keyLabel(root.keys.crt_toggle)}` : "")
-                                                        }
-                                                    }
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        onClicked: {
-                                                            root.crtOn = !root.crtOn;
-                                                            root.run(["crt", root.crtOn ? "on" : "off"],
-                                                                     `CRT mode ${root.crtOn ? "on" : "off"}`);
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                                                // casilla: la perilla on/off
+                                                                Component {
+                                                                    id: toggleRow
+                                                                    Item {
+                                                                        implicitHeight: toggleText.implicitHeight
+                                                                        Check95 {
+                                                                            y: 1
+                                                                            checked: root.vals[rowItem.rid] === true
+                                                                        }
+                                                                        Column {
+                                                                            id: toggleText
+                                                                            x: 20
+                                                                            width: parent.width - 20
+                                                                            Label95 { text: rowItem.modelData.label }
+                                                                            Hint95 { width: parent.width; text: rowItem.modelData.hint }
+                                                                        }
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            onClicked: root.commit(rowItem.rid, root.vals[rowItem.rid] !== true, true)
+                                                                        }
+                                                                    }
+                                                                }
 
-                                            // el sync: lo mismo que `fatal sync +|-`
-                                            Component {
-                                                id: syncRow
-                                                Column {
-                                                    spacing: 5
-                                                    Label95 { text: rowItem.modelData.label }
-                                                    Hint95 {
-                                                        width: parent.width
-                                                        text: rowItem.modelData.hint
-                                                              + (root.keys.sync_forward
-                                                                 ? ` · ${root.keyLabel(root.keys.sync_back)} / ${root.keyLabel(root.keys.sync_forward)}`
-                                                                 : "")
-                                                    }
-                                                    Row {
-                                                        spacing: 6
-                                                        Button95 {
-                                                            text: "Later  −0.1 s"
-                                                            onClicked: root.run(["sync", "-"], "lyric 0.1 s later")
-                                                        }
-                                                        Button95 {
-                                                            text: "Earlier  +0.1 s"
-                                                            onClicked: root.run(["sync", "+"], "lyric 0.1 s earlier")
+                                                                // botones de opción: todas a la vista, una elegida
+                                                                Component {
+                                                                    id: choiceRow
+                                                                    Column {
+                                                                        spacing: 3
+                                                                        Label95 { text: rowItem.modelData.label }
+                                                                        Hint95 { width: parent.width; text: rowItem.modelData.hint }
+                                                                        Flow {
+                                                                            width: parent.width
+                                                                            spacing: 2
+                                                                            Repeater {
+                                                                                model: rowItem.modelData.options
+                                                                                Radio95 {
+                                                                                    required property var modelData
+                                                                                    text: modelData.label
+                                                                                    checked: root.vals[rowItem.rid] === modelData.value
+                                                                                    onClicked: root.commit(rowItem.rid, modelData.value, true)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // trackbar: click o arrastre en cualquier punto
+                                                                Component {
+                                                                    id: sliderRow
+                                                                    Column {
+                                                                        spacing: 2
+                                                                        // nombre, para qué es y el número, en una línea:
+                                                                        // diez sliders con la pista abajo de cada uno
+                                                                        // estiraban la columna al doble que las otras
+                                                                        Item {
+                                                                            width: parent.width
+                                                                            height: sliderName.implicitHeight
+                                                                            Label95 { id: sliderName; text: rowItem.modelData.label }
+                                                                            Hint95 {
+                                                                                anchors { left: sliderName.right; leftMargin: 6; right: sliderNum.left
+                                                                                          rightMargin: 6; baseline: sliderName.baseline }
+                                                                                text: rowItem.modelData.hint
+                                                                                wrapMode: Text.NoWrap
+                                                                                elide: Text.ElideRight
+                                                                            }
+                                                                            Label95 {
+                                                                                id: sliderNum
+                                                                                anchors.right: parent.right
+                                                                                text: (root.vals[rowItem.rid] ?? 0).toFixed(rowItem.modelData.step >= 1 ? 0 : 2)
+                                                                                font.family: "monospace"
+                                                                            }
+                                                                        }
+                                                                        Item {
+                                                                            id: track
+                                                                            readonly property var spec: rowItem.modelData
+                                                                            readonly property real frac: Math.max(0, Math.min(1,
+                                                                                ((root.vals[spec.id] ?? spec.min) - spec.min) / (spec.max - spec.min)))
+                                                                            width: parent.width
+                                                                            height: 22
+                                                                            Rectangle {
+                                                                                x: 5
+                                                                                y: 9
+                                                                                width: track.width - 10
+                                                                                height: 4
+                                                                                color: "#c0c0c0"
+                                                                                Bevel { sunken: true }
+                                                                            }
+                                                                            Rectangle {
+                                                                                x: 5 + track.frac * (track.width - 10) - width / 2
+                                                                                y: 0
+                                                                                width: 11
+                                                                                height: 21
+                                                                                color: "#c0c0c0"
+                                                                                Bevel {}
+                                                                            }
+                                                                            MouseArea {
+                                                                                anchors.fill: parent
+                                                                                preventStealing: true
+                                                                                function apply(mx, final) {
+                                                                                    const s = track.spec;
+                                                                                    const f = Math.max(0, Math.min((mx - 5) / (track.width - 10), 1));
+                                                                                    root.commit(s.id, root.snap(s.min + f * (s.max - s.min), s.step), final);
+                                                                                }
+                                                                                onPressed: m => apply(m.x, false)
+                                                                                onPositionChanged: m => {
+                                                                                    if (pressed)
+                                                                                        apply(m.x, false);
+                                                                                }
+                                                                                onReleased: m => apply(m.x, true)
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // texto: el player, un atajo, la fuente
+                                                                Component {
+                                                                    id: textRow
+                                                                    Column {
+                                                                        id: textCol
+                                                                        spacing: 3
+                                                                        readonly property string saved: root.vals[rowItem.rid] ?? ""
+                                                                        onSavedChanged: if (!textField.input.activeFocus) textField.text = saved
+                                                                        Component.onCompleted: textField.text = saved
+                                                                        function save() {
+                                                                            const t = textField.text;
+                                                                            if (t === textCol.saved)
+                                                                                return;
+                                                                            const bad = root.textProblem(rowItem.modelData, t);
+                                                                            if (bad) {
+                                                                                root.status = `${rowItem.modelData.label}: ${bad} — not saved`;
+                                                                                textField.text = textCol.saved;
+                                                                                return;
+                                                                            }
+                                                                            root.commit(rowItem.rid, t.trim(), true);
+                                                                        }
+                                                                        Label95 { text: rowItem.modelData.label }
+                                                                        Hint95 { width: parent.width; text: rowItem.modelData.hint + " · Enter saves" }
+                                                                        Field95 {
+                                                                            id: textField
+                                                                            width: parent.width
+                                                                            onDone: textCol.save()
+                                                                            onUndone: {
+                                                                                textField.text = textCol.saved;
+                                                                                keyItem.forceActiveFocus();
+                                                                            }
+                                                                        }
+                                                                        // lo que playerctl ve ahora, para no tipear
+                                                                        Flow {
+                                                                            width: parent.width
+                                                                            spacing: 4
+                                                                            visible: rowItem.modelData.suggest === "players" && root.players.length > 0
+                                                                            Repeater {
+                                                                                model: rowItem.modelData.suggest === "players" ? root.players : []
+                                                                                Radio95 {
+                                                                                    required property var modelData
+                                                                                    text: modelData
+                                                                                    checked: textCol.saved === modelData
+                                                                                    onClicked: root.commit(rowItem.rid, modelData, true)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // qué pantallas: una opción especial o los
+                                                                // monitores que se marquen
+                                                                Component {
+                                                                    id: screensRow
+                                                                    Column {
+                                                                        id: scrCol
+                                                                        spacing: 3
+                                                                        readonly property var row: rowItem.modelData
+                                                                        readonly property var picked: root.screenList(row, root.vals[rowItem.rid])
+                                                                        // los conectados, de izquierda a derecha, y los
+                                                                        // que están guardados pero no aparecen
+                                                                        readonly property var names: root.monitors.map(m => m.name)
+                                                                            .concat(picked.filter(n => !root.monitors.some(m => m.name === n)))
+                                                                        function toggle(name) {
+                                                                            let on = scrCol.picked.indexOf(name) < 0
+                                                                                ? scrCol.picked.concat([name])
+                                                                                : scrCol.picked.filter(n => n !== name);
+                                                                            on = scrCol.names.filter(n => on.indexOf(n) >= 0);
+                                                                            root.commit(rowItem.rid, on.length ? on : scrCol.row.specials[0].value, true);
+                                                                        }
+                                                                        Label95 { text: scrCol.row.label }
+                                                                        Hint95 { width: parent.width; text: scrCol.row.hint }
+                                                                        Flow {
+                                                                            width: parent.width
+                                                                            spacing: 2
+                                                                            Repeater {
+                                                                                model: scrCol.row.specials
+                                                                                Radio95 {
+                                                                                    required property var modelData
+                                                                                    text: modelData.label
+                                                                                    checked: root.vals[rowItem.rid] === modelData.value
+                                                                                    onClicked: root.commit(rowItem.rid, modelData.value, true)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        Repeater {
+                                                                            model: scrCol.names
+                                                                            Item {
+                                                                                id: mon
+                                                                                required property string modelData
+                                                                                readonly property var info: root.monitors.find(m => m.name === modelData)
+                                                                                width: scrCol.width
+                                                                                height: 16
+                                                                                Check95 { y: 1; checked: scrCol.picked.indexOf(mon.modelData) >= 0 }
+                                                                                Label95 { id: monName; x: 20; text: mon.modelData }
+                                                                                Hint95 {
+                                                                                    anchors { left: monName.right; leftMargin: 6; right: parent.right
+                                                                                              baseline: monName.baseline }
+                                                                                    text: mon.info ? mon.info.info : "not connected"
+                                                                                    wrapMode: Text.NoWrap
+                                                                                    elide: Text.ElideRight
+                                                                                }
+                                                                                MouseArea {
+                                                                                    anchors.fill: parent
+                                                                                    onClicked: scrCol.toggle(mon.modelData)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // el orden de las pantallas del tubo: solo, o a mano
+                                                                // con los números gigantes de `fatal crt setup`
+                                                                Component {
+                                                                    id: orderRow
+                                                                    Column {
+                                                                        id: ordCol
+                                                                        spacing: 3
+                                                                        readonly property var list: Array.isArray(root.vals[rowItem.rid])
+                                                                            ? root.vals[rowItem.rid] : []
+                                                                        function move(i, d) {
+                                                                            let l = ordCol.list.slice();
+                                                                            const t = l[i];
+                                                                            l[i] = l[i + d];
+                                                                            l[i + d] = t;
+                                                                            root.commit(rowItem.rid, l, true);
+                                                                        }
+                                                                        Label95 { text: rowItem.modelData.label }
+                                                                        Hint95 { width: parent.width; text: rowItem.modelData.hint }
+                                                                        Flow {
+                                                                            width: parent.width
+                                                                            spacing: 2
+                                                                            Radio95 {
+                                                                                text: "Left to right"
+                                                                                checked: root.vals[rowItem.rid] === "auto"
+                                                                                onClicked: root.commit(rowItem.rid, "auto", true)
+                                                                            }
+                                                                            Radio95 {
+                                                                                text: "By hand"
+                                                                                checked: ordCol.list.length > 0
+                                                                                onClicked: if (!checked && root.monitors.length)
+                                                                                    root.commit(rowItem.rid, root.monitors.map(m => m.name), true)
+                                                                            }
+                                                                        }
+                                                                        Repeater {
+                                                                            model: ordCol.list
+                                                                            Row {
+                                                                                id: ordItem
+                                                                                required property string modelData
+                                                                                required property int index
+                                                                                spacing: 4
+                                                                                Label95 {
+                                                                                    width: 120
+                                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                                    text: `${ordItem.index + 1}. ${ordItem.modelData}`
+                                                                                }
+                                                                                Button95 {
+                                                                                    text: "▲"
+                                                                                    implicitWidth: 23
+                                                                                    enabled: ordItem.index > 0
+                                                                                    onClicked: if (enabled) ordCol.move(ordItem.index, -1)
+                                                                                }
+                                                                                Button95 {
+                                                                                    text: "▼"
+                                                                                    implicitWidth: 23
+                                                                                    enabled: ordItem.index < ordCol.list.length - 1
+                                                                                    onClicked: if (enabled) ordCol.move(ordItem.index, 1)
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        Row {
+                                                                            spacing: 6
+                                                                            Button95 {
+                                                                                text: "Show numbers"
+                                                                                onClicked: root.run(["crt", "setup"],
+                                                                                    "a big number on each screen: read them left to right")
+                                                                            }
+                                                                            Button95 {
+                                                                                text: "Hide them"
+                                                                                onClicked: root.run(["crt", "setup", "off"], "screen numbers off")
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // el tubo: no es una perilla, es el interruptor en vivo
+                                                                Component {
+                                                                    id: crtRow
+                                                                    Item {
+                                                                        implicitHeight: crtText.implicitHeight
+                                                                        Check95 { y: 1; checked: root.crtOn }
+                                                                        Column {
+                                                                            id: crtText
+                                                                            x: 20
+                                                                            width: parent.width - 20
+                                                                            Label95 { text: rowItem.modelData.label }
+                                                                            Hint95 {
+                                                                                width: parent.width
+                                                                                text: rowItem.modelData.hint
+                                                                                      + (root.keys.crt_toggle ? ` · ${root.keyLabel(root.keys.crt_toggle)}` : "")
+                                                                            }
+                                                                        }
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            onClicked: {
+                                                                                root.crtOn = !root.crtOn;
+                                                                                root.run(["crt", root.crtOn ? "on" : "off"],
+                                                                                         `CRT mode ${root.crtOn ? "on" : "off"}`);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // el sync: lo mismo que `fatal sync +|-|reset`
+                                                                Component {
+                                                                    id: syncRow
+                                                                    Column {
+                                                                        spacing: 5
+                                                                        Label95 { text: rowItem.modelData.label }
+                                                                        Hint95 {
+                                                                            width: parent.width
+                                                                            text: rowItem.modelData.hint
+                                                                                  + (root.keys.sync_forward
+                                                                                     ? ` · ${root.keyLabel(root.keys.sync_back)} / ${root.keyLabel(root.keys.sync_forward)}`
+                                                                                     : "")
+                                                                        }
+                                                                        Row {
+                                                                            spacing: 6
+                                                                            Button95 {
+                                                                                text: "Later  −0.1 s"
+                                                                                onClicked: root.run(["sync", "-"], "lyric 0.1 s later")
+                                                                            }
+                                                                            Button95 {
+                                                                                text: "Earlier  +0.1 s"
+                                                                                onClicked: root.run(["sync", "+"], "lyric 0.1 s earlier")
+                                                                            }
+                                                                        }
+                                                                        // `reset` sin nombre: el artista que suena. El
+                                                                        // daemon se entera en el próximo tema
+                                                                        Button95 {
+                                                                            text: "Forget this artist"
+                                                                            onClicked: root.run(["sync", "reset"],
+                                                                                "learned sync for this artist forgotten (from the next track)")
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Row {
+                        id: tabStrip
+                        x: 2
+                        height: 24
+                        Repeater {
+                            model: root.tabs
+                            Rectangle {
+                                id: tabBtn
+                                required property string modelData
+                                required property int index
+                                readonly property bool on: tabBtn.index === root.tab
+                                y: on ? 0 : 2
+                                width: tabLabel.implicitWidth + 20
+                                height: on ? 24 : 22
+                                color: "#c0c0c0"
+                                Rectangle { x: 0; y: 2; width: 1; height: parent.height; color: "#ffffff" }
+                                Rectangle { x: 2; y: 0; width: parent.width - 4; height: 1; color: "#ffffff" }
+                                Rectangle { x: 1; y: 1; width: 1; height: 1; color: "#ffffff" }
+                                Rectangle { x: parent.width - 1; y: 2; width: 1; height: parent.height - 2; color: "#000000" }
+                                Rectangle { x: parent.width - 2; y: 1; width: 1; height: parent.height - 1; color: "#808080" }
+                                Text {
+                                    id: tabLabel
+                                    anchors.centerIn: parent
+                                    text: tabBtn.modelData
+                                    color: "#000000"
+                                    font.pixelSize: 12
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        keyItem.forceActiveFocus();
+                                        root.tab = tabBtn.index;
+                                        flick.contentY = 0;
                                     }
                                 }
                             }
@@ -614,9 +1006,15 @@ ShellRoot {
                             onClicked: root.run(["demo"], "demo dialogs sent")
                         }
                         Button95 {
-                            text: "All options…"
-                            enabled: root.terminal !== ""
-                            onClicked: Quickshell.execDetached([root.terminal, "-e", root.fatalBin, "config"])
+                            readonly property int n: Object.keys(root.undo).length
+                            text: "Undo changes"
+                            enabled: n > 0
+                            onClicked: {
+                                if (n === 0)
+                                    return;
+                                root.commitMany(root.undo, true);
+                                root.status = `${n} option${n === 1 ? "" : "s"} back to how they were`;
+                            }
                         }
                         Button95 {
                             text: "Close"
@@ -632,9 +1030,13 @@ ShellRoot {
                     color: "#c0c0c0"
                     Bevel { sunken: true }
                     Text {
-                        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+                        anchors { left: parent.left; leftMargin: 6; right: parent.right; rightMargin: 6
+                                  verticalCenter: parent.verticalCenter }
+                        elide: Text.ElideRight
                         text: !root.daemonUp
                               ? "fatal-lyrics isn't running: changes are saved and apply when it starts"
+                              : (root.vals["effects.death_age_min"] ?? 0) > (root.vals["effects.death_age_max"] ?? 99)
+                              ? "Heads up: in Lifetime, “Dies after” is above “…at most”"
                               : root.status || "Every change applies live and is saved to config.toml"
                         color: "#000000"
                         font.pixelSize: 11

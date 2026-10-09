@@ -80,8 +80,11 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de
   `config.py` porque la escribe el propio daemon, no Ferox a mano. Adentro vive también el
   perfil por tema (`_pending`, en memoria): lo que todavía no se ganó el derecho a durar.
-- `[keys] sync_forward` / `sync_back` (`config.py`) + `system.key_bind_commands()` — las
-  teclas del sync. NO viajan al overlay: las aplica Hyprland desde el daemon. Con config Lua
+- `[keys] sync_forward` / `sync_back` / `crt_toggle` (`config.py`) + `system.key_bind_commands()` — las
+  teclas del sync y del tubo. Las aplica Hyprland desde el daemon; al overlay sólo viaja el
+  rótulo armado con ellas (`system.keys_hint()`, campo `keys_hint` del evento `config`): el
+  tooltip amarillo `keysWin` de `shell.qml` (arriba al medio, al empezar cada tema, con el
+  offset al ajustar) y la segunda línea de la ayuda de salida del tubo (`hint`, `Crt.qml`). Con config Lua
   (0.56+, `system._hypr_lua()`) van como `hyprctl eval 'hl.bind(...)'` y los modificadores en
   mayúscula (`_lua_keys`); con hyprlang, `hyprctl keyword`.
 - `packaging/` — `fatal.desktop` + `fatal-lyrics.svg` (ícono, Win95) para el lanzador, que

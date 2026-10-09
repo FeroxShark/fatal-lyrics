@@ -413,6 +413,13 @@ plays — bound to <kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>→</kbd> /
 focused screen types the accumulated offset small for a second and a half
 (`+0.3 s · Frank Sinatra`); without it, you get a dialog.
 
+You don't have to remember the keys: every time a song starts, a small yellow
+Win95 tooltip at the top of the screen shows them for a few seconds
+(`Super+Alt+→ / ←  sync ±0.1 s · Super+Shift+Y  CRT`) and fades away; a nudge
+brings it back for a moment with the offset under it. With the tube up they are
+written under its exit hint. The text is built from `[keys]`, so it follows
+your binds.
+
 **It learns, but slowly.** A nudge applies to the track that is playing right
 away. It is only saved for the *artist* once two **different** tracks of theirs
 were nudged the same way — one badly mastered track, or one lyrics file that
@@ -429,7 +436,7 @@ fatal sync reset all            # forget everything (asks first)
 
 Both of those work with the daemon stopped: what was learned is a file.
 
-The two keys are settings, `[keys] sync_forward` and `sync_back`, in Hyprland's
+The keys are settings, `[keys] sync_forward`, `sync_back` and `crt_toggle`, in Hyprland's
 own syntax (`"Super+Alt, Right"`). They default to the pair the shipped
 keybinds already run, so out of the box fatal-lyrics binds nothing and no
 shortcut ends up defined twice. Change one and the daemon rebinds it for you —
@@ -566,6 +573,7 @@ because there is nothing to install.
 | `crt`      | `word_fx`            | A few key words (fire/blood/burn, die/dead, break/crash/fall, dark/apagar, es + en) fire an alarm / blink / glitch / dark effect on the screen showing them, as the word is sung (or once the line settles); paced by `pace` | `true` |
 | `keys`     | `sync_forward`       | Keys that nudge the lyric forward 0.1 s (Hyprland syntax; `""` = none) | `"Super+Alt, Right"` |
 | `keys`     | `sync_back`          | ...and the ones that push it back 0.1 s                             | `"Super+Alt, Left"` |
+| `keys`     | `crt_toggle`         | Keys that turn the CRT mode on and off (same rule: only rebound if you change it) | `"Super+Shift, Y"` |
 
 This table is kept in sync with `cartelitos/config.py`'s `DEFAULTS`, which is
 also what generates the sample `config.toml` (`_render_default_config`) —

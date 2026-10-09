@@ -70,10 +70,11 @@ tanda 4 (`drive-motif.py`, `motif-hunt.py`, hoy OBSOLETOS) y era esperar minutos
 sacara el dibujo buscado. El forzado pisa pool, hold, filtro de validez y palabra clave, y se ve
 aunque no suene nada; la letra sigue dibujándose encima. Kinds válidos: `fatal crt motif --help`.
 
-Hyprland: binds, autostart y `no_anim` de las capas viven en `packaging/hyprland.lua`, que se carga
-con `dofile` desde `~/.config/hypr/hyprland.lua`. Autostart: **UNO solo**, ahí, con `sleep 6 &&
-fatal restart`. `restart` deja estado limpio aunque haya quedado media instancia. No reintroducir
-un segundo (`docs/TRAMPAS.md`).
+Hyprland: binds y `no_anim` de las capas viven en `packaging/hyprland.lua`, que se carga con
+`dofile` desde `~/.config/hypr/hyprland.lua`. Autostart: **UNO solo**, la unit de usuario
+`packaging/fatal-lyrics.service` (`fatal run`; el shell la prende/apaga en Apps de inicio).
+`fatal on|off|restart` pasan por `systemctl --user` si está. No reintroducir un segundo
+(`docs/TRAMPAS.md`).
 
 ## Dónde está el resto (leer sólo lo que toca)
 

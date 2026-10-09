@@ -89,8 +89,10 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   mayúscula (`_lua_keys`); con hyprlang, `hyprctl keyword`.
 - `packaging/` — `fatal.desktop` + `fatal-lyrics.svg` (ícono, Win95) para el lanzador, que
   `install.sh` copia a `~/.local/share`; `hyprland.lua` (binds Super+Shift+Y / Super+Alt+flechas,
-  autostart, `no_anim` de las capas `cartelitos*`) para el `dofile` de la config de Hyprland;
-  `PKGBUILD`. Pantallas de Ferox hoy: DP-2 · HDMI-A-1 (carteles) · DP-1 (widgets, fuera del CRT).
+  `no_anim` de las capas `cartelitos*`) para el `dofile` de la config de Hyprland;
+  `fatal-lyrics.service` (el autostart: unit de usuario con `fatal run`, que `install.sh` copia a
+  `~/.config/systemd/user` y habilita; `fatal on|off|restart` pasan por `systemctl --user` si
+  existe); `PKGBUILD`. Pantallas de Ferox hoy: DP-2 · HDMI-A-1 (carteles) · DP-1 (widgets, fuera del CRT).
 - `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`) — la captura
   estéreo se baja a mono ANTES de `AudioAnalyzer.feed` (no descalibra perfiles viejos); el scope
   dibuja Lissajous L/R real. Detalle y números: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.

@@ -345,6 +345,11 @@ git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
 ~/fatal-lyrics/install.sh
 ```
 
+It also installs a systemd user unit, `fatal-lyrics.service`, and enables it so
+fatal-lyrics starts with your graphical session (`systemctl --user disable
+fatal-lyrics.service` to stop that). While the unit is installed, `fatal on`,
+`off` and `restart` go through `systemctl --user`.
+
 ### Arch Linux (AUR)
 
 Not published yet. The `PKGBUILD` lives in `packaging/` and works today if you
@@ -353,6 +358,7 @@ want to build it yourself:
 ```bash
 git clone https://github.com/FeroxShark/fatal-lyrics ~/fatal-lyrics
 cd ~/fatal-lyrics/packaging && makepkg -si
+systemctl --user enable fatal-lyrics.service   # optional: start with the session
 ```
 
 ## Usage
@@ -618,6 +624,8 @@ package reads.
 
 ```bash
 fatal off
+systemctl --user disable fatal-lyrics.service
+rm -f ~/.config/systemd/user/fatal-lyrics.service   # manual install only
 # AUR: sudo pacman -R fatal-lyrics-git
 # manual:
 rm ~/.local/bin/fatal && rm -rf ~/fatal-lyrics

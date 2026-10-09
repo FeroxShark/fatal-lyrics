@@ -508,7 +508,7 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   7. **wf-recorder graba VFR:** `ffmpeg -fps_mode passthrough` y los `pts` de `ffprobe`
      (`frame=pts_time`, con coma final); sin eso ffmpeg duplica cuadros hasta la cadencia fija.
 
-## Autostart: un solo `exec-once`
+## Autostart: uno solo
 
 Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin monitores y el de
 `execs.conf` veía sus pidfiles y hacía no-op → boot roto. Queda UNO solo, en `execs.conf`, con
@@ -517,6 +517,15 @@ Hubo dos `exec-once` compitiendo: el de `hyprland.conf` arrancaba en t=0 sin mon
 Desde Hyprland 0.56 (config en Lua, 2026-10) ese UNO vive en `packaging/hyprland.lua`
 (`hl.on("hyprland.start", ...)` con `sleep 6 && fatal restart`), cargado con `dofile`. Sigue
 siendo uno solo: no sumar otro `exec_cmd` en `hyprland.lua`.
+
+Desde 2026-10-09 ese UNO es la unit de usuario `packaging/fatal-lyrics.service` (para que el
+shell de Ferox la prenda y apague desde Apps de inicio), y `hyprland.lua` ya no arranca nada.
+El `sleep 6` pasó a `fatal run` como espera real: hasta que `hyprctl -j monitors` lista alguno.
+`fatal on|off|restart` hablan con la unit si está instalada: un `fatal on` a mano por fuera
+dejaba los procesos en el cgroup de la terminal y la unit no los veía. Con la unit inactiva y
+una instancia viva por fuera, `systemctl --user start` la ADOPTA (start no relanza lo que corre)
+sin cortarla. `KillMode=process`: al parar, `run` baja todo con `stop`; matar el cgroup entero
+se llevaba lo que el overlay hubiera lanzado (TRAMPAS, "Procesos huérfanos").
 
 ## Hyprland 0.56 en Lua: `hyprctl keyword` falla MUDO
 

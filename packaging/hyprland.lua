@@ -26,7 +26,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("sh -c 'sleep 6 && " .. FATAL .. " restart'")
 end)
 
--- Interruptor del CRT. La salida que nunca depende del overlay (README, "CRT mode").
+-- Interruptor del CRT. La salida que nunca depende del overlay (README, "CRT mode"). Igual que
+-- las del sync: tiene que ser la de [keys] crt_toggle de fábrica ("Super+Shift, Y"), que es
+-- además la que la letra muestra escrita al empezar cada tema.
 hl.bind("SUPER + SHIFT + Y", hl.dsp.exec_cmd(FATAL .. " crt toggle"))
 
 -- Sync fino ±0.1 s. Tienen que ser las mismas que [keys] de fábrica ("Super+Alt, Right/Left"):

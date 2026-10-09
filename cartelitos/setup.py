@@ -209,9 +209,10 @@ SETTINGS = [
     ("screens", "crt", "Screens the tube takes", _ask_screens),
     ("order", "crt", "Screen order, left to right", _ask_crt_order),
     ("palette", "crt", "Phosphor colour", lambda c: _pick("Phosphor colour", [
-        ("auto (one per screen, rotates per track)", "auto"), ("amber", "amber"),
-        ("cyan", "cyan"), ("green", "green"), ("violet", "violet"),
-        ("red (always critical)", "red")], c)),
+        ("album (from the cover of what's playing)", "album"),
+        ("auto (a preset picked by the song)", "auto"), ("dragons", "dragons"),
+        ("ado", "ado"), ("poison", "poison"), ("bloodline", "bloodline"),
+        ("vapor", "vapor"), ("bone", "bone")], c)),
     ("split", "crt", "Line across screens", lambda c: _pick(
         "How the line is spread over several screens", [
             ("mixed (whole phrase, short lines cut in pieces)", "mixed"),

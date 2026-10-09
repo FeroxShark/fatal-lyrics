@@ -301,6 +301,91 @@ restart() {
     [ -n "$crt_prev" ] && crt_set "$crt_prev" >/dev/null
 }
 
+# --- la unit de systemd (packaging/fatal-lyrics.service) ----------------------
+# Con la unit instalada, `on`, `off` y `restart` pasan por `systemctl --user`:
+# así el shell de Ferox (Configuración, Apps de inicio) y la terminal hablan de
+# la MISMA instancia, y los procesos quedan dentro del cgroup de la unit en vez
+# de en el de la terminal que los lanzó. Sin la unit (otro compositor, sin
+# systemd, el paquete sin instalar) todo sigue como siempre, a mano.
+UNIT=fatal-lyrics.service
+
+unit_known() {
+    command -v systemctl >/dev/null 2>&1 &&
+        systemctl --user cat "$UNIT" >/dev/null 2>&1
+}
+
+unit_active() {
+    systemctl --user -q is-active "$UNIT" 2>/dev/null
+}
+
+# La unit vuelve recién cuando `run` avisó READY, o sea con los dos procesos
+# arriba (ver start: espera el flag del CRT del daemon).
+unit_start() {
+    if systemctl --user start "$UNIT"; then
+        echo "fatal ON"
+    else
+        echo "fatal: $UNIT didn't start — journalctl --user -u $UNIT" >&2
+        return 1
+    fi
+}
+
+# `stop` a mano además de la unit: una instancia lanzada por fuera (de antes de
+# la unit, otra copia del repo) no está en su cgroup y systemctl no la ve.
+cmd_stop() {
+    unit_known && unit_active && systemctl --user stop "$UNIT"
+    stop
+}
+
+cmd_start() {
+    if unit_known; then unit_start; else start; fi
+}
+
+# Mismo contrato que restart(): estado limpio y el tubo como estaba.
+cmd_restart() {
+    local crt_prev
+    unit_known || { restart; return; }
+    crt_prev=$(cat "$CRT" 2>/dev/null)
+    cmd_stop >/dev/null
+    sleep 0.5
+    unit_start || return 1
+    [ -n "$crt_prev" ] && crt_set "$crt_prev" >/dev/null
+    return 0
+}
+
+# Hyprland ya tiene monitores. Es lo que esperaba el `sleep 6` del autostart
+# viejo (TRAMPAS, "Autostart: un solo exec-once": arrancar en t=0 sin
+# monitores rompía el boot), pero mirando la cosa en vez de adivinar cuánto
+# tarda. Tope de 20 s: sin hyprctl, o fuera de Hyprland, sigue de largo.
+wait_monitors() {
+    command -v hyprctl >/dev/null 2>&1 || return 0
+    for _ in $(seq 1 40); do
+        hyprctl -j monitors 2>/dev/null | grep -q '"name"' && return 0
+        sleep 0.5
+    done
+    return 0
+}
+
+# `fatal run`: el ExecStart de la unit. Arranca (o adopta, si ya hay una
+# instancia viva: start no relanza lo que corre) y se queda en primer plano
+# mientras estén las DOS mitades — el daemon y el overlay se mueren por
+# separado (ver status_line), y con media instancia `run` sale con 1 para que
+# Restart=on-failure levante lo que falte. El lock del overlay y no qs.pid:
+# el quickshell que relanza el crash handler no figura en el pidfile.
+# SIGTERM (systemctl stop, con KillMode=process) baja todo con `stop`, que no
+# toca lo que qs haya lanzado (un navegador, un xdg-open).
+run() {
+    trap 'stop; exit 0' TERM INT HUP
+    wait_monitors
+    start || exit 1
+    command -v systemd-notify >/dev/null 2>&1 &&
+        systemd-notify --ready --pid=$$ 2>/dev/null
+    while running "$D_PID" "$DAEMON" && instance_busy "$QS_LOCK"; do
+        sleep 2 & wait $!
+    done
+    echo "fatal: half of it died ($(status_line | head -1)), letting systemd restart it" >&2
+    exit 1
+}
+
 tune() {
     if [ ! -f "$TUNE_QML" ]; then
         echo "can't find the sliders in $BASE" >&2
@@ -409,13 +494,14 @@ sync_lyrics() {
 }
 
 case "${1:-toggle}" in
-    on|start)  start ;;
-    off|stop)  stop ;;
-    restart)   restart ;;
+    on|start)  cmd_start ;;
+    off|stop)  cmd_stop ;;
+    restart)   cmd_restart ;;
+    run)       run ;;
     status)    status_line ;;
     # medio muerto cuenta como apagado: así el toggle lo levanta entero en vez
     # de rematar la mitad que seguía viva
-    toggle)    running "$D_PID" "$DAEMON" && running "$QS_PID" "$QML" && stop || start ;;
+    toggle)    running "$D_PID" "$DAEMON" && running "$QS_PID" "$QML" && cmd_stop || cmd_start ;;
     config|setup) python3 "$DAEMON" --setup ;;
     edit)      ${EDITOR:-nano} "$CONFIG" ;;
     demo)      demo ;;
@@ -424,5 +510,5 @@ case "${1:-toggle}" in
     sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
     tune|sliders) tune ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|status|config|edit|demo|tune|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
+    *)         echo "usage: fatal [on|off|toggle|restart|run|status|config|edit|demo|tune|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
 esac

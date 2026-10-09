@@ -52,4 +52,5 @@ package() {
   install -Dm644 packaging/fatal.desktop "$pkgdir/usr/share/applications/fatal.desktop"
   install -Dm644 packaging/fatal-lyrics.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/fatal-lyrics.svg"
   install -Dm644 packaging/hyprland.lua "$pkgdir/usr/share/fatal-lyrics/packaging/hyprland.lua"
+  install -Dm644 packaging/fatal-lyrics.service "$pkgdir/usr/lib/systemd/user/fatal-lyrics.service"
 }

@@ -20,11 +20,9 @@ if not io.open(FATAL) then FATAL = "/usr/bin/fatal" end
 -- a la vez. 0.56 compara el namespace ENTERO: va "^cartelitos.*$", no "^cartelitos".
 hl.layer_rule({ name = "fatal-lyrics", match = { namespace = "^cartelitos.*$" }, no_anim = true })
 
--- Autostart: UNO solo (docs/TRAMPAS.md, "Autostart: un solo exec-once"). El sleep es para que
--- los monitores ya estén; `restart` deja estado limpio aunque haya quedado media instancia.
-hl.on("hyprland.start", function()
-    hl.exec_cmd("sh -c 'sleep 6 && " .. FATAL .. " restart'")
-end)
+-- El autostart NO va acá: es la unit de usuario packaging/fatal-lyrics.service (install.sh la
+-- instala y la habilita), que el shell prende y apaga desde Apps de inicio. Sumar un exec acá
+-- volvería a los dos autostarts compitiendo (docs/TRAMPAS.md, "Autostart: uno solo").
 
 -- Interruptor del CRT. La salida que nunca depende del overlay (README, "CRT mode"). Igual que
 -- las del sync: tiene que ser la de [keys] crt_toggle de fábrica ("Super+Shift, Y"), que es

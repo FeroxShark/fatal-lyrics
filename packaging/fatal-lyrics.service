@@ -1,0 +1,30 @@
+# fatal-lyrics como unit de usuario: la prende y la apaga el shell (Configuración, Apps de
+# inicio) con `systemctl --user enable/disable`, y `fatal on|off|restart` pasan por acá cuando
+# está instalada. Reemplaza al autostart que vivía en packaging/hyprland.lua.
+#
+# install.sh la copia a ~/.config/systemd/user/ con el ExecStart apuntando a ~/.local/bin/fatal;
+# el PKGBUILD, a /usr/lib/systemd/user/ tal cual (/usr/bin/fatal).
+[Unit]
+Description=Fatal Lyrics: la letra de Spotify como carteles de error de Win95
+PartOf=graphical-session.target
+After=graphical-session.target
+# La necesita entera: hyprctl para los monitores, el juego en pantalla completa y los binds.
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+# `fatal run` arranca el overlay y el daemon (dos procesos, cada uno en su sesión pero los dos
+# dentro de esta unit), espera a que Hyprland tenga monitores en vez del `sleep 6` de antes,
+# avisa READY con systemd-notify recién cuando están arriba y se queda mirando: si se cae una
+# mitad sale con 1 y Restart levanta lo que falte.
+Type=notify
+NotifyAccess=all
+ExecStart=/usr/bin/fatal run
+# Al SIGTERM `run` baja todo con `fatal stop`. Sólo a él: lo que el overlay haya lanzado (un
+# navegador, un xdg-open) no es de fatal-lyrics y no se mata con la unit.
+KillMode=process
+TimeoutStartSec=60
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

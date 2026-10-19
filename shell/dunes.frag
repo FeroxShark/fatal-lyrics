@@ -14,6 +14,12 @@
 //     do not divide each other, so it never comes back to a frame it already
 //     showed.
 //
+// Light: the grains are shaded by SLOPE, not by height. A fixed low sun (its
+// azimuth comes from `seed`, so every appearance is lit from somewhere else, and
+// it never moves while the camera pans) rakes across the heightmap: the side of
+// a dune that faces it catches `hot`, the lee side falls to `ink`. Height alone
+// gave a contour map; slope is what gives a dune a side.
+//
 // The music enters as sand in the air, never as a colour flash:
 //   · every beat drops a giant footstep at a random spot and the grains around
 //     it are thrown up, fall under gravity and bounce once, small,
@@ -67,6 +73,8 @@ const float ZMAX = 34.0;  // the last row that draws anything at all
 const float GRAINR = 0.020;
 const float GRAV = 3.2;   // how fast a thrown grain comes back down
 const float BOUNCE = 0.42;
+const float SLOPEK = 3.0;   // how much steeper than the noise the light sees the dunes
+const float SUNEL = 0.35;   // sun elevation, radians: low enough to rake
 
 float hash21(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -86,15 +94,36 @@ float vnoise(vec2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+// Same value noise, plus its analytic gradient from the SAME four hash fetches
+// (so the slope below costs a few multiplies, not two extra noise lookups).
+// Returns (value, d/dx, d/dy).
+vec3 vnoiseD(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    vec2 du = 6.0 * f * (1.0 - f);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    float v = mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    vec2 g = du * vec2((b - a) * (1.0 - u.y) + (d - c) * u.y,
+                       (c - a) * (1.0 - u.x) + (d - b) * u.x);
+    return vec3(v, g);
+}
+
 // The landscape. Three octaves is where a ridge stops looking like a bump and
 // starts looking like a dune with a windward side; a fourth costs the same as
 // the whole projection and nobody sees it at this dot density.
-float dune(vec2 p) {
+// Returns (height, d/dx, d/dz) in world units.
+vec3 dune(vec2 p) {
     vec2 o = vec2(seed * 137.0, seed * 311.0);
-    float h = vnoise(p * 0.45 + o) * 0.62;
-    h += vnoise(p * 1.10 + o * 1.7) * 0.26;
-    h += vnoise(p * 2.60 + o * 2.9) * 0.12;
-    return (h - 0.5) * 0.34;
+    vec3 n0 = vnoiseD(p * 0.45 + o);
+    vec3 n1 = vnoiseD(p * 1.10 + o * 1.7);
+    vec3 n2 = vnoiseD(p * 2.60 + o * 2.9);
+    float h = n0.x * 0.62 + n1.x * 0.26 + n2.x * 0.12;
+    vec2 g = n0.yz * (0.62 * 0.45) + n1.yz * (0.26 * 1.10) + n2.yz * (0.12 * 2.60);
+    return vec3((h - 0.5) * 0.34, g * 0.34);
 }
 
 // A giant footstep: the grains near it are thrown up, fall, and bounce once.
@@ -135,6 +164,10 @@ void main() {
     float camX = tt * 0.045 + sin(tt * 0.031 + seed * 6.283) * 1.6;
     float camZ = tt * 0.075;
     float camY = 1.0 + 0.16 * sin(tt * 0.021 + seed * 3.1);
+
+    // the sun: fixed in the WORLD (the camera pans under it), azimuth from the seed
+    float saz = 6.2831853 * fract(seed * 3.7 + 0.15);
+    vec3 sun = vec3(cos(saz) * cos(SUNEL), sin(SUNEL), sin(saz) * cos(SUNEL));
 
     // grain spacing. KZ is the RATIO between one row and the next, not a
     // distance: 0.095 puts the first two rows 0.13 apart, which is what the old
@@ -237,7 +270,8 @@ void main() {
                     // and nothing would ever come closer.
                     vec2 wp = vec2(X + camX, Z + camZ);
                     float own = hash21(vec2(float(i), jw));
-                    float h = dune(wp);
+                    vec3 dn = dune(wp);
+                    float h = dn.x;
                     // The footstep is measured in CAMERA space, not world
                     // space: it lasts three seconds and has to stay where it
                     // landed on screen. In world space the pan would carry it
@@ -255,12 +289,15 @@ void main() {
                     if (g <= 0.001)
                         continue;
 
-                    // the ridge catches the light; the trough only dims. A
-                    // grain drawn darker than the sand reads as a hole in the
-                    // picture.
-                    float crest = clamp(h * 6.0 + 0.5, 0.0, 1.0);
+                    // raking light: the slope (exaggerated, a real dune is
+                    // steeper than the noise) against a fixed low sun. A flat
+                    // grain sits at 0.5; the face toward the sun goes to 1, the
+                    // lee side to 0. The floor stays above zero: a grain drawn
+                    // darker than the sand reads as a hole in the picture.
+                    vec3 nrm = normalize(vec3(-SLOPEK * dn.y, 1.0, -SLOPEK * dn.z));
+                    float crest = clamp((dot(nrm, sun) - sun.y) * 1.6 + 0.5, 0.0, 1.0);
                     vec3 c = mix(ink, hot, crest * crest);
-                    float bright = (0.42 + 0.8 * crest) * fade;
+                    float bright = (0.36 + 0.90 * crest) * fade;
                     // la niebla: el grano lejano se va HACIA el color del cielo
                     // en función de la DISTANCIA, no del |dy|. Así no hay
                     // ninguna línea: la arena se disuelve en el aire.

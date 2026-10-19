@@ -83,7 +83,9 @@ class TestMovWiring(unittest.TestCase):
 
     def test_the_beat_kick_is_fed_by_the_aud_event_and_only_runs_while_it_lasts(self):
         qml = read("shell.qml")
-        self.assertIn("root.movKickHit(Speed.kickStrength(!!ev.h));", qml)
+        # el bombo (`k`, o `b` si no llega) pasa por `bassHit`, que empuja el ritmo según el carácter
+        self.assertIn("root.bassHit(!!ev.h);", qml)
+        self.assertIn("movKickHit(Speed.kickStrength(hard) * (0.6 + 0.8 * crtCharacter));", qml)
         self.assertIn("Speed.kickAdd(", qml)
         self.assertIn("pace.movKick", qml)
         # el reloj del empujón se apaga solo cuando decayó (no es un FrameAnimation eterno)

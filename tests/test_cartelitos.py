@@ -4151,7 +4151,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         # los otros cortes: 6 s sin chorus, sin letra, pausa
         self.assertRegex(crt, r"readonly property int burnHoldMs:\s*6000")
         self.assertRegex(crt, r"id: burnHoldTimer\s*interval: crt\.burnHoldMs\s*onTriggered: crt\.burnFade\(\"timeout\"\)")
-        self.assertIn('onNoLyricChanged: if (noLyric) burnFade("sin letra")', crt)
+        self.assertRegex(crt, r'onNoLyricChanged: \{\s*if \(noLyric\) burnFade\("sin letra"\);')
         self.assertRegex(crt, r"onPausedChanged: \{[^}]*burnFade\(\"pausa\"\)")
         # el fade es una NumberAnimation sobre un uniform, ADENTRO del Loader (se destruye con él),
         # a 0 en 2 s, y nunca un re-render de la textura

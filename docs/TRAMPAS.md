@@ -1420,3 +1420,7 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   no se mueven. Capturas y recortes ×4 en `docs/tanda8-estado/vidrio/`.
 - **`crt.frag.qsb` está commiteado y se compara con el fuente** (`tests/test_vidrio_tubo.py`): si
   tocás el shader y el test falla, recompilá con el comando del header.
+
+## QML: la misma clave dos veces en un objeto (2026-10-19)
+
+- **Dos `onNoLyricChanged:` en la raíz de Crt.qml: "Property value set multiple times", el overlay no cargó y los 1002 tests pasaban.** qmllint no lo marca (sólo ve `width: 1; width: 2`, no handlers); lo caza `tests/test_qml_duplicados.py`.

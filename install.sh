@@ -11,6 +11,11 @@ for dep in qs playerctl python3; do
         missing=1
     fi
 done
+# config.py usa tomllib (3.11+): con un python viejo instala bien y el daemon revienta al arrancar
+if command -v python3 >/dev/null && ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
+    echo "python3 >= 3.11 needed (config.py uses tomllib), found: $(python3 -V 2>&1)"
+    missing=1
+fi
 [ "$missing" -eq 1 ] && exit 1
 
 mkdir -p "$HOME/.local/bin"

@@ -1,12 +1,17 @@
-// fatal-lyrics motivos CRT (testeo 2026-10-19) — lo que suman los tres motivos
-// del testeo (`membrana`, `cintas`, `giroscopio`) sobre MotifBase.
-//
-// MotifBase es copia de shell/ (lo pisa `sync-shell.sh`): lo nuevo vive acá.
+// fatal-lyrics motivos CRT — lo que suman los tres motivos de golpe físico
+// (`membrana`, `cintas`, `giroscopio`, integrados 2026-10-19) sobre MotifBase.
 //   · `thump`/`thumpAmt` — contador de golpes del BOMBO (cada vez que sube, un
-//     golpe) y su fuerza 0..1. En el overlay todavía no existe con ese nombre: al
-//     integrar se ata al detector de bombo que salga del frente "golpe de bajo".
-//   · `mov` (0..1, el `audMov` del daemon), `valence`/`moodEnergy` (evento `mood`)
-//     y el tempo (`beatMs`) arman el CARÁCTER (`temper`) y la física (`phys`).
+//     golpe) y su fuerza 0..1. En el overlay: `bassGen` de shell.qml (el `k` del
+//     daemon, o `b` si no llega; un `rise` también lo sube, más flojo) y
+//     `kickThump` × la perilla `flicker`.
+//   · `mov` (0..1: la densidad, `crtDensity` = `audMov` + `audNov`) y el tempo
+//     (`beatMs`) arman la densidad (`dens`) y la física (`phys`).
+//   · CARÁCTER (`temper`): con `character` >= 0 (`crtCharacter` del overlay: `char`
+//     del daemon o BPM + mood) es ése, suavizado 1.5 s (un cambio de tema o de
+//     compás no cambia la física con un golpe en el aire). Con -1 (el banco de
+//     previews, que no tiene `crtCharacter`) sale de BPM + `valence`/`moodEnergy`.
+//   · `hat` (0..1, `hatLevel`: el hi-hat `ht`, o los agudos `audHf` si no llega)
+//     son los agudos; con -1 se usa `hf`.
 //   · `hitT/hitA/hitS` — los últimos 4 golpes (reloj, fuerza, semilla): los
 //     shaders los reciben como vec4 y evalúan la respuesta del resorte por píxel
 //     (ondas que viajan: la edad cambia con la distancia).
@@ -28,24 +33,28 @@ MotifBase {
     property real mov: 0.35
     property real valence: 0.5
     property real moodEnergy: 0.5
+    property real character: -1
+    property real hat: -1
 
     readonly property real bpm: 60000 / Math.max(beatMs, 1)
-    readonly property real temper: T.temper(bpm, moodEnergy, valence)
+    readonly property real temperTarget: character >= 0 ? E.clamp01(character)
+                                                         : T.temper(bpm, moodEnergy, valence)
+    property real temperSmooth: -1
+    readonly property real temper: (character < 0 || temperSmooth < 0) ? temperTarget : temperSmooth
     readonly property var phys: T.params(temper, valence, bpm)
     // agudos con la curva del vidrio (sólo lo que ENTRA arriba, no el hi-hat parejo)
-    readonly property real fizz: Math.max(React.fizz(hf, 1), 0.8 * E.clamp01((high - 0.15) / 0.6))
+    readonly property real fizz: Math.max(React.fizz(hat >= 0 ? hat : hf, 1), 0.8 * E.clamp01((high - 0.15) / 0.6))
 
     property var hitT: [-1e6, -1e6, -1e6, -1e6]
     property var hitA: [0, 0, 0, 0]
     property var hitS: [0, 0, 0, 0]
     property int hitN: 0
-    // el primer cambio es el binding que llega con el valor acumulado: no es un golpe
-    property bool armed: false
+    // el valor con que nació el motivo (el contador del overlay ya viene acumulado): no es un golpe
+    property int thumpSeen: -1
+    Component.onCompleted: thumpSeen = thump
     onThumpChanged: {
-        if (!armed) {
-            armed = true;
+        if (thumpSeen < 0)
             return;
-        }
         const t = hitT.slice(1), a = hitA.slice(1), s = hitS.slice(1);
         t.push(clock);
         a.push(E.clamp01(thumpAmt) * phys.gain);
@@ -74,6 +83,11 @@ MotifBase {
             if (!(dt > 0) || dt > 0.5)
                 return;
             tb.dens = T.follow(tb.dens, tb.densTarget, dt, 0.7, 2.5);
+            if (tb.character >= 0) {
+                // se asienta y se queda: seguir aproximando para siempre recalcularía `phys` en cada cuadro
+                const tt = tb.temperTarget, cur = tb.temperSmooth < 0 ? tt : tb.temperSmooth;
+                tb.temperSmooth = Math.abs(tt - cur) < 0.003 ? tt : T.follow(cur, tt, dt, 1.5, 1.5);
+            }
             tb.drift += dt * tb.phys.drift * (0.75 + 0.6 * tb.dens);
         }
     }

@@ -19,7 +19,8 @@ Item {
 
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
     // | static | textsea | eyes | ekg | rorschach | plasma | tunnel
-    // | swarm | splitflap | maze | pipes | defrag | mystify | vector | harmonograph | none
+    // | swarm | splitflap | maze | pipes | defrag | mystify | vector | harmonograph
+    // | membrana | cintas | giroscopio | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -131,6 +132,13 @@ Item {
     property real bassAmt: 0.02
     property int bassMs: 150
     property real bump: 0
+    // Para los motivos de golpe físico (`ThumpBase.qml`): la fuerza de cada golpe (0..1), la
+    // densidad de la música (`crtDensity`), el carácter del tema (0 calmo .. 1 agitado,
+    // `crtCharacter`) y la valencia del mood en 0..1
+    property real thumpAmt: 1
+    property real density: 0.5
+    property real character: 0.5
+    property real valence: 0.5
     onBassChanged: {
         bumpDecay.stop();
         bump = 1;
@@ -326,6 +334,9 @@ Item {
             : motif.kind === "mystify" ? mystifyC
             : motif.kind === "vector" ? vectorC
             : motif.kind === "harmonograph" ? harmonographC
+            : motif.kind === "membrana" ? membranaC
+            : motif.kind === "cintas" ? cintasC
+            : motif.kind === "giroscopio" ? giroscopioC
             : null
     }
 
@@ -1559,6 +1570,126 @@ Item {
             linesSynced: motif.linesSynced
             fontFamily: motif.fontFamily
             running: motif.spinning
+        }
+    }
+
+    // membrana: el parche de un bombo en perspectiva, malla de fósforo (`membrana.frag`).
+    // Resorte de `Thump.js` por golpe; cámara = la misma masa, más pesada.
+    Component {
+        id: membranaC
+
+        Membrana {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // cintas: cintas de fósforo a distintas profundidades que el bombo comba y retuerce
+    // (`cintas.frag`). Las de atrás pesan más: la ola baja por la pila.
+    Component {
+        id: cintasC
+
+        Cintas {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // giroscopio: cardán de aros anidados en 3D (`giroscopio.frag`, raymarch). Un resorte por
+    // aro, el de adentro salta primero.
+    Component {
+        id: giroscopioC
+
+        Giroscopio {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
         }
     }
 }

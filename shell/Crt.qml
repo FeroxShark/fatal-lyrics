@@ -2014,6 +2014,12 @@ PanelWindow {
                     bassMs: crt.ctl.kickMs
                     hat: crt.live ? crt.ctl.hatLevel : 0
                     hatAmt: crt.ctl.pace.kickHat
+                    // los motivos de golpe físico (membrana, cintas, giroscopio): la fuerza del
+                    // golpe, la densidad de la música, el carácter del tema y la valencia (0..1)
+                    thumpAmt: crt.ctl.kickThumpAmt
+                    density: crt.ctl.crtDensity
+                    character: crt.ctl.crtCharacter
+                    valence: ((crt.ctl.crtMood ? crt.ctl.crtMood.valence : 0) + 1) / 2
                     clock: crt.tubeTime
                     // tanda 8, slice movimiento: el ritmo de la música, y lo que ya le
                     // corrió al reloj de dibujo. `clock` sigue siendo el real: con él

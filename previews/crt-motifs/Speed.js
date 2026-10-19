@@ -2,9 +2,10 @@
 // (tanda 8, slice "movimiento", parte visual).
 //
 // `pace` (`crtPaceTable`) sigue siendo la base del tema; `mov` (evento `aud`, 0..1,
-// ya suavizado del lado del daemon: sube en ~1 s, baja en ~3 s) empuja el RITMO de
-// los dibujos alrededor de 1: más lento en un pasaje quieto, más rápido en uno
-// nervioso, dentro de un rango acotado por fila (`movMin`/`movMax`).
+// ya suavizado del lado del daemon: sube en ~0.25 s, baja en ~0.7 s) empuja el RITMO
+// de los dibujos alrededor de 1: más lento en un pasaje quieto, más rápido en uno
+// nervioso, dentro de un rango acotado por fila (`movMin`/`movMax`). Encima de eso el
+// GOLPE fuerte da un empujón que decae en medio segundo (`kick*`, más abajo).
 //
 // La velocidad NO se aplica como `t · velocidad`: con `t` en cientos de segundos
 // cualquier cambio de velocidad teletransporta el dibujo (TRAMPAS, tanda 8: el grano
@@ -18,11 +19,12 @@
 // ESTAS funciones: la hoja muestra el mapeo que corre en el overlay, no una copia.
 .pragma library
 
-// Dónde `mov` deja el ritmo en 1 (el de siempre). No es 0.5: un tema fuerte y
-// PAREJO da `mov` ≈ 0.2 (el techo de la energía sola, docs/tanda8-estado/movimiento.md)
-// y uno ocupado ≈ 0.75-0.8. Con el pivote al medio, cualquier tema sin mucho
-// movimiento correría más lento que hoy de punta a punta.
-var PIVOT = 0.35;
+// Dónde `mov` deja el ritmo en 1 SIN historial del tema (los primeros segundos: con
+// historial el pivote es la mediana, ver `fit`). No es 0.5: un tema fuerte y PAREJO da
+// `mov` ≈ 0.2 (el techo de la energía sola, docs/tanda8-estado/movimiento.md), y desde
+// la ronda 3 (densidad sin saturar) la música con pulso ronda 0.6-0.7 y un final que se
+// calma 0.2-0.3.
+var PIVOT = 0.45;
 
 function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
 
@@ -41,14 +43,20 @@ function rate(mov, lo, hi, amount, pivot) {
     return 1 + (r - 1) * a;
 }
 
-// ---- percentiles del TEMA. `mov` real (Vivaldi, Invierno; qs.log, 99 muestras) vive en
-// 0.63–0.80: una franja de 0.17 dentro de 0..1. Con el mapeo absoluto el ritmo se movía
-// 1.0–1.2 y no se veía. Se guarda un histograma de `mov` del tema (decae con
-// STAT_TAU_S) y se estira p5..p95 a TODO el rango; la mediana queda en el pivote (ritmo 1).
+// ---- percentiles del TEMA. `mov` real vive en una franja angosta y SESGADA: música con
+// pulso 0.55-0.70 casi todo el tiempo y de golpe un final que se calma a 0.2-0.3
+// (ronda 3, docs/NUMEROS-MEDIDOS.md). Un estirado lineal de p5..p95 deja la mediana bien
+// arriba del medio: el tema "corre" todo el tiempo y sólo las caídas se notan. Por eso el
+// mapa pasa por TRES percentiles: P_LO → 0, la MEDIANA → 0.5 (ritmo 1) y P_HI → 1, cada
+// mitad estirada por su lado. Así un tema sesgado igual da ritmo 1 en su parte habitual, y
+// P_LO/P_HI (10/90 y no 5/95) son el 10 % del tiempo pegado a `movMin`/`movMax`: los
+// extremos SE USAN. Se guarda un histograma de `mov` del tema (decae con STAT_TAU_S).
 var STAT_BINS = 40;
 var STAT_TAU_S = 60;      // el tema "olvida" lento: la parte de hace 2 min pesa 13%
-var STAT_WARM = 20;       // masa (s) para confiar del todo en los percentiles
-var MIN_SPAN = 0.20;      // una franja más angosta se ensancha (tema parejo: no amplifica ruido)
+var STAT_WARM = 10;       // masa (s) para confiar del todo en los percentiles
+var MIN_HALF = 0.10;      // cada mitad de la franja mide al menos esto: un tema parejo no amplifica ruido
+var P_LO = 0.10;
+var P_HI = 0.90;
 
 function newStat() {
     const h = [];
@@ -81,22 +89,25 @@ function percentile(st, p) {
     return 1;
 }
 
-// {lo, hi, conf}: la franja p5..p95 (ya ensanchada a MIN_SPAN) y cuánto confiar (0..1).
+// {lo, mid, hi, conf}: P_LO, la mediana y P_HI (cada mitad ya ensanchada a MIN_HALF) y
+// cuánto confiar en ellos (0..1).
 function span(st) {
-    let lo = percentile(st, 0.05), hi = percentile(st, 0.95);
-    if (hi - lo < MIN_SPAN) {
-        const mid = (lo + hi) / 2;
-        lo = mid - MIN_SPAN / 2;
-        hi = mid + MIN_SPAN / 2;
-    }
-    return { lo: lo, hi: hi, conf: clamp01(st.mass / STAT_WARM) };
+    const mid = percentile(st, 0.5);
+    return {
+        lo: Math.min(percentile(st, P_LO), mid - MIN_HALF),
+        mid: mid,
+        hi: Math.max(percentile(st, P_HI), mid + MIN_HALF),
+        conf: clamp01(st.mass / STAT_WARM)
+    };
 }
 
-// `mov` reescalado al tema: 0.5 = el medio de su franja. Con `conf` 0 vale `mov` tal cual
-// (mapeo absoluto de siempre, pivote PIVOT); con 1 es el estirado con el pivote en 0.5.
+// `mov` reescalado al tema: 0.5 = su mediana. Con `conf` 0 vale `mov` tal cual (mapeo
+// absoluto de siempre, pivote PIVOT); con 1 es el mapa por cuantiles con el pivote en 0.5.
 function fit(mov, sp) {
     const m = clamp01(mov);
-    const nm = clamp01((m - sp.lo) / (sp.hi - sp.lo));
+    const nm = m < sp.mid
+        ? 0.5 * clamp01((m - sp.lo) / (sp.mid - sp.lo))
+        : 0.5 + 0.5 * clamp01((m - sp.mid) / (sp.hi - sp.mid));
     return {
         mov: m + (nm - m) * sp.conf,
         pivot: PIVOT + (0.5 - PIVOT) * sp.conf
@@ -111,4 +122,43 @@ function advance(off, dt, r) {
     if (!(dt > 0) || dt > 0.5)
         return off;
     return off + dt * (r - 1);
+}
+
+// ---- el golpe empuja la velocidad (ronda 3: "más sensible al ritmo") ----
+// Cada golpe (`b` del evento `aud`; `h`, el que sobresale mucho, pesa más) le suma al
+// ritmo un empujón que decae en KICK_S. Sigue siendo VELOCIDAD, no posición: el empujón
+// entra en el `rate` que después integra `advance`, así que un golpe acelera el dibujo un
+// instante y nunca lo teletransporta. Multiplica (`push`): pesa igual sobre un pasaje
+// quieto (0.4x) que sobre uno nervioso (2x). Con `amount` (crt.mov_speed) en 0 no queda
+// nada. La amplitud (`movKick`) vive en `crtPaceTable`, por fila.
+var KICK_S = 0.42;          // lo que dura el empujón (= Motion.levelMs, OutQuad)
+var KICK_HARD = 1.0;        // fuerza de un golpe que sobresale (`h`)
+var KICK_SOFT = 0.4;        // fuerza de un golpe común (`b`)
+var KICK_CAP = 1.5;         // golpes encimados: el empujón nunca pasa de KICK_CAP · amp
+
+// Cuánto pesa un golpe: `hard` (el `h` del evento `aud`, el que sobresale) o uno común.
+function kickStrength(hard) { return hard ? KICK_HARD : KICK_SOFT; }
+
+// El empujón `k0` que arrancó hace `elapsed` s: OutQuad hasta 0, como una
+// NumberAnimation con Easing.OutQuad. La función de tiempo es pura: la llaman el overlay
+// (`shell.qml`) y el banco offscreen.
+function kickAt(k0, elapsed) {
+    if (!(k0 > 0) || !(elapsed >= 0) || elapsed >= KICK_S)
+        return 0;
+    const r = 1 - elapsed / KICK_S;
+    return k0 * r * r;
+}
+
+// Un golpe nuevo `strength` (KICK_HARD/KICK_SOFT) encima del empujón que todavía queda
+// (`cur`), con la amplitud `amp` de la fila. Devuelve el empujón que arranca AHORA.
+function kickAdd(cur, strength, amp) {
+    if (!(amp > 0) || !(strength > 0))
+        return cur > 0 ? cur : 0;
+    return Math.min((cur > 0 ? cur : 0) + strength * amp, KICK_CAP * amp);
+}
+
+// `base` (el ritmo por `mov`) con el empujón encima. `amount` (perilla) 0 = ritmo 1.
+function push(base, kick, amount) {
+    const a = amount > 0 ? amount : 0;
+    return base * (1 + (kick > 0 ? kick : 0) * a);
 }

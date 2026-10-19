@@ -283,7 +283,11 @@ ShellRoot {
             // el `rise` de la tendencia (ver `riseHit`): el pulso que da, × el golpe de un bombo
             // (`kickRise`, columna kick* = excepción), y cuánto alarga el hold un `fall`
             // (`fallHoldMs`, ms × amplitud del fall). Tema lento = pulso chico, hold largo
+            // `kickThump`: la fuerza del golpe en los motivos de resorte (`membrana`, `cintas`,
+            // `giroscopio`, `ThumpBase.qml`), 0..1 tras la perilla `flicker`. NO lleva el carácter
+            // del tema: esos motivos ya lo traen en su física (`crtCharacter` -> `Thump.js`)
             kickRise: 0.40, fallHoldMs: 8000,
+            kickThump: 0.60,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -301,6 +305,7 @@ ShellRoot {
             kickCam: 0.022, kickTube: 0.90, kickMotif: 0.050, kickHat: 0.85,
             kickAmpMin: 0.30, kickSlowMs: 400, kickFastMs: 120,
             kickRise: 0.70, fallHoldMs: 5000,
+            kickThump: 1.00,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -332,6 +337,7 @@ ShellRoot {
             // `wild` no alarga holds (es el modo rápido, y la tanda 3 no tenía `fall`): 0
             kickAmpMin: 0.40, kickSlowMs: 340, kickFastMs: 90,
             kickRise: 1.00, fallHoldMs: 0,
+            kickThump: 1.40,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -2205,6 +2211,7 @@ ShellRoot {
     readonly property real kickCamAmt: pace.kickCam * kickAmp * Math.min(crtCamera, 1.5)
     readonly property real kickTubeAmt: pace.kickTube * kickAmp
     readonly property real kickMotifAmt: pace.kickMotif * kickAmp
+    readonly property real kickThumpAmt: pace.kickThump * kickKnob * bassMul
     // cada golpe: Crt.qml (cámara, tubo) y Motif.qml (dibujo) escuchan el contador
     property int bassGen: 0
     property real bassMul: 1
@@ -2381,14 +2388,14 @@ ShellRoot {
     // hasta que cambie el tema. `crt.set = "off"` (crtSetOn === false) apaga
     // esto entero y vuelve al pool parejo de siempre.
     //
-    // Los 24 motivos en tres grupos, por temperamento (la corrida 3 les
+    // Los 27 motivos en tres grupos, por temperamento (la corrida 3 les
     // cambia las cuotas según el mood; sin mood: 2 calm + 1 hot + 1 neutral).
     readonly property var motifGroups: ({
         calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach",
                   "harmonograph"],
         hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar",
-                  "pipes", "vector", "mystify", "maze"],
-        neutral: ["textsea", "eyes", "rain", "swarm", "defrag"],
+                  "pipes", "vector", "mystify", "maze", "membrana", "cintas"],
+        neutral: ["textsea", "eyes", "rain", "swarm", "defrag", "giroscopio"],
     })
     // Familias de entradas para cuando hay set puesto (el wiring adentro de
     // `crtEntriesFor`/`crtPickEntry` es un paso aparte; acá sólo se define
@@ -2754,7 +2761,9 @@ ShellRoot {
                                        "rorschach", "plasma", "tunnel",
                                        // los de loop de 15 s (previews/crt-motifs)
                                        "swarm", "maze", "pipes",
-                                       "defrag", "mystify", "vector", "harmonograph"]
+                                       "defrag", "mystify", "vector", "harmonograph",
+                                       // los de golpe físico (previews/crt-motifs, 2026-10-19)
+                                       "membrana", "cintas", "giroscopio"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca
@@ -2922,6 +2931,9 @@ ShellRoot {
         mystify:      { e: 0.70, b: 0.70, t: 0.60 },
         vector:       { e: 0.80, b: 0.80, t: 0.80 },
         harmonograph: { e: 0.20, b: 0.50, t: 0.25 },
+        membrana:     { e: 0.65, b: 0.55, t: 0.65 },
+        cintas:       { e: 0.70, b: 0.60, t: 0.65 },
+        giroscopio:   { e: 0.60, b: 0.55, t: 0.60 },
     })
     // cuántas veces salió cada kind en este tema (se vacía con el tema nuevo)
     property var crtMotifUsed: ({})

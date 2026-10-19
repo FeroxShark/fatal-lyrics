@@ -46,7 +46,7 @@ MotifBase {
     readonly property var board: {
         const out = [];
         const nl = lines ? lines.length : 0;
-        out.push(pad(nl > 0 && lineNo >= 0 ? "VERSO " + (lineNo + 1) + "/" + nl : "FATAL LYRICS", cols, false));
+        out.push(pad(nl > 0 && lineNo >= 0 ? "VERSO " + (lineNo + 1) + "/" + nl : "", cols, false));
         const text = nl > 0 && lineNo >= 0 ? D.clean(lineText(lines[lineNo % nl])) : "";
         const words = text.split(" ").filter(w => w.length > 0);
         const body = [];

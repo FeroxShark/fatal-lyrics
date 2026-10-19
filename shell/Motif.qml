@@ -976,7 +976,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: card.midY + (card.midH - card.dia) / 2 - card.gap * 0.9
-                text: (motif.title || "FATAL LYRICS").toUpperCase()
+                text: (motif.title || "").toUpperCase()
                 color: motif.hot
                 opacity: 0.85
                 font.family: motif.fontFamily

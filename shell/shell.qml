@@ -2285,10 +2285,10 @@ ShellRoot {
     // cambia las cuotas según el mood; sin mood: 2 calm + 1 hot + 1 neutral).
     readonly property var motifGroups: ({
         calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach",
-                  "harmonograph", "splitflap"],
+                  "harmonograph"],
         hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar",
                   "pipes", "vector", "mystify", "maze"],
-        neutral: ["textsea", "eyes", "testcard", "rain", "swarm", "defrag"],
+        neutral: ["textsea", "eyes", "rain", "swarm", "defrag"],
     })
     // Familias de entradas para cuando hay set puesto (el wiring adentro de
     // `crtEntriesFor`/`crtPickEntry` es un paso aparte; acá sólo se define
@@ -2648,12 +2648,12 @@ ShellRoot {
         onTriggered: root.crtMotifRefresh(false)
     }
 
-    readonly property var motifKinds: ["eye", "scope", "radar", "stars", "testcard",
+    readonly property var motifKinds: ["eye", "scope", "radar", "stars",
                                        "rain", "ocean", "pond", "dunes", "static",
                                        "textsea", "eyes", "ekg",
                                        "rorschach", "plasma", "tunnel",
                                        // los de loop de 15 s (previews/crt-motifs)
-                                       "swarm", "splitflap", "maze", "pipes",
+                                       "swarm", "maze", "pipes",
                                        "defrag", "mystify", "vector", "harmonograph"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla

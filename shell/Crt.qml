@@ -2484,7 +2484,7 @@ PanelWindow {
 
             Text {
                 anchors { left: parent.left; right: parent.right; bottom: bar.top; bottomMargin: chrome.fs }
-                text: crt.ctl.npTitle === "" ? "FATAL LYRICS"
+                text: crt.ctl.npTitle === "" ? ""
                     : (crt.ctl.npTitle + "  ·  " + crt.ctl.npInfo).toUpperCase()
                 color: crt.pal.dim
                 font.family: crt.fontFamily

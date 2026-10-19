@@ -230,8 +230,9 @@ PanelWindow {
         // T4.3: el cambio lleva PUENTE. Hasta acá el Loader cortaba seco y un
         // dibujo se convertía en otro en un cuadro, que es lo que hace que la
         // pared se lea como ruido aunque cada dibujo esté bien. Se va rápido
-        // (`exitMs`, InQuad), se cambia con la pantalla apagada y entra con
-        // snap (`enterMs`, OutExpo) — el corte del video de referencia.
+        // (medio `bridgeMs`, InQuad), se cambia con la pantalla apagada, pega
+        // un glitch y entra con snap (`enterFastMs`, OutExpo) — el corte del
+        // video de referencia (tanda 8: antes era un fundido de 460 ms).
         //
         // El puente NO va por `dim`: esa property tiene un Behavior de 220 ms,
         // así que el ScriptAction del cambio caería con el dibujo viejo todavía
@@ -244,16 +245,29 @@ PanelWindow {
     }
     property string motifShown: ""
     property real motifSwap: 1
+    // ¿esta pantalla dibuja el motivo ahora? (la misma condición del `visible` de `motifFrame`)
+    readonly property bool motifSeen: (idle || instrumental || motifForced)
+        && !tubeDark && !ctl.crtIntroOn && !rareNoSignalOn
+    // tanda 8 (r4): el cambio de dibujo es un PUENTE de glitch (`bridgeMs`), no un fundido a negro
+    // de 460 ms repetido ~14 veces por minuto: medio puente a negro, el golpe de tubo EN el swap
+    // (urgent: con `beat_lock` esperaría al próximo tiempo y caería lejos del cambio) y entrada
+    // rápida. Sin motivo a la vista (hay letra) el cambio es mudo: el glitch pegaría en el verso.
     SequentialAnimation {
         id: motifBridge
         NumberAnimation {
             target: crt; property: "motifSwap"; to: 0
-            duration: Motion.exitMs; easing.type: Easing.InQuad
+            duration: Motion.bridgeMs / 2; easing.type: Easing.InQuad
         }
-        ScriptAction { script: crt.motifShown = crt.motifKind; }
+        ScriptAction {
+            script: {
+                crt.motifShown = crt.motifKind;
+                if (crt.motifSeen)
+                    crt.hit(0.4, "motif", true);
+            }
+        }
         NumberAnimation {
             target: crt; property: "motifSwap"; to: 1
-            duration: Motion.enterMs; easing.type: Easing.OutExpo
+            duration: Motion.enterFastMs; easing.type: Easing.OutExpo
         }
     }
 
@@ -1959,8 +1973,7 @@ PanelWindow {
                 // tanda 6, corrida 5: con el intro corriendo esta pantalla
                 // no dibuja motivo — es la estática o la tarjeta, nunca
                 // las dos cosas a la vez ("una animación por pantalla")
-                visible: (crt.idle || crt.instrumental || crt.motifForced)
-                    && !crt.tubeDark && !crt.ctl.crtIntroOn && !crt.rareNoSignalOn
+                visible: crt.motifSeen
                 // con el dibujo forzado esta caja puede coexistir con la letra,
                 // y está declarada DESPUÉS del verso: sin bajarla, el motivo
                 // taparía justo lo que se quiere ver encima de él

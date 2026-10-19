@@ -1064,3 +1064,20 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **La etiqueta "CRT mode" de la bandeja quedaba vieja** cuando la tecla prendía/apagaba el tubo: el
   click siguiente la apagaba en vez de prenderla. Ahora `tray.py` la refresca cada segundo en el hilo
   de GTK y sólo reescribe el texto si cambió.
+
+## Swarm por shader de instancias (r10, 2026-10-19)
+
+- **Un array QML NO llega a un uniform del ShaderEffect.** `property var pts: [...]` + `float pts[N]` en el
+  shader lee negro/cero sin avisar. La palabra de Swarm va empaquetada en 18 `mat4` (`p0..p17`, cada punto
+  = `x*8+y`, 16 por matriz). `Qt.matrix4x4` recibe FILAS; el shader lee `M[col][row]` con `t = fila*4+col`.
+- **El vertex y el fragment shader tienen que declarar EXACTAMENTE el mismo bloque `buf`** (std140, binding
+  0). Si difieren, Qt lee los uniforms corridos sin error. `tests/test_swarm.py` los compara.
+- **Instancias con `GridMesh`**: Qt Quick no tiene instancing, así que `GridMesh` de `(4159, 1)` da 4160
+  columnas × 2 filas = 260 flechas × 4 columnas de vértices por instancia. Sólo la celda (c1,c2) tiene área;
+  las demás (y toda instancia no viva) quedan degeneradas, plegadas en dos puntos. Una instancia apagada se
+  pliega en (0,0). El orden de dibujo es el de la malla: estela 2, estela 1, fondo (+ aro del click),
+  escritoras.
+- **El hash en float32 no aguanta semillas de millones**: la semilla se reduce en QML (`seedS`) y el
+  `pnoise` del shader es periódico en 15 s (costura del loop).
+- **Una flecha con una arista horizontal da división por cero en el test de paridad**: `cross_` compara
+  `(a.y > p.y) != (b.y > p.y)` en vez de dividir.

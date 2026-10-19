@@ -251,6 +251,19 @@ medido: recalibrar con otros géneros si hace falta.
   (ya era Shape) sino tessellar 66 polilíneas de trazo ancho con MSAA 4× en CPU cada cuadro. Ojo: la CPU del
   banco incluye la espera de la placa en el grab; el costo real del overlay es menor en ambos.
 
+- **Swarm: ~260 flechas × 3 en `MShape` → un ShaderEffect por instancias** (`swarm.vert` + `swarm.frag`;
+  mismo banco, 1080p, 120 cuadros, con vidrio). Antes (`Swarmold.qml`) → después:
+
+  | ms/cuadro | antes | después |
+  |---|---|---|
+  | pared con grab (reloj de pared) | 11.5–13.7 | **2.1–2.2** |
+  | CPU del proceso | 12.8–14.9 | 3.2–3.3 |
+  | lado QML (bindings+JS) | 8.3–8.8 | **0.20–0.22** (= suelo) |
+
+  ~5–6× menos, muy por debajo de la mitad pedida (no hizo falta la variante S, la polilínea precalculada).
+  La causa del costo viejo era la misma que en Mystify: tessellar en CPU cientos de polígonos de trazo ancho
+  con MSAA 4× por cuadro. Medido en el banco offscreen: en la GPU real puede variar.
+
 ## `mov` ronda 3: "se ve el cambio pero es mínimo" (tanda 8, 2026-09-28)
 
 Pedido de Ferox con música real: más notorio, más sensible al ritmo. **Aviso de método:** el daemon

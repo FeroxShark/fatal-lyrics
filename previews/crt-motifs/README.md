@@ -63,7 +63,7 @@ tiene sonidos (decisión cerrada).
 
 | kind | qué es | qué lee | costo en el overlay | tubo |
 |---|---|---|---|---|
-| `swarm` | bandada de punteros de Win95 que en el 1 de cada compás **escribe la palabra que viene** en matriz 5×7, la sostiene tres tiempos y revienta en el cuarto | `nextWord`, `tick`, `high` (tiembla en la subida), `drop` (late) | MShape, ≤ 260 flechas × 3 (estela); `quality` | trinitron / bone |
+| `swarm` | bandada de punteros de Win95 que en el 1 de cada compás **escribe la palabra que viene** en matriz 5×7, la sostiene tres tiempos y revienta en el cuarto | `nextWord`, `tick`, `high` (tiembla en la subida), `drop` (late) | ShaderEffect por instancias (`swarm.vert`/`swarm.frag`): ≤ 260 flechas × 3 (estela) en un solo draw; `quality` | trinitron / bone |
 | `splitflap` | cartel de paletas de aeropuerto: verso N/M, el verso que suena, `SIGUE: <palabra>`; cada cambio gira las paletas en cascada | `lines`, `lineNo`, `nextWord`, `tick`, `drop` | 96 paletas de Text/Rectangle; un recorrido JS toca sólo las que giran | trinitron / dragons |
 | `maze` | el Laberinto 3D de Win95: un paso por tiempo por un pasillo en anillo, dobla en las esquinas, la vuelta entera = el loop | `tick`, `drop` (se abre la niebla, se prende el piso), `high` | ShaderEffect de pantalla completa (`maze.frag`, DDA ≤ 40 pasos): el más caro en GPU, casi nada de CPU | trinitron / ado |
 | `pipes` | Tuberías 3D de Win95: un caño nuevo cada dos compases, cuatro tramos por tiempo, bocha que late en cada codo; en el último tiempo se limpia la pantalla | `tick`, `drop`, `low` | MShape, 5 capas de profundidad × 8 caños × 3 tonos (cilindro = 3 trazos corridos hacia la luz) | arcade / poison |
@@ -92,9 +92,9 @@ monitor vectorial, harmonógrafo). Ninguno es un espectro de reproductor (regla 
 
 ## Laberinto (`maze`): sync y banderas
 
-`shell/` es la fuente del laberinto y de mystify. Antes de renderizarlos: `./sync-shell.sh` (copia
+`shell/` es la fuente del laberinto, de mystify y de swarm (`Swarmold.qml` es la copia vieja para el A/B). Antes de renderizarlos: `./sync-shell.sh` (copia
 `Maze`/`Mystify`/`MotifBase` a `motifs/` con los imports reescritos, más `maze.frag(.qsb)`,
-`mystify.frag(.qsb)`, `Maze.js`, `Mystify.js`, `React.js` y `Speed.js`).
+`mystify.frag(.qsb)`, `swarm.vert/.frag(.qsb)`, `Maze.js`, `Mystify.js`, `React.js` y `Speed.js`).
 `./render.py maze --egg smiley|dialog|exit|rat|rock|flip` fuerza un huevo (la costura del loop sólo
 cierra así) y `--rate <r>` fija el ritmo de la marcha. `LoopFeed.qml` da un `cut` y un `hf` sintéticos.
 Estado: `docs/tanda8-estado/laberinto.md`.

@@ -757,17 +757,24 @@ Item {
                     text: {
                         const chars = "01∎▓░╳ΔΣ¥§#*+=<>";
                         let out = "";
-                        for (let i = 0; i < 22; i++)
+                        // las chicas llevan más renglones: la columna sigue cubriendo la pantalla
+                        const n = Math.round(22 / (0.66 + 0.34 * ((index * 3) % 5) / 4));
+                        for (let i = 0; i < n; i++)
                             out += chars[(index * 7 + i * 13) % chars.length] + "\n";
                         return out;
                     }
+                    // PROFUNDIDAD: la clase de velocidad (0 = la lenta, 4 = la rápida) es
+                    // también el plano. Las lentas quedan lejos, chicas y tenues; las rápidas
+                    // cerca, grandes y brillantes. Se salteó el orden (index·3 mod 5) para que
+                    // dos columnas vecinas no formen una rampa
+                    readonly property real depth: ((index * 3) % 5) / 4
                     color: index % 4 === 0 ? motif.hot : motif.colour
-                    opacity: 0.35 + 0.4 * motif.level
-                    font.pixelSize: Math.round(motif.span * 0.055)
+                    opacity: (0.35 + 0.4 * motif.level) * (0.5 + 0.5 * depth)
+                    font.pixelSize: Math.round(motif.span * 0.055 * (0.66 + 0.34 * depth))
                     font.family: "monospace"
                     horizontalAlignment: Text.AlignHCenter
                     lineHeight: 0.95
-                    y: (((rain.base + rain.kph * (index % 5) * 0.12) * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
+                    y: (((rain.base + rain.kph * depth * 4 * 0.12) * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
                 }
             }
         }

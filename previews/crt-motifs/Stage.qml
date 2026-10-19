@@ -26,6 +26,9 @@ Item {
     // banco de costo: la cara se rinde a costW×costH en una capa y la ventana es de 64×36,
     // así el readback no tapa lo que cuesta el shader (la placa es más rápida que el grab)
     property bool cost: false
+    // diff de cuadros (framediff.py): el motivo no corre solo (sin FrameAnimation ni pisotones al
+    // azar) y los pisotones/gotas quedan clavados, así dos renders con el mismo `t` son comparables
+    property bool freeze: false
     property int costW: 1920
     property int costH: 1080
 
@@ -105,8 +108,20 @@ Item {
                     for (const k of stage.contract)
                         if (k in it)
                             it[k] = Qt.binding(() => feed[k]);
+                    if (stage.freeze) {
+                        if ("running" in it) it.running = false;
+                        if ("jump1" in it) {
+                            it.jump1 = Qt.binding(() => Qt.vector4d(-0.6, 2.4, feed.clock - 0.35, 1.0));
+                            it.jump2 = Qt.binding(() => Qt.vector4d(0.9, 4.1, feed.clock - 1.1, 0.8));
+                        }
+                        if ("rip1" in it) {
+                            it.rip1 = Qt.binding(() => Qt.vector4d(-0.6, 2.4, feed.clock - 0.35, 1.0));
+                            it.rip2 = Qt.binding(() => Qt.vector4d(0.9, 4.1, feed.clock - 1.1, 0.8));
+                        }
+                    }
                     it.colour = Qt.binding(() => stage.pal.ink);
-                    it.hot = Qt.binding(() => stage.pal.hot);
+                    if ("hot" in it) it.hot = Qt.binding(() => stage.pal.hot);
+                    if ("crest" in it) it.crest = Qt.binding(() => stage.pal.hot);   // dunes/ocean/pond
                     if ("bg" in it) it.bg = Qt.binding(() => stage.pal.bg);
                     if ("seed" in it) it.seed = 0.37;
                     if ("eggs" in it) it.eggs = Qt.binding(() => stage.egg !== "");

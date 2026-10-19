@@ -83,7 +83,7 @@ qInstallMessageHandler(_qt_log)
 
 class Stage:
     def __init__(self, kind, tube, scheme, portrait=False, glass=True, egg="", rate=1.0,
-                 bpm=128.0, valence=0.5, menergy=0.5, scale=1, cost=False):
+                 bpm=128.0, valence=0.5, menergy=0.5, scale=1, cost=False, freeze=False):
         self.w, self.h = (1080, 1920) if portrait else (1920, 1080)
         self.w, self.h = self.w * scale, self.h * scale
         cw, ch = self.w, self.h
@@ -103,6 +103,7 @@ class Stage:
         self.root.setProperty("tube", tube)
         self.root.setProperty("scheme", scheme)
         self.root.setProperty("glassOn", glass)
+        self.root.setProperty("freeze", freeze)
         if cost:
             self.root.setProperty("costW", cw)
             self.root.setProperty("costH", ch)

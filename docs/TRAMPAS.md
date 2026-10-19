@@ -957,3 +957,19 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   del cartel se cierra en `isFree` (una pared de verdad, no un decal en un hueco).
 - **GLSL 100 es no tiene operaciones de bits ni `fwidth`:** el rótulo SALIDA son cinco glifos de 5×5
   guardados como enteros (`glyph`), y el ancho de línea se pasa a mano (`pxw`).
+
+## Señales de un bloque y el `aud` salteado (golpes por instrumento, 2026-10-19)
+
+- **El hilo de audio NO manda todos los bloques:** un bloque dura 32 ms y `AUDIO_MIN_SEND` es 40 ms, así
+  que uno de cada dos se tira salvo que traiga algo puntual. Todo campo que vale sólo en el bloque en que
+  pasa (`b`, `cutf`, `k`, `ht`, `rise`, `fall`) tiene que estar en la condición de envío de `_capture_loop`;
+  si no, la mitad de los bombos se pierden sin ruido.
+- **`b` no distingue bombo de hi-hat** (rms de banda completa): un hi-hat solo dispara `b` igual. Para el
+  bombo, `k`; está en `tests/test_golpes.py` (`test_b_cannot_tell_them_apart_but_k_can`).
+- **Un flujo relativo en una banda vacía da 1.0 con cualquier fuga:** la cola del Hann de un bombo de 60 Hz
+  en 2.5-8 kHz es casi cero, pero contra una banda en silencio el ratio es 1. Por eso `ht` tiene piso
+  absoluto (`HAT_FLOOR`).
+- **`rise`/`fall` recién abierta la captura:** `mov` sube desde 0 aunque el tema venga parejo. Los
+  primeros `TREND_WARMUP_S` quedan desarmados y se rearman sólo cuando la diferencia vuelve cerca de 0.
+- **La densidad de `char` mira el pico que decae, no el rms del bloque**, para decidir si "hay música":
+  con el rms, el aire entre golpes ralos no contaba como tiempo y un tema espaciado salía denso.

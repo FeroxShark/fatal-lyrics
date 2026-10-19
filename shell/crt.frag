@@ -142,13 +142,24 @@ void main() {
         uv.x += (0.65 * wav + 0.35 * jit) * fizz * 2.2 / res.x;
     }
 
-    // out of tube: black bezel with a thin phosphor edge
-    vec2 e = step(vec2(0.0), uv) * step(uv, vec2(1.0));
-    float inside = e.x * e.y;
-    if (inside < 0.5) {
+    // The tube's outline (tanda 9, vidrio). The barrel already pushes the corners
+    // out of [0,1]; on top of that the face is a rounded box, so the corners are
+    // not sharp, and the cut is anti-aliased by one SCREEN pixel (`kx`/`ky` are
+    // tube px per screen px) instead of the 1 px staircase a `step()` leaves.
+    // Units: the SHORT side of the surface, so the vertical monitor rounds the
+    // same. `rimD` is the depth inside the edge, in pixels, for the bevel and
+    // the phosphor edge further down.
+    float sSide = min(res.x, res.y);
+    vec2 hbox = res / sSide * 0.5;
+    vec2 qb = abs((uv - 0.5) * res / sSide) - hbox + 0.045;
+    float sdf = length(max(qb, 0.0)) + min(max(qb.x, qb.y), 0.0) - 0.045;
+    float aaw = max(kx, ky) / sSide;
+    float tubeCut = clamp(0.5 - sdf / aaw, 0.0, 1.0);
+    if (tubeCut <= 0.0) {
         fragColor = vec4(0.0, 0.0, 0.0, qt_Opacity);
         return;
     }
+    float rimD = -sdf * sSide;
 
     // RGB split: red drifts left, blue drifts right (worse while glitching)
     float ca = chroma * 0.0016 + glitch * 0.007;
@@ -383,10 +394,21 @@ void main() {
         col = mix(col, hot * vec3(1.6, 0.16, 0.12) * pulse + col * 0.35, alarm);
     }
 
-    // glass: vignette plus a faint sheen off the top-left of the tube face
+    // glass: vignette, a dark bevel where the face meets the frame (14 px at
+    // 1080p, 22 % at the very edge), the cut of the outline, and then what the
+    // glass REFLECTS: a thin phosphor edge hugging the border and
+    // a faint sheen off the top-left. The reflections come last and die with `cutDim`, so the dry
+    // cut still goes to black; they sit on the SCREEN (not on the warped uv),
+    // so they stay put when the picture shakes.
     float v = pow(16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y), 0.22);
     col *= mix(1.0, v, vignette);
+    float bevW = 0.013 * sSide;
+    float bev = 1.0 - smoothstep(0.0, bevW, rimD);
+    col *= 1.0 - 0.22 * bev * bev;
+    col *= tubeCut;
+    vec3 refl = tint * 0.03 * exp(-pow(rimD / (0.0016 * sSide), 2.0));
     col += vec3(0.012, 0.014, 0.02) * smoothstep(1.2, 0.0, uv.x + uv.y);
+    col += refl * (1.0 - cutDim) * tubeCut;
 
     fragColor = vec4(col, 1.0) * qt_Opacity;
 }

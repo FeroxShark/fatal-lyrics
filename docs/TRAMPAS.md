@@ -1365,3 +1365,30 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   harmonograph, vector) con el `Motif` real de `shell/`, sin vidrio, en tiempo real. Hojas en
   `docs/tanda8-estado/motivos/`. El aviso `Unable to assign [undefined] to int` de `Motif.qml:43`
   es el singleton `Motion` que el banco no registra: no afecta lo que se mira.
+
+## Tanda de shaders de motivos (2026-10-19)
+
+- **En esta placa un `if` por píxel en un shader de marcha cuesta más de lo que ahorra.** El
+  giroscopio con la cota exacta por aro (`|p|` contra la cáscara del aro, sin rotar ni evaluar el
+  SDF cuando no puede ganar) salía IDÉNTICO (diff 0/255) y 15 % más lento en el banco (2.4 → 2.8 ms
+  a 3840×2160; mover las matrices adentro del test de la esfera sola: 2.5). Las matrices ya estaban
+  fuera del bucle de marcha (se arman una vez por píxel). No se tocó `giroscopio.frag`.
+- **Cortar vecinos de `dunes`/`ocean`/`pond` por la vertical no corta nada.** La ventana de filas
+  vecinas (±2 filas, o 4×3 celdas en el estanque) se eligió justo para cubrir el rango de alturas
+  posibles; una cota exacta de la altura (±0.17 en las dunas, ~±0.13 en el mar, ~±0.08 en el
+  estanque) siempre es más ancha que la ventana. En las dunas se implementó igual (diff 0, mismo
+  tiempo: 1.3 vs 1.3 ms) y se descartó. La x ya se descartaba antes de calcular la altura.
+- **El costo de un shader de motivo se mide en una capa, no con `grabWindow` de la pantalla
+  entera:** el readback de 1920×1080 (y los otros workers en la placa) tapan hasta 3 ms de ruido
+  y la diferencia entre motivos queda dentro. `previews/crt-motifs/bench.py --cost --scale 2`
+  rinde a 3840×2160 en una capa y lee una ventana de 64×36; intercalar variantes (A B A B…) y
+  mirar el mínimo. Para los que deben salir idénticos: `framediff.py` (reloj congelado: `freeze`
+  en `Stage.qml` apaga el `FrameAnimation` y clava pisotones/gotas). Dos ventanas offscreen en el
+  mismo proceso NO dan cuadros repetibles: `framediff.py` lanza un proceso por motivo.
+- **`dunes` sombrea por pendiente, no por altura** (sol bajo fijo en el mundo, azimut de la
+  semilla; `dune()` devuelve altura y gradiente de las mismas cuatro lecturas de hash por octava).
+  +8 % en el banco (1.3 → 1.4 ms). El suelo de brillo (0.36) no baja de cero: un grano más
+  oscuro que la arena se lee como un agujero. Si se edita `dunes.frag`, regenerar el `.qsb` (un test
+  lo compara byte a byte).
+- **Los comentarios de cabecera de `Membrana`, `Cintas` y `Giroscopio` decían "NO está en el
+  sorteo"** y ya están en `motifGroups` desde que pasaron al CRT; un test mira que no vuelva.

@@ -207,6 +207,11 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   32 ms, bajo+medio+agudo variable, misma máquina): 0.641 ms/bloque antes → 0.662 ms/bloque después (+0.021 ms,
   ~3.3 % relativo, ~0.065 % de un núcleo extra sobre un hop de 32 ms). `hf` reusa la FFT que `dirt` ya calculaba
   (`power_spectrum`), no hay FFT nueva.
+- **Señales `k`/`ht`/`nov`/`rise`/`fall` + `char`** (2026-10-19, `AudioAnalyzer.feed`, `perf_counter`, 3×600
+  bloques de 512 muestras, 60-80 Hz + ruido, misma máquina, A/B contra el `audio.py` anterior): 0.74 ms/bloque →
+  0.80 ms/bloque (+0.05 ms, ~+7 % relativo, ~+0.15 % de un núcleo). Todo reusa la FFT de `dirt`; `char` corre
+  una vez por segundo (recorre el perfil para `mood.energy`). Envío: `k`/`ht`/`rise`/`fall` fuerzan el `aud` de
+  su bloque — techo físico 31 eventos/s (un bloque cada 32 ms) contra ~25 de antes.
 - **Reacción visual** (`shell/crt.frag` vía `shell/React.js`, banco offscreen `previews/reaccion/`, pace normal):
   corte — brillo medio durante el corte 1.003 → 0.479 del de antes, pico de vuelta 1.147 → 1.594. Golpe de bajo
   (a flicker 1): brillo +10.0 %, cambio local de rms 2.6, azul−rojo en claros −4.7. Agudos: brillo +0.08 %,

@@ -25,6 +25,9 @@ POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
 # loop duerme justo hasta ahí. LEAD es el margen para despertar un pelo DESPUÉS
 # (con pos < due el show no sale y se pierde la vuelta); MIN, el piso para no
 # girar en falso si MPRIS da una posición que no avanza.
+# En una pausa CORTA el poll sigue siendo el rápido: el play despierta la pared en
+# ~0.3 s y no en hasta 1 s. Pasados estos segundos de pausa vuelve el de 1 s.
+PAUSE_FAST = 8.0
 DUE_LEAD = 0.02
 DUE_MIN_SLEEP = 0.03
 # T4.5: silencio con la letra cargada y el tema sonando. Un instrumental largo
@@ -251,9 +254,14 @@ class DaemonLoop:
             # el tema termina en pausa (usuario paró justo al final): no tiene
             # sentido esperar el pause_clear si ya no queda nada por mostrar
             near_end = t["length"] - t["pos"] < 2.0
-            if not self.pause_cleared and (near_end or (
-                    self._config.CFG["behavior"]["pause_clear"] > 0
-                    and now - self.pause_started > self._config.CFG["behavior"]["pause_clear"])):
+            # con el tubo prendido la pausa larga NO borra la letra: el `clear`
+            # vacía la línea y la pared cae a "NO SIGNAL" (la pausa se descartó
+            # como standby, Crt.qml). La letra queda quieta y a los minutos el
+            # tubo se duerme solo (`deepSleep` por pausa, en Crt.qml).
+            long_pause = (not self._config.crt_on()
+                          and self._config.CFG["behavior"]["pause_clear"] > 0
+                          and now - self.pause_started > self._config.CFG["behavior"]["pause_clear"])
+            if not self.pause_cleared and (near_end or long_pause):
                 self._ipc.clear(why="pause")
                 self.pause_cleared = True
                 self.resend_np = True
@@ -510,6 +518,8 @@ class DaemonLoop:
         cuando se canta y no hasta 300 ms después, y el aro del tubo — que
         cuenta contra `due` — ya no llega a cero con el texto todavía sin salir."""
         if not fast:
+            if self.pause_started is not None and now - self.pause_started < PAUSE_FAST:
+                return POLL
             return POLL_IDLE
         due_in = self.next_due_in
         if due_in is None:

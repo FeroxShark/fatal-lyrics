@@ -539,6 +539,14 @@ PanelWindow {
         if (!standby)
             deepSleep = false;
     }
+    // la pausa larga con la letra puesta (el daemon ya no manda el `clear` de pausa con el
+    // tubo prendido, que caía a NO SIGNAL): mismo reloj de 3 minutos, pero la letra se
+    // queda quieta en vez de ceder a las barras. Vuelve con el primer `pos`/`aud`.
+    Timer {
+        interval: 180000
+        running: crt.visible && crt.paused && !crt.deepSleep && !crt.motifForced
+        onTriggered: crt.deepSleep = true
+    }
 
     // tanda 7, corrida 8 (idea 14): la música se pausó y la letra quedó puesta. No es
     // standby (que es sin letra: NO SIGNAL, descartado para la pausa) — se ve EXACTAMENTE
@@ -555,9 +563,11 @@ PanelWindow {
         onTriggered: crt.resting = true
     }
     onPausedChanged: {
-        if (!paused)
+        if (!paused) {
             resting = false;
-        else
+            if (!standby)
+                deepSleep = false;   // despertó de la pausa larga (ver el Timer de arriba)
+        } else
             burnFade("pausa");
     }
     onRestingChanged: if (ctl.crtOn) console.log("crt: rest " + idx + (resting ? " on" : " off"))

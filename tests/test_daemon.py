@@ -740,6 +740,25 @@ class TestLongPauseClear(unittest.TestCase):
         self.assertTrue(loop.pause_cleared)
         loop._ipc.clear.assert_called_once_with(why="pause")
 
+    def test_with_the_tube_on_a_long_pause_keeps_the_lyric(self):
+        # el `clear` de pausa vacía la línea y la pared cae a NO SIGNAL
+        cfg = make_config(pause_clear=15)
+        cfg.crt_on.return_value = True
+        loop = make_loop(config=cfg)
+        loop.handle_track(track(status="Paused"), now=0.0)
+        loop._ipc.reset_mock()
+        loop.handle_track(track(status="Paused"), now=600.0)
+        self.assertFalse(loop.pause_cleared)
+        loop._ipc.clear.assert_not_called()
+
+    def test_with_the_tube_on_a_track_ending_in_pause_still_clears(self):
+        cfg = make_config(pause_clear=15)
+        cfg.crt_on.return_value = True
+        loop = make_loop(config=cfg)
+        loop.track_id = "t1"
+        loop.handle_track(track(status="Paused", pos=99.0, length=100.0), now=0.0)
+        loop._ipc.clear.assert_called_with(why="pause")
+
     def test_zero_disables_the_long_pause_clear(self):
         loop = make_loop(config=make_config(pause_clear=0))
         loop.handle_track(track(status="Paused"), now=0.0)
@@ -815,8 +834,18 @@ class TestLineFiresAtItsInstant(unittest.TestCase):
     def test_after_the_last_line_it_polls_normally(self):
         self.assertEqual(self._tick(pos=50.0), daemon.POLL)
 
-    def test_paused_keeps_the_idle_poll(self):
-        self.assertEqual(self._tick(pos=9.9, status="Paused"), daemon.POLL_IDLE)
+    def _paused_tick(self, at, started=0.0):
+        loop = make_loop(playerctl_state=mock.Mock(return_value=track(status="Paused")),
+                         monotonic=mock.Mock(return_value=at))
+        loop.pause_started = started
+        loop.tick()
+        return loop._sleep.call_args.args[0]
+
+    def test_a_short_pause_keeps_the_fast_poll_so_play_wakes_in_a_poll(self):
+        self.assertEqual(self._paused_tick(at=3.0), daemon.POLL)
+
+    def test_a_long_pause_goes_back_to_the_idle_poll(self):
+        self.assertEqual(self._paused_tick(at=daemon.PAUSE_FAST + 1), daemon.POLL_IDLE)
 
     def test_the_time_the_tick_already_took_is_discounted(self):
         from cartelitos import lyrics as real

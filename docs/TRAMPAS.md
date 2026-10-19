@@ -1035,6 +1035,15 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   si cumplió `pace.motifHoldMs`) y da un pulso en el canal del golpe (`bassMul`); `fall` alarga el hold
   (`fallHoldMs`, tope: empezar de cero). `wild` no alarga holds.
 
+- **La pausa larga con el tubo prendido NO manda `clear(why="pause")`.** El `clear` vacía `crtLine`
+  y la pared cae a standby: barras y "NO SIGNAL", justo lo que `Crt.qml` descartó para la pausa
+  (la letra queda quieta, `resting` a 15 fps). Con el tubo prendido el daemon sólo limpia si el
+  tema termina en pausa (`near_end`). La letra quieta no se queda para siempre: `Crt.qml` tiene un
+  Timer de 3 min sobre `paused` que pone `deepSleep` (5 fps, estática apagada), y el primer
+  `pos`/`aud` lo despierta. Con el tubo apagado (carteles Win95) el `pause_clear` de 15 s sigue igual.
+  Además, las pausas cortas (< `PAUSE_FAST`, 8 s) siguen con el poll de 0.3 s: el play despierta la
+  pared en ~0.3 s y no en hasta 1 s (~1 % de un core esos 8 s; después vuelve el de 1 s).
+
 ## Instalable sin la mitad de `shell/` y README con la tecla vieja (instalación, 2026-10-19)
 
 - **El PKGBUILD tenía una lista fija de `shell/`** y se le escaparon `Motion.qml`, casi todos los

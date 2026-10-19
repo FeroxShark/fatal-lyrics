@@ -29,6 +29,11 @@ hl.layer_rule({ name = "fatal-lyrics", match = { namespace = "^cartelitos.*$" },
 -- además la que la letra muestra escrita al empezar cada tema.
 hl.bind("SUPER + SHIFT + Y", hl.dsp.exec_cmd(FATAL .. " crt toggle"))
 
+-- La ventana de Ajustes (`fatal ajustes`): el único lugar con todas las opciones. Bind fijo, no
+-- está en [keys]: el daemon no lo toca. Super+Shift+A estaba libre en la config de Ferox; si en la
+-- tuya no, cambiá la tecla acá y en el README.
+hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd(FATAL .. " ajustes"))
+
 -- Sync fino ±0.1 s. Tienen que ser las mismas que [keys] de fábrica ("Super+Alt, Right/Left"):
 -- mientras la perilla no cambie, el daemon no toca estos binds. Super+Shift+flechas ya mueve
 -- ventanas (docs/TRAMPAS.md).

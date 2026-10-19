@@ -57,6 +57,13 @@ class TestHyprlandDocs(unittest.TestCase):
         self.assertIn('hl.bind("SUPER + SHIFT + Y"', readme)
         self.assertNotIn("SUPER + SHIFT + C", readme)
 
+    def test_the_settings_key_in_the_readme_is_the_bound_one(self):
+        lua = self._read("packaging", "hyprland.lua")
+        readme = self._read("README.md")
+        self.assertIn('hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd(FATAL .. " ajustes"))', lua)
+        self.assertIn('hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd("fatal ajustes"))', readme)
+        self.assertIn("`Super+Shift+A`", readme)
+
     def test_the_load_path_in_the_readme_is_the_one_in_the_lua(self):
         lua = self._read("packaging", "hyprland.lua")
         readme = self._read("README.md")

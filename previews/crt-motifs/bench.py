@@ -22,12 +22,17 @@ def main():
     ap.add_argument("--n", type=int, default=240)
     ap.add_argument("--rounds", type=int, default=1, help="rondas intercaladas")
     ap.add_argument("--portrait", action="store_true")
+    ap.add_argument("--temper", choices=list(R.TEMPERS), help="testeo: carácter del tema")
     a = ap.parse_args()
+    bpm, val, men = R.TEMPERS[a.temper] if a.temper else (128.0, 0.5, 0.5)
+    R.set_bpm(bpm)
     kinds = a.kinds or list(R.MOTIFS)
     # `<kind>old` carga motifs/<Kind>old.qml: la versión vieja, para el A/B intercalado
     for k in kinds * a.rounds:
-        tube, scheme = R.MOTIFS.get(k.replace('old', ''), R.MOTIFS['mystify'])
-        st = R.Stage(k, tube, scheme, portrait=a.portrait, glass=not a.flat)
+        base = k.replace('old', '')
+        tube, scheme = R.MOTIFS.get(base) or R.TESTEO.get(base) or R.MOTIFS['mystify']
+        st = R.Stage(k, tube, scheme, portrait=a.portrait, glass=not a.flat,
+                     bpm=bpm, valence=val, menergy=men)
         for f in range(60):
             st.frame(f / R.FPS)
         w0, c0 = time.perf_counter(), time.process_time()

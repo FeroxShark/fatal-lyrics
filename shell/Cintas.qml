@@ -1,4 +1,4 @@
-// fatal-lyrics — motivo `cintas` (testeo 2026-10-19, NO está en el sorteo).
+// fatal-lyrics — motivo `cintas` (testeo 2026-10-19; ya está en el sorteo, grupo `hot` de `motifGroups`).
 //
 // Cintas de fósforo tendidas a distintas profundidades (cuerdas de un bajo vistas
 // de costado). Qué hace con cada señal:

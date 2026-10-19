@@ -288,6 +288,10 @@ ShellRoot {
             // del tema: esos motivos ya lo traen en su física (`crtCharacter` -> `Thump.js`)
             kickRise: 0.40, fallHoldMs: 8000,
             kickThump: 0.60,
+            // el empujón de la cámara en el DROP (`sectionKick`): fracción de zoom en un tema
+            // agitado (`crtCharacter` 1); `dropZoomMin` es la fracción que queda en uno lento
+            // (piso >= 0.5: el drop de una balada se nota igual, sólo más chico)
+            dropZoom: 0.10, dropZoomMin: 0.50,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -306,6 +310,7 @@ ShellRoot {
             kickAmpMin: 0.30, kickSlowMs: 400, kickFastMs: 120,
             kickRise: 0.70, fallHoldMs: 5000,
             kickThump: 1.00,
+            dropZoom: 0.14, dropZoomMin: 0.50,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -338,6 +343,8 @@ ShellRoot {
             kickAmpMin: 0.40, kickSlowMs: 340, kickFastMs: 90,
             kickRise: 1.00, fallHoldMs: 0,
             kickThump: 1.40,
+            // la tanda 3 empujaba 12 % fijo, sin mirar el carácter: `wild` lo devuelve (mín 1)
+            dropZoom: 0.12, dropZoomMin: 1.00,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -2212,6 +2219,10 @@ ShellRoot {
     readonly property real kickTubeAmt: pace.kickTube * kickAmp
     readonly property real kickMotifAmt: pace.kickMotif * kickAmp
     readonly property real kickThumpAmt: pace.kickThump * kickKnob * bassMul
+    // el empujón del drop (`Crt.qml` `sectionKick`): escala por carácter como el golpe, sin el
+    // `kickKnob` (la perilla `camera` ya lo multiplica en Crt.qml)
+    readonly property real dropZoomAmt: pace.dropZoom
+        * (pace.dropZoomMin + (1 - pace.dropZoomMin) * crtCharacter)
     // cada golpe: Crt.qml (cámara, tubo) y Motif.qml (dibujo) escuchan el contador
     property int bassGen: 0
     property real bassMul: 1

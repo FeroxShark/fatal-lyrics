@@ -48,5 +48,30 @@ class TestSorteoSinRepetir(unittest.TestCase):
         self.assertIn('wanted !== "" && taken.indexOf(wanted) < 0 && wanted !== kinds[i]', q)
 
 
+class TestEmpujonDelDrop(unittest.TestCase):
+    def test_drop_zoom_is_a_pace_column_with_a_floor_and_scales_by_character(self):
+        q = read("shell.qml")
+        block = code(re.search(r"crtPaceTable:\s*\(\{(.*?)\n    \}\)", q, re.S).group(1))
+        rows = re.findall(r"^\s{8}(\w+):\s*\{(.*?)\n\s{8}\},", block, re.S | re.M)
+        self.assertEqual([r[0] for r in rows], ["calm", "normal", "wild"])
+        for name, body in rows:
+            z = float(re.search(r"dropZoom:\s*([\d.]+)", body).group(1))
+            mn = float(re.search(r"dropZoomMin:\s*([\d.]+)", body).group(1))
+            self.assertGreaterEqual(mn, 0.5, name)
+            self.assertLessEqual(mn, 1.0, name)
+            self.assertGreater(z, 0.05, name)
+        wild = dict(rows)["wild"]
+        self.assertRegex(wild, r"dropZoom:\s*0\.12,\s*dropZoomMin:\s*1\.00")   # tanda 3: 12 % fijo
+        self.assertRegex(code(q), r"dropZoomAmt: pace\.dropZoom\s*\* \(pace\.dropZoomMin \+ \(1 - pace\.dropZoomMin\) \* crtCharacter\)")
+
+    def test_crt_uses_the_scaled_zoom_and_cue_starts_from_where_it_is(self):
+        c = code(read("Crt.qml"))
+        self.assertIn("to: 1 + crt.ctl.dropZoomAmt * crt.cam", c)
+        self.assertNotIn("0.12 * crt.cam", c)
+        anim = re.search(r"id: cueAnim(.*?)\n    }", c, re.S).group(1)
+        self.assertNotRegex(anim, r"\bfrom:")
+        self.assertIn("1 + 0.75 * crt.ctl.dropZoomAmt", c)
+
+
 if __name__ == "__main__":
     unittest.main()

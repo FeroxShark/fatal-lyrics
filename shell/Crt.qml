@@ -785,7 +785,8 @@ PanelWindow {
         id: cueAnim
         target: crt
         property: "cueZoom"
-        from: 1
+        // sin `from`: arranca de donde está `cueZoom` (si el cue llega con la rampa o la suelta
+        // en curso, `from: 1` lo tiraba a 1 de golpe, hasta ~9 %)
         to: 1.055
         duration: 2000
         easing.type: Easing.InQuad
@@ -809,8 +810,9 @@ PanelWindow {
             // el mismo acercamiento, un poco más largo cuando lo que viene es
             // el drop que el zoom por sección va a abrir: la anticipación es
             // ÉSTA, no una rampa nueva al lado
+            // (0.75 del empujón: 1.09 con el 12 % de siempre)
             cueAnim.to = crt.sectionZoomOn && crt.ctl.audComing === "drop"
-                ? 1.09 : 1.055;
+                ? 1 + 0.75 * crt.ctl.dropZoomAmt : 1.055;
             cueAnim.restart();
         }
         function onSectionGenChanged() {
@@ -1577,7 +1579,7 @@ PanelWindow {
         id: sectionKick
         NumberAnimation {
             target: crt; property: "sectionZoom"
-            to: 1 + 0.12 * crt.cam; duration: Motion.enterMs; easing.type: Easing.OutExpo
+            to: 1 + crt.ctl.dropZoomAmt * crt.cam; duration: Motion.enterMs; easing.type: Easing.OutExpo
         }
         PauseAnimation { duration: 500 }
         NumberAnimation {

@@ -2388,7 +2388,7 @@ ShellRoot {
     // hasta que cambie el tema. `crt.set = "off"` (crtSetOn === false) apaga
     // esto entero y vuelve al pool parejo de siempre.
     //
-    // Los 27 motivos en tres grupos, por temperamento (la corrida 3 les
+    // Los 25 motivos en tres grupos, por temperamento (la corrida 3 les
     // cambia las cuotas según el mood; sin mood: 2 calm + 1 hot + 1 neutral).
     readonly property var motifGroups: ({
         calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach",

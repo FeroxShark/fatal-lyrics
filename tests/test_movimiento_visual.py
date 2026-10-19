@@ -116,7 +116,8 @@ class TestMovWiring(unittest.TestCase):
     def test_every_child_motif_with_its_own_clock_gets_the_rate(self):
         motif = read("Motif.qml")
         for kind in ("Ocean", "Dunes", "Rorschach", "Plasma", "Tunnel", "Static", "TextSea", "Pond",
-                     "Swarm", "Splitflap", "Maze", "Pipes", "Defrag", "Mystify", "Vector", "Harmonograph"):
+                     "Swarm", "Splitflap", "Maze", "Pipes", "Defrag", "Mystify", "Vector", "Harmonograph",
+                     "Membrana", "Cintas", "Giroscopio"):
             body = re.search(r"\n        %s \{\n(.*?)\n        \}" % kind, motif, re.S)
             self.assertIsNotNone(body, kind)
             self.assertIn("rate: motif.rate", body.group(1), kind)

@@ -127,6 +127,54 @@ Item {
         }
     }
 
+    // La rejilla de papel de ECG: cuadrito chico y, cada cinco, el grueso, MUY tenue (alfa
+    // bajo: compite con el bloom del vidrio). Se pinta UNA vez por tamaño o color, no por
+    // cuadro: el motivo sigue costando lo que costaba. Una línea gruesa pasa por la base.
+    Canvas {
+        id: grid
+        anchors.fill: parent
+        anchors.margins: Math.min(parent.width, parent.height) * 0.08
+        renderStrategy: Canvas.Cooperative
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        Connections { target: ekg; function onColourChanged() { grid.requestPaint(); } }
+        onVisibleChanged: if (visible) requestPaint()
+        Component.onCompleted: requestPaint()
+
+        onPaint: {
+            const c = getContext("2d");
+            c.reset();
+            const w = width, h = height;
+            if (w <= 0 || h <= 0)
+                return;
+            const g = Math.max(8, Math.min(w, h) / 36);
+            const mid = h * 0.62;
+            c.strokeStyle = ekg.colour;
+            for (let pass = 0; pass < 2; pass++) {
+                // 0 = el cuadrito, 1 = el grueso (cada cinco)
+                c.globalAlpha = pass ? 0.13 : 0.06;
+                c.lineWidth = pass ? Math.max(1.5, g * 0.09) : Math.max(1, g * 0.05);
+                c.beginPath();
+                for (let k = -Math.ceil(mid / g); k * g < h - mid + g; k++) {
+                    if ((k % 5 !== 0) !== !pass)
+                        continue;
+                    const y = mid + k * g;
+                    if (y < 0 || y > h)
+                        continue;
+                    c.moveTo(0, y);
+                    c.lineTo(w, y);
+                }
+                for (let k = 0; k * g <= w; k++) {
+                    if ((k % 5 !== 0) !== !pass)
+                        continue;
+                    c.moveTo(k * g, 0);
+                    c.lineTo(k * g, h);
+                }
+                c.stroke();
+            }
+        }
+    }
+
     Canvas {
         id: trace
         anchors.fill: parent
@@ -164,29 +212,47 @@ Item {
             c.lineTo(w, mid);
             c.stroke();
 
-            c.globalAlpha = 1;
+            // el rastro con brillo decreciente: el latido de hace cuatro segundos pesa
+            // menos que el de recién. Seis tandas de la más vieja (alfa 0.28) a la nueva
+            // (1); una muestra va en la tanda que le toca por su EDAD (cuántas muestras
+            // atrás del cursor), y cada tanda arranca desde el punto anterior para que
+            // no queden cortes entre una y otra
             c.strokeStyle = ekg.colour;
             c.lineWidth = Math.max(2, span * 0.007);
             c.lineJoin = "round";
-            c.beginPath();
-            let pen = false;
-            for (let i = 0; i < n; i++) {
-                // el hueco del cursor: lo de adelante ya se borró
-                const ahead = (i - ekg.cursor + n) % n;
-                if (ahead >= 0 && ahead < ekg.gap) {
-                    pen = false;
-                    continue;
+            c.lineCap = "round";
+            const NB = 6;
+            const live = n - ekg.gap;
+            const inGap = i => ((i - ekg.cursor + n) % n) < ekg.gap;
+            const bucketOf = i => Math.max(0, NB - 1 - Math.floor(((ekg.cursor - 1 - i + n) % n) / live * NB));
+            const X = i => i / (n - 1) * w;
+            const Y = i => mid - a[i] * amp;
+            for (let B = 0; B < NB; B++) {
+                c.globalAlpha = 0.28 + 0.72 * Math.pow(B / (NB - 1), 1.2);
+                c.beginPath();
+                let pen = false;
+                for (let i = 0; i < n; i++) {
+                    // el hueco del cursor: lo de adelante ya se borró
+                    if (inGap(i)) {
+                        pen = false;
+                        continue;
+                    }
+                    if (bucketOf(i) !== B) {
+                        pen = false;
+                        continue;
+                    }
+                    if (!pen) {
+                        if (i > 0 && !inGap(i - 1))
+                            c.moveTo(X(i - 1), Y(i - 1));
+                        else
+                            c.moveTo(X(i), Y(i));
+                        pen = true;
+                    }
+                    c.lineTo(X(i), Y(i));
                 }
-                const x = i / (n - 1) * w;
-                const y = mid - a[i] * amp;
-                if (!pen) {
-                    c.moveTo(x, y);
-                    pen = true;
-                } else {
-                    c.lineTo(x, y);
-                }
+                c.stroke();
             }
-            c.stroke();
+            c.globalAlpha = 1;
 
             // el cursor, la cabeza caliente que escribe
             const cx = ((ekg.cursor - 1 + n) % n) / (n - 1) * w;

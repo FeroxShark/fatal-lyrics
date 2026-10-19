@@ -161,12 +161,20 @@ void main() {
     }
     float rimD = -sdf * sSide;
 
-    // RGB split: red drifts left, blue drifts right (worse while glitching)
-    float ca = chroma * 0.0016 + glitch * 0.007;
+    // RGB split: red drifts left, blue drifts right (worse while glitching).
+    // The misalignment of a real tube is convergence: nothing in the middle,
+    // growing to the knob's value in the corners (30 % at the centre) and a
+    // pinch vertical towards the top and bottom. It is a function of the SCREEN
+    // position, so the glitch bands do not drag it around; the burst keeps its
+    // own uniform term.
+    vec2 cq = qt_TexCoord0 * 2.0 - 1.0;
+    float conv = 0.3 + 0.7 * 0.5 * dot(cq, cq);
+    float ca = chroma * 0.0016 * conv + glitch * 0.007;
+    float cav = chroma * 0.0016 * 0.22 * cq.y * conv;
     vec3 col;
-    col.r = texture(src, uv + vec2(ca, 0.0)).r;
+    col.r = texture(src, uv + vec2(ca, cav)).r;
     col.g = texture(src, uv).g;
-    col.b = texture(src, uv - vec2(ca, 0.0)).b;
+    col.b = texture(src, uv - vec2(ca, cav)).b;
 
     // Phosphor bleed. It has to work both ways round: bright letters on a dark
     // tube (the glyph spills light outwards) and a lit screen with dark letters

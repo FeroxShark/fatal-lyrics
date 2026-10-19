@@ -35,7 +35,8 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `crtIntroPhase`/`crtIntroScreen` + `crtIntroStart`/`Advance`/`End`/`Skip` (`shell.qml`,
   perilla `crt.intro`, `crt.intro_card`) — el cambio de tema es un evento: `clear` (why="track")
   apaga la pared, degauss, estática y la tarjeta (título/artista) en la pantalla del próximo foco,
-  sin plazo: la corta `show()`. Detalle: `docs/TRAMPAS.md` ("Detalle movido desde CLAUDE.md").
+  sin plazo: la corta `show()`. Sin apagón (`screen_off` false) + tarjeta `plain`: sólo la tarjeta,
+  en el foco, con plazo (`crtIntroSoft`, `Crt.introHere`). Detalle: `docs/TRAMPAS.md`.
 - `shell/WordSlot.qml` + `crt.wholeWordsOn` (`Crt.qml`) — la palabra que suena pulsa con la familia
   de entrada del set. Costo y auto-drop de calidad: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.
 - `crtRareKinds` + `crtRare`/`crtRareTimer`/`crtRareRoll`/`crtForceRare` (`shell.qml`, perilla

@@ -1117,3 +1117,20 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   `previews/shader-check/render.py` antes/después: moiré, textura y envolvente iguales o menores en los
   6 tubos y las 2 orientaciones. Recompilar: `/usr/lib/qt6/bin/qsb --glsl "100 es,120,150" -o
   shell/crt.frag.qsb shell/crt.frag`.
+
+## La tarjeta del tema sin apagón (`crt.screen_off = false`, 2026-10-19)
+
+- **Con `screen_off` en false (default) el cambio de tema no tenía momento propio:** `crtIntroStart`
+  salía de entrada. Ahora, si `crt.intro_card = plain`, la tarjeta (título/artista) entra sola en la
+  pantalla del foco, sin pared apagada ni estática (`crtIntroSoft`). Con `testcard` no hay nada (Ferox
+  rechazó la carta de ajuste a mitad de tema).
+- **El `np` llega DESPUÉS del `clear`**: la tarjeta espera a `nowPlaying` (`crtIntroCardPending`), si
+  no saldría con el título del tema anterior (`npTitle` nunca se vacía).
+- **Tapa SÓLO su pantalla:** `Crt.qml` lee `introHere` (no `ctl.crtIntroOn` pelado) para ocultar motivo,
+  rótulo y énfasis; con el intro completo `introHere` es la pared entera. Un `crtIntroOn` suelto en
+  `Crt.qml` apagaría el motivo de toda la pared durante la tarjeta.
+- **Tiene plazo** (`Motion.introCardSoftMs`, 7 s): sin estática que la cierre, un tema sin letra la
+  dejaría puesta para siempre. El primer verso la corta antes, como siempre.
+- **Aro de cuenta regresiva en el intro: NO se puede.** El aro cuenta hacia el `nx` de la línea que
+  viene y necesita una línea actual y un `crtShot`; antes del primer verso no hay ninguno, y el daemon
+  no manda la hora del primer verso. Haría falta un evento nuevo del daemon (`first_due`).

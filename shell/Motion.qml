@@ -83,6 +83,10 @@ Singleton {
     // glitch, más como un tubo roto. Corre sobre `Easing.OutQuad` (amplitud 1 → 0).
     readonly property int degaussMs: 700
     readonly property int introCardMs: 2400
+    // intro SIN apagón (`crt.screen_off = false`, tarjeta `plain`): no hay estática que la cierre
+    // y un tema sin letra dejaría el título puesto para siempre, así que tiene plazo. Lo justo para
+    // leer título y artista dos veces; el primer verso la corta antes si llega antes.
+    readonly property int introCardSoftMs: 7000
 
     // ---- eventos raros (tanda 6, corrida 7): cuánto dura el CONTENIDO de
     // un nosignal o testcard (la transición de entrada/salida reusa

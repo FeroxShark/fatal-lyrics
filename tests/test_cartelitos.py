@@ -3732,7 +3732,7 @@ class TestKnobsAreReachable(unittest.TestCase):
         self.assertIn('crt_screen_off: "crtScreenOff"', qml)
         # escena e intro cuelgan de la perilla
         self.assertIn("crtScreenOff && crtSceneMode", qml)
-        self.assertRegex(qml, r"!crtIntro \|\| !crtScreenOff")
+        self.assertRegex(qml, r"if \(!crtScreenOff\) \{[^}]*crtIntroCard === \"plain\"")
         self.assertIn("crt.screen_off", settings.ROWS)
 
     def test_testcard_knob_is_wired_and_off_by_default(self):
@@ -3759,13 +3759,32 @@ class TestKnobsAreReachable(unittest.TestCase):
         picked = _options("crt.intro_card")
         self.assertEqual(set(picked), {"testcard", "plain"})
 
+    def test_intro_without_blackout_is_only_a_plain_card_on_the_focus(self):
+        # sin screen_off: ni apagón ni estática; la tarjeta `plain` espera al `np`
+        # (llega DESPUÉS del clear) y tapa SÓLO la pantalla del foco, con plazo
+        qml, _ = self._tube_table()
+        m = re.search(r"function crtIntroStart\(\) \{(.*?)\n    \}\n", qml, re.S)
+        body = m.group(1)
+        self.assertLess(body.index("if (!crtScreenOff)"), body.index('crtIntroPhase = "off"'))
+        self.assertIn('crtIntroCardPending = crtIntroCard === "plain"', body)
+        m = re.search(r"function nowPlaying\(.*?\n    \}\n", qml, re.S)
+        self.assertIn("crtIntroCardPending && crtOn && crtIntro && !crtScreenOff", m.group(0))
+        self.assertIn("Motion.introCardSoftMs", m.group(0))
+        adv = re.search(r"function crtIntroAdvance\(\) \{(.*?)\n    \}\n", qml, re.S).group(1)
+        self.assertIn('crtIntroPhase === "card" && crtIntroSoft', adv)
+        crt = self._crt_qml()
+        self.assertRegex(crt, r"introHere:\s*ctl\.crtIntroOn\s*&& \(!ctl\.crtIntroSoft \|\| ctl\.crtIntroScreen === idx\)")
+        self.assertNotIn("ctl.crtIntroOn", crt.replace("property bool introHere: ctl.crtIntroOn", ""))
+
     def test_degauss_phase_sits_between_off_and_static(self):
         # corrida 6: off -> degauss -> static -> card, con la duración en Motion.qml
         qml, _ = self._tube_table()
         m = re.search(r"function crtIntroAdvance\(\) \{(.*?)\n    \}\n", qml, re.S)
         self.assertIsNotNone(m)
         body = m.group(1)
-        order = [body.index(f'crtIntroPhase = "{ph}"') for ph in ("degauss", "static", "card")]
+        order = [body.index(m_) for m_ in ('crtIntroPhase = "degauss"', 'crtIntroPhase = "static"',
+                                           "crtIntroCardShow()")]
+        self.assertIn('crtIntroPhase = "card"', qml)
         self.assertEqual(order, sorted(order))
         self.assertIn("Motion.degaussMs", body)
         # la fase se pone ANTES de prender: Crt.qml la mira al reencender (sin haz de tubeon)

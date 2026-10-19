@@ -146,6 +146,10 @@ PanelWindow {
     // `crtDark[idx]` puede no existir todavía en un hotplug a mitad de golpe;
     // `=== true` (y no un cast) es lo que hace que eso lea "prendida".
     readonly property bool tubeDark: ctl.crtDark[idx] === true
+    // el intro tapa ESTA pantalla: con apagón, toda la pared; sin apagón
+    // (`crtIntroSoft`), sólo la de la tarjeta — el resto sigue con lo suyo
+    readonly property bool introHere: ctl.crtIntroOn
+        && (!ctl.crtIntroSoft || ctl.crtIntroScreen === idx)
     // tanda 6, corrida 7: el raro `nosignal` en ESTA pantalla — no es lo
     // mismo que `standby` (que depende de si hay música), acá se fuerza
     // aunque el tema esté sonando. "Una animación por pantalla": mientras
@@ -247,7 +251,7 @@ PanelWindow {
     property real motifSwap: 1
     // ¿esta pantalla dibuja el motivo ahora? (la misma condición del `visible` de `motifFrame`)
     readonly property bool motifSeen: (idle || instrumental || motifForced)
-        && !tubeDark && !ctl.crtIntroOn && !rareNoSignalOn
+        && !tubeDark && !introHere && !rareNoSignalOn
     // tanda 8 (r4): el cambio de dibujo es un PUENTE de glitch (`bridgeMs`), no un fundido a negro
     // de 460 ms repetido ~14 veces por minuto: medio puente a negro, el golpe de tubo EN el swap
     // (urgent: con `beat_lock` esperaría al próximo tiempo y caería lejos del cambio) y entrada
@@ -1114,7 +1118,7 @@ PanelWindow {
         const f = fxHit;
         if (f === null || fxFired || !ctl.crtWordFx)
             return;
-        if (!visible || !showsText || tubeDark || fxBusy || ctl.crtIntroOn
+        if (!visible || !showsText || tubeDark || fxBusy || introHere
                 || rareNoSignalOn || ctl.crtRare.screen === idx)
             return;
         if (f.t >= 0) {
@@ -1881,7 +1885,7 @@ PanelWindow {
                                     entryStyle: crt.entryStyle
                                     emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
                                     suppressEmphasis: !crt.emphasisGateOpen
-                                        || crt.tubeDark || crt.ctl.crtIntroOn
+                                        || crt.tubeDark || crt.introHere
                                         || crt.ctl.crtRare.screen === crt.idx
                                     onOverburnHit: crt.burnFlash()
                                 }
@@ -1935,7 +1939,7 @@ PanelWindow {
                             // parecido a como se veía antes de esta corrida
                             emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
                             suppressEmphasis: !crt.emphasisGateOpen
-                                || crt.tubeDark || crt.ctl.crtIntroOn
+                                || crt.tubeDark || crt.introHere
                                 || crt.ctl.crtRare.screen === crt.idx
                             onOverburnHit: crt.burnFlash()
                         }
@@ -2132,7 +2136,7 @@ PanelWindow {
                 }
                 width: parent.width * 0.8
                 visible: crt.instrumental && crt.idx === crt.ctl.crtShot.focus
-                    && crt.ctl.npTitle !== "" && !crt.ctl.crtIntroOn
+                    && crt.ctl.npTitle !== "" && !crt.introHere
                 text: (crt.ctl.npTitle + "  ·  " + crt.ctl.npInfo).toUpperCase()
                 color: crt.pal.dim
                 font.family: crt.fontFamily
@@ -2159,7 +2163,7 @@ PanelWindow {
                 // tema esté sonando — misma imagen, la diferencia es que
                 // ésta vuelve sola a los 3 s.
                 visible: (crt.standby || crt.rareNoSignalOn)
-                    && !crt.motifForced && !crt.tubeDark && !crt.ctl.crtIntroOn
+                    && !crt.motifForced && !crt.tubeDark && !crt.introHere
 
                 Row {
                     anchors.fill: parent

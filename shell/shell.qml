@@ -203,6 +203,8 @@ ShellRoot {
             crtIntroTimer.stop();
             crtIntroPhase = "";
             crtIntroScreen = -1;
+            crtIntroSoft = false;
+            crtIntroCardPending = false;
             crtSceneOutroTimer.stop();
             crtSceneOutroTimer.queue = [];
             if (crtOn && crtRare.screen < 0)
@@ -882,6 +884,11 @@ ShellRoot {
     property string crtIntroPhase: ""
     property int crtIntroScreen: -1
     readonly property bool crtIntroOn: crtIntroPhase !== ""
+    // intro sin apagón (`crt.screen_off = false`): la tarjeta `plain` tapa SÓLO la
+    // pantalla del foco (`crtIntroScreen`); el resto de la pared sigue viva.
+    // `crtIntroCardPending` = hubo `clear` de tema y falta el `np` con el título.
+    property bool crtIntroSoft: false
+    property bool crtIntroCardPending: false
 
     Timer {
         id: crtIntroTimer
@@ -893,15 +900,46 @@ ShellRoot {
     // ausente); seek/pause no reinician nada acá, igual que no
     // resortean `crtTrackSeed`.
     function crtIntroStart() {
-        if (!crtOn || !crtIntro || !crtScreenOff)
+        if (!crtOn || !crtIntro)
             return;
         crtIntroTimer.stop();
+        crtIntroSoft = false;
+        crtIntroCardPending = false;
+        if (!crtScreenOff) {
+            // sin apagón (default): la ceremonia es SÓLO la tarjeta `plain`
+            // en la pantalla del foco, sin pared apagada ni estática. El `np`
+            // viaja DESPUÉS de este `clear`: la tarjeta espera a `nowPlaying`
+            // (si no, saldría con el título del tema anterior). `testcard`
+            // no entra por acá: Ferox rechazó la carta de ajuste a mitad de tema.
+            crtIntroCardPending = crtIntroCard === "plain";
+            return;
+        }
         console.log("crt: intro start");
         crtIntroPhase = "off";
         crtIntroScreen = -1;
         crtSetDark(-1, true);
         crtIntroTimer.interval = Motion.tubeOffMs;
         crtIntroTimer.restart();
+    }
+
+    // la tarjeta con título/artista en la pantalla del foco. La comparten el
+    // intro completo (tras la estática) y el intro sin apagón (`crtIntroSoft`).
+    function crtIntroCardShow() {
+        crtIntroPhase = "card";
+        // la tarjeta es uno de los TRES lugares que congelan el mood
+        // del tema (corrida 3): si ya se congeló (tema repetido tras
+        // pausa/seek) no lo toca, pero si es la primera vez que este
+        // tema muestra algo, la tarjeta fija el mood ANTES que el
+        // primer verso — así `crtSet` no le cambia el color/fuente
+        // por debajo cuando `show()` haga su propio freeze (no-op)
+        if (crtMoodLocked === null)
+            crtMoodLocked = crtMood;
+        const n = activeCrtScreens.length;
+        const focus = (crtShot && crtShot.focus >= 0 && crtShot.focus < n)
+            ? crtShot.focus : Math.floor((n - 1) / 2);
+        crtIntroScreen = focus;
+        console.log("crt: intro card \"" + npTitle + "\" screen=" + focus + " style=" + crtIntroCard
+                    + (crtIntroSoft ? " soft" : ""));
     }
 
     function crtIntroAdvance() {
@@ -917,6 +955,10 @@ ShellRoot {
             crtIntroPhase = "static";
             crtIntroTimer.interval = Motion.introStaticMs;
             crtIntroTimer.restart();
+        } else if (crtIntroPhase === "card" && crtIntroSoft) {
+            // sin apagón no hay estática que la cierre, y un tema sin letra
+            // dejaría el título puesto para siempre: tiene plazo
+            crtIntroEnd();
         } else if (crtIntroPhase === "static") {
             // el `np` no llegó a tiempo (raro: sólo si `now_playing` está
             // apagado) — no hay título que poner en la tarjeta. La
@@ -927,20 +969,7 @@ ShellRoot {
                 crtIntroEnd();
                 return;
             }
-            crtIntroPhase = "card";
-            // la tarjeta es uno de los TRES lugares que congelan el mood
-            // del tema (corrida 3): si ya se congeló (tema repetido tras
-            // pausa/seek) no lo toca, pero si es la primera vez que este
-            // tema muestra algo, la tarjeta fija el mood ANTES que el
-            // primer verso — así `crtSet` no le cambia el color/fuente
-            // por debajo cuando `show()` haga su propio freeze (no-op)
-            if (crtMoodLocked === null)
-                crtMoodLocked = crtMood;
-            const n = activeCrtScreens.length;
-            const focus = (crtShot && crtShot.focus >= 0 && crtShot.focus < n)
-                ? crtShot.focus : Math.floor((n - 1) / 2);
-            crtIntroScreen = focus;
-            console.log("crt: intro card \"" + npTitle + "\" screen=" + focus + " style=" + crtIntroCard);
+            crtIntroCardShow();
             // Sin timer nuevo: la tarjeta se queda puesta (intro
             // instrumental, el título acompaña) hasta que el primer verso
             // la corte en `show()` (`crtIntroEnd`/`crtIntroSkip`).
@@ -959,6 +988,8 @@ ShellRoot {
         crtIntroTimer.stop();
         crtIntroPhase = "";
         crtIntroScreen = -1;
+        crtIntroSoft = false;
+        crtIntroCardPending = false;
         console.log("crt: intro end");
         if (crtOn) {
             crtSetDark(-1, false);
@@ -975,6 +1006,8 @@ ShellRoot {
         crtIntroTimer.stop();
         crtIntroPhase = "";
         crtIntroScreen = -1;
+        crtIntroSoft = false;
+        crtIntroCardPending = false;
         console.log("crt: intro skipped (lyric first)");
     }
 
@@ -3422,6 +3455,8 @@ ShellRoot {
         // más abajo necesita saber si la ceremonia estaba corriendo para
         // ESTE `show`, no si sigue corriendo después de que la termine.
         const introWasOn = crtIntroOn;
+        if (crtTrackStart)
+            crtIntroCardPending = false;
         if (crtTrackStart && (crtIntroPhase === "off" || crtIntroPhase === "degauss"
                               || crtIntroPhase === "static"))
             // el primer verso llegó mientras todavía era estática (o ni
@@ -3648,6 +3683,14 @@ ShellRoot {
         npShown = !crtOn;
         npDocked = false;
         npSerial++;
+        // intro sin apagón: el título ya llegó, la tarjeta entra en el foco
+        if (crtIntroCardPending && crtOn && crtIntro && !crtScreenOff && !crtIntroOn) {
+            crtIntroCardPending = false;
+            crtIntroSoft = true;
+            crtIntroCardShow();
+            crtIntroTimer.interval = Motion.introCardSoftMs;
+            crtIntroTimer.restart();
+        }
         npDockTimer.restart();
         keysHintSync = false;
         keysHintGen++;

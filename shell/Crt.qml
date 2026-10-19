@@ -2510,6 +2510,123 @@ PanelWindow {
             }
         }
 
+        // ---- r20.2: el raro `hang`, el "fatal-lyrics no responde" de los 30 s de silencio.
+        // El cartel de Win95 dibujado de CERO (como el `bsod`: nada de `dialogList`), centrado
+        // sobre el escritorio verde azulado clásico, en la pantalla del foco y en la fuente del
+        // set. Reemplaza la pantalla entera mientras dura, así que no compite con ningún motivo.
+        Item {
+            id: hangCard
+            anchors.fill: parent
+            readonly property bool hangOn: crt.ctl.crtRare.kind === "hang"
+                && crt.ctl.crtRare.screen === crt.idx && !crt.tubeDark
+            readonly property real u: crt.shortSide / 1080
+            opacity: hangOn ? 1 : 0
+            visible: opacity > 0.001
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: hangCard.hangOn ? Motion.enterMs : Motion.exitMs
+                    easing.type: hangCard.hangOn ? Easing.OutExpo : Easing.InQuad
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#008080"
+            }
+
+            // marco con bisel: blanco arriba/izquierda, negro y gris abajo/derecha
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width * 0.84, 900 * hangCard.u)
+                height: hangBody.implicitHeight + 8 * hangCard.u
+                color: "#000000"
+                Rectangle {
+                    x: 0; y: 0
+                    width: parent.width - 1 * hangCard.u; height: parent.height - 1 * hangCard.u
+                    color: "#dfdfdf"
+                    Rectangle {
+                        x: 1 * hangCard.u; y: 1 * hangCard.u
+                        width: parent.width - 1 * hangCard.u; height: parent.height - 1 * hangCard.u
+                        color: "#808080"
+                        Rectangle {
+                            x: 0; y: 0
+                            width: parent.width - 1 * hangCard.u; height: parent.height - 1 * hangCard.u
+                            color: "#c0c0c0"
+                        }
+                    }
+                }
+                Column {
+                    id: hangBody
+                    x: 4 * hangCard.u; y: 4 * hangCard.u
+                    width: parent.width - 8 * hangCard.u
+                    spacing: 0
+
+                    Rectangle {
+                        width: parent.width
+                        height: 40 * hangCard.u
+                        color: "#000080"
+                        Text {
+                            anchors { left: parent.left; leftMargin: 12 * hangCard.u; verticalCenter: parent.verticalCenter }
+                            text: crt.ctl.crtHangTitle
+                            color: "#ffffff"
+                            font.family: crt.lyricFont
+                            font.bold: true
+                            font.pixelSize: Math.round(26 * hangCard.u)
+                        }
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: msg.implicitHeight + 76 * hangCard.u
+                        Text {
+                            id: msg
+                            anchors { left: parent.left; right: parent.right; top: parent.top
+                                      leftMargin: 28 * hangCard.u; rightMargin: 28 * hangCard.u
+                                      topMargin: 32 * hangCard.u }
+                            text: crt.ctl.crtHangText !== "" ? crt.ctl.crtHangText
+                                : "fatal-lyrics no responde.\nEl programa no responde. Si espera, puede que responda."
+                            color: "#000000"
+                            font.family: crt.lyricFont
+                            font.pixelSize: Math.round(30 * hangCard.u)
+                            wrapMode: Text.WordWrap
+                            lineHeight: 1.15
+                        }
+                    }
+
+                    // el botón "Aceptar" (no hace nada: es decoración con bisel de botón)
+                    Item {
+                        width: parent.width
+                        height: 88 * hangCard.u
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 170 * hangCard.u; height: 50 * hangCard.u
+                            color: "#000000"
+                            Rectangle {
+                                width: parent.width - 1 * hangCard.u; height: parent.height - 1 * hangCard.u
+                                color: "#ffffff"
+                                Rectangle {
+                                    x: 1 * hangCard.u; y: 1 * hangCard.u
+                                    width: parent.width - 1 * hangCard.u; height: parent.height - 1 * hangCard.u
+                                    color: "#808080"
+                                    Rectangle {
+                                        width: parent.width - 1 * hangCard.u; height: parent.height - 1 * hangCard.u
+                                        color: "#c0c0c0"
+                                    }
+                                }
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Aceptar"
+                                color: "#000000"
+                                font.family: crt.lyricFont
+                                font.pixelSize: Math.round(26 * hangCard.u)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ---- el rayo del salto (T3.B4)
         // Va en `stage` y NO adentro de `camera`: el recorrido se mide contra
         // los bordes del tubo, y con el plano de la sección encima terminaría

@@ -74,7 +74,7 @@ class TestMovWiring(unittest.TestCase):
         qml = read("shell.qml")
         self.assertIn("root.audMov = ev.mov || 0;", qml)
         self.assertIn('import "Speed.js" as Speed', qml)
-        self.assertRegex(qml, r"property real crtMovRate: audLive\s*\n\s*\? Speed\.push\(Speed\.rate\(movFit\.mov, "
+        self.assertRegex(qml, r"property real crtMovRate: audLive\s*\n\s*\? Speed\.push\(Speed\.rate\(movNovIn, "
                               r"pace\.movMin, pace\.movMax, crtMovAmount, movFit\.pivot\),\s*\n"
                               r"\s*crtMovKick, crtMovAmount\) : 1\n")
         # ronda 3: el Behavior de 420 ms encima del suavizado se comía el empujón del golpe

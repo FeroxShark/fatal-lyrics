@@ -95,6 +95,8 @@ Singleton {
     // la línea que suena (`crtVEndAt`), con `holdMs` de piso.
     readonly property int rareNoSignalMs: 3000
     readonly property int rareTestcardMs: 6000
+    // el "no responde" de los 30 s de silencio (`hang`): tiempo de leer el cartel dos veces
+    readonly property int rareHangMs: 4500
 
     // ---- efectos por palabra (tanda 7, corrida 5b, `Crt.qml` `fxAnim*`). Reusan la
     // gramática de arriba: se apagan con `exitMs`, vuelven con `levelMs` (alarm/blink) o con

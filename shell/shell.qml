@@ -785,7 +785,11 @@ ShellRoot {
     // el estado vive en `crtRare` — UN raro a la vez en toda la pared, no
     // uno por pantalla (la invariante sigue siendo una animación por
     // pantalla, y acá además una sola pantalla rota por vez).
-    readonly property var crtRareKinds: ["bsod", "nosignal", "testcard"]
+    // `hang` (r20.2) no se sortea nunca: lo dispara el silencio largo (`crtHangFire`) o el forzado
+    readonly property var crtRareKinds: ["bsod", "nosignal", "testcard", "hang"]
+    // el texto del cartel colgado: lo manda el daemon con el `show` de `kind: hang`
+    property string crtHangTitle: "fatal-lyrics"
+    property string crtHangText: ""
     // "" = no hay raro corriendo. `screen` es el índice en `activeCrtScreens`.
     property var crtRare: ({ kind: "", screen: -1, until: 0 })
     // último raro NATURAL (sorteo), para el portero `rareGapMs`. Un raro
@@ -1064,6 +1068,8 @@ ShellRoot {
             return Motion.rareNoSignalMs;
         if (kind === "testcard")
             return Motion.rareTestcardMs;
+        if (kind === "hang")
+            return Motion.rareHangMs;
         const left = crtVEndAt > 0 ? crtVEndAt - Date.now() : 0;
         return Math.max(left, Motion.holdMs);
     }
@@ -1077,7 +1083,7 @@ ShellRoot {
         const n = activeCrtScreens.length;
         if (n <= 0)
             return -1;
-        if (kind === "bsod")
+        if (kind === "bsod" || kind === "hang")
             return (focus >= 0 && focus < n) ? focus : -1;
         const cands = [];
         for (let i = 0; i < n; i++)
@@ -1101,7 +1107,7 @@ ShellRoot {
             return;
         if (crtHash(serial * 71 + 5) >= pace.rarePerLine * crtRareMult)
             return;
-        const kinds = crtRareKinds.filter(k => k !== "testcard" || crtTestcard);
+        const kinds = crtRareKinds.filter(k => k !== "hang" && (k !== "testcard" || crtTestcard));
         if (kinds.length === 0)
             return;
         const kind = kinds[Math.floor(crtHash(serial * 71 + 13) * kinds.length)];
@@ -1126,6 +1132,28 @@ ShellRoot {
         crtSetDark(screen, true);
         crtRareTimer.interval = Motion.tubeOffMs;
         crtRareTimer.restart();
+    }
+
+    // r20.2: el "fatal-lyrics no responde" de los 30 s de silencio, en el tubo, como un raro sobre
+    // la pantalla del foco (el chiste de Win95 que en CRT se tiraba). Cede al aro (el aviso de que
+    // viene la voz) y a cualquier otro raro o al intro; "la letra manda": la próxima línea lo corta
+    // (`crtRareCut`). Respeta la perilla `crt.rare` en 0. Cuenta para el piso entre raros.
+    function crtHangFire(title, text) {
+        if (text)
+            crtHangText = text;
+        if (title)
+            crtHangTitle = title;
+        if (!crtOn || crtRareMult <= 0 || crtRare.screen >= 0 || crtIntroOn || crtRingLive >= 0) {
+            console.log("crt: hang skipped");
+            return;
+        }
+        const n = activeCrtScreens.length;
+        const focus = (crtShot && crtShot.focus >= 0 && crtShot.focus < n)
+            ? crtShot.focus : Math.floor((n - 1) / 2);
+        if (n <= 0)
+            return;
+        crtLastRareAt = Date.now();
+        crtRareFire(focus, "hang");
     }
 
     function crtRareAdvance() {
@@ -1272,6 +1300,9 @@ ShellRoot {
         // aro no aparecía nunca justo cuando el recorte era el que mandaba.
         if (left <= 1400 || left > crtRingMaxMs)
             return;
+        // el aro manda sobre el "no responde" (r20.2): si el silencio ya lo sacó, se va
+        if (crtRare.kind === "hang")
+            crtRareCut(crtRare.screen);
         crtRingLive = place;
         console.log("crt: ring armed screen=" + place
             + " in=" + Math.round(left) + " gap=" + Math.round(gap)
@@ -3537,8 +3568,12 @@ ShellRoot {
         // envejece a nadie y no pasa a ser la línea actual. Muere solo cuando
         // llegue la próxima línea de verdad (ver shouldDie).
         if (kind === "hang") {
-            if (crtOn || (singMode && !singing))
-                return;      // en el tubo no hay carteles: no hay dónde ponerlo
+            if (crtOn) {
+                crtHangFire(title, text);     // en el tubo es un raro (r20.2)
+                return;
+            }
+            if (singMode && !singing)
+                return;
             pushDialog({ text: text, title: title || "fatal-lyrics",
                          icon: "warning", kind: "hang" }, false);
             return;

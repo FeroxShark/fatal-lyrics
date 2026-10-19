@@ -48,6 +48,36 @@ class TestNovedad(unittest.TestCase):
         self.assertIn("Speed.rate(movNovIn,", qml)
 
 
+class TestHangRare(unittest.TestCase):
+    def test_hang_is_a_forceable_rare_but_never_rolled(self):
+        qml = read("shell.qml")
+        self.assertRegex(qml, r'crtRareKinds: \["bsod", "nosignal", "testcard", "hang"\]')
+        roll = re.search(r"function crtRareRoll\(.*?\n    \}", qml, re.S).group(0)
+        self.assertIn('k !== "hang"', roll)
+
+    def test_hang_goes_on_the_focus_screen_and_the_crt_show_fires_it(self):
+        qml = read("shell.qml")
+        self.assertIn('kind === "bsod" || kind === "hang"', qml)
+        show = re.search(r'if \(kind === "hang"\) \{(.*?)\n        \}\n', qml, re.S).group(1)
+        self.assertIn("crtHangFire(title, text)", show)
+
+    def test_hang_yields_to_the_ring_and_the_ring_cuts_a_live_hang(self):
+        qml = read("shell.qml")
+        fire = re.search(r"function crtHangFire\(.*?\n    \}", qml, re.S).group(0)
+        self.assertIn("crtRingLive >= 0", fire)
+        self.assertIn("crtRare.screen >= 0", fire)       # un raro a la vez
+        self.assertIn("crtIntroOn", fire)
+        self.assertIn('crtRare.kind === "hang"', qml)    # el aro corta un hang vivo
+        # a diferencia del bsod, la próxima línea lo corta: `crtRareCut` sólo exceptúa al bsod
+        cut = re.search(r"function crtRareCut\(i\) \{(.*?)\n    \}", qml, re.S).group(1)
+        self.assertNotIn("hang", cut)
+
+    def test_hang_card_and_duration_live_in_crt_and_motion(self):
+        self.assertIn("id: hangCard", read("Crt.qml"))
+        self.assertRegex(read("Motion.qml"), r"rareHangMs: \d+")
+        self.assertIn("Motion.rareHangMs", read("shell.qml"))
+
+
 NODE = shutil.which("node")
 DP2 = "{x:0,y:-370,w:1080,h:1920}"
 HDMI = "{x:1080,y:0,w:1920,h:1080}"

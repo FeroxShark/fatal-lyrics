@@ -1172,8 +1172,15 @@ ShellRoot {
     function crtRingPlace() {
         const t = crtNextFocus;
         const sh = crtShot;
-        if (!crtRing || t < 0 || (crtLine.text || "") === "")
+        if (!crtRing || t < 0)
             return -1;
+        // el intro: todavía no hay línea ni reparto vivo. El aro cuenta hacia
+        // el primer verso con lo que anticipó `crtFirstPredict`; si ése cae en
+        // toda la pared (all/iown) no hay una pantalla donde ponerlo.
+        if ((crtLine.text || "") === "") {
+            const p = crtPendingShot;
+            return (p && p.mode !== "all" && p.mode !== "iown" && crtVEndAt > 0) ? t : -1;
+        }
         if (sh.mode === "all" || sh.mode === "iown" || t === sh.focus)
             return -1;
         for (let k = 0; k < sh.chunks.length; k++)
@@ -1201,6 +1208,10 @@ ShellRoot {
         }
         if (place < 0 || left <= 0)
             return;
+        // el intro (estática + tarjeta) ya es el aviso de "empezó otro tema":
+        // el aro espera a que termine, no se cuenta encima de la tarjeta
+        if ((crtLine.text || "") === "" && crtIntroOn)
+            return;
         // T4.2b: el aro es un aviso de INSTRUMENTAL, no una flecha. Sólo se
         // arma si el hueco sin voz entero — de cuándo se dejó de cantar a
         // cuándo el daemon manda la próxima línea — pasa de `ring_gap`. Entre
@@ -1227,6 +1238,26 @@ ShellRoot {
             + " at=" + Date.now());
     }
     onCrtNowChanged: crtRingTick()
+
+    // El aro del intro: antes del primer verso no hay línea ni `next`, así que
+    // el aro no tenía contra qué contar y el verso entraba sin aviso. El
+    // evento `lyrics` trae `first` (el primer verso con su `due`): se anticipa
+    // igual que cualquier línea que viene, y el INICIO DEL TEMA cuenta como
+    // "voz terminada" (`crtVEndAt` = el instante en que la posición fue 0), de
+    // modo que el hueco es el intro entero y pasa por el mismo umbral de
+    // `ring_gap` que el instrumental de mitad de tema. Un intro corto no arma
+    // aro. Sólo con el tema todavía sin línea: el reenvío de la letra al
+    // reconectar el overlay, a mitad de tema, no hace nada.
+    function crtFirstPredict(first) {
+        if (!crtOn || !crtRing || !first || !first.text || (crtLine.text || "") !== "")
+            return;
+        const pos = songPos();
+        if ((first.due ?? first.t0 ?? 0) - pos < 1.4)
+            return;
+        crtNext = first;
+        crtPredict();
+        crtVEndAt = Date.now() - pos * 1000;
+    }
 
     // Ruido determinístico: todas las pantallas tienen que elegir el MISMO
     // layout para la misma línea, y sin hablar entre ellas.
@@ -3800,6 +3831,8 @@ ShellRoot {
                         else if (ev.cmd === "lyrics") {
                             root.crtLines = ev.lines || [];
                             root.crtLinesSynced = ev.synced !== false;
+                            if (root.crtLinesSynced)
+                                root.crtFirstPredict(ev.first);
                         }
                         else if (ev.cmd === "np")
                             root.nowPlaying(ev.title, ev.artist, ev.album, ev.art);

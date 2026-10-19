@@ -1200,3 +1200,29 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **`mood` en cada tick en temas sin letra / error de red:** la condición "recoger la letra" era
   `self.lyrics is None`, que sigue verdadera si la búsqueda terminó sin letra; con POLL_IDLE de 1 s
   eran ~60 `mood` por minuto. Ahora `lyrics_taken` (se reinicia en el tema nuevo).
+
+## Reproducción: pausa, anuncios e intro (daemon, 2026-10-19)
+
+- **Pausa con el karaoke corriendo:** el overlay extrapolaba la posición hasta 1,5 s con el reloj
+  local aunque el daemon sólo manda `pos` sonando; al dar play el primer `pos` corregía hacia atrás.
+  Ahora el daemon manda un `pos` con `pl: false` al pausar (y en cada cambio de posición en pausa) y
+  `songPos()` no extrapola con `posPlaying` en false. Efecto lateral buscado: `musicLive` (3,5 s
+  desde el último `pos`) cae a los 3,5 s de pausa.
+- **Seek en pausa:** el `clear why=seek` corría con la música parada y en el tubo vaciaba la línea
+  (NO SIGNAL), y adelantar no mostraba nada. Ahora se detecta (`was_paused` y cambio de posición
+  > 1 s), se muestra la línea nueva sin `v_end` (el aro contaría contra el reloj de pared) y se
+  reenvía con `v_end` al dar play (el overlay lo trata como "misma línea": no cambia el reparto).
+  Un seek en el MISMO tick en que se pausa no se detecta (hace falta un tick previo en pausa).
+- **Letra plana:** `handle_track` devolvía `voice_active` como `fast`, así que la letra sin tiempos
+  pollaba cada 0,3 s sin nada que pegarle. Ahora `fast` exige letra sincronizada; `voice_active`
+  (micrófono) no cambia.
+- **Anuncios:** sin captura real de la metadata de un anuncio; la detección es por el patrón
+  conocido de Spotify (`system.is_ad`). Si un anuncio se cuela, mirar `playerctl -p spotify metadata`
+  durante él y ajustar `is_ad`. Durante un anuncio el poll es de 0,3 s para pescar rápido el tema
+  que sigue.
+- **Aro del intro:** `first.due` se calcula con el offset del momento en que llega la letra; un
+  `fatal sync` durante el intro no lo recalcula (el aro puede errar por el delta, 0,1 s por golpe).
+  Se desactiva solo si el primer verso cae en toda la pared (`all`/`iown`) o si el intro dura menos de
+  `ring_gap`. El aro no se arma mientras corre la tarjeta/estática del intro (`crtIntroOn`): entra
+  después, con menos de 8 s si el intro es corto.
+

@@ -443,7 +443,7 @@ class TestLyricsListIsSent(unittest.TestCase):
     def test_it_goes_out_when_the_lyric_arrives(self):
         loop = self._loop_with_fetch([(0.0, "a"), (10.0, "b")], "ok")
         loop.handle_track(track(id="t1"), now=0.0)
-        loop._ipc.lyrics_list.assert_called_once_with([(0.0, "a"), (10.0, "b")])
+        loop._ipc.lyrics_list.assert_called_once_with([(0.0, "a"), (10.0, "b")], 0.0)
 
     def test_only_once_per_track(self):
         loop = self._loop_with_fetch([(0.0, "a")], "ok")
@@ -1338,3 +1338,52 @@ class TestSpotifyAds(unittest.TestCase):
         loop.tick()
         loop.tick()
         self.assertEqual(sum("ad:" in str(c) for c in loop._log.call_args_list), 1)
+
+
+class TestFirstVerseEvent(unittest.TestCase):
+    """El evento `lyrics` trae `first`: el primer verso con la hora a la que el
+    daemon va a mandar su `show` (offset descontado), para el aro del intro."""
+
+    def sent(self, lines, offset=0.0):
+        from cartelitos import ipc as real_ipc
+        with mock.patch.object(real_ipc, "send") as send:
+            real_ipc.lyrics_list(lines, offset)
+        return send.call_args.args[0]
+
+    def test_first_carries_the_due_time_with_the_offset(self):
+        ev = self.sent([(14.0, "primero"), (20.0, "segundo")], offset=0.5)
+        self.assertEqual(ev["first"]["text"], "primero")
+        self.assertEqual(ev["first"]["due"], 13.5)
+        self.assertEqual(ev["first"]["t0"], 14.0)
+        self.assertEqual(ev["first"]["t1"], 20.0)
+
+    def test_empty_leading_lines_are_skipped(self):
+        ev = self.sent([(2.0, ""), (14.0, "primero")])
+        self.assertEqual(ev["first"]["text"], "primero")
+
+    def test_a_lyric_with_no_text_has_no_first(self):
+        self.assertNotIn("first", self.sent([(2.0, ""), (4.0, "  ")]))
+
+    def test_next_line_is_unchanged(self):
+        from cartelitos import ipc as real_ipc
+        n = real_ipc.next_line([(0.0, "a"), (10.0, "b"), (20.0, "c")], 0, 0.5)
+        self.assertEqual((n["text"], n["due"], n["t1"]), ("b", 9.5, 20.0))
+        self.assertIsNone(real_ipc.next_line([(0.0, "a")], 0))
+        self.assertIsNone(real_ipc.next_line([(0.0, "a"), (1.0, "b")], -1))
+
+    def test_the_overlay_wires_first_to_the_ring(self):
+        # el overlay no se puede correr acá: se comprueba el cableado. `first`
+        # del evento `lyrics` -> crtFirstPredict -> crtPredict, el inicio del
+        # tema cuenta como voz terminada (crtVEndAt) y el aro espera al intro.
+        import re
+        qml = open(os.path.join(os.path.dirname(__file__), "..", "shell", "shell.qml"),
+                   encoding="utf-8").read()
+        self.assertIn("root.crtFirstPredict(ev.first)", qml)
+        fn = re.search(r"function crtFirstPredict\(first\)\s*\{(.*?)\n    \}", qml, re.S)
+        self.assertIsNotNone(fn)
+        self.assertIn("crtPredict()", fn.group(1))
+        self.assertIn("crtVEndAt = Date.now() - pos * 1000", fn.group(1))
+        tick = re.search(r"function crtRingTick\(\)\s*\{(.*?)\n    \}", qml, re.S).group(1)
+        self.assertIn("crtIntroOn", tick)
+        place = re.search(r"function crtRingPlace\(\)\s*\{(.*?)\n    \}", qml, re.S).group(1)
+        self.assertIn("crtPendingShot", place)

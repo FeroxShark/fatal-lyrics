@@ -264,10 +264,15 @@ def next_line(lines, i, offset=0.0):
     era la mitad de por qué llegaba a la mitad y la voz ya estaba cantando."""
     if not lines or i < 0 or i + 1 >= len(lines):
         return None
-    nxt = lines[i + 1]
+    return _line_info(lines, i + 1, offset)
+
+
+def _line_info(lines, k, offset=0.0):
+    """La línea k con su ventana, en la forma que viaja en `next` y en `first`."""
+    nxt = lines[k]
     # mismo criterio que la línea actual: termina donde arranca la siguiente,
     # y la última se queda 5 s
-    end = lines[i + 2][0] if i + 2 < len(lines) else nxt[0] + 5
+    end = lines[k + 1][0] if k + 1 < len(lines) else nxt[0] + 5
     out = {"text": nxt[1], "t0": round(nxt[0], 2), "t1": round(end, 2),
            "due": round(nxt[0] - offset, 2)}
     segs = lyrics.split_repeats(nxt[1])
@@ -275,11 +280,23 @@ def next_line(lines, i, offset=0.0):
         out["segs"] = segs
     # ocurrencia de la línea en la letra (`repeat_map`): la curva de tensión
     # del tubo sabe que viene un estribillo antes de que suene
-    out["rep"] = lyrics.repeat_map(lines)[i + 1]
+    out["rep"] = lyrics.repeat_map(lines)[k]
     return out
 
 
-def lyrics_list(lines):
+def first_line(lines, offset=0.0):
+    """El primer verso con texto, en la forma de `next_line`, o None.
+
+    Va en el evento `lyrics` (campo `first`): durante el intro del tema el
+    overlay todavía no recibió ningún `show`, y sin esto el aro no tiene nada
+    contra qué contar."""
+    for k, ln in enumerate(lines or []):
+        if ln[1] and ln[1].strip():
+            return _line_info(lines, k, offset)
+    return None
+
+
+def lyrics_list(lines, offset=0.0):
     """La letra entera del tema, una sola vez por tema.
 
     El `show` manda una línea por vez: el overlay nunca ve el resto. Los
@@ -294,6 +311,11 @@ def lyrics_list(lines):
          "t1": round(lines[k + 1][0] if k + 1 < len(lines) else ln[0] + 5, 2),
          "text": ln[1], "rep": reps[k]}
         for k, ln in enumerate(lines)]}
+    # el primer verso con la hora a la que el daemon va a mandar su `show`
+    # (`due`, ya con el offset descontado): el aro cuenta el intro contra ella
+    first = first_line(lines, offset)
+    if first is not None:
+        ev["first"] = first
     _last_lyrics = ev
     send(ev)
 

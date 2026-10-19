@@ -80,6 +80,16 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright/contrast
   determinísticos, sin red ni IA (`feedback_ia_sin_creditos`). El daemon lo manda por el socket
   como evento `mood`, hasta dos veces por tema. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- Protocolo daemon → overlay, campos de la tanda de reproducción (2026-10-19):
+  `pos {p, l, pl?}` — `pl: false` = en pausa, el overlay NO extrapola (`posPlaying`); se manda al
+  pausar y por cada cambio de posición en pausa; el primer tick sonando manda sin esperar el segundo.
+  `lyrics {…, first?}` — `first` = el primer verso con texto, en la forma de `next` (`text, t0, t1,
+  due, segs?, rep`; `due` ya con el offset). `crtFirstPredict` (`shell.qml`) lo anticipa como una
+  línea que viene y toma el INICIO del tema como "voz terminada" (`crtVEndAt`): el aro cuenta el
+  intro entero (si pasa de `ring_gap`, en los últimos 8 s, y espera a que termine el intro del
+  tema). `show` en pausa (rebobinar/adelantar con la música parada) sale sin `v_end` y se reenvía
+  con él al dar play. Los anuncios de Spotify (`system.is_ad`: trackid `/com/spotify/ad/` o
+  `spotify:ad:`, o título "Advertisement" sin artista) no mandan nada salvo un `pos` con `pl: false`.
 - `cartelitos/lyrics.py` — cadena de proveedores, cache, LRC "enhanced" (tiempo por
   palabra) y `split_repeats`.
 - `cartelitos/offsets.py` — corrección de sync por artista (`offsets.toml`), separada de

@@ -321,7 +321,10 @@ class TestLyricsEvent(unittest.TestCase):
         self.assertEqual(out[0], {"cmd": "lyrics", "synced": True, "lines": [
             {"t0": 0.0, "t1": 4.0, "text": "one", "rep": {"n": 1, "k": 1, "chorus": False}},
             {"t0": 4.0, "t1": 9.0, "text": "two", "rep": {"n": 1, "k": 1, "chorus": False}},
-            {"t0": 9.0, "t1": 14.0, "text": "three", "rep": {"n": 1, "k": 1, "chorus": False}}]})
+            {"t0": 9.0, "t1": 14.0, "text": "three", "rep": {"n": 1, "k": 1, "chorus": False}}],
+            # el primer verso con su hora (el aro del intro cuenta contra ella)
+            "first": {"text": "one", "t0": 0.0, "t1": 4.0, "due": 0.0,
+                      "rep": {"n": 1, "k": 1, "chorus": False}}})
 
     def test_a_repeated_chorus_carries_its_occurrence(self):
         out = self.sent()

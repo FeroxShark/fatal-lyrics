@@ -337,6 +337,9 @@ class DaemonLoop:
             self.profile = self._audio.profile_for(t)
             self._audio.set_profile(self.profile)
             self.idx = -1
+            # el `pos` del tema nuevo sale en ESTE tick, sin esperar el segundo:
+            # el aro del intro cuenta contra esa posición
+            self.last_pos_sent = 0.0
             self._ipc.clear(why="track", track_id=t["id"])
             self._log(f"track: {t['artist']} — {t['title']}")
             if self._np_wanted():
@@ -371,7 +374,9 @@ class DaemonLoop:
             if self.lyrics and self.lyrics_kind == "plain":
                 self._ipc.lyrics_plain(self.lyrics[0][1])
             elif self.lyrics:
-                self._ipc.lyrics_list(self.lyrics)
+                self._ipc.lyrics_list(
+                    self.lyrics,
+                    self._config.CFG["behavior"]["offset"] + self.session_offset)
             # el reloj del "no responde" arranca cuando HAY letra: la búsqueda
             # va en otro hilo y puede tardar, y esa espera no es un silencio
             self.last_show_at = now

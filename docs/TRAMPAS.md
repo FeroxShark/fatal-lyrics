@@ -1250,3 +1250,11 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **Uso inválido.** `fatal <cualquier cosa>` imprime el uso por stderr y sale 1; `fatal help` /
   `-h` / `--help` lo imprimen por stdout con exit 0. El bind de Ajustes (`Super+Shift+A`) es fijo
   en `packaging/hyprland.lua`, no está en `[keys]`.
+
+## Ajustes: la ayuda cortada, la fila atenuada y por qué no lleva fuentes (r16, 2026-10-19)
+
+- Los deslizadores cortaban la ayuda con "…" (`NoWrap` + `ElideRight`): una ayuda larga ("how hard the bass drum hits the picture") no se leía. Ahora va entera debajo del nombre; el número queda en la línea del nombre.
+- La fila con `needs` falso se atenuaba entera (`opacity` en el `rowItem`): la ayuda a 0.45 sobre `#c0c0c0` daba ~1.8:1, justo la que explica por qué está apagada. Ahora la atenuación es por control (`rowItem.ctlAlpha` en cada casilla, botón, campo y pista); nombre y ayuda quedan a plena opacidad. Cuidado: una pista o casilla gris sobre gris casi no se nota al atenuarla; la prueba es el valor de píxel, no la vista.
+- `#505050` sobre `#c0c0c0` daba ~4.4:1 (no llegaba al 4.5 de AA); `#404040` da ~5.7:1.
+- NO poner `FontLoader` en Ajustes: los carteles (`shell.qml`, el título y el cuerpo, `font.pixelSize` sin `font.family`) ya van en la sans del sistema. Las fuentes por tema (VT323, Plex, Space…) son sólo de la letra CRT (`Crt.qml`). Una ventana de Ajustes con otra fuente rompe el "misma pinta que los carteles" del encabezado de `settings.qml`.
+

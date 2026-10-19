@@ -39,6 +39,7 @@ PROFILE_BLEND_OLD = 0.6
 PROFILE_BLEND_NEW = 0.4
 
 PROFILE_MIN_SAMPLES = 20    # menos que esto es medio tema: no sirve de mapa
+PROFILE_TTL = 180 * 86400   # un tema sin escucharse en medio año se vuelve a medir (como OK_TTL de letras)
 
 # Cuánto adelante mira el mapa. Sin esto la reacción siempre llega tarde: el
 # golpe se ve DESPUÉS de que sonó; con el mapa cargado el tubo empieza a apretar
@@ -228,6 +229,26 @@ def set_profile(prof):
         _profile = prof
     if old is not None:
         old.save()
+
+
+def purge_profiles(now):
+    """Borra los perfiles sin escuchar hace PROFILE_TTL (y los .tmp de un guardado
+    cortado): sin esto el cache crece sin límite. El mtime es el del último guardado,
+    así que un tema que sigue sonando no se toca. Se llama al arrancar, antes de que
+    arranque el hilo de audio."""
+    try:
+        names = os.listdir(PROFILE_DIR)
+    except OSError:
+        return
+    for name in names:
+        if not name.endswith((".json", ".json.tmp")):
+            continue
+        path = os.path.join(PROFILE_DIR, name)
+        try:
+            if now - os.path.getmtime(path) > PROFILE_TTL:
+                os.remove(path)
+        except OSError:
+            pass
 
 # ------------------------------------------------------------------ audio
 # El tubo late con la música de verdad. Se graba el monitor de la placa con

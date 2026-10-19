@@ -9,6 +9,8 @@ import math
 import os
 import struct
 import sys
+import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -74,6 +76,44 @@ class TestBandEnergyIsTheLoop(unittest.TestCase):
                     im += x * sin_t[i]
                 ref = (re * re + im * im) / (N * N)
                 self.assertLess(abs(audio.band_energy(s, RATE, f) - ref), 1e-9)
+
+
+class TestProfilePurge(unittest.TestCase):
+    """El cache de perfiles se purga al arranque, como el de letras (ver purge_cache)."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        old = audio.PROFILE_DIR
+        audio.PROFILE_DIR = self.dir.name
+        self.addCleanup(setattr, audio, "PROFILE_DIR", old)
+
+    def _write(self, name, age):
+        path = os.path.join(self.dir.name, name)
+        with open(path, "w") as f:
+            f.write("{}")
+        t = time.time() - age
+        os.utime(path, (t, t))
+
+    def test_purges_old_profiles_and_keeps_recent_ones(self):
+        self._write("old.json", audio.PROFILE_TTL + 10)
+        self._write("fresh.json", 10)
+        audio.purge_profiles(time.time())
+        self.assertEqual(set(os.listdir(self.dir.name)), {"fresh.json"})
+
+    def test_a_leftover_tmp_from_a_cut_save_goes_too(self):
+        self._write("dead.json.tmp", audio.PROFILE_TTL + 10)
+        audio.purge_profiles(time.time())
+        self.assertEqual(os.listdir(self.dir.name), [])
+
+    def test_leaves_files_it_does_not_own(self):
+        self._write("notes.txt", audio.PROFILE_TTL + 10)
+        audio.purge_profiles(time.time())
+        self.assertEqual(os.listdir(self.dir.name), ["notes.txt"])
+
+    def test_no_cache_dir_yet_is_not_an_error(self):
+        audio.PROFILE_DIR = os.path.join(self.dir.name, "nope")
+        audio.purge_profiles(time.time())
 
 
 if __name__ == "__main__":

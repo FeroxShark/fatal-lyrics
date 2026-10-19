@@ -469,7 +469,9 @@ class DaemonLoop:
         # el karaoke sólo cuenta como "cantar" con una canción y su letra
         # encima: lo demás es hablar al lado del micrófono
         self.voice_active = t["status"] == "Playing" and bool(self.lyrics)
-        return self.voice_active
+        # la letra plana canta (voice_active) pero no tiene tiempos que pegarle:
+        # el poll fino sólo vale con letra sincronizada
+        return self.voice_active and self.lyrics_kind != "plain"
 
     def sync(self, delta):
         """Gesto de ajuste fino (T0.13): el keybind, `fatal sync` y los botones

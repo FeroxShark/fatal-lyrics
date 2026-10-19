@@ -1247,3 +1247,30 @@ class TestSeekWhilePaused(unittest.TestCase):
         loop = self.paused_loop()
         loop.handle_track(track(status="Paused", pos=12.0), 100.0)
         loop._ipc.hang.assert_not_called()
+
+
+class TestPlainLyricsPoll(unittest.TestCase):
+    """Con la letra sin sincronizar no hay verso al que pegarle: el poll es el
+    lento (1 s), pero el micrófono la sigue contando como letra que suena."""
+
+    def run_tick(self, kind):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.lyrics = [(0.0, "todo el texto")] if kind == "plain" else [(0.0, "a"), (50.0, "b")]
+        loop.lyrics_kind = kind
+        loop.plain_shown = True
+        loop._lyr.current_line_index.return_value = 0
+        loop.idx = 0
+        fast = loop.handle_track(track(pos=1.0), 1.0)
+        return loop, fast
+
+    def test_plain_lyrics_poll_slowly_but_count_as_voice(self):
+        loop, fast = self.run_tick("plain")
+        self.assertFalse(fast)
+        self.assertTrue(loop.voice_active)
+        self.assertEqual(loop._next_sleep(fast, 1.0), daemon.POLL_IDLE)
+
+    def test_synced_lyrics_keep_the_fast_poll(self):
+        loop, fast = self.run_tick("synced")
+        self.assertTrue(fast)
+        self.assertLessEqual(loop._next_sleep(fast, 1.0), daemon.POLL)

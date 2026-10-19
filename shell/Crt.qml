@@ -2570,7 +2570,7 @@ PanelWindow {
                             text: crt.ctl.crtHangTitle
                             color: "#ffffff"
                             font.family: crt.lyricFont
-                            font.bold: true
+                            font.bold: crt.lyricBold
                             font.pixelSize: Math.round(26 * hangCard.u)
                         }
                     }

@@ -61,6 +61,7 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `shell/Speed.js` + `crtMovRate`/`movOff` (`crt.mov_speed`, `movMin`/`movMax` en `crtPaceTable`) — la
   deriva de los motivos sigue `mov` del `aud`, INTEGRADA (nunca `t·rate`); entradas, shader y compás no.
   TRAMPAS: "El ritmo de los dibujos". Banco: `previews/movimiento/`.
+- `crtCharacter` / `kickAmp` / `kickMs` / `bassHit()` / `bassGen` (`shell.qml`) + `kickPulse` (`Crt.qml`) + `bump`/`glints` (`Motif.qml`) — el golpe visible por bombo, escalado por carácter del tema; columnas `kick*` de `crtPaceTable`. Ganchos de `audio.py`: `audKick`, `audHat`, `audNov`, `songChar`. `crtDensity` mete `audMov` al sorteo, al hold y a `crtSceneFor`. TRAMPAS: "El golpe del bajo". Banco: `previews/golpe/`.
 - `shell/HopRay.qml` — el rayo del salto: recorrido, cabeza, cola, degradado.
 - `shell/Maze.qml`/`Maze.js` (`crt.maze_eggs`) — marcha por CONTADOR de pasos (crédito `rate`, se planta en `cut`, mira con `hf`) + huevos raros. TRAMPAS: "El laberinto".
 - `crtEntryTable` + `crtPickEntry` (`shell.qml`) — pesos de las entradas y sorteo.

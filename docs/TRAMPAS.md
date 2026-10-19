@@ -973,3 +973,29 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   primeros `TREND_WARMUP_S` quedan desarmados y se rearman sólo cuando la diferencia vuelve cerca de 0.
 - **La densidad de `char` mira el pico que decae, no el rms del bloque**, para decidir si "hay música":
   con el rms, el aire entre golpes ralos no contaba como tiempo y un tema espaciado salía denso.
+
+## El golpe del bajo, la densidad y las pantallas planas (2026-10-19, revisión del CRT con 10 lectores)
+
+- **El golpe NO va al cuadrado del flicker ni espera al pico `pk`.** Antes tubo y cámara sólo latían en
+  ~4 picos por tema y con `flickerAmt` (= flicker², 0.06): nadie lo veía. Ahora cada bombo
+  (`audKick` si llega `k` del daemon, si no `audBeat`) sube `bassGen` y `Crt.qml` pulsa `camS`, `pulse`
+  y `bloom`; `Motif.qml` pulsa su escala (`bump`). Amplitud y caída salen de `crtCharacter`
+  (`songChar` si llega `char`; si no BPM + energía del mood) y de las columnas `kick*` de
+  `crtPaceTable`. Un tema lento da pulso chico y lento (≈ `kickAmpMin`, `kickSlowMs`), uno agitado
+  grande y seco: NUNCA un solo "golpe de dubstep" para todo. `kickKnob` baja con `flicker` pero no
+  lo borra (0.25 → 0.75).
+- **`b` es rms de banda completa: no separa bombo de hi-hat.** `audio.py` ya manda `k`/`ht`/`char`
+  (sección de arriba); si un daemon viejo no los manda, el golpe y los agudos caen a `b`/`hf` y los
+  ganchos (`audKick`, `audHat`, `audNov`, `songChar`) quedan en 0 sin cambiar nada.
+- **`sec` no existe en la primera escucha** (sólo percentil de volumen con 4 s de hold): el sorteo
+  (`crtSoundNow`), el hold y `crtSceneFor` también miran `crtDensity` (`audMov` relativo al tema +
+  `nov`). Si vuelve a depender sólo de `audSection`, la primera escucha queda plana.
+- **Pantallas planas: `splitflap` y `testcard` ya no están en `motifKinds`/`motifGroups`.** Entraban por
+  el piso de peso 0.01 de `crtMotifWeight` en pasajes intensos y salía "FATAL LYRICS" quieto. Sin
+  título no se dibuja texto (`Crt.qml` pie, `Motif.qml` carta, `Splitflap.qml` encabezado). El
+  testcard del intro y el standby "NO SIGNAL" sin música se quedan. Forzados siguen andando.
+- **`turns` del osciloscopio lee `target`, no `ratio`:** `ratio` viaja 600 ms por valores
+  intermedios y las vueltas saltaban a mitad de la transición (la figura se cortaba).
+- **El destello de agudos (`Motif.qml`, `glints`) dispara por SUBIDA de `hat`, no por nivel,** y
+  tiene piso de 90 ms: un `hf` alto sostenido no puede convertirse en parpadeo continuo.
+  Banco: `previews/golpe/render.py` (`docs/tanda8-estado/golpe-motif.png`).

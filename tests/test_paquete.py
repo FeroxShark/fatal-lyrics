@@ -42,5 +42,28 @@ class TestPaquete(unittest.TestCase):
             self.assertIn(name, installed)
 
 
+class TestHyprlandDocs(unittest.TestCase):
+    """README y packaging/hyprland.lua tienen que decir lo mismo: la ruta de carga y la
+    tecla del CRT. Se desfasaron (README con Super+Shift+C y ruta ~/cartelitos)."""
+
+    def _read(self, *parts):
+        with open(os.path.join(ROOT, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_the_crt_key_in_the_readme_is_the_bound_one(self):
+        lua = self._read("packaging", "hyprland.lua")
+        readme = self._read("README.md")
+        self.assertIn('hl.bind("SUPER + SHIFT + Y"', lua)
+        self.assertIn('hl.bind("SUPER + SHIFT + Y"', readme)
+        self.assertNotIn("SUPER + SHIFT + C", readme)
+
+    def test_the_load_path_in_the_readme_is_the_one_in_the_lua(self):
+        lua = self._read("packaging", "hyprland.lua")
+        readme = self._read("README.md")
+        path = '"/fatal-lyrics/packaging/hyprland.lua"'
+        self.assertIn(path, readme)
+        self.assertIn(path, lua)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 -- fatal-lyrics para Hyprland 0.56+ (config en Lua). Reemplaza las líneas de hyprlang de antes
 -- (`exec-once` en execs.conf, `bind =` en keybinds.conf), que el parser de Lua ya no lee.
 -- Se carga desde ~/.config/hypr/hyprland.lua con:
---     local fl = os.getenv("HOME") .. "/cartelitos/packaging/hyprland.lua"
+--     local fl = os.getenv("HOME") .. "/fatal-lyrics/packaging/hyprland.lua"
 --     if io.open(fl) then dofile(fl) end
 --
 -- El binario es el que deja install.sh, ~/.local/bin/fatal (symlink al bin/fatal del repo), o el

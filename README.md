@@ -281,8 +281,8 @@ Either way there are two exits that never depend on the overlay: a compositor
 keybind, and the command itself.
 
 ```
-bind = SUPER SHIFT, C, exec, fatal crt toggle   # Hyprland (hyprlang .conf)
-hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("fatal crt toggle"))   -- Hyprland 0.56+ (Lua config)
+bind = SUPER SHIFT, Y, exec, fatal crt toggle   # Hyprland (hyprlang .conf)
+hl.bind("SUPER + SHIFT + Y", hl.dsp.exec_cmd("fatal crt toggle"))   -- Hyprland 0.56+ (Lua config)
 ```
 
 It is **opt-in** and never turns itself on. The switch is a file in
@@ -349,6 +349,21 @@ It also installs a systemd user unit, `fatal-lyrics.service`, and enables it so
 fatal-lyrics starts with your graphical session (`systemctl --user disable
 fatal-lyrics.service` to stop that). While the unit is installed, `fatal on`,
 `off` and `restart` go through `systemctl --user`.
+
+### Hyprland keys
+
+The CRT switch (`Super+Shift+Y`) and the sync keys (`Super+Alt+←/→`) are binds in
+`packaging/hyprland.lua`, and Hyprland 0.56+ only loads them if your config does.
+Add these two lines to `~/.config/hypr/hyprland.lua`:
+
+```lua
+local fl = os.getenv("HOME") .. "/fatal-lyrics/packaging/hyprland.lua"
+if io.open(fl) then dofile(fl) end
+```
+
+That file also holds the layer rule that keeps Hyprland's own animations off the
+overlay. The AUR package puts it at `/usr/share/fatal-lyrics/packaging/hyprland.lua`:
+point `fl` there instead. Without it fatal still runs, but those keys do nothing.
 
 ### Arch Linux (AUR)
 

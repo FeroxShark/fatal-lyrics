@@ -90,6 +90,10 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   valida cada valor antes del TOML (`_toml_val` no escapa: nada de comillas ni barras). Lo que se
   toca vuelve por `$XDG_RUNTIME_DIR/cartelitos-settings` (`<serie> seccion.clave=<json>`), que
   vigila `watch_settings` en el daemon; sin daemon, `--settings-set` escribe el TOML directo.
+  Apuntar una fila llena el panel de abajo de la hoja con `details` (el comentario de
+  `_CONFIG_COMMENTS`, `settings.detail`; si no hay, el hint), y una fila con `needs: [ids]`
+  (`_needs`) se atenúa mientras alguna de esas casillas esté apagada. Los nombres de fila no se
+  repiten ni igualan a un título de grupo (un test lo exige).
   Reemplazó a `tune.qml`, a los submenús de la bandeja (`tray.py` quedó en Ajustes / CRT /
   karaoke / Quit) y al menú de terminal `setup.py` (borrado 2026-10-09).
 - `[keys] sync_forward` / `sync_back` / `crt_toggle` (`config.py`) + `system.key_bind_commands()` — las

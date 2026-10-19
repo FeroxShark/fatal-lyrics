@@ -31,6 +31,10 @@ _CLEAN_TITLE_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
     r"\(with .*?\)",
     r"\[.*?\]",
     r" - \d{4} Remaster",
+    # "(Remastered 2011)", "(Deluxe Edition)", "(Radio Edit)": la misma marca
+    # de edición, pero entre paréntesis en vez de con guion
+    r"\((?:\d{4} )?(?:remaster|deluxe|expanded|bonus|anniversary|mono\b|stereo\b|"
+    r"radio edit|single version|album version|explicit|live)[^)]*\)",
 )]
 
 

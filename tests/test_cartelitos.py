@@ -847,6 +847,11 @@ class TestCleanTitle(unittest.TestCase):
         ("Song (with Someone Else)", "Song"),
         ("Song [Bonus Track]", "Song"),
         ("Song - 2004 Remaster", "Song"),
+        ("Song (Remastered 2011)", "Song"),
+        ("Song (2009 Remaster)", "Song"),
+        ("Song (Deluxe Edition)", "Song"),
+        ("Song (Live at Wembley)", "Song"),
+        ("Song (Radio Edit)", "Song"),
     ]
 
     def test_table(self):
@@ -856,6 +861,9 @@ class TestCleanTitle(unittest.TestCase):
 
     def test_a_plain_title_is_left_alone(self):
         self.assertEqual(c.clean_title("Just a Song"), "Just a Song")
+
+    def test_a_parenthesis_that_is_part_of_the_name_stays(self):
+        self.assertEqual(c.clean_title("Song (Reprise)"), "Song (Reprise)")
 
 
 class TestLyricsCache(unittest.TestCase):

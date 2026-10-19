@@ -6,6 +6,7 @@ import random
 import re
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,7 +31,7 @@ _CLEAN_TITLE_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
     r"\(feat\. .*?\)",
     r"\(with .*?\)",
     r"\[.*?\]",
-    r" - \d{4} Remaster",
+    r" - \d{4} Remaster(ed)?",
     # "(Remastered 2011)", "(Deluxe Edition)", "(Radio Edit)": la misma marca
     # de edición, pero entre paréntesis en vez de con guion
     r"\((?:\d{4} )?(?:remaster|deluxe|expanded|bonus|anniversary|mono\b|stereo\b|"
@@ -150,17 +151,97 @@ def lrclib_get(track, title):
     return "none", None
 
 
+def _norm(s):
+    """Texto comparable: sin acentos, sin mayúsculas, sin lo que va entre
+    paréntesis o corchetes ni los sufijos de edición, y sin puntuación."""
+    s = clean_title(s or "")
+    s = re.sub(r"\s+-\s+.*$", "", s)         # " - Live", " - Single Version"...
+    s = re.sub(r"\((?:feat|ft|with)\b.*?\)|\[.*?\]|\(.*?\)", " ", s, flags=re.I)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch)).casefold()
+    s = re.sub(r"['’`´]", "", s)    # "That's" y "Thats" son el mismo título
+    return " ".join(re.sub(r"[^\w]+", " ", s).split())
+
+
+# palabras de edición que, sueltas al final del título, no lo hacen otro tema
+_EDITION_WORDS = {"remaster", "remastered", "remasterizado", "remasterizada", "deluxe",
+                  "version", "edition", "mono", "stereo", "edit", "radio", "single",
+                  "album", "explicit", "live", "bonus", "track"}
+
+
+def _norm_title(s):
+    """`_norm` sin las palabras de edición de la cola ni los años: "Song Deluxe
+    Version" y "Song 2011 Remaster" quedan en "song"."""
+    words = _norm(s).split()
+    while len(words) > 1 and (words[-1] in _EDITION_WORDS or re.fullmatch(r"\d{4}", words[-1])):
+        words.pop()
+    return " ".join(words)
+
+
+_CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+_ARTIST_NOISE = {"the", "and", "feat", "ft", "with", "y", "e", "de", "of"}
+
+
+def names_agree(a, b):
+    """¿Dos títulos son el mismo tema? Igualdad normalizada, sin sufijos de
+    edición ("Song" vs "Song Deluxe Version"); "Song" contra "Other Song" NO
+    es el mismo: no vale la contención. Si falta un
+    nombre, o uno está en CJK y el otro no (NetEase guarda el título en chino),
+    no hay con qué comparar y no se veta: el largo sigue haciendo su trabajo."""
+    if not a or not b or bool(_CJK_RE.search(a)) != bool(_CJK_RE.search(b)):
+        return True
+    return _norm_title(a) == _norm_title(b) or not (_norm_title(a) and _norm_title(b))
+
+
+def artists_agree(ours, theirs):
+    """Lo mismo para el artista, más tolerante: "A, B" contra "A & B" comparten
+    una palabra, y con eso alcanza. Acepta `theirs` como texto o como lista de
+    nombres (NetEase los manda en una lista)."""
+    if isinstance(theirs, (list, tuple)):
+        theirs = " ".join(str(x) for x in theirs)
+    if not ours or not theirs or bool(_CJK_RE.search(ours)) != bool(_CJK_RE.search(theirs)):
+        return True
+    wa = set(_norm(ours).split()) - _ARTIST_NOISE
+    wb = set(_norm(theirs).split()) - _ARTIST_NOISE
+    return not wa or not wb or bool(wa & wb)
+
+
+def same_track(title, hit_title, artist, hit_artist):
+    """Título y artista del resultado contra los nuestros. Un título distinto
+    veta siempre. Un artista distinto sólo veta si el título no es IDÉNTICO
+    (normalizado): Spotify pone "Arcane" a lo que NetEase tiene a nombre de
+    quienes lo cantan, y ahí el título exacto más el largo alcanzan."""
+    if not names_agree(title, hit_title):
+        return False
+    if artists_agree(artist, hit_artist):
+        return True
+    return bool(hit_title) and _norm_title(title) == _norm_title(hit_title)
+
+
+LRCLIB_SLACK = 4.0      # segundos de diferencia de duración que se toleran en la búsqueda
+
+
 def lrclib_search(track, title):
-    """Búsqueda de lrclib: sin álbum ni duración, el primero que esté sincronizado."""
+    """Búsqueda de lrclib: sin álbum ni duración, el primero sincronizado que sea
+    el mismo tema (nombre, artista y largo): una versión en vivo o un cover
+    salían corridos desde el primer verso."""
     params = urllib.parse.urlencode({"track_name": title, "artist_name": track["artist"]})
     data, why = _json_or("https://lrclib.net/api/search?" + params)
     if data is None:
         return why, None
     for hit in data or []:
-        if hit.get("syncedLyrics"):
-            lines = parse_lrc(hit["syncedLyrics"])
-            if lines:
-                return "ok", lines
+        if not hit.get("syncedLyrics"):
+            continue
+        if not same_track(title, hit.get("trackName"), track["artist"], hit.get("artistName")):
+            continue
+        try:
+            if abs(float(hit["duration"]) - track["length"]) > LRCLIB_SLACK:
+                continue
+        except (KeyError, TypeError, ValueError):
+            pass    # sin duración en el hit: no hay con qué vetarlo
+        lines = parse_lrc(hit["syncedLyrics"])
+        if lines:
+            return "ok", lines
     return "none", None
 
 
@@ -184,8 +265,9 @@ NETEASE_CREDIT_RE = re.compile(
     r"mixed|mastered|recorded)\b\s*(by)?\s*[:：]", re.IGNORECASE)
 
 
-def netease_pick(songs, length):
-    """El id del resultado que dura lo mismo que el tema (±NETEASE_SLACK).
+def netease_pick(songs, length, title=None, artist=None):
+    """El id del resultado que dura lo mismo que el tema (±NETEASE_SLACK) y que,
+    si se pasan título y artista, se llama igual (ver `names_agree`).
 
     La búsqueda de NetEase es difusa a lo bruto: con una consulta que no existe
     igual devuelve cinco temas cualesquiera. El largo es lo único que separa el
@@ -195,8 +277,12 @@ def netease_pick(songs, length):
             dur = float(song["duration"]) / 1000.0
         except (KeyError, TypeError, ValueError):
             continue
-        if abs(dur - length) <= NETEASE_SLACK:
-            return song.get("id")
+        if abs(dur - length) > NETEASE_SLACK:
+            continue
+        names = [a.get("name", "") for a in song.get("artists") or [] if isinstance(a, dict)]
+        if not same_track(title, song.get("name"), artist, names):
+            continue
+        return song.get("id")
     return None
 
 
@@ -216,7 +302,8 @@ def netease(track, title):
     # eso no es "este tema no tiene letra", es que no hubo respuesta útil
     if data.get("code") != 200:
         return "error", None
-    song_id = netease_pick((data.get("result") or {}).get("songs"), track["length"])
+    song_id = netease_pick((data.get("result") or {}).get("songs"), track["length"],
+                            title, track["artist"])
     if song_id is None:
         return "none", None
 

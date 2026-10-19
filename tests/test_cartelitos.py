@@ -852,6 +852,7 @@ class TestCleanTitle(unittest.TestCase):
         ("Song (Deluxe Edition)", "Song"),
         ("Song (Live at Wembley)", "Song"),
         ("Song (Radio Edit)", "Song"),
+        ("My Way - 2008 Remastered", "My Way"),
     ]
 
     def test_table(self):
@@ -864,6 +865,62 @@ class TestCleanTitle(unittest.TestCase):
 
     def test_a_parenthesis_that_is_part_of_the_name_stays(self):
         self.assertEqual(c.clean_title("Song (Reprise)"), "Song (Reprise)")
+
+
+class TestSameTrack(unittest.TestCase):
+    """r20.2: lrclib_search y netease_pick exigen el nombre, no sólo el largo."""
+
+    def test_titles_ignore_case_accents_punctuation_and_editions(self):
+        for a, b in [("That's Life", "Thats Life"),
+                     ("En la Ciudad de la Furia", "En La Ciudad De La Furia (Remasterizado 2007)"),
+                     ("Song - Remastered 2011", "Song"),
+                     ("Café", "cafe"),
+                     ("Song", "Song (Deluxe Version)")]:
+            with self.subTest(a=a, b=b):
+                self.assertTrue(lyrics.names_agree(a, b))
+
+    def test_a_different_title_is_vetoed(self):
+        self.assertFalse(lyrics.names_agree("Charlie's Inferno", "Twist The Knife"))
+        self.assertFalse(lyrics.names_agree("Meant To Be", "Meant"))
+
+    def test_nothing_to_compare_is_not_a_veto(self):
+        self.assertTrue(lyrics.names_agree("Song", None))
+        self.assertTrue(lyrics.names_agree("Song", "歌"))       # CJK contra latino: sólo manda el largo
+
+    def test_artists_share_a_word(self):
+        self.assertTrue(lyrics.artists_agree("Calvin Harris", ["Calvin Harris", "Disciples"]))
+        self.assertTrue(lyrics.artists_agree("Frank Sinatra", "Frank Sinatra/Frank Sinatra"))
+        self.assertFalse(lyrics.artists_agree("Jared Benjamin", ["Arc North", "Krista Marina"]))
+
+    def test_another_artist_only_passes_with_the_identical_title(self):
+        self.assertTrue(lyrics.same_track("Renegade", "Renegade", "Arcane", ["Raja Kumari"]))
+        self.assertFalse(lyrics.same_track("Renegade", "Other", "Arcane", ["Raja Kumari"]))
+
+    def test_lrclib_search_skips_another_version_and_takes_the_next(self):
+        hits = [{"syncedLyrics": LRC, "trackName": "Other Song", "artistName": "Band", "duration": 200},
+                {"syncedLyrics": LRC, "trackName": "Song", "artistName": "Band", "duration": 260},
+                {"syncedLyrics": "[00:05.00]right", "trackName": "Song", "artistName": "Band",
+                 "duration": 201}]
+        old = lyrics.http_json
+        lyrics.http_json = lambda url, **kw: hits
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
+        status, lines = c.lrclib_search(TRACK, "Song")
+        self.assertEqual((status, [t for _, t, _ in lines]), ("ok", ["right"]))
+
+    def test_lrclib_search_with_only_mismatches_is_none(self):
+        hits = [{"syncedLyrics": LRC, "trackName": "Other Song", "artistName": "Band", "duration": 200}]
+        old = lyrics.http_json
+        lyrics.http_json = lambda url, **kw: hits
+        self.addCleanup(lambda: setattr(lyrics, "http_json", old))
+        self.assertEqual(c.lrclib_search(TRACK, "Song"), ("none", None))
+
+    def test_netease_pick_wants_the_name_too(self):
+        songs = [{"id": 1, "name": "Filler", "artists": [{"name": "Band"}], "duration": 200000},
+                 {"id": 2, "name": "Song", "artists": [{"name": "Band"}], "duration": 201000}]
+        self.assertEqual(c.netease_pick(songs, 200.0, "Song", "Band"), 2)
+        self.assertEqual(c.netease_pick(songs[:1], 200.0, "Song", "Band"), None)
+        # sin título ni artista (llamada vieja) se comporta como antes: sólo el largo
+        self.assertEqual(c.netease_pick(songs, 200.0), 1)
 
 
 class TestLyricsCache(unittest.TestCase):

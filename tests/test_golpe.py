@@ -47,7 +47,7 @@ class TestGolpe(unittest.TestCase):
         self.assertEqual([r[0] for r in rows], ["calm", "normal", "wild"])
         for name, body in rows:
             for col in ("kickCam", "kickTube", "kickMotif", "kickHat", "kickAmpMin",
-                        "kickSlowMs", "kickFastMs"):
+                        "kickSlowMs", "kickFastMs", "kickRise"):
                 self.assertRegex(body, col + r":\s*[\d.]+", "%s sin %s" % (name, col))
         vals = {n: {k: float(v) for k, v in re.findall(r"(kick\w+):\s*([\d.]+)", b)} for n, b in rows}
         # calm < normal < wild en amplitud; la caída de un tema lento es más larga que la de uno agitado
@@ -66,7 +66,8 @@ class TestGolpe(unittest.TestCase):
         self.assertIn("audHatSeen ? audHat : audHf", qml)
         self.assertIn("kSeen ? ev.k : ev.b", qml)      # k si llega, si no b
         self.assertIn("ev.ht !== undefined", qml)
-        self.assertIn('ev["char"] > 0', qml)
+        self.assertIn('ev.cmd === "char"', qml)        # el carácter llega como evento suelto
+        self.assertNotIn('ev["char"]', qml)
 
     def test_character_scales_amplitude_and_decay_and_falls_back_to_bpm_and_mood(self):
         qml = read("shell.qml")

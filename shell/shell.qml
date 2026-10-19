@@ -280,6 +280,10 @@ ShellRoot {
             // del destello de los agudos en el dibujo
             kickCam: 0.014, kickTube: 0.60, kickMotif: 0.030, kickHat: 0.60,
             kickAmpMin: 0.25, kickSlowMs: 420, kickFastMs: 150,
+            // el `rise` de la tendencia (ver `riseHit`): el pulso que da, × el golpe de un bombo
+            // (`kickRise`, columna kick* = excepción), y cuánto alarga el hold un `fall`
+            // (`fallHoldMs`, ms × amplitud del fall). Tema lento = pulso chico, hold largo
+            kickRise: 0.40, fallHoldMs: 8000,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -296,6 +300,7 @@ ShellRoot {
             movMin: 0.40, movMax: 2.20, movKick: 0.70,
             kickCam: 0.022, kickTube: 0.90, kickMotif: 0.050, kickHat: 0.85,
             kickAmpMin: 0.30, kickSlowMs: 400, kickFastMs: 120,
+            kickRise: 0.70, fallHoldMs: 5000,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -324,7 +329,9 @@ ShellRoot {
             movMin: 0.30, movMax: 2.80, movKick: 1.00,
             // la tanda 3 no tenía golpe por bombo: como `dirtMax`, `wild` se lleva el más fuerte
             kickCam: 0.040, kickTube: 1.30, kickMotif: 0.090, kickHat: 1.00,
+            // `wild` no alarga holds (es el modo rápido, y la tanda 3 no tenía `fall`): 0
             kickAmpMin: 0.40, kickSlowMs: 340, kickFastMs: 90,
+            kickRise: 1.00, fallHoldMs: 0,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -2187,8 +2194,9 @@ ShellRoot {
     }
     // la perilla `flicker` baja el golpe pero ya no lo borra al cuadrado: 0.25 -> 0.75
     readonly property real kickKnob: crtFlicker <= 0.01 ? 0 : Math.min(1, 0.45 + 1.2 * crtFlicker)
-    // 1 = tema agitado, `kickAmpMin` = tema lento
-    readonly property real kickAmp: (pace.kickAmpMin + (1 - pace.kickAmpMin) * crtCharacter) * kickKnob
+    // 1 = tema agitado, `kickAmpMin` = tema lento. `bassMul`: 1 para un bombo, menos para el
+    // pulso de un `rise` (ver `riseHit`); pasa por los mismos consumidores (cámara, tubo, dibujo)
+    readonly property real kickAmp: (pace.kickAmpMin + (1 - pace.kickAmpMin) * crtCharacter) * kickKnob * bassMul
     // la caída: larga en un tema lento, seca en uno agitado; con compás nunca pasa de 0.6 tiempos
     readonly property int kickMs: {
         const ms = pace.kickSlowMs + (pace.kickFastMs - pace.kickSlowMs) * crtCharacter;
@@ -2199,11 +2207,35 @@ ShellRoot {
     readonly property real kickMotifAmt: pace.kickMotif * kickAmp
     // cada golpe: Crt.qml (cámara, tubo) y Motif.qml (dibujo) escuchan el contador
     property int bassGen: 0
+    property real bassMul: 1
     function bassHit(hard) {
         if (!crtOn || !audLive)
             return;
+        bassMul = 1;
         bassGen++;
         movKickHit(Speed.kickStrength(hard) * (0.6 + 0.8 * crtCharacter));
+    }
+    // El `rise` y el `fall` del daemon (`_Trend` en audio.py: la tendencia del movimiento o del
+    // nivel subió o bajó de golpe y se sostuvo). Un `rise` cambia UNA pantalla — la más vieja, y
+    // sólo si ya tuvo el hold mínimo del pace (`motifHoldMs`) — y da un pulso en el canal del
+    // golpe, más chico cuanto menos subió. Un `fall` alarga el hold de todas las pantallas
+    // (`fallHoldMs`), sin pasar de empezar de cero.
+    function riseHit(amt) {
+        if (!crtOn || crtIntroOn || !audLive)
+            return;
+        if (!crtMotifRefresh(false, false, pace.motifHoldMs))
+            return;
+        bassMul = pace.kickRise * (0.5 + 0.5 * amt);
+        bassGen++;
+    }
+    function fallHold(amt) {
+        if (!crtOn || crtIntroOn || !audLive || !(pace.fallHoldMs > 0))
+            return;
+        const now = Date.now();
+        const ext = pace.fallHoldMs * (0.5 + 0.5 * amt);
+        // `since` es cuándo empezó cada dibujo: correrlo hacia adelante es alargar su hold, y el
+        // tope es `now` (un hold entero desde cero, no más)
+        crtMotifSince = crtMotifSince.map(t => Math.min(t + ext, now));
     }
 
     // cuánto se mueve la música ahora, 0..1 con la mediana del tema en 0.5 (`Speed.fit`);
@@ -2967,12 +2999,14 @@ ShellRoot {
     //     tiempo con su dibujo (si ya tuvo un rato para verse)
     //   · ninguna: el reloj — la que venció su hold, de a una por vez y con
     //     aire entre cambios. El hold se acorta cuanto más movido suena.
+    //   · `floorMs` (el `rise`, `riseHit`): UNA pantalla, la más vieja, pero sólo si
+    //     su dibujo ya tuvo `floorMs`. Devuelve si cambió algo (el pulso depende de eso)
     // El filtro de validez (un dibujo que ya no tiene con qué dibujarse)
     // cambia en el acto, siempre.
-    function crtMotifRefresh(force, one) {
+    function crtMotifRefresh(force, one, floorMs) {
         const n = activeCrtScreens.length;
         if (n <= 0)
-            return;
+            return false;
         let kinds = crtMotifKinds.slice(0, n);
         let since = crtMotifSince.slice(0, n);
         let seeds = crtMotifSeeds.slice(0, n);
@@ -3005,7 +3039,7 @@ ShellRoot {
         // la única que cambia sin `force`: la más vieja entre las candidatas
         let single = -1;
         if (!force) {
-            const oldEnough = one ? Math.min(3000, gap) : hold;
+            const oldEnough = floorMs !== undefined ? floorMs : one ? Math.min(3000, gap) : hold;
             const spaced = one || now - crtMotifLastOneAt >= gap;
             for (let i = 0; i < n && spaced; i++)
                 if (live(i) && valid(i) && now - since[i] >= oldEnough
@@ -3042,7 +3076,7 @@ ShellRoot {
             if (!force)
                 crtMotifLastOneAt = now;
             console.log("crt: motif screen=" + i + " kind=" + pick + " src=" + src
-                        + (force ? " (all)" : one ? " (section)" : ""));
+                        + (force ? " (all)" : one ? " (section)" : floorMs !== undefined ? " (rise)" : ""));
         }
         // arrays nuevos, no mutados: si no, el binding de Crt.qml no se entera
         if (changed || crtMotifKinds.length !== n) {
@@ -3050,6 +3084,7 @@ ShellRoot {
             crtMotifSince = since;
             crtMotifSeeds = seeds;
         }
+        return changed;
     }
     onCrtMotifsChanged: if (crtMotifs) crtMotifRefresh(true)
 
@@ -3739,6 +3774,11 @@ ShellRoot {
                             else if (!root.crtIntroOn)
                                 root.crtMotifRefresh(ev.kind === "drop" && secMoved,
                                                      ev.kind !== "drop" && secMoved);
+                        } else if (ev.cmd === "char") {
+                            // el carácter del tema (`char_target` en audio.py, EMA): viaja como
+                            // evento suelto, no dentro de `aud`. 0 = no llegó (ver `crtCharacter`)
+                            if (ev.v > 0)
+                                root.songChar = ev.v;
                         } else if (ev.cmd === "bpm") {
                             root.bpm = ev.v;
                             root.bpmConf = ev.conf;
@@ -3780,8 +3820,6 @@ ShellRoot {
                                 root.audHatSeen = true;
                                 root.audHat = +ev.ht || 0;
                             }
-                            if (ev["char"] > 0)
-                                root.songChar = ev["char"];
                             if (ev.cutf > 0) {
                                 root.audCutF = ev.cutf;
                                 root.audCutGen++;
@@ -3803,6 +3841,12 @@ ShellRoot {
                                     root.audKick++;
                                 root.bassHit(!!ev.h);
                             }
+                            // tendencia (`_Trend`, audio.py): `rise` pulsa el golpe y cambia una
+                            // pantalla; `fall` alarga el hold. Llegan sólo en el bloque que dispara
+                            if (ev.rise > 0)
+                                root.riseHit(ev.rise);
+                            if (ev.fall > 0)
+                                root.fallHold(ev.fall);
                             // el pico lo elige el daemon (es el que sabe dónde
                             // cae este momento dentro de la canción entera)
                             if (ev.pk) {

@@ -999,3 +999,13 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **El destello de agudos (`Motif.qml`, `glints`) dispara por SUBIDA de `hat`, no por nivel,** y
   tiene piso de 90 ms: un `hf` alto sostenido no puede convertirse en parpadeo continuo.
   Banco: `previews/golpe/render.py` (`docs/tanda8-estado/golpe-motif.png`).
+
+## El `char` no llegaba al tubo y el `rise`/`fall` no se leían (cableado, 2026-10-19)
+
+- **`char` es un evento suelto** (`{"cmd": "char", "v"}`, `audio.py`), no un campo de `aud`. `shell.qml`
+  lo leía como `ev["char"]` dentro de `aud`, así que `songChar` quedaba en 0 y `crtCharacter` caía
+  siempre al BPM + mood. Ahora tiene rama propia. `tests/test_cableado.py` falla si el audio manda un
+  `cmd` que el QML no despacha.
+- **`rise`/`fall` salían en `aud` y nadie los usaba.** `rise` cambia UNA pantalla (la más vieja, sólo
+  si cumplió `pace.motifHoldMs`) y da un pulso en el canal del golpe (`bassMul`); `fall` alarga el hold
+  (`fallHoldMs`, tope: empezar de cero). `wild` no alarga holds.

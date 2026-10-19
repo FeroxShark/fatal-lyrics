@@ -107,6 +107,12 @@ Item {
                 height: sea.lineH
                 y: column.height * 0.5 + (lineIdx - sea.scroll) * sea.lineH
                 visible: y > -sea.lineH * 2 && y < column.height + sea.lineH
+                // PROFUNDIDAD: el alfa cae con la distancia al renglón que suena (0 = el del
+                // medio, 1 = el borde): 0.75 pegado a él, ~0.6 a un cuarto de pantalla, 0.37
+                // a los cuatro quintos. Y en el 14 % de cada borde se desvanece a nada, en
+                // vez de cortarse en seco. Las cercanas no bajan de ~0.6 (se lee a dos metros)
+                readonly property real dist: Math.min(1, Math.abs(y + sea.lineH / 2 - column.height / 2) / (column.height / 2))
+                readonly property real depthOpa: (0.75 - 0.6 * dist * dist) * Math.min(1, (1 - dist) / 0.14)
 
                 // El halo de la línea que suena son dos copias escaladas. No hay
                 // desenfoque en este shell (Qt5Compat.GraphicalEffects no se
@@ -142,7 +148,7 @@ Item {
                     anchors.centerIn: parent
                     text: row.modelData.text || ""
                     color: row.current ? sea.hot : sea.colour
-                    opacity: row.current ? 1 : 0.55
+                    opacity: row.current ? 1 : row.depthOpa
                     font.family: sea.fontFamily
                     font.pixelSize: sea.fontPx
                     horizontalAlignment: Text.AlignHCenter

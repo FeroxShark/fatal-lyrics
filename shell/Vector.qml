@@ -8,7 +8,8 @@
 // girar en XW el cubo de adentro sale y el de afuera entra: se da vuelta como
 // un guante. Lo que suena:
 //   · `kick`: el octavo de vuelta
-//   · `tick`: el tamaño pega un tirón en cada tiempo y los vértices se prenden
+//   · `tick`: el tamaño pega un tirón en cada tiempo y los vértices se prenden; en el 1 y
+//     el 3 las aristas destellan en `hot` (fuera del drop)
 //   · `drop`: aparecen dos ecos girados (tres teseractos entrelazados) y las
 //     aristas van en `hot` en cada tiempo
 //   · `low`: el grosor del haz
@@ -77,6 +78,12 @@ MotifBase {
         const copies = dropAmt > 0.01 ? 3 : 1;
         const lw = span * (0.0035 + 0.002 * low);
         const r = lw * (1.2 + 1.6 * beatHot);
+        // el DESTELLO de las aristas en el tiempo 1 y el 3 (el 2 y el 4 sólo prenden los
+        // vértices): arranca en `hot` y vuelve a `colour` con el mismo decaimiento que el
+        // latido. En el drop no hace nada: ahí las aristas ya van en `hot` en cada tiempo y
+        // ese contraste es del drop
+        const flash = beatN % 2 === 0 ? beatHot * (1 - dropAmt) : 0;
+        const flashCol = Qt.tint(colour, Qt.rgba(hot.r, hot.g, hot.b, 0.7 * flash));
         for (let cI = 0; cI < 3; cI++) {
             const on = cI < copies;
             const extra = cI * 2 * Math.PI / 3;
@@ -95,11 +102,12 @@ MotifBase {
                             segs.push([Qt.point(p[0], p[1]), Qt.point(q[0], q[1])]);
                         }
                     if (tr === 0) {
-                        styles.push({ w: lw * 5, c: E.col(colour, 0.18 * a * depth) });
+                        styles.push({ w: lw * (5 + 1.5 * flash), c: E.col(flashCol, (0.18 + 0.12 * flash) * a * depth) });
                         geo.push(segs);
                     }
                     styles.push({ w: tr === 0 ? lw : lw * 0.7,
-                                  c: E.col(hotEdge > 0.3 ? hot : colour, a * (0.45 + 0.55 * depth)) });
+                                  c: E.col(hotEdge > 0.3 ? hot : (tr === 0 ? flashCol : colour),
+                                           a * (0.45 + 0.55 * depth)) });
                     geo.push(segs);
                 }
                 if (tr === 0) {

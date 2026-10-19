@@ -86,6 +86,25 @@ class TestFacesJs(unittest.TestCase):
         self.assertGreaterEqual(v["hotMin"], HOT_MIN)
         self.assertGreaterEqual(v["bgMin"], BG_MIN)
 
+    def test_a_calm_theme_keeps_a_muted_cover_muted_and_still_readable(self):
+        # la energía del tema mueve el piso de saturación (0.35 quieto → 0.6 de golpe); el tono
+        # lo sigue mandando la tapa y la letra se lee con cualquier energía
+        v = self.js("(() => { let w = {inkMin: 99, hotMin: 99, bgMin: 99}; let sat = [];"
+                    " for (const e of [0, 0.5, 1, undefined]) for (let h = 0; h < 1; h += 0.05)"
+                    "  for (const s of [0.2, 0.4, 1]) {"
+                    "   const f = albumFaces([hslToHex(h, s, 0.5)], e);"
+                    "   const r = checkScheme(f);"
+                    "   for (const k in w) w[k] = Math.min(w[k], r[k]); }"
+                    " const dull = ['#8a7660', '#6e5e4c', '#a08c70'];"
+                    " w.calmBg = albumFaces(dull, 0).a.bg; w.hardBg = albumFaces(dull, 1).a.bg;"
+                    " w.noEnergyBg = albumFaces(dull).a.bg; return w; })()")
+        self.assertGreaterEqual(v["inkMin"], INK_MIN)
+        self.assertGreaterEqual(v["hotMin"], HOT_MIN)
+        self.assertGreaterEqual(v["bgMin"], BG_MIN)
+        self.assertNotEqual(v["calmBg"], v["hardBg"])
+        self.assertEqual(v["noEnergyBg"], v["hardBg"])     # sin energía = el piso de antes
+        self.assertIn("albumFaces(hex, (crtMoodLocked || crtMood).energy)", read("shell.qml"))
+
     def test_a_grey_cover_gives_no_palette(self):
         self.assertIsNone(self.js('albumFaces(["#808080", "#1a1a1a", "#f0f0f0"])'))
         self.assertIsNone(self.js("albumFaces([])"))

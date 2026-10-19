@@ -30,7 +30,12 @@ COVERS = [
     ("tapa: tres naranjas", ["#e07020", "#e07828", "#d86818"]),
     ("tapa: un solo azul", ["#1c2f8f"]),
     ("tapa: teal+rosa+ocre", ["#1f8a8a", "#e0508a", "#c8a030"]),
+    # apagadas (poca saturación): la energía del tema decide cuánto neón se les da
+    ("tapa apagada: sepia", ["#8a7660", "#6e5e4c", "#a08c70"]),
+    ("tapa apagada: gris azulado", ["#5c6878", "#48546a", "#7c8898"]),
 ]
+# energía del tema (0..1): quieto, medio, de golpe
+ENERGIES = (0.0, 0.5, 1.0)
 LINE = ("no me", "ESCUCHÁS", "cuando grito")
 
 
@@ -96,8 +101,9 @@ def contrast_label(face):
 def sheet():
     rows = fixed_schemes()
     for name, colors in COVERS:
-        f = js("albumFaces(%s)" % json.dumps(colors))
-        rows.append((name, f, colors))
+        for e in ENERGIES:
+            f = js("albumFaces(%s, %s)" % (json.dumps(colors), e))
+            rows.append(("%s  e=%.1f" % (name, e), f, colors))
     tw, th, lw, gap = 480, 200, 300, 8
     W = lw + 3 * (tw + gap) + gap
     H = 70 + len(rows) * (th + gap) + gap

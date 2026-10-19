@@ -131,13 +131,16 @@ function faceMid(h, s) {
     };
 }
 
+const ALBUM_SAT_CALM = 0.35;
+const ALBUM_SAT_HARD = 0.6;
+
 // La paleta de la tapa: hasta cuatro colores del daemon (evento `art`, ya
 // ordenados por presencia pesada por saturación). El primero manda la prendida,
 // el segundo la oscura y el tercero la media. Un color que repite el tono de
 // uno que ya está no cuenta como otro: se busca el siguiente y, si no hay, se
 // DERIVA del arco más grande que dejan los que hay (split-complementario), no
 // se sortea. null si la tapa no tiene color (gris, blanco y negro).
-function albumFaces(colors) {
+function albumFaces(colors, energy) {
     let usable = [];
     for (let i = 0; i < (colors || []).length; i++) {
         const hsl = rgbToHsl(hexToRgb(colors[i]));
@@ -164,7 +167,12 @@ function albumFaces(colors) {
         const mid = d > 0.5 ? h1 + d / 2 : h2 + (1 - d) / 2;
         picked.push([mid % 1, 0.7, 0.5]);
     }
-    function sat(p) { return Math.min(Math.max(p[1], 0.6), 1); }
+    // La tapa manda el TONO; la energía del tema, cuánto se le deja de su apagado. Piso de
+    // saturación: ALBUM_SAT_CALM (tema quieto: una tapa sepia sale sepia) hasta ALBUM_SAT_HARD
+    // (tema de golpe: plena, como siempre). `energy` ausente = 1, el piso de antes.
+    const e = Math.min(Math.max(energy === undefined || energy === null ? 1 : energy, 0), 1);
+    const floor = ALBUM_SAT_CALM + (ALBUM_SAT_HARD - ALBUM_SAT_CALM) * e;
+    function sat(p) { return Math.min(Math.max(p[1], floor), 1); }
     return {
         a: faceLit(picked[0][0], sat(picked[0])),
         b: faceDark(picked[1][0], sat(picked[1])),

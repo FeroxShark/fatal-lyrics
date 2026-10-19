@@ -1403,7 +1403,7 @@ ShellRoot {
         let hex = [];
         for (let i = 0; i < artColors.length; i++)
             hex.push(Qt.color(artColors[i]).toString());
-        const f = Faces.albumFaces(hex);
+        const f = Faces.albumFaces(hex, (crtMoodLocked || crtMood).energy);
         if (!f)
             return null;
         return { key: "album", a: qtFace(f.a), b: qtFace(f.b), c: qtFace(f.c) };

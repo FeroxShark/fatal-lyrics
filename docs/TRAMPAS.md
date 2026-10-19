@@ -1144,3 +1144,11 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   cambió (`is_current`) y manda `colors: []` cuando no hay colores, que suelta la paleta anterior
   (`albumScheme` → null → esquema del mood). Si la tapa llega tarde, la pared hace dos cambios de
   paleta seguidos: es el precio de no vaciar antes de la confirmación.
+
+## El piso de saturación de la tapa depende de la energía del tema (2026-10-19)
+
+- `Faces.albumFaces(colors, energy)`: piso de saturación de 0.35 (tema quieto) a 0.6 (de golpe,
+  lo de siempre); `energy` ausente = 0.6. Antes era 0.6 fijo y una tapa sepia o gris azulada salía
+  de neón en cualquier tema. La tapa sigue mandando el TONO. `shell.qml` pasa
+  `(crtMoodLocked || crtMood).energy` (congelada con el primer verso: la paleta no se mueve a mitad
+  de tema por el mood). Banco: `previews/colores/render.py` (tapas apagadas × tres energías).

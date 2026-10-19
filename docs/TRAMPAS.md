@@ -1095,3 +1095,25 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **`crt.layout` "stack"/"plain"/"type" no cambia nada en el director** (2026-10-19): la `Column` del director
   apila SIEMPRE una palabra por renglón, y fuera de allMode `layout` sólo se lee para `!== "split"`. Subir el
   tope de "stack" de 2 a 4 palabras en pantalla vertical (idea de un revisor) no tendría efecto visible.
+
+### Tanda de mejoras del CRT (2026-10-19: movimiento y tubo)
+
+- **El cambio de dibujo de una pantalla es un PUENTE, no un fundido** (`motifBridge`, `Crt.qml`): medio
+  `bridgeMs` a negro, `hit(0.4, "motif", true)` EN el swap y entrada `enterFastMs`. Tiene que ser
+  `urgent`: con `beat_lock` un hit normal espera al próximo tiempo y cae lejos del cambio. Y sólo si el
+  motivo está a la vista (`motifSeen`): `motifKind` cambia también con letra encima, y ahí el glitch
+  pegaría en el verso. Suma unas 14 roturas por minuto en `normal` (medirlas con el `hit ... src=motif`).
+- **El sorteo no repite los últimos 5 dibujos de la pared** (`crtMotifRecent`, no se vacía al cambiar de
+  tema). Si el pool queda vacío se cae al pool sin la regla. La palabra clave no pasa por ahí, pero ya no
+  re-elige el dibujo que la pantalla muestra (`wanted !== kinds[i]`).
+- **El empujón del drop es una columna de `pace`** (`dropZoom`, `dropZoomMin` >= 0.5) escalada por
+  `crtCharacter`: una balada empujaba 12 % fijo, ~20 veces su propio bombo. `wild` conserva el 12 % de la
+  tanda 3 (`dropZoomMin` 1). La anticipación del cue es 0.75 del empujón. `cueAnim` NO lleva `from`: con
+  `from: 1`, un cue que llegaba con la rampa o la suelta en curso tiraba `cueZoom` a 1 de golpe.
+- **`crt.frag`: grano a 30 Hz en celdas de 2×2 px y el golpe sin temblor.** `hash21(floor(fc*0.5) +
+  floor(t*30))` (dos cuadros a 60, sin judder); el escalón del tubo pasó de 24 a 30 Hz y el golpe es
+  `pulse * 0.15` (la media de lo que era `0.10 + 0.10·U` a 11 Hz, que ponía ±10 % de luz al azar en toda
+  la pared en la banda de 10–20 Hz). El golpe se sigue viendo por luz, cámara y tamaño. Medido con
+  `previews/shader-check/render.py` antes/después: moiré, textura y envolvente iguales o menores en los
+  6 tubos y las 2 orientaciones. Recompilar: `/usr/lib/qt6/bin/qsb --glsl "100 es,120,150" -o
+  shell/crt.frag.qsb shell/crt.frag`.

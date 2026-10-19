@@ -320,8 +320,11 @@ void main() {
     // hay señal, no una señal a media luz.
     col *= tubeLevel;
 
-    // static, worse mid-glitch
-    float n = hash21(fc + floor(t * 60.0));
+    // static, worse mid-glitch. Tanda 8: grano de película y no nieve por píxel — celdas de 2×2 px
+    // que cambian a 30 Hz (exacto: dos cuadros a 60, sin judder). Antes era un valor por píxel
+    // en CADA cuadro: lo de más alta frecuencia de la pantalla y lo único que cambiaba en todo
+    // el ancho a 60 Hz. Sigue siendo de media cero: el brillo no se mueve.
+    float n = hash21(floor(fc * 0.5) + floor(t * 30.0));
     float namp = noiseAmt * 0.14;
     // Tanda 8: la suciedad le da MOVIMIENTO al grano. Sin esto era ruido blanco
     // parejo: más sucio = más ruido, pero siempre la misma nieve quieta. Con
@@ -358,10 +361,13 @@ void main() {
     // El titileo. La parte fija es el tubo (60 Hz y su inestabilidad), pero lo
     // que se ve es el otro: `pulse` llega con cada golpe de la canción, así que
     // la pantalla late CON la música en vez de parpadear por su cuenta.
-    // el escalón al azar 24 veces por segundo es lo que hace que un tubo parezca
-    // vivo, pero de más se lee como una lámpara que falla: va bajito
-    col *= 1.0 - 0.022 * sin(t * 377.0) - 0.010 * hash11(floor(t * 24.0));
-    col *= 1.0 + pulse * (0.10 + 0.10 * hash11(floor(t * 11.0)));
+    // el escalón al azar es lo que hace que un tubo parezca vivo, pero de más se lee como una
+    // lámpara que falla: va bajito. A 30 Hz (era 24: caía con cadencia despareja sobre 60 Hz)
+    col *= 1.0 - 0.022 * sin(t * 377.0) - 0.010 * hash11(floor(t * 30.0));
+    // el golpe se ve como PICO de luz (la caída la da `beatAnim`). Tanda 8: sin el temblor al
+    // azar a 11 Hz que tenía (±10 % de luz en toda la pared, en la banda de 10–20 Hz donde el
+    // ojo es más sensible al parpadeo); el 0.15 es la media de lo que era 0.10 + 0.10·U(0,1)
+    col *= 1.0 + pulse * 0.15;
     // y en los picos, el apagón corto de una tele a la que le falta corriente
     col *= 1.0 - blink * 0.55;
     // el corte seco (tanda 8): el tema se calló y el tubo se queda sin corriente

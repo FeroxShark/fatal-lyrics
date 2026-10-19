@@ -73,5 +73,15 @@ class TestEmpujonDelDrop(unittest.TestCase):
         self.assertIn("1 + 0.75 * crt.ctl.dropZoomAmt", c)
 
 
+class TestVidrio(unittest.TestCase):
+    def test_grain_is_30hz_2px_cells_and_the_kick_has_no_11hz_jitter(self):
+        f = code(read("crt.frag"))
+        self.assertIn("hash21(floor(fc * 0.5) + floor(t * 30.0))", f)
+        self.assertNotIn("floor(t * 60.0)", f)
+        self.assertNotIn("floor(t * 11.0)", f)
+        self.assertNotIn("floor(t * 24.0)", f)
+        self.assertIn("col *= 1.0 + pulse * 0.15;", f)
+
+
 if __name__ == "__main__":
     unittest.main()

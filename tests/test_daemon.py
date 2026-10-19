@@ -783,6 +783,53 @@ class TestFastPollDecision(unittest.TestCase):
         self.assertFalse(fast)
 
 
+class TestLineFiresAtItsInstant(unittest.TestCase):
+    """La línea siguiente sale en su instante, no en el primer poll que la ve:
+    con 0.3 s fijos el cartel caía 0–300 ms tarde, parejo."""
+
+    LINES = [(0.0, "a"), (10.0, "b"), (20.0, "c")]
+
+    def _tick(self, pos, offset=0.0, lines=None, status="Playing"):
+        from cartelitos import lyrics as real
+        loop = make_loop(config=make_config(offset=offset),
+                         playerctl_state=mock.Mock(return_value=track(pos=pos, status=status)))
+        loop._lyr.current_line_index.side_effect = real.current_line_index
+        loop.track_id = "t1"
+        loop.lyrics = lines or self.LINES
+        loop.tick()
+        return loop._sleep.call_args.args[0]
+
+    def test_far_from_the_next_line_it_keeps_the_normal_poll(self):
+        self.assertEqual(self._tick(pos=5.0), daemon.POLL)
+
+    def test_close_to_the_next_line_it_sleeps_until_its_instant(self):
+        self.assertAlmostEqual(self._tick(pos=9.9), 0.1 + daemon.DUE_LEAD)
+
+    def test_the_offset_moves_the_wake_up_earlier(self):
+        # con offset 0.05 el show sale en pos 9.95: desde 9.9 faltan 0.05
+        self.assertAlmostEqual(self._tick(pos=9.9, offset=0.05), 0.05 + daemon.DUE_LEAD)
+
+    def test_the_sleep_never_drops_under_the_floor(self):
+        self.assertEqual(self._tick(pos=9.999), daemon.DUE_MIN_SLEEP)
+
+    def test_after_the_last_line_it_polls_normally(self):
+        self.assertEqual(self._tick(pos=50.0), daemon.POLL)
+
+    def test_paused_keeps_the_idle_poll(self):
+        self.assertEqual(self._tick(pos=9.9, status="Paused"), daemon.POLL_IDLE)
+
+    def test_the_time_the_tick_already_took_is_discounted(self):
+        from cartelitos import lyrics as real
+        clock = iter([0.0, 0.04])
+        loop = make_loop(playerctl_state=mock.Mock(return_value=track(pos=9.9)),
+                         monotonic=mock.Mock(side_effect=lambda: next(clock)))
+        loop._lyr.current_line_index.side_effect = real.current_line_index
+        loop.track_id = "t1"
+        loop.lyrics = self.LINES
+        loop.tick()
+        self.assertAlmostEqual(loop._sleep.call_args.args[0], 0.06 + daemon.DUE_LEAD)
+
+
 if __name__ == "__main__":
     unittest.main()
 

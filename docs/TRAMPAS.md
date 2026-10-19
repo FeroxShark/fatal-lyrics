@@ -223,8 +223,12 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   ese instante falta ~0 ms para la línea — cualquier condición sin memoria contesta "en ninguna"
   siempre. En un hueco largo aparece recién cuando faltan 8 s; antes de eso la pantalla es del
   motif. El log dice `crt: ring armed|zero|dash`.
-- **El aro llega a cero en la hora, pero la raya sale con la LÍNEA.** El `show` cae 0–300 ms
-  después del instante real (el poll del daemon): entre el cero y la línea el aro se queda quieto
+- **El aro llega a cero en la hora, pero la raya sale con la LÍNEA.** (Hasta 2026-10-19 el `show`
+  caía 0–300 ms tarde por el poll; ahora el daemon duerme hasta `due` — `_next_sleep`, margen
+  `DUE_LEAD` 20 ms — y queda un atraso de decenas de ms. El default `behavior.offset` bajó de 0.15
+  a 0.05 s: el 0.15 compensaba el atraso medio del poll, y con disparo exacto adelantaba 120 ms. El
+  `config.toml` de quien ya lo tenía escrito conserva el 0.15.) Si MPRIS devolviera una posición que
+  no avanza, el piso `DUE_MIN_SLEEP` evita girar en falso. Cuando el atraso existe: entre el cero y la línea el aro se queda quieto
   en "0.0", y recién cuando llega la frase sale la raya con la rotura. Un colapso que entrega en
   la hora se gasta el portero (`hit`) justo antes de la entrada, y una raya que se corta seco
   deja el aro apagado antes de que aparezca la letra. Si no llega en medio segundo, se apaga solo.

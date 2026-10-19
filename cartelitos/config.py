@@ -393,7 +393,7 @@ DEFAULTS = {
     "behavior": {
         "now_playing": True, "np_corner": "top-right", "np_margin": 14,
         "np_vinyl": True, "troll_no": True, "click_through": False,
-        "pause_clear": 15, "player": "spotify", "offset": 0.15,
+        "pause_clear": 15, "player": "spotify", "offset": 0.05,
         "game_pause": True, "sing": False,
     },
     "system": {

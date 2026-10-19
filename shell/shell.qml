@@ -1859,7 +1859,7 @@ ShellRoot {
         // `due` es el instante en que el daemon va a mandar el `show`, ya con
         // su offset descontado; el `t0` pelado es el fallback para un daemon
         // viejo y para los drivers de `docs/plans/`, y llega tarde por el
-        // offset (0.15 s de fábrica, más lo que haya ajustado el sync).
+        // offset (0.05 s de fábrica, más lo que haya ajustado el sync).
         const due = nx.due !== undefined ? nx.due : (nx.t0 || 0);
         crtNextAt = Date.now() + Math.max(due - songPos(), 0) * 1000;
         // "la letra prende el tubo" (tanda 6, corrida 0): si el próximo verso

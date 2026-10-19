@@ -20,6 +20,13 @@ from .util import acquire_instance_lock, instance_lock_holder, log, mark_ready
 
 POLL = 0.3
 POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
+# La línea siguiente se dispara EN SU INSTANTE, no en el primer poll que la ve
+# (que cae 0–300 ms tarde, parejo): cuando `due` queda a menos de un POLL, el
+# loop duerme justo hasta ahí. LEAD es el margen para despertar un pelo DESPUÉS
+# (con pos < due el show no sale y se pierde la vuelta); MIN, el piso para no
+# girar en falso si MPRIS da una posición que no avanza.
+DUE_LEAD = 0.02
+DUE_MIN_SLEEP = 0.03
 # T4.5: silencio con la letra cargada y el tema sonando. Un instrumental largo
 # (una intro, un solo, el puente) deja la pantalla vacía y parece que el
 # programa se murió. Que se cuelgue A PROPÓSITO, como un programa de Windows,
@@ -162,6 +169,9 @@ class DaemonLoop:
         self.last_pos = 0.0
         self.last_show_at = 0.0
         self.hang_sent = False
+        # segundos (de posición cruda) que faltan para el próximo `show`, tal
+        # como los dejó el último handle_track; None = no hay próximo conocido
+        self.next_due_in = None
         # T5.2: el modo karaoke. `voice_active` es "hay letra sonando ahora":
         # sin canción no se está cantando, se está hablando.
         self.sing = SingGate()
@@ -228,6 +238,7 @@ class DaemonLoop:
         # lo que suena (con la funda apagada no se manda ninguno), y el modo
         # instrumental se queda sin nada que decir hasta el tema siguiente. Se
         # reenvía UNA vez, cuando el interruptor pasa de apagado a prendido.
+        self.next_due_in = None
         crt_now = self._config.crt_on()
         if crt_now and not self.crt_was_on:
             self.resend_np = True
@@ -354,6 +365,8 @@ class DaemonLoop:
                 # persistida de sesiones pasadas más lo que se ajustó ahora)
                 pos_offset = self._config.CFG["behavior"]["offset"] + self.session_offset
                 i = self._lyr.current_line_index(self.lyrics, t["pos"] + pos_offset)
+                if i + 1 < len(self.lyrics):
+                    self.next_due_in = self.lyrics[i + 1][0] - pos_offset - t["pos"]
                 if i != self.idx:
                     self.idx = i
                     line = self.lyrics[i] if i >= 0 else None
@@ -488,7 +501,23 @@ class DaemonLoop:
             return
 
         fast = self.handle_track(t, now)
-        self._sleep(POLL if fast else POLL_IDLE)
+        self._sleep(self._next_sleep(fast, now))
+
+    def _next_sleep(self, fast, now):
+        """Cuánto dormir hasta la próxima vuelta. Con la letra sincronizada
+        sonando, si la línea siguiente cae antes del próximo poll se duerme
+        hasta ella (descontando lo que ya tardó este tick): el cartel entra
+        cuando se canta y no hasta 300 ms después, y el aro del tubo — que
+        cuenta contra `due` — ya no llega a cero con el texto todavía sin salir."""
+        if not fast:
+            return POLL_IDLE
+        due_in = self.next_due_in
+        if due_in is None:
+            return POLL
+        due_in -= self._monotonic() - now
+        if due_in >= POLL:
+            return POLL
+        return max(due_in + DUE_LEAD, DUE_MIN_SLEEP)
 
     def run(self):
         """El while True de siempre, delegando cada vuelta a tick()."""

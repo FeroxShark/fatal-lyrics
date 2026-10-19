@@ -534,7 +534,7 @@ because there is nothing to install.
 | `behavior` | `click_through`      | Dialogs don't capture the mouse                                    | `false`     |
 | `behavior` | `pause_clear`        | Seconds paused before clearing everything (`0` = never)            | `15`        |
 | `behavior` | `player`             | MPRIS player name (`playerctl -l`)                                 | `"spotify"` |
-| `behavior` | `offset`             | Sync lead time in seconds                                          | `0.15`      |
+| `behavior` | `offset`             | Sync lead time in seconds                                          | `0.05`      |
 | `behavior` | `game_pause`         | Auto-pause when a window goes fullscreen (any game, no process list needed; **Hyprland-only**, see [Known Limitations](#known-limitations)) | `true` |
 | `system`   | `not_a_game`         | Fullscreen window classes that never count as "a game" for `game_pause` (browsers, video/music players), matched as a substring | `["chrome", "chromium", "firefox", "zen", "brave", "vivaldi", "librewolf", "waterfox", "epiphany", "mpv", "vlc", "celluloid", "haruna", "totem", "spotify", "netflix", "youtube"]` |
 | `crt`      | `enabled`            | Start with the tube on (live switch: `fatal crt on/off`)           | `false`     |

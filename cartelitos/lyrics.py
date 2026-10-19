@@ -887,6 +887,8 @@ VOICE_TAIL_BLIND = 0.6      # ...y la cola cuando el largo es todo lo que hay
 VOICE_MIN_GAP = 1.7
 
 
+CHORUS_GAP_WORDS = 2       # un adlib de hasta estas palabras entre dos líneas de estribillo no corta la tanda
+CHORUS_GAP_LINES = 2       # y se tolera una racha de hasta estas líneas
 CHORUS_MIN_WORDS = 3        # una línea repetida de menos palabras es un golpe, no un estribillo
 
 
@@ -897,7 +899,10 @@ def repeat_map(lines):
     compara normalizada (`seg_key` por palabra: sin mayúsculas ni puntuación ni
     espacios de más). `n` es cuántas veces aparece, `k` cuál de ellas es (de 1 a
     n) y `chorus` es `n >= 2` con al menos tres palabras: "yeah yeah" repetido
-    es un golpe, no un estribillo. Una línea vacía nunca cuenta como repetida."""
+    es un golpe, no un estribillo. Una línea vacía nunca cuenta como repetida.
+
+    Una racha de hasta dos líneas cortas (adlibs de 2 palabras o menos) entre dos
+    líneas de estribillo también va como `chorus`: no parte la tanda."""
     keys = [" ".join(k for k in (seg_key(w) for w in (ln[1] or "").split()) if k)
             for ln in lines or ()]
     total = {}
@@ -913,6 +918,24 @@ def repeat_map(lines):
         n = total[key]
         out.append({"n": n, "k": seen[key],
                     "chorus": n >= 2 and len(key.split()) >= CHORUS_MIN_WORDS})
+    # un adlib ("oh", "yeah") metido en el estribillo lo parte en dos: el
+    # quemado se apaga y la tensión baja a mitad de tanda. Se cierran los
+    # huecos de líneas cortas entre dos líneas de estribillo; n y k quedan como
+    # están (no es una repetición: sólo cuenta como parte de la tanda).
+    i = 0
+    while i < len(out):
+        if out[i]["chorus"] or not keys[i] or len(keys[i].split()) > CHORUS_GAP_WORDS:
+            i += 1
+            continue
+        j = i
+        while (j < len(out) and not out[j]["chorus"] and keys[j]
+               and len(keys[j].split()) <= CHORUS_GAP_WORDS):
+            j += 1
+        if (i > 0 and out[i - 1]["chorus"] and j < len(out) and out[j]["chorus"]
+                and j - i <= CHORUS_GAP_LINES):
+            for m in range(i, j):
+                out[m]["chorus"] = True
+        i = j
     return out
 
 

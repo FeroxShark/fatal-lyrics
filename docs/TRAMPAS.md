@@ -1161,3 +1161,20 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **El digest de `test_the_event_for_a_fixed_pcm_is_the_same_as_before` es a propósito:** fija 40 eventos de
   `feed()` con PCM determinista. Un cambio de DSP legítimo lo rompe: regenerar el sha1 y decir por qué en el
   commit. Si rompe SIN tocar el DSP, mirar primero si el redondeo a 3 decimales cambió por la libm de la máquina.
+
+## Tanda 50: daemon de letras (portada, proveedores, estribillo)
+
+- **`art.album_colors` con `tmp` sin inicializar**: si `urlopen` fallaba, el `finally` tiraba
+  `UnboundLocalError`, el hilo moría sin mandar `colors: []` (la paleta vieja quedaba) y el fallo
+  se cacheaba hasta reiniciar. Ahora un fallo no entra al `_art_cache` y el próximo play reintenta.
+- **`fetch_lyrics` no es una cadena en serie**: `lrclib_get` va solo; si no acierta, `lrclib_search` y
+  NetEase salen a la vez en hilos, pero el resultado se lee en el orden de `PROVIDERS` (manda la
+  confianza, no quién terminó antes). Un proveedor que devolvió `error` se descarta POR NOMBRE para
+  el resto de la búsqueda, también en la vuelta del título limpio (un `lrclib_get` caído no prueba
+  `lrclib_search`: es el mismo server). Un proveedor nuevo con otro nombre corre en paralelo con el resto.
+- **`repeat_map` cierra huecos**: una racha de hasta 2 líneas de <=2 palabras entre dos líneas de
+  estribillo va como `chorus` (n y k intactos), si no el quemado (`Crt.qml`, `burnFade("verso")`) y
+  el escalón de la tensión se cortaban en cada adlib. No se tocó el QML: la doc de `crt.burnin` dice
+  que una línea que NO es estribillo y asienta apaga el quemado, y el código hace eso; los "~6 s" son
+  del otro disparador (`burnHoldTimer`, sin línea de estribillo). Es decir, no había gracia prometida.
+- `purge_cache` y `purge_profiles` corren en un hilo (`_purge_caches`) después de `mark_ready` (antes leían todos los JSON en el arranque).

@@ -325,7 +325,7 @@ class TestLyricsEvent(unittest.TestCase):
 
     def test_a_repeated_chorus_carries_its_occurrence(self):
         out = self.sent()
-        c.lyrics_list([(0.0, "la la la la"), (2.0, "verse"), (4.0, "La la, la la!")])
+        c.lyrics_list([(0.0, "la la la la"), (2.0, "verse one goes here"), (4.0, "La la, la la!")])
         reps = [ln["rep"] for ln in out[0]["lines"]]
         self.assertEqual(reps, [{"n": 2, "k": 1, "chorus": True}, {"n": 1, "k": 1, "chorus": False},
                                 {"n": 2, "k": 2, "chorus": True}])
@@ -3032,6 +3032,28 @@ class TestRepeatMap(unittest.TestCase):
 
     def test_two_words_are_still_not_a_chorus(self):
         self.assertFalse(any(r["chorus"] for r in self.rep("oh baby", "oh baby")))
+
+    def test_a_short_adlib_inside_the_chorus_does_not_cut_it(self):
+        A = "we are the champions"
+        out = self.rep(A, A, "oh", A)
+        self.assertEqual([r["chorus"] for r in out], [True, True, True, True])
+        self.assertEqual((out[2]["n"], out[2]["k"]), (1, 1))     # no es una repetición
+        out = self.rep(A, "oh", "yeah yeah", A)                   # racha de dos
+        self.assertEqual([r["chorus"] for r in out], [True] * 4)
+
+    def test_only_short_gaps_between_choruses_are_closed(self):
+        A = "we are the champions"
+        # variante larga: sí corta
+        self.assertEqual([r["chorus"] for r in self.rep(A, "a whole other line", A)],
+                         [True, False, True])
+        # adlib al borde (sin estribillo de un lado): no se contagia
+        self.assertEqual([r["chorus"] for r in self.rep("oh", A, A, "oh")],
+                         [False, True, True, False])
+        # tres líneas cortas: demasiado hueco
+        self.assertEqual([r["chorus"] for r in self.rep(A, "oh", "ah", "eh", A)],
+                         [True, False, False, False, True])
+        # una línea vacía (instrumental) corta
+        self.assertEqual([r["chorus"] for r in self.rep(A, "", A)], [True, False, True])
 
     def test_case_and_punctuation_do_not_matter(self):
         out = self.rep("Take me home,", "take   ME home!!", "  TAKE me... home")

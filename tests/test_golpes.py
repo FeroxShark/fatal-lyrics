@@ -192,6 +192,7 @@ class CharTests(unittest.TestCase):
 
     def test_tracker_is_stable_and_only_sends_real_changes(self):
         tr = audio.CharTracker()
+        tr.seed(0.3)
         msgs = []
         t = 0.0
         for i in range(60):       # un minuto, una vez por segundo, golpe a golpe
@@ -201,7 +202,7 @@ class CharTests(unittest.TestCase):
                 msgs.append(m)
             t += 1.0
         self.assertEqual(msgs[0]["cmd"], "char")
-        self.assertLessEqual(len(msgs), 2)            # el jitter no se manda
+        self.assertEqual(len(msgs), 1)                # el jitter no se manda
         # un cambio de verdad (el tema se agita) sí, y llega en unos segundos
         sent = None
         for _ in range(20):

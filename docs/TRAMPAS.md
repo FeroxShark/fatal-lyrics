@@ -1392,3 +1392,31 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   lo compara byte a byte).
 - **Los comentarios de cabecera de `Membrana`, `Cintas` y `Giroscopio` decían "NO está en el
   sorteo"** y ya están en `motifGroups` desde que pasaron al CRT; un test mira que no vuelva.
+
+## Vidrio del tubo: contorno, reflejo y convergencia (tanda 9, 2026-10-19)
+
+- **El contorno es una caja redondeada con SDF, no un `step()`.** `crt.frag` mide la distancia al
+  borde en unidades del lado CORTO (`sSide`: la vertical redondea igual que la horizontal) y la
+  suaviza con un píxel de PANTALLA (`max(kx, ky) / sSide`, las derivadas se toman antes del
+  glitch: el salto de una banda las dispararía). Las esquinas que ya empujaba el barril se cortan
+  ahora con radio 0.045; no tapa letra (centro y esquinas del banco, mismas posiciones de texto).
+- **Bisel y filo van ADENTRO del borde, el reflejo y el filo mueren con `cutDim`.** El bisel
+  (14 px a 1080p, -22 %) multiplica; el filo de fósforo (`tint * 0.03`, ~1.6 px) y el reflejo son
+  sumas y van después del corte seco y del golpe de vuelta, escaladas por `(1 - cutDim)`: el corte
+  sigue llegando a negro. El reflejo (elipse de luz de ventana, pico +0.026 ≈ 7/255 sobre el
+  negro, arriba a la izquierda) está en coordenadas de PANTALLA, no del uv deformado: no tiembla
+  con las bandas del glitch. Un reflejo más grande ya se lee como un velo sobre los negros.
+- **`smoothstep(e0, e1, x)` con `e0 >= e1` es indefinido en GLSL.** Había tres con los bordes
+  invertidos (brillo del vidrio, destello del degauss, barra que rueda); ahora
+  `1.0 - smoothstep(0.0, e, x)`, que da lo mismo donde la GPU lo interpretaba bien. El test
+  `test_no_inverted_smoothstep_edges` lo vigila en todo el shader.
+- **La convergencia crece hacia afuera:** `chroma * 0.0016 * conv`, `conv` = 0.3 en el centro y 1
+  en las esquinas (función de la posición en pantalla), más una pizca vertical (22 % hacia arriba y
+  abajo). En el banco (arcade, chroma 0.8) el desfase R/B del texto del centro baja de 4 px a 1 px;
+  la perilla sigue siendo el techo y los tubos green/amber (chroma 0) no cambian. El término del
+  glitch (`glitch * 0.007`) sigue parejo en toda la pantalla.
+- **El banco `previews/shader-check/render.py` sube `moire` (0.03-0.06 → 0.06-0.10) en los tubos
+  suaves** porque el reflejo y el bisel son baja frecuencia a propósito; el arcade/pvm (1.1 / 0.25)
+  no se mueven. Capturas y recortes ×4 en `docs/tanda8-estado/vidrio/`.
+- **`crt.frag.qsb` está commiteado y se compara con el fuente** (`tests/test_vidrio_tubo.py`): si
+  tocás el shader y el test falla, recompilá con el comando del header.

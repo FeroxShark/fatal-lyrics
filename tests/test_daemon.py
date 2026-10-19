@@ -1183,3 +1183,67 @@ class TestPausedPos(unittest.TestCase):
         evs = self.pos_events(loop)
         self.assertEqual([e["p"] for e in evs], [10.0, 60.0])
         self.assertTrue(all(e["pl"] is False for e in evs))
+
+
+class TestSeekWhilePaused(unittest.TestCase):
+    """Rebobinar o adelantar con la música parada tiene que cambiar la letra:
+    un `show` de la línea nueva, sin `v_end` (el aro contaría contra el reloj de
+    pared) y sin un `clear` que deje la pared vacía."""
+
+    LYRICS = [(0.0, "uno"), (10.0, "dos"), (20.0, "tres")]
+
+    def paused_loop(self):
+        loop = make_loop()
+        loop.track_id = "t1"
+        loop.lyrics = self.LYRICS
+        loop.lyrics_kind = "synced"
+        loop._lyr.voice_end.return_value = 18.0
+        loop._lyr.current_line_index.side_effect = (
+            lambda ls, p: max([k for k, ln in enumerate(ls) if ln[0] <= p], default=-1))
+        loop.handle_track(track(pos=25.0), 5.0)          # sonando en "tres"
+        loop.handle_track(track(status="Paused", pos=25.0), 5.3)
+        loop._ipc.show.reset_mock()
+        loop._ipc.clear.reset_mock()
+        return loop
+
+    def test_seek_back_in_pause_shows_the_new_line(self):
+        loop = self.paused_loop()
+        loop.handle_track(track(status="Paused", pos=12.0), 5.6)
+        loop._ipc.clear.assert_not_called()
+        loop._ipc.show.assert_called_once()
+        args, kw = loop._ipc.show.call_args
+        self.assertEqual(args[0], "dos")
+        self.assertIsNone(kw["v_end"])
+
+    def test_seek_forward_in_pause_shows_the_new_line(self):
+        loop = self.paused_loop()
+        loop.handle_track(track(status="Paused", pos=2.0), 5.6)
+        loop.handle_track(track(status="Paused", pos=15.0), 5.9)
+        self.assertEqual([c.args[0] for c in loop._ipc.show.call_args_list], ["uno", "dos"])
+        loop._ipc.clear.assert_not_called()
+
+    def test_a_quiet_pause_shows_nothing(self):
+        loop = self.paused_loop()
+        loop.handle_track(track(status="Paused", pos=25.0), 5.6)
+        loop._ipc.show.assert_not_called()
+        loop._ipc.clear.assert_not_called()
+
+    def test_seek_before_the_first_line_clears(self):
+        loop = self.paused_loop()
+        loop.lyrics = [(5.0, "uno"), (10.0, "dos")]
+        loop.handle_track(track(status="Paused", pos=1.0), 5.6)
+        loop._ipc.show.assert_not_called()
+        loop._ipc.clear.assert_called_once_with(why="seek")
+
+    def test_resuming_resends_the_line_with_its_v_end(self):
+        loop = self.paused_loop()
+        loop.handle_track(track(status="Paused", pos=12.0), 5.6)
+        loop._ipc.show.reset_mock()
+        loop.handle_track(track(status="Playing", pos=12.0), 6.0)
+        loop._ipc.show.assert_called_once()
+        self.assertEqual(loop._ipc.show.call_args.kwargs["v_end"], 18.0)
+
+    def test_a_paused_seek_does_not_start_the_hang_clock(self):
+        loop = self.paused_loop()
+        loop.handle_track(track(status="Paused", pos=12.0), 100.0)
+        loop._ipc.hang.assert_not_called()

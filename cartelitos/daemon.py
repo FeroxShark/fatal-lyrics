@@ -181,6 +181,8 @@ class DaemonLoop:
         self.last_pos_sent = 0.0
         # posición del último `pos` mandado en pausa (None = sonando)
         self.paused_pos_sent = None
+        # se mostró una línea con la música parada (seek en pausa): sin `v_end`
+        self.paused_show = False
         self.last_pos = 0.0
         self.last_show_at = 0.0
         self.hang_sent = False
@@ -261,6 +263,8 @@ class DaemonLoop:
             self.resend_np = True
         self.crt_was_on = crt_now
 
+        playing = t["status"] == "Playing"
+        was_paused = self.pause_started is not None
         # música en pausa mucho tiempo → limpiar carteles colgados
         if t["status"] == "Paused":
             if self.pause_started is None:
@@ -285,6 +289,11 @@ class DaemonLoop:
         else:
             self.pause_started = None
             self.pause_cleared = False
+            # la línea que se mostró en pausa salió sin `v_end` (el aro contaría
+            # contra el reloj de pared): al dar play se reenvía con él
+            if self.paused_show:
+                self.paused_show = False
+                self.idx = -1
             # la pausa larga escondió la funda: al retomar, mostrarla de nuevo
             if self.resend_np:
                 self.resend_np = False
@@ -298,10 +307,19 @@ class DaemonLoop:
 
         # el usuario saltó para atrás en el mismo tema (rebobinó, repitió un
         # verso): la línea vieja quedaba pegada porque `idx` sólo avanza
-        if t["id"] == self.track_id and t["pos"] < self.last_pos - 2.0:
+        paused_seek = False
+        if t["id"] == self.track_id and playing and t["pos"] < self.last_pos - 2.0:
             self.idx = -1
             self._ipc.clear(why="seek")
             self._log("seek back: reset")
+        elif (t["id"] == self.track_id and was_paused and not playing
+                and abs(t["pos"] - self.last_pos) > 1.0):
+            # rebobinar o adelantar CON LA MÚSICA PARADA: la posición cambia sin
+            # que suene nada. Sin clear (en el tubo vaciaría la línea y la pared
+            # caería a NO SIGNAL): se muestra la línea de la posición nueva.
+            paused_seek = True
+            self.idx = -1
+            self._log("seek while paused: reshow")
         self.last_pos = t["pos"]
 
         if t["id"] != self.track_id:
@@ -387,7 +405,7 @@ class DaemonLoop:
                 and self.profile is not None and self.profile.conf >= 0.6):
             self._send_mood()
 
-        if self.lyrics and t["status"] == "Playing":
+        if self.lyrics and (playing or paused_seek):
             if self.lyrics_kind == "plain":
                 # lrclib no tiene la letra sincronizada para este tema, sólo el
                 # texto entero: un cartel único con el arranque, no una línea
@@ -405,9 +423,13 @@ class DaemonLoop:
                 i = self._lyr.current_line_index(self.lyrics, t["pos"] + pos_offset)
                 if i + 1 < len(self.lyrics):
                     self.next_due_in = self.lyrics[i + 1][0] - pos_offset - t["pos"]
-                if i != self.idx:
+                if i != self.idx or paused_seek:
                     self.idx = i
                     line = self.lyrics[i] if i >= 0 else None
+                    if paused_seek and not (line and line[1]):
+                        # la posición nueva cae antes de la letra o en un hueco:
+                        # lo que había ya no es lo que suena ahí
+                        self._ipc.clear(why="seek")
                     if line and line[1]:
                         t1 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else line[0] + 5
                         # el tercer campo (tiempos por palabra) es de T1.1: una
@@ -419,8 +441,12 @@ class DaemonLoop:
                         # contra el instante en que ESTE daemon va a mandar el
                         # próximo `show`, no contra el `t0` pelado de la letra
                         nxt_t0 = self.lyrics[i + 1][0] if i + 1 < len(self.lyrics) else None
-                        v_end = self._lyr.voice_end(line[0], line[1], words,
-                                                    nxt_t0) - pos_offset
+                        # en pausa no hay `v_end`: el aro lo cuenta contra el reloj
+                        # de pared y arrancaría solo con la música parada
+                        v_end = None if not playing else self._lyr.voice_end(
+                            line[0], line[1], words, nxt_t0) - pos_offset
+                        if not playing:
+                            self.paused_show = True
                         self._ipc.show(line[1], t["title"], line[0], t1, words,
                                        nxt=self._ipc.next_line(self.lyrics, i,
                                                                pos_offset),
@@ -430,7 +456,7 @@ class DaemonLoop:
             # silencio largo con la letra cargada: el programa se cuelga solo.
             # Con la letra sin sincronizar no aplica: ahí no viene ninguna línea
             # más por diseño, no porque el tema se haya quedado callado.
-            if (self.lyrics_kind != "plain" and not self.hang_sent
+            if (playing and self.lyrics_kind != "plain" and not self.hang_sent
                     and now - self.last_show_at > HANG_AFTER):
                 self.hang_sent = True
                 self._log("long silence: fatal-lyrics is not responding")

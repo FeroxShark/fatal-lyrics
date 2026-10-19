@@ -56,6 +56,7 @@ class Bench:
         self.t0 = time.time()
         self.next_beat = self.t0 + BEAT
         self.n = 0
+        self.level = 0.5
 
     def run(self, sec):
         """Tiempo real: reloj, un `tick` por tiempo, y deja pasar `sec` segundos."""
@@ -69,6 +70,8 @@ class Bench:
                 self.root.setProperty("tick", self.n)
                 self.root.setProperty("beat", self.n)
                 self.root.setProperty("kick", self.n)
+                # el volumen llega vivo (14 Hz): el ekg se calla si no cambia en 2 s
+                self.root.setProperty("level", self.level + 0.04 * (self.n % 2))
             self.app.processEvents()
             time.sleep(0.004)
 
@@ -90,25 +93,25 @@ def scene(kind, tag):
     b = Bench(kind)
     shots = []
     if kind == "radar":
-        b.root.setProperty("level", 0.55)
+        b.level = 0.55
         b.run(1.0)
         for i in range(4):
             b.run(0.9)
             shots.append((f"radar +{i * 0.9 + 1.0:.1f}s", b.grab()))
     elif kind == "rain":
-        b.root.setProperty("level", 0.5)
+        b.level = 0.5
         b.run(3.0)
         shots.append(("lluvia", b.grab()))
         b.run(1.0)
         shots.append(("lluvia +1s", b.grab()))
     elif kind == "ekg":
-        b.root.setProperty("level", 0.6)
+        b.level = 0.6
         b.run(6.5)
         shots.append(("ekg", b.grab()))
         b.run(1.7)
         shots.append(("ekg +1.7s", b.grab()))
     elif kind == "textsea":
-        b.root.setProperty("level", 0.5)
+        b.level = 0.5
         b.root.setProperty("lines", [{"t0": i, "t1": i + 1, "text": s} for i, s in enumerate(LETRA)])
         b.root.setProperty("linesSynced", True)
         b.root.setProperty("lineNo", 20)
@@ -118,14 +121,14 @@ def scene(kind, tag):
         b.run(1.5)
         shots.append(("textsea (verso 21)", b.grab()))
     elif kind == "harmonograph":
-        b.root.setProperty("level", 0.5)
+        b.level = 0.5
         b.run(3.5)
         for i in range(3):
             b.run_to_beat(0.0)
             shots.append((f"harmonograph t={time.time() - b.t0:.1f}s", b.grab()))
             b.run(4.0)
     elif kind == "vector":
-        b.root.setProperty("level", 0.5)
+        b.level = 0.5
         b.run(2.0)
         for k in range(2):
             b.run_to_beat(0.03)

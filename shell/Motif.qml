@@ -13,6 +13,7 @@
 //   · line traces that must change repaint at 30 Hz, never per frame
 //   · anything made of many pieces is plain rectangles moved by bindings
 import QtQuick
+import QtQuick.Shapes
 
 Item {
     id: motif
@@ -642,12 +643,42 @@ Item {
                     opacity: 0.35
                 }
 
-                // la aguja
+                // la aguja y su estela: una cuña de 50° con alfa decreciente DETRÁS de la
+                // aguja (gradiente cónico: 0 = la aguja, sube hacia atrás). Es geometría
+                // estática que gira con la aguja: no cuesta nada por cuadro
                 Item {
                     anchors.centerIn: parent
                     width: radar.width
                     height: radar.height
                     rotation: radar.angle
+
+                    Shape {
+                        anchors.fill: parent
+                        preferredRendererType: Shape.GeometryRenderer
+                        ShapePath {
+                            strokeWidth: -1
+                            fillGradient: ConicalGradient {
+                                centerX: radar.width / 2
+                                centerY: radar.height / 2
+                                angle: 0
+                                GradientStop { position: 0.0; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0.5) }
+                                GradientStop { position: 0.04; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0.28) }
+                                GradientStop { position: 0.14; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0) }
+                                GradientStop { position: 1.0; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0) }
+                            }
+                            startX: radar.width / 2
+                            startY: radar.height / 2
+                            PathLine { x: radar.width; y: radar.height / 2 }
+                            PathArc {
+                                x: radar.width / 2 + radar.width / 2 * Math.cos(-50 * Math.PI / 180)
+                                y: radar.height / 2 + radar.width / 2 * Math.sin(-50 * Math.PI / 180)
+                                radiusX: radar.width / 2
+                                radiusY: radar.width / 2
+                                direction: PathArc.Counterclockwise
+                            }
+                            PathLine { x: radar.width / 2; y: radar.height / 2 }
+                        }
+                    }
 
                     Rectangle {
                         x: parent.width / 2
@@ -662,21 +693,26 @@ Item {
                     }
                 }
 
-                // ecos que aparecen con el golpe
+                // los ecos se ENCIENDEN cuando la aguja pasa por su ángulo y se apagan en
+                // unos 90° (la memoria del barrido: lo que hace que se lea como radar). El
+                // golpe sólo suma un poco, ya no los prende a todos a la vez
                 Repeater {
-                    model: radar.visible ? 5 : 0
+                    model: radar.visible ? 7 : 0
 
                     Rectangle {
                         required property int index
                         readonly property real ang: index * 2.31
                         readonly property real rad: radar.width * (0.16 + (index % 3) * 0.14)
+                        // grados que lleva la aguja pasada del eco (0 = recién pasó)
+                        readonly property real age: (((radar.angle - ang * 180 / Math.PI) % 360) + 360) % 360
+                        readonly property real lit: age < 90 ? Math.pow(1 - age / 90, 1.6) : 0
                         x: radar.width / 2 + Math.cos(ang) * rad - width / 2
                         y: radar.height / 2 + Math.sin(ang) * rad - height / 2
-                        width: radar.width * (0.02 + 0.02 * motif.punch)
+                        width: radar.width * (0.018 + 0.016 * lit + 0.012 * motif.punch)
                         height: width
                         radius: width / 2
-                        color: motif.hot
-                        opacity: 0.25 + 0.7 * motif.punch
+                        color: age < 20 ? motif.hot : motif.colour
+                        opacity: Math.min(1, 0.07 + 0.93 * lit + 0.2 * motif.punch)
                     }
                 }
             }

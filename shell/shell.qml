@@ -651,6 +651,28 @@ ShellRoot {
     // empieza a apretar ANTES, que es lo que hace que el golpe caiga en tiempo
     readonly property bool building: audComing !== "" && (Date.now() - audComingAt) < 2200
 
+    // tanda 50, r3.2: el nivel que late en toda la pared. Sus tres entradas (`audLevel`,
+    // `sectionEnergy`, `building`) son del root, así que antes cada pantalla corría su Timer de
+    // 70 ms y su Behavior para calcular el MISMO número. Ahora hay UNO acá; cada `Crt` lo lee en
+    // `pump` mientras no esté en reposo (en reposo congela el suyo, como antes). El Timer se frena
+    // cuando TODAS las pantallas están en reposo (`crtRestingCount`, lo mantiene `Crt.qml`).
+    property real crtPump: 0.35
+    Behavior on crtPump { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+    property int crtRestingCount: 0
+    Timer {
+        interval: 70
+        repeat: true
+        running: root.crtOn && root.crtRestingCount < root.activeCrtScreens.length
+        triggeredOnStart: true
+        onTriggered: {
+            // el nivel del momento, pero pesado por la parte del tema: el mismo
+            // volumen no significa lo mismo en el silencio que en el estribillo
+            const base = root.audLive ? root.audLevel : 0.35;
+            const boost = root.sectionEnergy * (root.building ? 1.15 : 1);
+            root.crtPump = Math.min(base * boost, 1.3);
+        }
+    }
+
     // estado del Now Playing (ventana propia, no es un diálogo);
     // compartido entre pantallas para que la animación vaya sincronizada
     property bool npShown: false
@@ -2195,7 +2217,11 @@ ShellRoot {
     // Tanda 8: el Behavior era de `holdMs` (1.5 s) ENCIMA de los ~1.5 s del daemon, y la
     // estática llegaba tres segundos tarde. `levelMs` alcanza para tapar el escalón.
     property real crtDirt: audLive ? audDirt : 0
-    Behavior on crtDirt { NumberAnimation { duration: Motion.levelMs } }
+    // Tanda 50, r3.1: con el audio vivo SIN Behavior. Llegan ~25 `aud`/s ya suavizados por el
+    // daemon (`_smooth_dirt`), así que una animación de `levelMs` encima nunca terminaba y
+    // cambiaba `crtDirtMult` en cada cuadro (un filtro, ver TRAMPAS: Behavior sobre lo que se
+    // reescribe solo). Sólo queda para el escalón que no suaviza nadie: la música que se corta.
+    Behavior on crtDirt { enabled: !root.audLive; NumberAnimation { duration: Motion.levelMs } }
     readonly property real crtDirtMult: 1 + (pace.dirtMin
         + (pace.dirtMax - pace.dirtMin) * crtDirt - 1) * crtDirtAmount
     Timer {

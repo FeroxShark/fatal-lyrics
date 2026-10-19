@@ -1258,3 +1258,28 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - `#505050` sobre `#c0c0c0` daba ~4.4:1 (no llegaba al 4.5 de AA); `#404040` da ~5.7:1.
 - NO poner `FontLoader` en Ajustes: los carteles (`shell.qml`, el título y el cuerpo, `font.pixelSize` sin `font.family`) ya van en la sans del sistema. Las fuentes por tema (VT323, Plex, Space…) son sólo de la letra CRT (`Crt.qml`). Una ventana de Ajustes con otra fuente rompe el "misma pinta que los carteles" del encabezado de `settings.qml`.
 
+
+## Tanda 50: rendimiento del tubo y del overlay (2026-10-19)
+
+- **Tubo apagado de verdad = `tubeIdle`** (`tubeDark && tubeLevel < 0.01`): reloj a 5 fps (Timer), sin
+  `FrameAnimation`, `stageTex`/`signalTex` no vivos, sin estela. El vidrio (`glass`) NO se oculta: el 3 % de
+  ruido de fósforo es lo único que se ve y, ocultándolo, la capa Overlay quedaría transparente sobre el
+  escritorio. Se despierta en cuanto cae `tubeDark`, antes de que `tubeLevel` suba.
+- **NO SIGNAL a 60 Hz durante 3 min era el costo más grande sin música:** el plazo del `deepSleep` de
+  standby bajó a 60 s. No se baja la tasa (el zumbido de 60 Hz vive en `tubeTime` y se aliasearía). La pausa
+  con letra puesta sigue en 3 min (ahí el tubo ya va a 15 fps).
+- **Despertar del `deepSleep` con puente:** `sleepMix` (Behavior de `Motion.bridgeMs`) multiplica la
+  estática; antes volvía de golpe. Con `sleepMix` ya no hay rama `deepSleep ? 0` en `noiseAmt`.
+- **`crtDirt` sin Behavior mientras el audio está vivo:** ~25 `aud`/s ya suavizados por el daemon, y una
+  animación de 420 ms encima nunca terminaba (un filtro, igual que el Behavior sobre lo que se reescribe
+  solo). Queda sólo para cuando se corta la música (`enabled: !audLive`).
+- **`pump` vive en el root (`crtPump`):** un Timer de 70 ms y un Behavior para toda la pared, no uno por
+  pantalla. Cada `Crt` lo lee con un `Binding { when: visible && !resting }` (en reposo congela el suyo). El
+  Timer del root se frena con `crtRestingCount == pantallas` (lo mantiene `Crt.qml`, incluido
+  `Component.onDestruction`): si agregás otra forma de salir del reposo, tiene que pasar por `resting`.
+- **Poll de la letra (80 ms) frenado con `resting`:** el reveal ya quedó fijo; `triggeredOnStart` lo pone al
+  día con el primer `pos`/`aud`.
+- **Descartado (r8.2), precalentar los `ShaderEffect` del tubo:** los `Crt` existen siempre pero su
+  ventana layer-shell sólo se muestra con `tubeOn`; precalentar exigiría mostrar una superficie sobre el
+  escritorio de Ferox, y el tirón de compilar sólo se mide en la placa real con el compositor (el banco
+  offscreen/software no lo representa). Si alguien lo mide ≥ 50 ms en vivo, reabrirlo.

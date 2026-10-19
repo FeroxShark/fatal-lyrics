@@ -158,6 +158,10 @@ PanelWindow {
     readonly property bool rareNoSignalOn: ctl.crtRare.kind === "nosignal"
         && ctl.crtRare.screen === idx
     property real tubeLevel: 1
+    // tanda 50, r1.1: el tubo apagado de verdad (oscuro Y con el nivel ya en 0): lo único que se
+    // ve es el 3 % de ruido de fósforo, así que no hace falta el reloj de 60 Hz, ni redibujar
+    // la señal, ni la estela. Vuelve solo en cuanto `tubeDark` cae (antes de que `tubeLevel` suba).
+    readonly property bool tubeIdle: tubeDark && tubeLevel < 0.01
     NumberAnimation {
         id: tubeDarkOffAnim
         target: crt; property: "tubeLevel"; to: 0
@@ -545,12 +549,19 @@ PanelWindow {
         }
     }
 
-    // T3.8 (idea 24): tres minutos sin nada que mostrar y sin música, y el tubo
+    // T3.8 (idea 24): un minuto sin nada que mostrar y sin música, y el tubo
     // se duerme — cinco cuadros por segundo y la estática apagada. Se despierta
-    // solo, en cuanto vuelve a haber señal.
+    // solo, en cuanto vuelve a haber señal. Era 3 min (tanda 50, r1.2): la estática del NO SIGNAL
+    // a 60 Hz en las tres pantallas era el costo más grande del estado sin música. Se bajó el
+    // plazo y NO la tasa: el zumbido de 60 Hz vive en `tubeTime` y a 30 Hz se aliasearía.
+    // La pausa con letra puesta (Timer de abajo) sigue en 3 min: ahí el tubo ya va a 15 fps.
     property bool deepSleep: false
+    // tanda 50, r21.3: la estática vuelve con un puente (`Motion.bridgeMs`), no de golpe. Es el
+    // único consumidor del despertar: el reloj ya vuelve solo a su ritmo.
+    property real sleepMix: deepSleep ? 0 : 1
+    Behavior on sleepMix { NumberAnimation { duration: Motion.bridgeMs; easing.type: Easing.OutQuad } }
     Timer {
-        interval: 180000
+        interval: 60000
         running: crt.visible && crt.standby && !crt.deepSleep && !crt.motifForced
         onTriggered: crt.deepSleep = true
     }
@@ -589,7 +600,12 @@ PanelWindow {
         else
             burnFade("pausa");
     }
-    onRestingChanged: if (ctl.crtOn) console.log("crt: rest " + idx + (resting ? " on" : " off"))
+    onRestingChanged: {
+        ctl.crtRestingCount += resting ? 1 : -1;
+        if (ctl.crtOn)
+            console.log("crt: rest " + idx + (resting ? " on" : " off"));
+    }
+    Component.onDestruction: if (resting && ctl) ctl.crtRestingCount -= 1
 
     // el texto de ESTA pantalla: el pedazo del director, o la línea entera
     // (partida por posición si `split` mandó cortarla) cuando no hay director
@@ -656,7 +672,9 @@ PanelWindow {
     Timer {
         interval: crt.reveal < 1 ? 33 : 80
         repeat: true
-        running: crt.visible && !crt.noLyric
+        // en pausa (`resting`) la línea no avanza y el reveal ya quedó fijo (tanda 50, r1.3): vuelve
+        // con el primer `pos`/`aud` (que baja `resting`), y `triggeredOnStart` la pone al día
+        running: crt.visible && !crt.noLyric && !crt.resting
         triggeredOnStart: true
         onTriggered: {
             const st = crt.ctl.crtChunkState(crt.idx);
@@ -685,20 +703,8 @@ PanelWindow {
     // pantalla, pesado por lo que está sonando): acá sólo se lee el que tocó
     readonly property string entryStyle: ctl.crtEntryStyles[idx] || "snap"
     property real pump: 0.35
-    Behavior on pump { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-    Timer {
-        interval: 70
-        repeat: true
-        running: crt.visible && !crt.resting
-        triggeredOnStart: true
-        onTriggered: {
-            // el nivel del momento, pero pesado por la parte del tema: el mismo
-            // volumen no significa lo mismo en el silencio que en el estribillo
-            const base = crt.live ? crt.ctl.audLevel : 0.35;
-            const boost = crt.ctl.sectionEnergy * (crt.ctl.building ? 1.15 : 1);
-            crt.pump = Math.min(base * boost, 1.3);
-        }
-    }
+    // lo calcula el root (`crtPump`, un solo Timer para toda la pared); en reposo se congela
+    Binding { target: crt; property: "pump"; value: crt.ctl.crtPump; when: crt.visible && !crt.resting }
 
     // El latido llega del root, una sola vez para toda la pared: la pantalla con
     // la letra pega el fogonazo y las otras multiplican su animación. Antes esto
@@ -1464,6 +1470,7 @@ PanelWindow {
     property real healthySince: -1
     FrameAnimation {
         running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep && !crt.resting
+            && !crt.tubeIdle
         onTriggered: {
             crt.tubeAccum += frameTime;
             if (crt.tubeAccum >= crt.tubeStep) {
@@ -1507,9 +1514,9 @@ PanelWindow {
         // el instrumental va por acá (20 fps, que es lo que necesita un motif);
         // dormido, 5 fps; en pausa con la letra puesta (`resting`), 15 — también en la
         // pantalla que muestra el texto, que el resto del tiempo va por el FrameAnimation
-        interval: crt.deepSleep ? 200 : crt.resting ? 66 : 50
+        interval: crt.deepSleep || crt.tubeIdle ? 200 : crt.resting ? 66 : 50
         repeat: true
-        running: crt.visible && (!crt.showsText || crt.resting) && (!crt.standby || crt.deepSleep)
+        running: crt.visible && (crt.tubeIdle || ((!crt.showsText || crt.resting) && (!crt.standby || crt.deepSleep)))
         onTriggered: {
             crt.tubeTime += interval / 1000;
             crt.movOff = Speed.advance(crt.movOff, interval / 1000, crt.ctl.crtMovRate);
@@ -2719,7 +2726,7 @@ PanelWindow {
         hideSource: true
         visible: false
         smooth: false   // como el `layer` de antes: sin filtro al muestrear
-        live: crt.visible
+        live: crt.visible && !crt.tubeIdle
         textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.texQuality)),
                              Math.max(1, Math.round(crt.height * crt.texQuality)))
     }
@@ -2759,7 +2766,7 @@ PanelWindow {
     // lenta) queda un source común y `prev` apunta a otra textura para no leerse
     // a sí misma.
     readonly property bool trailOn: visible && ctl.tubePersistence > 0.001
-        && !deepSleep && !resting && trailQ
+        && !deepSleep && !resting && !tubeIdle && trailQ
     onTrailOnChanged: console.log("crt: trail " + idx + (trailOn ? " on " + ctl.tubePersistence : " off"))
     // el decay es por segundo, no por cuadro: el tiempo REAL desde el último
     // cuadro de ESTA ventana (a 144 Hz un factor por cuadro duraría la mitad). `tubeTime` no
@@ -3046,7 +3053,7 @@ PanelWindow {
         visible: false
         smooth: false
         recursive: crt.trailOn
-        live: crt.visible
+        live: crt.visible && !crt.tubeIdle
         textureSize: stageTex.textureSize
     }
 
@@ -3086,9 +3093,8 @@ PanelWindow {
         // cambio de canal sobre una pantalla oscura.
         property real noiseAmt: crt.tubeDark ? crt.ctl.tubeNoise * 0.06
             : crt.chanNoise > 0 ? 1
-            : crt.deepSleep ? 0
             : crt.ctl.tubeNoise * (0.35 + 0.65 * crt.rest) * crt.ctl.crtDirtMult
-            * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6))
+            * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6)) * crt.sleepMix
         property real tubeLevel: crt.tubeLevel
         property real degauss: crt.degauss
         property real cutDim: crt.cutDimNow

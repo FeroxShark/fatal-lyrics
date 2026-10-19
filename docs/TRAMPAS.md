@@ -1338,3 +1338,30 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   hang en pantalla, lo corta. `hang` está en `crtRareKinds` (se fuerza con `fatal crt rare hang`) pero
   `crtRareRoll` lo excluye: sólo lo dispara el silencio. A diferencia del bsod, la próxima línea lo
   corta (`crtRareCut`). El cartel es de cero (Win95, teal) como el bsod; el texto lo manda el daemon.
+
+## Tanda de motivos en QML: radar, lluvia, ekg, textsea, harmonógrafo, vector (2026-10-19)
+
+- **`Shape` con `ConicalGradient` para la estela del radar**: el ángulo 0 es las 3 en punto y las
+  posiciones SUBEN en sentido antihorario, o sea hacia atrás de la aguja (que gira horaria con
+  `rotation` positiva). La cuña es geometría estática dentro del `Item` que gira con la aguja:
+  nada por cuadro. Los ecos leen `radar.angle` para su edad (`(angle − ang) mod 360`): 5–7
+  bindings baratos, no un Canvas.
+- **Un motivo que se prueba en el banco necesita el `level` vivo**: `ekg` se pone en silencio si
+  `level` no cambia en 2 s (`lastLoudAt`), así que un banco que fija el volumen una vez dibuja
+  una línea plana y parece roto. `previews/motivos/render.py` lo mueve en cada tiempo.
+- **Girar la roseta del harmonógrafo se hace con `rotation` del lienzo, no con los puntos**: el
+  caché `figurePts` queda intacto y no cuesta CPU. Pero la caja ±R de la figura, girada, sobresale
+  por las esquinas (hasta 1,41 R en la diagonal) y contra el borde de la pantalla se cortaba:
+  por eso el lienzo va a `scale: 0.88`. La rotación cuenta tiempos SIN envolver en 32
+  (`beatN + bp`): el loop del banco de `crt-motifs` ya no cierra exacto con este motivo, y en el
+  overlay no importa (no hay loop).
+- **Lluvia con profundidad: el tamaño cambia la altura de la columna.** Una columna de fuente
+  chica con 22 renglones no cubre la pantalla y el wrap deja huecos: las chicas llevan más
+  renglones (`22 / escala`). La clase de velocidad es `(index·3) mod 5` y manda también el
+  plano; con `index mod 5` vecinas formaban una rampa.
+- **`r17.3` (lluvia y estrellas no leen `rate`) era falso**: `rain`, `stars` y `radar` ya
+  multiplican su `frameTime` por `motif.rate` (`Motif.qml`); no se tocó nada.
+- Banco nuevo: `previews/motivos/render.py <antes|despues> <kind>…` (radar, rain, ekg, textsea,
+  harmonograph, vector) con el `Motif` real de `shell/`, sin vidrio, en tiempo real. Hojas en
+  `docs/tanda8-estado/motivos/`. El aviso `Unable to assign [undefined] to int` de `Motif.qml:43`
+  es el singleton `Motion` que el banco no registra: no afecta lo que se mira.

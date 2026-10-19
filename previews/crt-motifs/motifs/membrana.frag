@@ -41,9 +41,11 @@ layout(std140, binding = 0) uniform buf {
     float depth;      // escala de alto de los golpes
 };
 
-const float Z0 = 1.2;
+const float Z0 = 0.8;
 const float Z1 = 9.0;
-const float FOCAL = 1.35;
+const float ZC = 4.4;      // el centro del parche
+const float R = 2.35;      // el radio del parche (el aro)
+const float FOCAL = 1.2;
 
 float resp(float age) {
     if (age <= 0.0) return 0.0;
@@ -58,11 +60,12 @@ float envl(float age) {
 vec2 hit(vec2 m, float age, float amp, float sd) {
     if (amp <= 0.0 || age > 6.0) return vec2(0.0);
     float a = sd * 6.2831853;
-    vec2 o = vec2(cos(a), sin(a)) * (0.4 + 1.2 * fract(sd * 7.13));
+    // el palo pega cerca del centro, nunca dos veces en el mismo lugar
+    vec2 o = vec2(cos(a), sin(a)) * R * (0.08 + 0.4 * fract(sd * 7.13));
     float r = length(m - o);
     float tau = age - r / waveC;
     // la energía se reparte en un anillo que crece: cae con la distancia
-    float spread = amp / (1.0 + 0.7 * r);
+    float spread = amp / (1.0 + 0.35 * r);
     float front = exp(-abs(tau) * 7.0) * step(-0.05, tau);
     return vec2(-resp(tau) * spread, envl(tau) * spread + 0.6 * front * spread);
 }
@@ -77,6 +80,9 @@ vec2 field(vec2 m) {
     h += hit(m, hitAge.y, hitAmp.y, hitSeed.y);
     h += hit(m, hitAge.z, hitAmp.z, hitSeed.z);
     h += hit(m, hitAge.w, hitAmp.w, hitSeed.w);
+    // el parche está atado al aro: el alto se anula en el borde
+    float rr = dot(m, m) / (R * R);
+    h *= max(1.0 - rr, 0.0) * (1.0 + 0.4 * (1.0 - rr));
     h.x *= depth;
     // los agudos: un temblor fino que corre por encima (el detalle, no el golpe)
     h.x += 0.018 * fizz * sin(m.x * 23.0 + drift * 9.0) * sin(m.y * 19.0 - drift * 7.0);
@@ -84,7 +90,7 @@ vec2 field(vec2 m) {
 }
 
 vec2 toPatch(float X, float Z) {
-    vec2 q = vec2(X, Z - 5.0);
+    vec2 q = vec2(X, Z - ZC);
     float c = cos(yaw), s = sin(yaw);
     return vec2(c * q.x - s * q.y, s * q.x + c * q.y);
 }
@@ -119,7 +125,9 @@ void main() {
         float Z = Z0 + (Z1 - Z0) * fi / (n - 1.0);
         float d0 = camH * spp + Z * cp;
         float X = sp.x * d0 / FOCAL;
-        vec2 h = field(toPatch(X, Z));
+        vec2 mp = toPatch(X, Z);
+        vec2 h = field(mp);
+        float inDisc = smoothstep(R + 0.03, R - 0.03, length(mp));
         float dz = -(h.x - camH) * spp + Z * cp;
         float Y = ((h.x - camH) * cp + Z * spp) / dz * FOCAL;
         float Yflat = ((-camH) * cp + Z * spp) / d0 * FOCAL;
@@ -127,7 +135,7 @@ void main() {
         float px = abs(sp.y - Y) * res.y;
         if (Y > maxY - 0.5 / res.y) {
             float w = 0.6 + 1.1 * (1.0 - fi / n);
-            lineAcc = max(lineAcc, exp(-px * px / (w * w)) * (1.0 - 0.6 * fi / n) * (0.55 + 1.2 * h.y));
+            lineAcc = max(lineAcc, exp(-px * px / (w * w)) * (1.0 - 0.5 * fi / n) * (0.12 + inDisc * (0.75 + 1.4 * h.y)));
         }
         if (Y >= sp.y && maxY < sp.y) {
             // la banda entre la fila anterior y ésta tapa al píxel
@@ -159,11 +167,19 @@ void main() {
         vec2 id = floor(m / cell + 0.5);
         float tw = fract(sin(dot(id, vec2(12.9898, 78.233)) + floor(drift * 6.0)) * 43758.5453);
         float node = exp(-dot(g, g) / 3.0) * step(1.0 - 0.55 * fizz, tw) * fizz;
-        float lit = 0.10 + 0.22 * clamp(bandLit - 0.6, 0.0, 2.0);
-        vec3 fill = bg.rgb + ink.rgb * lit * 0.35 * fog;
+        float rm = length(m);
+        float inside = smoothstep(R + 0.02, R - 0.02, rm);
+        float lit = 0.10 + 0.25 * clamp(bandLit - 0.6, 0.0, 2.0);
+        vec3 fill = bg.rgb + ink.rgb * lit * 0.45 * fog * inside;
         float crest = clamp(Hhit.y, 0.0, 1.5);
-        vec3 wire = mix(ink.rgb, hot.rgb, clamp(0.25 * crest + 0.8 * node, 0.0, 1.0));
-        col = fill + wire * (0.38 * gl * (0.6 + 0.9 * crest) + 1.4 * node) * fog;
+        vec3 wire = mix(ink.rgb, hot.rgb, clamp(0.35 * crest + 0.8 * node, 0.0, 1.0));
+        col = fill + wire * (0.7 * gl * (0.55 + 0.9 * crest) + 1.4 * node) * fog * inside;
+        // el aro: una línea caliente que tiembla con el golpe que le llega
+        float rimPx = abs(rm - R) * pxPerUnit;
+        col += mix(ink.rgb, hot.rgb, 0.5) * exp(-rimPx * rimPx / 6.0) * (0.9 + 0.6 * crest) * fog;
+        // afuera del parche: el piso apagado, sólo puntos (la profundidad se lee igual)
+        vec2 dg = abs(fract(m / 0.5 + 0.5) - 0.5) * 0.5 * pxPerUnit;
+        col += ink.rgb * 0.22 * exp(-dot(dg, dg) / 1.5) * fog * (1.0 - inside);
     } else {
         // el cielo: un resplandor bajo sobre el horizonte, que respira con la deriva
         float hz = max(sp.y - maxY, 0.0);

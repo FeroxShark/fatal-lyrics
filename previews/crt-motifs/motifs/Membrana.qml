@@ -41,8 +41,8 @@ ThumpBase {
         property real dens: m.dens
         property real fizz: m.fizz
         property real temper: m.temper
-        property real camH: 1.15 - 0.10 * m.camK * E.mix(0.6, 1.0, m.temper)
-        property real pitch: 0.42 + 0.035 * m.camK + 0.03 * Math.sin(m.drift * 0.37)
+        property real camH: 1.75 - 0.16 * m.camK * E.mix(0.6, 1.0, m.temper)
+        property real pitch: 0.50 + 0.045 * m.camK + 0.03 * Math.sin(m.drift * 0.37)
         property real roll: 0.05 * Math.sin(m.drift * 0.23) + 0.012 * m.camK * (m.hitS[3] > 0.5 ? 1 : -1)
         property real yaw: m.drift * 0.16
         // calmo: la onda viaja lenta y ancha; agitado: rápida

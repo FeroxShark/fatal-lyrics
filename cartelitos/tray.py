@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import threading
 
-from . import config
+from . import config, util
 from .util import log
 
 # lo único que se cambia desde la bandeja, de un click y con el estado en el
@@ -13,6 +13,51 @@ from .util import log
 TRAY_TOGGLES = [
     ("karaoke", "display", "Karaoke"),
 ]
+
+STATUS_MAX = 44   # el texto más ancho del menú no puede ensanchar el menú entero
+
+
+def _lock_held(path):
+    """¿Alguien tiene tomado este flock? Mismo truco que lock_held() de bin/fatal."""
+    import fcntl
+    try:
+        with open(path, "a+") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            return False
+    except OSError:
+        return False
+
+
+def status_text(overlay_up=None, state_path=None):
+    """Primer ítem del menú: ON o HALF (el daemon, que es quien dibuja la bandeja,
+    está vivo por definición; lo que se puede haber caído es el overlay) y el
+    estado de la letra que escribe lyrics.write_state, truncado."""
+    if overlay_up is None:
+        overlay_up = _lock_held(os.path.join(util.RUN_DIR, "qs.lock"))
+    head = "Fatal Lyrics: ON" if overlay_up else "Fatal Lyrics: HALF (overlay died)"
+    try:
+        with open(state_path or os.path.join(util.RUN_DIR, "lyrics"), encoding="utf-8") as f:
+            line = f.read().strip()
+    except OSError:
+        line = ""
+    if not line or not overlay_up:
+        return head
+    if len(line) > STATUS_MAX:
+        line = line[:STATUS_MAX - 1].rstrip() + "…"
+    return f"{head} · {line}"
+
+
+def icon_name():
+    """El ícono de la marca si install.sh/el paquete lo dejó en el tema; si no, el genérico."""
+    data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    for base in (data, "/usr/share"):
+        if os.path.exists(os.path.join(base, "icons", "hicolor", "scalable", "apps",
+                                       "fatal-lyrics.svg")):
+            return "fatal-lyrics"
+    return "dialog-warning"
 
 
 def start_tray():
@@ -49,13 +94,13 @@ def start_tray():
 
     def run():
         indicator = AyatanaAppIndicator3.Indicator.new(
-            "cartelitos", "dialog-warning",
+            "cartelitos", icon_name(),
             AyatanaAppIndicator3.IndicatorCategory.APPLICATION_STATUS)
         indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
         indicator.set_title("Fatal Lyrics")
 
         menu = Gtk.Menu()
-        item(menu, "Fatal Lyrics active")
+        item(menu, "Fatal Lyrics", dynamic=status_text)
         menu.append(Gtk.SeparatorMenuItem())
 
         # la ventana es otro proceso (Quickshell); `fatal ajustes` no abre una

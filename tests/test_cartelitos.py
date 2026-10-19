@@ -720,6 +720,38 @@ class TestProviderChain(unittest.TestCase):
         self.chain(("a", boom), ("b", self.const("ok", found)))
         self.assertEqual(c.fetch_lyrics(TRACK), ("ok", found, "b"))
 
+    def test_a_provider_that_errored_is_not_asked_again(self):
+        # lrclib_get sin respuesta: lrclib_search (mismo nombre) no se prueba,
+        # ni en la vuelta del título limpio; NetEase sí
+        seen = []
+        self.chain(("lrclib", self.const("error", seen=seen)),
+                   ("lrclib", self.const("none", seen=seen)),
+                   ("netease", self.const("none")))
+        status = c.fetch_lyrics(dict(TRACK, title="Song - Remastered 2011"))
+        self.assertEqual(status, ("error", None, None))
+        self.assertEqual(seen, ["Song - Remastered 2011"])
+
+    def test_the_tail_runs_in_parallel_but_trust_order_wins(self):
+        import time as _t
+        def slow(status, lines, secs):
+            def prov(track, title):
+                _t.sleep(secs)
+                return status, lines
+            return prov
+        lrc = [(1.0, "lrclib", None)]
+        net = [(1.0, "netease", None)]
+        self.chain(("lrclib", slow("none", None, 0)),
+                   ("lrclib", slow("ok", lrc, 0.3)),
+                   ("netease", slow("ok", net, 0.0)))
+        # NetEase termina antes pero lrclib es más confiable
+        self.assertEqual(c.fetch_lyrics(TRACK), ("ok", lrc, "lrclib"))
+        self.chain(("lrclib", slow("none", None, 0)),
+                   ("lrclib", slow("none", None, 0.3)),
+                   ("netease", slow("ok", net, 0.3)))
+        t1 = _t.monotonic()
+        self.assertEqual(c.fetch_lyrics(TRACK), ("ok", net, "netease"))
+        self.assertLess(_t.monotonic() - t1, 0.5)   # en serie serían 0.6 s
+
 
 NETEASE_LRC = ("[00:00.000] 作词 : Thom Yorke\n"
                "[00:02.000] 制作人 : Sean Slade\n"

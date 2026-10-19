@@ -333,6 +333,30 @@ PROVIDERS = (
 )
 
 
+def _run_provider(pr, track, title):
+    name, provider = pr
+    try:
+        return provider(track, title)
+    except Exception as e:
+        # un proveedor que revienta no puede llevarse puestos a los otros:
+        # cuenta como no haber llegado y la cadena sigue
+        log(f"lyrics provider {name} blew up ({e})")
+        return "error", None
+
+
+def _start_provider(pr, track, title):
+    """(nombre, evento, caja) de un proveedor corriendo en su hilo."""
+    done, box = threading.Event(), []
+
+    def work():
+        try:
+            box.append(_run_provider(pr, track, title))
+        finally:
+            done.set()
+    threading.Thread(target=work, daemon=True, name="lyrics-" + pr[0]).start()
+    return pr[0], done, box
+
+
 def fetch_lyrics(track):
     """Letra sincronizada, probando la cadena de proveedores con el título
     original y después con el limpio.
@@ -357,21 +381,39 @@ def fetch_lyrics(track):
 
     plain = None
     unreachable = False
+    dead = set()     # proveedores que no contestaron: no se les insiste
     for title in titles:
-        for name, provider in PROVIDERS:
-            try:
-                status, lines = provider(track, title)
-            except Exception as e:
-                # un proveedor que revienta no puede llevarse puestos a los
-                # otros: cuenta como no haber llegado y la cadena sigue
-                log(f"lyrics provider {name} blew up ({e})")
-                status, lines = "error", None
+        live = [(n, p) for n, p in PROVIDERS if n not in dead]
+        if not live:
+            continue
+        # el primero va solo (es el match exacto y casi siempre alcanza); si
+        # no, el resto sale a la vez y NetEase no espera las consultas de
+        # lrclib. Los resultados se leen IGUAL en el orden de PROVIDERS: manda
+        # la confianza, no quién terminó antes.
+        first = _run_provider(live[0], track, title)
+        pending = []
+        if first[0] != "ok":
+            rest = live[1:]
+            if first[0] == "error":
+                # lrclib_get sin respuesta: lrclib_search iría al mismo server
+                rest = [pr for pr in rest if pr[0] != live[0][0]]
+            pending = [_start_provider(pr, track, title) for pr in rest]
+        names = [live[0][0]] + [pr[0] for pr in pending]
+        for i, name in enumerate(names):
+            if i == 0:
+                res = first
+            else:
+                _, done, box = pending[i - 1]
+                done.wait()
+                res = box[0] if box else ("error", None)
+            status, lines = res
             if status == "ok":
                 return "ok", lines, name
             if status == "plain" and plain is None:
                 plain = (lines, name)
             elif status == "error":
                 unreachable = True
+                dead.add(name)
 
     if plain:
         return "plain", plain[0], plain[1]

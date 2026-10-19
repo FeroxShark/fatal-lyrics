@@ -43,6 +43,11 @@ SYNCF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sync"
 # que es lo que el daemon manda al overlay y lo que sobrevive al reinicio
 SINGF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sing"
 
+# El binario de Quickshell: `qs` en Arch, `quickshell` en las distros que sólo traen ese nombre.
+qs_bin() {
+    command -v qs 2>/dev/null || command -v quickshell 2>/dev/null
+}
+
 # Un PID vivo no alcanza: el sistema recicla números, y con el pidfile de una
 # sesión anterior `kill -0` daba OK sobre un proceso ajeno — status decía ON sin
 # nada corriendo y stop le mandaba la señal a otro. Se confirma el cmdline, igual
@@ -216,6 +221,7 @@ status_line() {
     # el modo karaoke cambia lo que se ve entero (todo apagado hasta que
     # cantás): si está puesto, tiene que decirlo — si no, parece que se rompió
     echo "sing: $(sing_state)"
+    echo "crt: $(crt_state)"
     # qué falta instalar y qué función se pierde por cada cosa: no imprime nada
     # si está todo. Sin esto, media app apagada parecía un bug.
     [ -f "$DAEMON" ] && python3 "$DAEMON" --check 2>/dev/null
@@ -232,8 +238,12 @@ start() {
             refuse "overlay" "$QS_LOCK"
             return 1
         fi
+        QS=$(qs_bin) || {
+            echo "fatal: missing dependency: Quickshell (neither 'qs' nor 'quickshell' is in the PATH)" >&2
+            return 1
+        }
         rotate_log "$QS_LOG"
-        LOCKFILE="$QS_LOCK" spawn "$QS_PID" "$QS_LOG" qs -p "$QML"
+        LOCKFILE="$QS_LOCK" spawn "$QS_PID" "$QS_LOG" "$QS" -p "$QML"
     fi
     # wait for the overlay to bring up the socket before starting the daemon
     for _ in $(seq 1 25); do
@@ -257,7 +267,27 @@ start() {
             sleep 0.2
         done
     fi
+    # "ON" sólo si las DOS mitades siguen vivas: antes se imprimía igual con el
+    # overlay muerto (sin qs, QML roto) y la pantalla quedaba vacía sin explicación
+    if ! { running "$QS_PID" "$QML" || instance_busy "$QS_LOCK"; }; then
+        start_failed "overlay" "$QS_LOG"
+        return 1
+    fi
+    if ! running "$D_PID" "$DAEMON"; then
+        start_failed "daemon" "$D_LOG"
+        return 1
+    fi
     echo "fatal ON"
+}
+
+# Dice cuál mitad no arrancó, la última línea de su log (suele ser el motivo) y
+# dónde mirar el resto.
+start_failed() {
+    local what="$1" log="$2" last
+    echo "fatal: the $what didn't start — see $log" >&2
+    last=$(tail -n 1 "$log" 2>/dev/null)
+    [ -n "$last" ] && echo "       last line: $last" >&2
+    return 0
 }
 
 stop() {
@@ -297,8 +327,9 @@ restart() {
     crt_prev=$(cat "$CRT" 2>/dev/null)
     stop
     sleep 0.5
-    start
+    start || return 1
     [ -n "$crt_prev" ] && crt_set "$crt_prev" >/dev/null
+    return 0
 }
 
 # --- la unit de systemd (packaging/fatal-lyrics.service) ----------------------
@@ -327,6 +358,12 @@ unit_active() {
 # arriba (ver start: espera el flag del CRT del daemon).
 unit_start() {
     if systemctl --user start "$UNIT"; then
+        # `start` devuelve 0 aunque la unit se salte sola por su Condition (sin
+        # WAYLAND_DISPLAY en el entorno de systemd --user): ahí no hay nada corriendo
+        if ! unit_active; then
+            echo "fatal: $UNIT didn't stay up (does systemd --user see WAYLAND_DISPLAY?) — journalctl --user -u $UNIT" >&2
+            return 1
+        fi
         echo "fatal ON"
     else
         echo "fatal: $UNIT didn't start — journalctl --user -u $UNIT" >&2
@@ -402,12 +439,21 @@ settings() {
         echo "can't find the settings window in $BASE" >&2
         exit 1
     fi
-    FATAL_BIN="$SELF" FATAL_DAEMON="$DAEMON" exec qs -n -p "$SETTINGS_QML"
+    FATAL_BIN="$SELF" FATAL_DAEMON="$DAEMON" exec "$(qs_bin || echo qs)" -n -p "$SETTINGS_QML"
 }
 
 crt_state() { [ "$(cat "$CRT" 2>/dev/null)" = "1" ] && echo on || echo off; }
 
+# con todo apagado `fatal on` vuelve a [crt] enabled y pisa el archivo (TRAMPAS):
+# decir "CRT on" sería mentira. Se avisa y no se escribe nada.
+crt_needs_daemon() {
+    running "$D_PID" "$DAEMON" && return 0
+    echo "fatal-lyrics isn't running — start it with: fatal on (or set [crt] enabled = true)" >&2
+    return 1
+}
+
 crt_set() {
+    [ "$1" = 1 ] && { crt_needs_daemon || return 1; }
     printf '%s' "$1" > "$CRT.tmp" && mv "$CRT.tmp" "$CRT"
     echo "CRT $(crt_state)"
 }
@@ -422,6 +468,7 @@ crt_setup() {
         echo "CRT setup off"
         return 0
     fi
+    crt_needs_daemon || return 1
     printf '1' > "$CRT_SETUP.tmp" && mv "$CRT_SETUP.tmp" "$CRT_SETUP"
     crt_set 1
     echo "read the numbers left to right — that's your [crt] order"
@@ -504,6 +551,25 @@ sync_lyrics() {
     printf '%s' "$d" > "$SYNCF.tmp" && mv "$SYNCF.tmp" "$SYNCF"
 }
 
+# `fatal help` lo imprime por stdout; un comando que no existe, por stderr con exit 1
+usage() {
+    cat <<'EOF'
+usage: fatal [command]
+  on | off | toggle | restart | status      (no command = toggle)
+  ajustes                                   the Settings window: every option
+  edit                                      open config.toml in $EDITOR
+  demo                                      fake dialogs, no music needed
+  crt on | off | toggle | status            the CRT tube
+  crt setup [off]                           a number on each screen, for [crt] order
+  crt motif <kind> [--screen <name|idx|all>] | motif off
+  crt dark <screen|idx|all> on|off
+  crt rare <kind> [--screen <name|idx|all>]
+  sync + | - | show | reset [<artist>|all]  lyric timing
+  sing on | off | toggle | status           karaoke mode
+  help                                      this text
+EOF
+}
+
 case "${1:-toggle}" in
     on|start)  cmd_start ;;
     off|stop)  cmd_stop ;;
@@ -522,5 +588,6 @@ case "${1:-toggle}" in
     # todas las opciones viven en la ventana de Ajustes: `config` y `setup`
     # (el menú de terminal que había antes) abren la ventana
     ajustes|settings|config|setup|tune|sliders) settings ;;
-    *)         echo "usage: fatal [on|off|toggle|restart|run|status|ajustes|edit|demo|crt on|off|toggle|setup|crt motif <kind> [--screen <name|idx|all>]|crt dark <screen|idx|all> on|off|crt rare <kind> [--screen <name|idx|all>]|sync +|-|show|reset [<artist>|all]|sing on|off|toggle]" ;;
+    help|-h|--help) usage ;;
+    *)         usage >&2; exit 1 ;;
 esac

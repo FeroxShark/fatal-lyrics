@@ -405,7 +405,8 @@ class FatalUnitTests(unittest.TestCase):
             return []
 
     def test_on_starts_the_unit(self):
-        out = self.fatal("on")
+        # `active`: después del start la unit tiene que figurar viva (si no, `on` falla)
+        out = self.fatal("on", state="active")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(self.calls(), ["--user start fatal-lyrics.service"])
 

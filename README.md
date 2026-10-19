@@ -397,7 +397,7 @@ fatal crt on|off|toggle   # CRT mode: the tube takes over every screen (needs fa
 fatal crt setup           # a number on each screen, to write down [crt] order
 fatal crt motif <kind> [--screen <name|index|all>]   # force one screen's drawing right away
 fatal crt motif off       # give the roll back to chance
-fatal crt rare <kind> [--screen <name|index|all>]    # force a rare event (bsod|nosignal|testcard) right away
+fatal crt rare <kind> [--screen <name|index|all>]    # force a rare event (bsod|nosignal|testcard|hang) right away
 fatal sync + | -          # nudge the lyric 0.1 s forward/back, live
 fatal sync show           # the artist offsets it has learned so far
 fatal sync reset [<artist>|all]   # forget one (default: the artist playing) or all

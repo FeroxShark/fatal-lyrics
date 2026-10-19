@@ -60,6 +60,7 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   una tabla sola. `crtMotifKinds` / `crtMotifSince` / `crtMotifSeeds` + `crtMotifRefresh()` —
   qué dibuja cada pantalla, desde cuándo y con qué semilla.
 - `shell/Rows.js` + `crt.lyricRows` (`Crt.qml`) + `WordSlot.fitWidth` — en allMode (con `wholeWordsOn`) una línea larga se acomoda en renglones centrados en vez de una palabra por renglón; `Rows.pick` elige cuántos y `measure` pone el tamaño sobre ellos. Director y calidad baja siguen apilados. TRAMPAS: "El Flow del allMode apilaba". Banco: `previews/letra/` (`docs/tanda8-estado/letra-renglones-*.png`).
+- `shell/Wall.js` + `crtWallPivot` (`shell.qml`) + `camOrigin` (`Crt.qml`) — la cámara de pared: pivote único de la unión de pantallas del tubo, pegado a la costura más cercana; `Wall.local` lo ata a cada tubo. TRAMPAS: "Música y momentos". Test: `tests/test_musica_momentos.py`.
 - `shell/Speed.js` + `crtMovRate`/`movOff` (`crt.mov_speed`, `movMin`/`movMax` en `crtPaceTable`) — la
   deriva de los motivos sigue `mov` del `aud`, INTEGRADA (nunca `t·rate`); entradas, shader y compás no.
   TRAMPAS: "El ritmo de los dibujos". Banco: `previews/movimiento/`.

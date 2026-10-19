@@ -1309,3 +1309,32 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   (rama suave) ahora llama `crtIntroEnd()`.
 - **Paleta/fuente entre `clear` y mood (descartado, no es bug):** el set (`crtSetFor(seed, locked)`)
   es puro y da lo mismo antes y después del lock con el mood por defecto; la paleta hace lerp de 900 ms.
+
+## Música y momentos: bombo, novedad, cámara de pared, "no responde" (2026-10-19)
+
+- **Salpicón, burbuja y fogonazo salían de `b`, no del bombo.** `b` es el onset de banda completa
+  (también el hi-hat); el agua temblaba 2–4 veces por compás. Ahora el contador `audBoom` (`shell.qml`)
+  sube con la misma condición que `bassHit` (`k` si el daemon lo manda, `b` de respaldo si `k` nunca
+  llegó) y `Crt.qml` se lo pasa a `beat` del motivo y a `kick` del aro. `audBeat` quedó sólo como
+  contador crudo (nadie lo lee). Si un tema tiene `k` tardío, el fogonazo cae con él: es el costo.
+- **La novedad espectral entra al ritmo** con su peso en la columna `movNov` de `crtPaceTable`
+  (calm 0.15, normal 0.25, `wild` 0 = lo de antes), sumada a `movFit.mov` ya ajustado al tema y topada
+  en 1 (`movNovIn`). Ojo: `mov` se mapea por percentiles (mediana = 0.5), así que una novedad
+  sostenida empuja el ritmo hacia el tope: si un tema con mucha novedad "corre" de más, bajar la columna.
+- **La cámara escala sobre un pivote de PARED (`shell/Wall.js`).** Cada tubo escalaba sobre su centro y
+  la costura DP-2 / HDMI-A-1 perdía ~30 px a 2 % de golpe (11 + 19). El pivote es el centro de la unión
+  de `activeCrtScreens` **pegado a la costura más cercana** (el centro de las dos pantallas cae a 420 px
+  de la costura y con el pivote ahí la de la izquierda se achicaría 8 px hacia adentro, dejando asomar
+  el fondo): en el setup real es (1080, 540) y el punto de la costura no se mueve aunque el zoom de
+  foco difiera por pantalla (1.030 vs 1.004). `Wall.local` ata el pivote al rectángulo de cada tubo: un
+  tercer monitor que no toca la costura escala sobre su borde más cercano (su borde nunca entra, nunca
+  asoma el fondo). El quemado (`burn.frag`) deshacía la cámara "sobre el centro": ahora suma
+  `(camOrigin - centro)·(1 - 1/camS)` a `off`. Con `crt.screens = "all"` y DP-1 prendido (la config de
+  hoy) el pivote cae en la costura HDMI-A-1/DP-1 (la más cercana al centro de las tres) y la de DP-2
+  vuelve a partirse; con DP-1 fuera del CRT es el caso bueno. Lo que NO se unificó: el factor de foco
+  sigue siendo por pantalla (el foco se sigue marcando con zoom).
+- **El "no responde" de los 30 s sale en el tubo** como raro `hang` (`crtHangFire`), sobre el foco,
+  4.5 s (`Motion.rareHangMs`). Cede si hay otro raro, el intro o el aro vivo; si el aro se arma con el
+  hang en pantalla, lo corta. `hang` está en `crtRareKinds` (se fuerza con `fatal crt rare hang`) pero
+  `crtRareRoll` lo excluye: sólo lo dispara el silencio. A diferencia del bsod, la próxima línea lo
+  corta (`crtRareCut`). El cartel es de cero (Win95, teal) como el bsod; el texto lo manda el daemon.

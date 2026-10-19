@@ -1283,3 +1283,29 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   ventana layer-shell sólo se muestra con `tubeOn`; precalentar exigiría mostrar una superficie sobre el
   escritorio de Ferox, y el tirón de compilar sólo se mide en la placa real con el compositor (el banco
   offscreen/software no lo representa). Si alguien lo mide ≥ 50 ms en vivo, reabrirlo.
+
+## Tanda letra en el tubo (2026-10-19)
+
+- **Negrita sintética:** `font.bold: true` sobre una familia con sólo Regular (VT323, Share Tech Mono,
+  Syne Mono, DotGothic16) la engorda a la fuerza y la ensucia. La tabla `crtFontBold` de `shell.qml`
+  lleva el flag por familia (`crtFontBoldFor`); `Crt.lyricBold` lo reparte a los `Text` y a los
+  `WordSlot`. Fuente nueva = fila en la tabla.
+- **Tracking proporcional:** con `Text.Fit` el `pixelSize` de la propiedad NO es el efectivo (`fontInfo`
+  sí). Por eso `measure0` (sin tracking) calcula el tamaño y `measure` se mide con
+  `letterSpacing = fontInfo.pixelSize * lyricTrackingEm` (0.03). Un `letterSpacing` fijo en px se
+  lee más apretado en el tamaño chico y más suelto en el grande.
+- **`onLandedChanged` no corre con el valor inicial:** una palabra que nace con `landed` ya en true
+  (reveal en 0 + línea ya puesta) aparecía puesta, sin entrada. `bornAtStart` + `Component.onCompleted`
+  llaman a `land()`.
+- **Karaoke = estado, no transición:** el color de la palabra que suena (`pal.hot`) NO pasa por el
+  `Behavior` de 900 ms de la tinta (`inkSmooth` aparte); si no, el "ahora" llega tarde. Límite: en
+  la mayoría de las paletas `ink` y `hot` están a luminancia 1.1–1.27: se nota poco, y casi nada en
+  esquemas de cara clara.
+- **`clear` no sube `crtSerial`:** vacía la línea sin pasar por `onCrtSerialChanged`, así que el
+  quemado del verso no se armaba y la letra se cortaba seca al cambiar de tema. `onNoLyricChanged`
+  arma un quemado con `lastShownText` que se va con `exitMs` (`ghostCutOn`).
+- **Tarjeta suave pegada:** saltear de tema antes de `introCardSoftMs` cortaba el timer pero dejaba
+  `crtIntroPhase` en `"card"`: sin plazo, y `nowPlaying` no rearma con `crtIntroOn`. `crtIntroStart()`
+  (rama suave) ahora llama `crtIntroEnd()`.
+- **Paleta/fuente entre `clear` y mood (descartado, no es bug):** el set (`crtSetFor(seed, locked)`)
+  es puro y da lo mismo antes y después del lock con el mood por defecto; la paleta hace lerp de 900 ms.

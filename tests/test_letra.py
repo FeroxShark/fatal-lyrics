@@ -91,6 +91,9 @@ class TestCableado(unittest.TestCase):
         self.assertNotIn("dueFrac(index)", body)
         self.assertIn("fitWidth: true", body)
 
+    def test_reveal_clock_is_fast_only_while_words_are_pending(self):
+        self.assertRegex(self.crt, r"Timer\s*\{\s*interval:\s*crt\.reveal\s*<\s*1\s*\?\s*33\s*:\s*80")
+
     def test_wordslot_fits_its_width_only_when_asked(self):
         self.assertRegex(self.slot, r"width:\s*fitWidth\s*\|\|\s*!parent\s*\?\s*label\.implicitWidth\s*:\s*parent\.width")
 

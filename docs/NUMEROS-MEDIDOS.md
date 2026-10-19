@@ -312,3 +312,11 @@ pudo repetir con el `mov` nuevo. Se usó como proxy una réplica offline: captur
 - **No hecho:** tempo local. `BpmTracker` está armado para golpes tipo bombo (histograma de intervalos entre
   `beat`); en un pasaje de cuerdas rápidas no da. La densidad de onsets + la de golpes (últimos 0.6 / 1.5 s)
   cubre lo que se pidió sin un estimador nuevo.
+
+- **Reloj del contenido a 33 ms mientras entran palabras** (`Crt.qml`, Timer de `reveal`, 2026-10-19; banco
+  suelto: 3 pantallas x 12 `WordSlot` reales, un Timer que sube `reveal`, 8 s offscreen, 2 corridas por
+  intervalo, `process_time`): 80 ms fijo 0.7 / 1.3 % de un núcleo, 33 ms 1.4 / 1.5 % — +0.1 a +0.7 puntos, dentro
+  del ruido entre corridas. No incluye `crtChunkState`/`fxCheck` (baratos: en allMode `crtChunkState` es
+  `crtProgress()`; `fxCheck` sale en la primera guarda). Sólo late a 33 ms con `reveal < 1`.
+- **Renglones centrados** (`Rows.js`): `pick` es JS puro, una DP de n² con n ≤ ~20 palabras por línea, una vez por
+  línea (binding de `lyricRows`). Sin costo medible; el `Text.Fit` de `measure` ya corría antes sobre el mismo texto.

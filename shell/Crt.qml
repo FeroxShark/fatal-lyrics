@@ -628,9 +628,15 @@ PanelWindow {
         return acc / total;
     }
 
-    // un solo reloj para el contenido: qué pedazo va y cuánto lleva pintado
+    // un solo reloj para el contenido: qué pedazo va y cuánto lleva pintado.
+    // Mientras quedan palabras por entrar (`reveal < 1`) late a 33 ms: a 80 ms
+    // cada palabra llegaba hasta 80 ms tarde y dos pegadas caían en el mismo
+    // tick, y se notaba contra la voz. Con la línea entera ya pintada vuelve
+    // a 80 ms. No es presupuesto de eventos (no pasa nada más seguido): es la
+    // resolución del reloj. Medido (3 pantallas x 12 palabras, sin el resto del
+    // tubo): +0.1 a +0.7 puntos de un núcleo (docs/NUMEROS-MEDIDOS.md).
     Timer {
-        interval: 80
+        interval: crt.reveal < 1 ? 33 : 80
         repeat: true
         running: crt.visible && !crt.noLyric
         triggeredOnStart: true
@@ -994,7 +1000,7 @@ PanelWindow {
     // tanda 7, corrida 5b (`crt.word_fx`): una palabra de `motifWords` con `fx` (fuego, morir,
     // romper, oscuro) le pega al tubo de LA PANTALLA que la muestra (con el director, el pedazo
     // que la tiene), una vez por línea. Cuándo: con tiempos por palabra (LRC enhanced), cuando
-    // esa palabra empieza a sonar (`f.t`, el mismo reloj de 80 ms que pinta el karaoke, así que
+    // esa palabra empieza a sonar (`f.t`, el mismo reloj que pinta el karaoke, 33/80 ms, así que
     // cae con ella); sin ellos, al asentar la entrada (`Motion.enterMs`: la condición de
     // `emphasisGateOpen`, leída acá directo porque esa property sólo se reevalúa cuando `reveal`
     // cambia y una línea quieta no la despertaría). Pasa por `fxGapMs` (piso por pantalla, tabla
@@ -1087,7 +1093,7 @@ PanelWindow {
         console.log("crt: fx s" + idx + " " + kind + " '" + word + "' hit="
                     + (lastHitAt !== before ? "ok" : "held"));
     }
-    // se llama desde el reloj de 80 ms del contenido (`Timer` de `reveal`)
+    // se llama desde el reloj del contenido (`Timer` de `reveal`, 33/80 ms)
     function fxCheck() {
         const f = fxHit;
         if (f === null || fxFired || !ctl.crtWordFx)
@@ -1230,7 +1236,7 @@ PanelWindow {
         textArrivedAt = Date.now();
     }
     // referenciar `reveal` fuerza la reevaluación con el mismo reloj de
-    // 80 ms de arriba (el Timer de `crt.reveal`), sin un Timer nuevo por
+    // arriba (el Timer de `crt.reveal`), sin un Timer nuevo por
     // pantalla — Date.now() por sí solo no dispara binding
     readonly property bool emphasisGateOpen: reveal >= 0
         && (Date.now() - textArrivedAt) >= Motion.enterMs

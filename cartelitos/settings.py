@@ -41,6 +41,13 @@ def _count(section, key, label, hint, lo, hi, step=1):
     return dict(_slider(section, key, label, hint, lo, hi, step), int=True)
 
 
+def _needs(row, *ids):
+    """Marca la fila como dependiente: la ventana la dibuja atenuada mientras
+    alguna de esas casillas (ids "seccion.clave") esté apagada. Sigue siendo
+    tocable: sólo avisa que, tal como está todo, mover esto no se va a notar."""
+    return dict(row, needs=list(ids))
+
+
 def _screens(section, key, label, hint, specials):
     """Qué pantallas: una opción especial ("auto", "all"...) o nombres de
     monitor. La ventana dibuja las especiales como botones de opción y cada
@@ -80,7 +87,7 @@ GROUPS = [
         _choice("display", "spawn_area", "Spawn zone", "where on the screen they appear", [
             ("Full screen", "full"), ("Top", "top"), ("Bottom", "bottom"),
             ("Left", "left"), ("Right", "right"), ("Edges", "edges")]),
-        _screens("display", "screen", "Screens", "which monitors get dialogs", [
+        _screens("display", "screen", "Dialog screens", "which monitors get dialogs", [
             ("Auto (the first)", "auto"), ("All", "all")]),
     ]},
     {"title": "Effects", "tab": 0, "column": 1, "rows": [
@@ -141,7 +148,7 @@ GROUPS = [
         {"kind": "crt", "id": "crt", "label": "Tube on",
          "hint": "every screen becomes a CRT with the lyric inside"},
         _toggle("crt", "enabled", "Start with it on", "the tube is on when Fatal starts"),
-        _screens("crt", "screens", "Screens", "which monitors the tube takes", [
+        _screens("crt", "screens", "Tube screens", "which monitors the tube takes", [
             ("All", "all"), ("Same as the dialogs", "same")]),
         {"kind": "order", "id": "crt.order", "label": "Screen order",
          "hint": "left to right: where each piece of a line lands"},
@@ -150,7 +157,7 @@ GROUPS = [
         _toggle("crt", "chrome", "Console readouts", "REC, track, timecode, progress bar"),
     ]},
     {"title": "Colours", "tab": 2, "column": 1, "rows": [
-        _choice("crt", "palette", "Colours", "the phosphor of the tube", [
+        _choice("crt", "palette", "Palette", "the phosphor of the tube", [
             ("Album cover", "album"), ("Auto", "auto"), ("Dragons", "dragons"),
             ("Ado", "ado"), ("Poison", "poison"), ("Bloodline", "bloodline"),
             ("Vapor", "vapor"), ("Bone", "bone")]),
@@ -161,7 +168,7 @@ GROUPS = [
         _count("crt", "color_hold", "Colour hold", "s before it changes", 0, 600, 5),
     ]},
     {"title": "Pace", "tab": 2, "column": 1, "rows": [
-        _choice("crt", "pace", "Pace", "how much may happen per minute (nothing moves slower)", [
+        _choice("crt", "pace", "How busy", "how much may happen per minute (nothing moves slower)", [
             ("Calm", "calm"), ("Normal", "normal"), ("Wild", "wild")]),
         _slider("crt", "rare", "Odd screens", "fake crash, no signal", 0.0, 2.0, 0.05),
     ]},
@@ -191,12 +198,13 @@ GROUPS = [
         _choice("crt", "intro_card", "Intro card", "what the title sits on", [
             ("Test card", "testcard"), ("Plain title", "plain")]),
         _toggle("crt", "ring", "Instrumental ring", "counts down to the voice coming back"),
-        _count("crt", "ring_gap", "Ring after", "s of silence", 2, 120),
+        _needs(_count("crt", "ring_gap", "Ring after", "s of silence", 2, 120), "crt.ring"),
     ]},
     {"title": "Drawings", "tab": 3, "column": 1, "rows": [
-        _toggle("crt", "motifs", "Drawings", "animations on the screens without lyric"),
+        _toggle("crt", "motifs", "Show drawings", "animations on the screens without lyric"),
         _toggle("crt", "water", "Water drawings", "a sea and a shivering pond"),
-        _slider("crt", "water_amp", "Water", "sea swell and pond shiver", 0.0, 1.0),
+        _needs(_slider("crt", "water_amp", "Water motion", "sea swell and pond shiver", 0.0, 1.0),
+               "crt.motifs", "crt.water"),
         _toggle("crt", "screen_off", "Screens may go dark",
                 "the intro and the sections switch some off"),
         _toggle("crt", "testcard", "Test card mid-track", "in the pool and as a rare event"),
@@ -222,6 +230,7 @@ GROUPS = [
         _slider("crt", "bloom", "Phosphor glow", "around the letters", 0.0, 3.0),
         _slider("crt", "vignette", "Corners", "how dark", 0.0, 1.5),
         _slider("crt", "persistence", "Phosphor trail", "what moves lingers", 0.0, 1.0),
+        _slider("crt", "quality", "Resolution", "lower = cheaper", 0.4, 1.0, 0.05),
     ]},
     {"title": "Signal", "tab": 4, "column": 2, "rows": [
         _slider("crt", "noise", "Static", "grain on the glass", 0.0, 1.0),
@@ -230,16 +239,15 @@ GROUPS = [
         _slider("crt", "composite", "Analog signal", "0 RGB · 1 VHS", 0.0, 1.0),
     ]},
     {"title": "Restlessness", "tab": 4, "column": 1, "rows": [
-        _slider("crt", "intensity", "Restlessness", "signal breaks, static", 0.0, 2.0),
-        _slider("crt", "flicker", "Beating", "how hard it beats on peaks", 0.0, 1.0),
+        _slider("crt", "intensity", "Overall", "signal breaks, static", 0.0, 2.0),
+        _slider("crt", "flicker", "Bass hit", "how hard the bass drum hits the picture", 0.0, 1.0),
         _slider("crt", "word_flash", "Word flash", "how much each word jolts", 0.0, 1.0),
         _slider("crt", "channel_switch", "Channel change", "lines landing so", 0.0, 1.0),
+        _slider("crt", "alarm_threshold", "Red alarm", "how rare the red screen is", 0.0, 1.0),
         _slider("crt", "burnin", "Chorus burn-in", "a faint silhouette", 0.0, 1.0),
-        _slider("crt", "quality", "Resolution", "lower = cheaper", 0.4, 1.0, 0.05),
     ]},
     {"title": "Colour timing", "tab": 4, "column": 2, "rows": [
         _slider("crt", "infect_lead", "Colour lead", "how early it jumps", 0.0, 0.5),
-        _slider("crt", "alarm_threshold", "Alarm rarity", "how rare the red screen is", 0.0, 1.0),
     ]},
 ]
 
@@ -277,6 +285,17 @@ def _text_ok(row, value):
     if check == "key" and value and "," not in value:
         return None
     return value
+
+
+def detail(row_id):
+    """El primer párrafo del comentario de la perilla en _CONFIG_COMMENTS (la
+    misma prosa del TOML de ejemplo, así hay una sola fuente), en una línea. Es
+    lo que la ventana muestra al apuntar una fila; vacío si la perilla no
+    tiene comentario y entonces la ventana usa el hint."""
+    section, key = _split(row_id)
+    text = config._CONFIG_COMMENTS.get(section, {}).get(key, "")
+    first = re.split(r"\n\s*\n", text.strip(), maxsplit=1)[0]
+    return " ".join(first.split())
 
 
 def _split(row_id):
@@ -394,6 +413,7 @@ def snapshot():
         "tabs": TABS,
         "groups": GROUPS,
         "values": values,
+        "details": {rid: d for rid in ROWS if (d := detail(rid))},
         "crt": config.crt_on(),
         "keys": dict(cfg["keys"]),
         "monitors": [{"name": n, "info": info} for n, info in system._monitors_lr()],

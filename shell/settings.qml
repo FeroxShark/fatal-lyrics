@@ -34,6 +34,10 @@ ShellRoot {
     property var tabs: []
     property var groups: []
     property var vals: ({})
+    // la prosa larga de cada perilla (el comentario del TOML) y la fila que se
+    // está apuntando: el panel de abajo de la hoja las muestra
+    property var details: ({})
+    property var sel: null
     property bool crtOn: false
     property var keys: ({})
     property var monitors: []
@@ -71,6 +75,7 @@ ShellRoot {
         if (root.groups.length === 0) {
             root.tabs = d.tabs;
             root.groups = d.groups;
+            root.details = d.details || {};
         }
         if (root.opening === null)
             root.opening = d.values;
@@ -85,6 +90,12 @@ ShellRoot {
         if (JSON.stringify(d.players) !== JSON.stringify(root.players))
             root.players = d.players;
         root.daemonUp = d.daemon;
+    }
+
+    // una fila dependiente (`needs`) se atenúa mientras alguna de sus casillas
+    // esté apagada: seguir tocándola no se nota
+    function dimmed(row) {
+        return (row.needs || []).some(id => root.vals[id] === false);
     }
 
     function commit(id, value, final) {
@@ -510,7 +521,7 @@ ShellRoot {
                             x: 10
                             y: 10
                             width: parent.width - 20
-                            height: Math.min(pages.tallest, (win.screen ? win.screen.height : 1080) - 190)
+                            height: Math.min(pages.tallest, (win.screen ? win.screen.height : 1080) - 270)
                             contentWidth: width
                             contentHeight: pages.tallest
                             clip: true
@@ -571,6 +582,12 @@ ShellRoot {
                                                                 readonly property string rid: modelData.id
                                                                 width: group.width - 22
                                                                 height: loader.item ? loader.item.implicitHeight : 0
+                                                                opacity: root.dimmed(modelData) ? 0.45 : 1
+
+                                                                // apuntar la fila llena el panel de detalle
+                                                                HoverHandler {
+                                                                    onHoveredChanged: if (hovered) root.sel = rowItem.modelData
+                                                                }
 
                                                                 Loader {
                                                                     id: loader
@@ -990,6 +1007,36 @@ ShellRoot {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // qué hace la fila apuntada: el primer párrafo de su comentario
+                // del TOML. Alto fijo (nombre + 4 renglones): un texto largo se
+                // corta con "…" y la ventana no cambia de tamaño
+                Rectangle {
+                    width: parent.width
+                    height: 74
+                    color: "#c0c0c0"
+                    Bevel { sunken: true }
+                    Column {
+                        x: 8
+                        y: 6
+                        width: parent.width - 16
+                        spacing: 2
+                        Label95 {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            font.bold: true
+                            text: root.sel ? root.sel.label : "What does it do?"
+                        }
+                        Hint95 {
+                            width: parent.width
+                            height: 4 * 14
+                            maximumLineCount: 4
+                            elide: Text.ElideRight
+                            text: root.sel ? (root.details[root.sel.id] || root.sel.hint)
+                                           : "Point at any setting to read what it does."
                         }
                     }
                 }

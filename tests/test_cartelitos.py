@@ -3211,6 +3211,49 @@ class TestSettingsSchema(unittest.TestCase):
                     self.assertIsInstance(default, int, row_id)
             self.assertEqual(settings.coerce(row, default), default, row_id)
 
+    def test_no_two_rows_share_a_name_and_none_repeats_a_group_title(self):
+        """"Colours" era grupo y fila, "Screens" estaba en dos pestañas, "Water"
+        chocaba con "Water drawings": en la ventana no se sabía cuál era cuál."""
+        labels = [r["label"].lower() for g in settings.GROUPS for r in g["rows"]]
+        titles = {g["title"].lower() for g in settings.GROUPS}
+        for label in labels:
+            self.assertEqual(labels.count(label), 1, label)
+            self.assertNotIn(label, titles, label)
+
+    def test_the_bass_knob_says_it_is_the_bass_and_resolution_is_glass(self):
+        self.assertIn("bass", settings.ROWS["crt.flicker"]["label"].lower())
+        by_id = {r["id"]: g["title"] for g in settings.GROUPS for r in g["rows"]}
+        self.assertEqual(by_id["crt.quality"], "Glass")
+        self.assertNotEqual(by_id["crt.alarm_threshold"], "Colour timing")
+
+    def test_dependent_rows_name_real_toggles(self):
+        self.assertEqual(settings.ROWS["crt.ring_gap"]["needs"], ["crt.ring"])
+        self.assertIn("crt.water", settings.ROWS["crt.water_amp"]["needs"])
+        for row in settings.ROWS.values():
+            for dep in row.get("needs", []):
+                self.assertEqual(settings.ROWS[dep]["kind"], "toggle", dep)
+
+    def test_the_detail_is_the_toml_comment_in_one_line(self):
+        """Una sola fuente: el panel de la ventana muestra la prosa de
+        _CONFIG_COMMENTS, sin saltos de línea del TOML."""
+        text = settings.detail("crt.flicker")
+        self.assertIn("0 = nothing moves with the volume", text)
+        self.assertNotIn("\n", text)
+        self.assertEqual(settings.detail("crt.no_such_knob"), "")
+        multi = {"crt": {"x": "first one\nstill first\n\nsecond paragraph"}}
+        with mock.patch.object(c, "_CONFIG_COMMENTS", multi):
+            self.assertEqual(settings.detail("crt.x"), "first one still first")
+
+    def test_the_snapshot_carries_a_detail_for_each_commented_knob(self):
+        with mock.patch.object(system, "_daemon_pid", return_value=None), \
+                mock.patch.object(system, "_monitors_lr", return_value=[]), \
+                mock.patch.object(system, "_players", return_value=[]):
+            details = json.loads(json.dumps(settings.snapshot()))["details"]
+        self.assertIn("crt.flicker", details)
+        for row_id, text in details.items():
+            self.assertIn(row_id, settings.ROWS)
+            self.assertTrue(text)
+
     def test_every_group_sits_on_a_real_tab_and_column(self):
         for g in settings.GROUPS:
             self.assertIn(g["tab"], range(len(settings.TABS)), g["title"])

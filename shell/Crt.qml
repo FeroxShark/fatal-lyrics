@@ -2148,7 +2148,7 @@ PanelWindow {
                     level: crt.pump
                     low: crt.live ? crt.ctl.audLo : 0.4
                     high: crt.live ? crt.ctl.audHi : 0.3
-                    beat: crt.ctl.audBeat
+                    beat: crt.ctl.audBoom
                     beatAmt: crt.ctl.crtFlicker
                     // cuando el tubo parpadea, la animación acompaña: se acelera y
                     // crece un instante, así el golpe se ve en todas las pantallas.
@@ -2195,9 +2195,9 @@ PanelWindow {
                 stepped: crt.ctl.bpmLive
                 beatMs: crt.ctl.beatMs > 0 ? crt.ctl.beatMs : 500
                 beat: crt.ctl.beatTick
-                // sin compás, en el grave: el golpe CRUDO (`audBeat`), no el
+                // sin compás, en el grave: el golpe CRUDO (`audBoom`), no el
                 // pico del tubo, que va uno cada cuatro segundos
-                kick: crt.ctl.audBeat
+                kick: crt.ctl.audBoom
                 low: crt.live ? crt.ctl.audLo : 0.4
                 screen: crt.idx
                 cue: crt.ctl.cueGen

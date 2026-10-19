@@ -273,6 +273,10 @@ ShellRoot {
             // un pasaje quieto (`mov` 0) y en uno nervioso (`mov` 1); 1 = como estaba.
             // `movKick`: cuánto empuja la velocidad un golpe (× ritmo, decae en 0.42 s)
             movMin: 0.60, movMax: 1.50, movKick: 0.40,
+            // r17.2: cuánto pesa la novedad espectral (`audNov`, entrada nueva, cambio de
+            // instrumento) en el ritmo de los dibujos, sumada a `mov` ya ajustado al tema
+            // (como `crtDensity`). `wild` es lo de antes: 0
+            movNov: 0.15,
             // el GOLPE visible (excepción a "una animación por pantalla" y a "la cámara se
             // queda quieta", ver CLAUDE.md): cada bombo pulsa la cámara (`kickCam`, fracción
             // de zoom) y el tubo (`kickTube`, fogonazo) y empuja un poco el dibujo
@@ -308,6 +312,7 @@ ShellRoot {
             fxGapMs: 6000,
             cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
             movMin: 0.40, movMax: 2.20, movKick: 0.70,
+            movNov: 0.25,
             kickCam: 0.022, kickTube: 0.90, kickMotif: 0.050, kickHat: 0.85,
             kickAmpMin: 0.30, kickSlowMs: 400, kickFastMs: 120,
             kickRise: 0.70, fallHoldMs: 5000,
@@ -339,6 +344,7 @@ ShellRoot {
             // el valor más fuerte y no el cero
             cutDepth: 0.75, cutFlash: 0.45, fizzAmt: 1.0, grainMove: 1.0,
             movMin: 0.30, movMax: 2.80, movKick: 1.00,
+            movNov: 0,
             // la tanda 3 no tenía golpe por bombo: como `dirtMax`, `wild` se lleva el más fuerte
             kickCam: 0.040, kickTube: 1.30, kickMotif: 0.090, kickHat: 1.00,
             // `wild` no alarga holds (es el modo rápido, y la tanda 3 no tenía `fall`): 0
@@ -540,6 +546,9 @@ ShellRoot {
     // no llega, y `crtCharacter` lo saca de BPM + mood).
     property int audKick: 0
     property bool audKickSeen: false
+    // r17.1: contador del golpe que mueve salpicón, burbuja y fogonazo: el bombo (`k`) si el
+    // daemon lo manda; `b` (cualquier ataque, también el hi-hat) sólo si `k` nunca llegó
+    property int audBoom: 0
     property real audHat: 0
     property bool audHatSeen: false
     property real audNov: 0
@@ -2293,8 +2302,10 @@ ShellRoot {
                 running = false;
         }
     }
+    // r17.2: `mov` ajustado al tema + la novedad (`audNov`), topado en 1
+    readonly property real movNovIn: Math.min(1, movFit.mov + pace.movNov * audNov)
     property real crtMovRate: audLive
-        ? Speed.push(Speed.rate(movFit.mov, pace.movMin, pace.movMax, crtMovAmount, movFit.pivot),
+        ? Speed.push(Speed.rate(movNovIn, pace.movMin, pace.movMax, crtMovAmount, movFit.pivot),
                      crtMovKick, crtMovAmount) : 1
 
     // ---- el GOLPE visible. Ferox 2026-10-19: cada golpe del bajo se ve, pero a la medida
@@ -4007,6 +4018,7 @@ ShellRoot {
                             if (ev.b)
                                 root.audBeat++;
                             if (kSeen ? ev.k : ev.b) {
+                                root.audBoom++;
                                 if (kSeen)
                                     root.audKick++;
                                 root.bassHit(!!ev.h);

@@ -11,6 +11,7 @@ import Quickshell.Widgets
 import QtQuick
 import "Faces.js" as Faces
 import "Speed.js" as Speed
+import "Wall.js" as Wall
 
 ShellRoot {
     id: root
@@ -3430,6 +3431,11 @@ ShellRoot {
     // estén limitados a una sola: el modo CRT es una toma de la máquina entera
     readonly property var activeCrtScreens: orderScreens(
         crtScreens === "same" ? activeScreens : matchScreens(crtScreens))
+
+    // r14.1: el pivote de la cámara de PARED (ver `Wall.js`): todos los tubos escalan el golpe,
+    // el zoom de foco y el latido sobre el mismo punto global, así la costura no se parte.
+    readonly property var crtWallPivot: Wall.pivot(activeCrtScreens.map(
+        s => ({ x: s.x, y: s.y, w: s.width, h: s.height })))
 
     function randomIcon() {
         const r = Math.random();

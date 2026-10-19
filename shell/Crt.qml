@@ -15,6 +15,7 @@ import QtQuick
 import "React.js" as React
 import "Speed.js" as Speed
 import "Rows.js" as Rows
+import "Wall.js" as Wall
 
 PanelWindow {
     id: crt
@@ -1618,6 +1619,10 @@ PanelWindow {
     // para conseguirlo — que es lo que dejaba el marco alrededor del motivo.
     // el encuadre de la cámara completo (deriva + golpe + latido): lo usa el Scale
     // de `camera` y el quemado, que tiene que deshacerlo para ubicar la letra
+    // r14.1: el pivote de la cámara en px de ESTA pantalla (`Wall.js`): el de la pared entera,
+    // atado al rectángulo del tubo. Con una sola pantalla es su centro, como antes.
+    readonly property var camOrigin: Wall.local(
+        { x: scr.x, y: scr.y, w: scr.width, h: scr.height }, ctl.crtWallPivot)
     readonly property real camS: camZoom * cueZoom * sectionZoom
         * (1 + ctl.pace.camBeat * beatPulse + ctl.pace.camGrid * gridPulse * ctl.crtFlicker)
         * (1 + ctl.kickCamAmt * kickPulse)
@@ -1688,8 +1693,8 @@ PanelWindow {
             // acompaña el parpadeo y no sólo las de al lado
             transform: [
                 Scale {
-                    origin.x: camera.width / 2
-                    origin.y: camera.height / 2
+                    origin.x: crt.camOrigin.x
+                    origin.y: crt.camOrigin.y
                     // T4.3: el latido de la cámara es CHICO sobre una deriva
                     // uniforme (1.5 % en el pico, 0.2 % en el tiempo; eran
                     // 3.5 % y 2 %). El punto 3 de la referencia de fluidez: lo
@@ -3065,8 +3070,14 @@ PanelWindow {
                 property real lyrSy: Math.max(crt.camS * crt.textPlane * crt.tubeOnY, 0.05)
                 property variant sc: Qt.vector2d(crt.width / (lyrSx * Math.max(lyric.width, 1)),
                                                  crt.height / (lyrSy * Math.max(lyric.height, 1)))
+                // el pivote de la cámara ya no es el centro (`camOrigin`): q = p/s + o·(1 - 1/s)
+                property real pivK: 1 - 1 / Math.max(crt.camS, 0.05)
                 property variant off: Qt.vector2d(0.5 - crt.hopShift
-                    / (Math.max(crt.textPlane, 0.05) * Math.max(lyric.width, 1)), 0.5)
+                    / (Math.max(crt.textPlane, 0.05) * Math.max(lyric.width, 1))
+                    + (crt.camOrigin.x - crt.width / 2) * pivK
+                    / (Math.max(crt.textPlane, 0.05) * Math.max(lyric.width, 1)),
+                    0.5 + (crt.camOrigin.y - crt.height / 2) * pivK
+                    / (Math.max(crt.textPlane * crt.tubeOnY, 0.05) * Math.max(lyric.height, 1)))
                 property variant res: Qt.vector2d(Math.max(1, Math.round(crt.width / 2)),
                                                   Math.max(1, Math.round(crt.height / 2)))
                 fragmentShader: Qt.resolvedUrl("burn.frag.qsb")

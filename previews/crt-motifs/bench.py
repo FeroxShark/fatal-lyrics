@@ -22,6 +22,8 @@ def main():
     ap.add_argument("--n", type=int, default=240)
     ap.add_argument("--rounds", type=int, default=1, help="rondas intercaladas")
     ap.add_argument("--portrait", action="store_true")
+    ap.add_argument("--cost", action="store_true", help="rinde en una capa a tamaño completo y lee una ventana de 64x36: mide el shader, no el readback (implica --flat)")
+    ap.add_argument("--scale", type=int, default=1, help="x veces el lado: el shader pesa x²; sirve cuando la placa es tan rápida que el costo se pierde en el ruido")
     ap.add_argument("--temper", choices=list(R.TEMPERS), help="testeo: carácter del tema")
     a = ap.parse_args()
     bpm, val, men = R.TEMPERS[a.temper] if a.temper else (128.0, 0.5, 0.5)
@@ -31,8 +33,8 @@ def main():
     for k in kinds * a.rounds:
         base = k.replace('old', '')
         tube, scheme = R.MOTIFS.get(base) or R.TESTEO.get(base) or R.MOTIFS['mystify']
-        st = R.Stage(k, tube, scheme, portrait=a.portrait, glass=not a.flat,
-                     bpm=bpm, valence=val, menergy=men)
+        st = R.Stage(k, tube, scheme, portrait=a.portrait, glass=not (a.flat or a.cost),
+                     bpm=bpm, valence=val, menergy=men, scale=a.scale, cost=a.cost)
         for f in range(60):
             st.frame(f / R.FPS)
         w0, c0 = time.perf_counter(), time.process_time()

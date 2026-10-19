@@ -23,6 +23,11 @@ Item {
     property string tube: "trinitron"
     property string scheme: "ado"
     property bool glassOn: true
+    // banco de costo: la cara se rinde a costW×costH en una capa y la ventana es de 64×36,
+    // así el readback no tapa lo que cuesta el shader (la placa es más rápida que el grab)
+    property bool cost: false
+    property int costW: 1920
+    property int costH: 1080
 
     readonly property var schemes: ({
         dragons: { bg: "#170604", ink: "#ff8a2b", hot: "#ffe0b0" },
@@ -71,7 +76,13 @@ Item {
 
     Item {
         id: face
-        anchors.fill: parent
+        anchors.fill: stage.cost ? undefined : parent
+        width: stage.cost ? stage.costW : stage.width
+        height: stage.cost ? stage.costH : stage.height
+        layer.enabled: stage.cost
+        layer.textureSize: Qt.size(stage.costW, stage.costH)
+        transformOrigin: Item.TopLeft
+        scale: stage.cost ? stage.width / stage.costW : 1
         Rectangle { id: bgRect; anchors.fill: parent; color: stage.pal.bg }
 
         // el latido de Motif.qml con `pace = normal`: 0.80 + 0.15 de opacidad

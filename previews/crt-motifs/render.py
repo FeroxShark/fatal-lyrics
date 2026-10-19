@@ -56,6 +56,10 @@ TESTEO = {
     "membrana": ("trinitron", "ado"),
     "cintas": ("arcade", "bloodline"),
     "giroscopio": ("pvm", "dragons"),
+    # los de shader por punto/aro, sólo para el banco de costo y el diff (tanda shaders 2026-10-19)
+    "dunes": ("trinitron", "bone"),
+    "ocean": ("trinitron", "ado"),
+    "pond": ("trinitron", "vapor"),
 }
 # el carácter del tema: (bpm, valence, energy del mood)
 TEMPERS = {"calmo": (78, 0.6, 0.2), "agitado": (140, 0.35, 0.9)}
@@ -79,8 +83,12 @@ qInstallMessageHandler(_qt_log)
 
 class Stage:
     def __init__(self, kind, tube, scheme, portrait=False, glass=True, egg="", rate=1.0,
-                 bpm=128.0, valence=0.5, menergy=0.5):
+                 bpm=128.0, valence=0.5, menergy=0.5, scale=1, cost=False):
         self.w, self.h = (1080, 1920) if portrait else (1920, 1080)
+        self.w, self.h = self.w * scale, self.h * scale
+        cw, ch = self.w, self.h
+        if cost:
+            self.w, self.h = 64, 36
         self.app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
         self.view = QQuickView()
         self.view.setResizeMode(QQuickView.ResizeMode.SizeRootObjectToView)
@@ -95,6 +103,10 @@ class Stage:
         self.root.setProperty("tube", tube)
         self.root.setProperty("scheme", scheme)
         self.root.setProperty("glassOn", glass)
+        if cost:
+            self.root.setProperty("costW", cw)
+            self.root.setProperty("costH", ch)
+            self.root.setProperty("cost", True)
         self.root.setProperty("egg", egg)
         self.root.setProperty("rate", rate)
         self.root.setProperty("bpm", float(bpm))

@@ -5,7 +5,12 @@ set -e
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 missing=0
-for dep in qs playerctl python3; do
+# Quickshell se llama `qs` en Arch y `quickshell` en las distros que sólo traen ese nombre
+if ! command -v qs >/dev/null && ! command -v quickshell >/dev/null; then
+    echo "missing dependency: qs (Quickshell; the binary may be called quickshell)"
+    missing=1
+fi
+for dep in playerctl python3; do
     if ! command -v "$dep" >/dev/null; then
         echo "missing dependency: $dep"
         missing=1
@@ -49,6 +54,10 @@ echo "installed. Play something on Spotify and run: fatal"
 echo "config: auto-created at ~/.config/cartelitos/config.toml (every option: fatal ajustes)"
 if command -v hyprctl >/dev/null && [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua" ]; then
     echo "Hyprland (Lua config): keybinds + layer rule live in packaging/hyprland.lua; load it from hyprland.lua with"
-    echo "    dofile(\"$REPO_DIR/packaging/hyprland.lua\")"
+    echo "    local fl = \"$REPO_DIR/packaging/hyprland.lua\""
+    echo "    if io.open(fl) then dofile(fl) end"
 fi
-echo "system tray (icon + quit button): optional, install gtk3 + libayatana-appindicator"
+# lo opcional que falta y qué función se pierde por cada cosa (la misma lista que
+# `fatal status`: pw-record/parec, magick, pactl, hyprctl, bandeja). `|| true`: set -e
+echo
+python3 "$REPO_DIR/cartelitos.py" --check || true

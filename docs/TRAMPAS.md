@@ -1226,3 +1226,28 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   `ring_gap`. El aro no se arma mientras corre la tarjeta/estática del intro (`crtIntroOn`): entra
   después, con menos de 8 s si el intro es corto.
 
+
+## Control y primer uso (tanda 50, 2026-10-19)
+
+- **`fatal on` decía ON con media instancia.** `start` imprimía "fatal ON" tras esperar al daemon sin
+  mirar los PID: sin `qs`, o con el QML roto, quedaba la pantalla vacía y un exit 0. Ahora confirma
+  las DOS mitades (overlay por pidfile o por el lock; daemon por pidfile), y si una no está dice cuál,
+  la última línea de su log y dónde mirar, y sale 1. Con la unit, `systemctl --user start` devuelve 0
+  aunque la unit se salte sola por `ConditionEnvironment=WAYLAND_DISPLAY`: `unit_start` pregunta
+  `is-active` después. Dentro de la unit, `run` hace `start || exit 1`, así que un error duro hace que
+  `Restart=on-failure` reintente cada 3 s (el motivo queda en el journal).
+- **`qs` o `quickshell`.** El binario se resuelve con `qs_bin()` (bin/fatal) en el arranque y en
+  Ajustes, e install.sh acepta cualquiera de los dos. El `pgrep -x "qs|quickshell"` del wrapper ya
+  contemplaba los dos nombres.
+- **`fatal crt on|toggle` con todo apagado ya no dice "CRT on".** `fatal on` vuelve a `[crt] enabled`
+  y pisa el archivo, así que escribirlo con el daemon muerto era mentira. Avisa por stderr y sale 1
+  sin tocar el archivo; `crt off` y el `crt_set` del `restart` con el valor previo siguen andando.
+  `fatal status` suma `crt: on|off` junto a `sing:`.
+- **La bandeja lee el estado de verdad.** El primer ítem (`tray.status_text`) dice ON o HALF según
+  el lock del overlay (`qs.lock`, mismo criterio que `lock_held` de bin/fatal) y agrega el estado de
+  la letra que escribe `lyrics.write_state` (`$RUN/lyrics`), truncado a 44 caracteres: no es el
+  verso que suena (el daemon no lo publica fuera del socket del overlay). El ícono es
+  `fatal-lyrics` si el SVG está en el tema (install.sh/paquete), si no `dialog-warning`.
+- **Uso inválido.** `fatal <cualquier cosa>` imprime el uso por stderr y sale 1; `fatal help` /
+  `-h` / `--help` lo imprimen por stdout con exit 0. El bind de Ajustes (`Super+Shift+A`) es fijo
+  en `packaging/hyprland.lua`, no está en `[keys]`.

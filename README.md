@@ -283,6 +283,7 @@ keybind, and the command itself.
 ```
 bind = SUPER SHIFT, Y, exec, fatal crt toggle   # Hyprland (hyprlang .conf)
 hl.bind("SUPER + SHIFT + Y", hl.dsp.exec_cmd("fatal crt toggle"))   -- Hyprland 0.56+ (Lua config)
+hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd("fatal ajustes"))      -- the Settings window
 ```
 
 It is **opt-in** and never turns itself on. The switch is a file in
@@ -330,9 +331,12 @@ no capture, no textures, no timers. `quality` trades resolution for load, and
 ## Requirements
 
 - Wayland with a wlroots-like compositor (tested on **Hyprland**)
-- [Quickshell](https://quickshell.org/) (`qs`)
+- [Quickshell](https://quickshell.org/) (`qs`, or `quickshell` on distros that only ship that name)
 - `playerctl`
 - `python3` ≥ 3.11 (stdlib only)
+- Optional: `pw-record` or `parec` (without one the CRT tube doesn't move with the
+  music), `magick` (album-cover colours), `pactl`, `hyprctl`, GTK3 +
+  `libayatana-appindicator` (tray). `fatal status` lists what is missing.
 - Spotify (or any MPRIS player — configurable)
 
 Lyrics come from [lrclib.net](https://lrclib.net) (free, no API key), falling
@@ -352,9 +356,11 @@ fatal-lyrics.service` to stop that). While the unit is installed, `fatal on`,
 
 ### Hyprland keys
 
-The CRT switch (`Super+Shift+Y`) and the sync keys (`Super+Alt+←/→`) are binds in
-`packaging/hyprland.lua`, and Hyprland 0.56+ only loads them if your config does.
-Add these two lines to `~/.config/hypr/hyprland.lua`:
+The CRT switch (`Super+Shift+Y`), the Settings window (`Super+Shift+A`) and the sync
+keys (`Super+Alt+←/→`) are binds in `packaging/hyprland.lua`, and Hyprland 0.56+
+only loads them if your config does. `install.sh` prints these two lines with the
+real path of your checkout; add them to `~/.config/hypr/hyprland.lua` (the path
+below is the `~/fatal-lyrics` from the install command above):
 
 ```lua
 local fl = os.getenv("HOME") .. "/fatal-lyrics/packaging/hyprland.lua"
@@ -382,11 +388,12 @@ systemctl --user enable fatal-lyrics.service   # optional: start with the sessio
 fatal            # toggle on/off
 fatal on|off     # explicit
 fatal restart    # restart it
-fatal status     # ON / OFF, plus anything optional that's missing and what it costs you
+fatal status     # ON / HALF / OFF, the CRT and karaoke state, plus anything optional that's missing and what it costs you
+fatal help       # the command list
 fatal ajustes    # the Settings window: every option, live (aliases: settings, config, setup)
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 fatal demo       # throws a few fake dialogs, to try settings without music
-fatal crt on|off|toggle   # CRT mode: the tube takes over every screen
+fatal crt on|off|toggle   # CRT mode: the tube takes over every screen (needs fatal on first)
 fatal crt setup           # a number on each screen, to write down [crt] order
 fatal crt motif <kind> [--screen <name|index|all>]   # force one screen's drawing right away
 fatal crt motif off       # give the roll back to chance
@@ -638,11 +645,16 @@ package reads.
 ```bash
 fatal off
 systemctl --user disable fatal-lyrics.service
-rm -f ~/.config/systemd/user/fatal-lyrics.service   # manual install only
 # AUR: sudo pacman -R fatal-lyrics-git
-# manual:
-rm ~/.local/bin/fatal && rm -rf ~/fatal-lyrics
+# manual install (everything install.sh put there):
+rm -f ~/.config/systemd/user/fatal-lyrics.service
+systemctl --user daemon-reload
+rm -f ~/.local/bin/fatal
+rm -f ~/.local/share/applications/fatal.desktop
+rm -f ~/.local/share/icons/hicolor/scalable/apps/fatal-lyrics.svg
+rm -rf ~/fatal-lyrics
 rm -rf ~/.config/cartelitos   # optional: delete config
+# and take the dofile(...) lines out of ~/.config/hypr/hyprland.lua if you added them
 ```
 
 ## Fonts

@@ -47,6 +47,40 @@ class TestInstalador(unittest.TestCase):
         # nada instalado: el chequeo corta antes de crear ~/.local/bin
         self.assertFalse(os.path.exists(os.path.join(self.home, ".local")))
 
+    def test_quickshell_alone_is_enough_and_the_install_ends_with_the_check(self):
+        # una PATH sin /usr/bin (donde esta máquina tiene qs): sólo lo del bindir
+        tools = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tools, True)
+        for name in ("bash", "env", "sh", "dirname", "ln", "chmod", "mkdir", "sed",
+                     "install", "cat", "tr", "grep", "python3"):
+            src = shutil.which(name)
+            if src:
+                os.symlink(src, os.path.join(tools, name))
+        os.remove(os.path.join(self.bindir, "qs"))
+        _exe(os.path.join(self.bindir, "quickshell"), "exit 0\n")
+        env = {"PATH": f"{self.bindir}:{tools}", "HOME": self.home,
+               "XDG_CONFIG_HOME": os.path.join(self.home, ".config")}
+        out = subprocess.run(["bash", os.path.join(ROOT, "install.sh")], env=env,
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertNotIn("missing dependency", out.stdout)
+        # el chequeo de opcionales va al final y nombra lo que falta (sin pw-record/parec)
+        self.assertIn("pw-record/parec", out.stdout)
+
+    def test_no_quickshell_at_all_stops_the_install(self):
+        tools = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tools, True)
+        for name in ("bash", "env", "dirname", "python3"):
+            src = shutil.which(name)
+            if src:
+                os.symlink(src, os.path.join(tools, name))
+        os.remove(os.path.join(self.bindir, "qs"))
+        env = {"PATH": f"{self.bindir}:{tools}", "HOME": self.home}
+        out = subprocess.run(["bash", os.path.join(ROOT, "install.sh")], env=env,
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 1, out.stdout + out.stderr)
+        self.assertIn("missing dependency: qs", out.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

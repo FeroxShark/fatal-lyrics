@@ -1379,6 +1379,9 @@ ShellRoot {
 
     // colores de la tapa del disco (evento "art" del daemon)
     property var artColors: []
+    // tema al que pertenece lo que suena (lo manda el `clear` de tema nuevo); "" = no se sabe
+    // (overlay que arrancó a mitad de tema, daemon viejo) y entonces el `art` entra siempre
+    property string artTrackId: ""
 
     // Una cara de `Faces.js` (hex puro, sin Qt) con su `tint` pasado a vec3
     // para el uniform de crt.frag.
@@ -3880,7 +3883,14 @@ ShellRoot {
                                 root.cueGen++;
                             }
                         } else if (ev.cmd === "art") {
-                            root.artColors = ev.colors || [];
+                            // el `art` lleva el id del tema que lo pidió: una
+                            // descarga lenta que llega tras un salto no pinta la
+                            // canción que ya no suena. `colors: []` = ese tema no
+                            // tiene tapa con color → el esquema cae al del mood
+                            // en vez de quedarse con el disco anterior.
+                            if (ev.id === undefined || ev.id === null || root.artTrackId === ""
+                                    || String(ev.id) === root.artTrackId)
+                                root.artColors = ev.colors || [];
                         } else if (ev.cmd === "aud") {
                             root.audLevel = ev.l;
                             root.audLevel2s = root.audLevel2s * 0.95 + ev.l * 0.05;
@@ -3969,6 +3979,8 @@ ShellRoot {
                             // bloque — el que decide es el daemon
                             root.singing = ev.on === true;
                         } else if (ev.cmd === "clear") {
+                            if (ev.id !== undefined && ev.id !== null)
+                                root.artTrackId = String(ev.id);
                             root.npShown = false;
                             root.bpm = 0;      // otro tema, otro compás
                             root.bpmConf = 0;

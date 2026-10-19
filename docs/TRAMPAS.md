@@ -1134,3 +1134,13 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **Aro de cuenta regresiva en el intro: NO se puede.** El aro cuenta hacia el `nx` de la línea que
   viene y necesita una línea actual y un `crtShot`; antes del primer verso no hay ninguno, y el daemon
   no manda la hora del primer verso. Haría falta un evento nuevo del daemon (`first_due`).
+
+## El `art` no decía de qué tema era (2026-10-19)
+
+- **`artColors` nunca se vaciaba:** un tema sin tapa (o con descarga fallida) dejaba la pared con la
+  paleta del disco anterior, y una descarga lenta que llegaba después de un salto pintaba una canción
+  que ya no suena. Ahora el `clear` de tema lleva `id` (overlay: `artTrackId`), el `art` lleva el id
+  del tema que lo pidió y el overlay ignora el de otro tema; el daemon corta el hilo si el tema ya
+  cambió (`is_current`) y manda `colors: []` cuando no hay colores, que suelta la paleta anterior
+  (`albumScheme` → null → esquema del mood). Si la tapa llega tarde, la pared hace dos cambios de
+  paleta seguidos: es el precio de no vaciar antes de la confirmación.

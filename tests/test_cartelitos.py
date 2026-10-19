@@ -2447,6 +2447,41 @@ class TestAlbumColours(unittest.TestCase):
         self.assertIsNone(c.album_colors(""))
 
 
+class TestAlbumEventCarriesTheTrack(unittest.TestCase):
+    """El `art` lleva el id del tema; sin tapa va `colors: []` (suelta la paleta anterior)."""
+
+    def run_art(self, colors, is_current=None):
+        sent = []
+        class Sync:       # el hilo corre en el acto
+            def __init__(self, target, **kw): self.target = target
+            def start(self): self.target()
+        with mock.patch.object(c.art.threading, "Thread", Sync), \
+             mock.patch.object(c.art, "album_colors", return_value=colors), \
+             mock.patch.object(c.art.ipc, "send", side_effect=sent.append):
+            c.art.send_album_colors("u", "t1", is_current)
+        return sent
+
+    def test_event_has_the_track_id_and_the_colours(self):
+        self.assertEqual(self.run_art(["#ff0000"]),
+                         [{"cmd": "art", "id": "t1", "colors": ["#ff0000"]}])
+
+    def test_a_cover_without_colours_still_confirms_with_an_empty_list(self):
+        self.assertEqual(self.run_art(None), [{"cmd": "art", "id": "t1", "colors": []}])
+
+    def test_a_download_for_a_track_that_no_longer_plays_is_dropped(self):
+        self.assertEqual(self.run_art(["#ff0000"], lambda: False), [])
+
+    def test_overlay_ignores_the_art_of_another_track(self):
+        qml = open(os.path.join(os.path.dirname(__file__), "..", "shell", "shell.qml"),
+                   encoding="utf-8").read()
+        self.assertIn("root.artTrackId = String(ev.id)", qml)
+        self.assertIn("String(ev.id) === root.artTrackId", qml)
+        ev = c.ipc
+        with mock.patch.object(ev, "send") as snd:
+            ev.clear(why="track", track_id="t9")
+        snd.assert_called_once_with({"cmd": "clear", "why": "track", "id": "t9"})
+
+
 class TestAlbumGreys(unittest.TestCase):
     """Un gris no sirve de color de pantalla: no tiene tono propio, y una tapa en
     blanco y negro terminaba pintando el tubo de un color inventado."""

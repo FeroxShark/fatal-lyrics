@@ -309,12 +309,13 @@ class DaemonLoop:
             self.profile = self._audio.profile_for(t)
             self._audio.set_profile(self.profile)
             self.idx = -1
-            self._ipc.clear(why="track")
+            self._ipc.clear(why="track", track_id=t["id"])
             self._log(f"track: {t['artist']} — {t['title']}")
             if self._np_wanted():
                 self._ipc.send({"cmd": "np", "title": t["title"], "artist": t["artist"],
                       "album": t["album"], "art": t["art"]})
-            self._art.send_album_colors(t["art"])
+            tid = t["id"]
+            self._art.send_album_colors(t["art"], tid, lambda: self.track_id == tid)
             self.lyrics = None
             self.lyrics_kind = None
             self.plain_shown = False

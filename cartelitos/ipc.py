@@ -292,13 +292,16 @@ def show(text, title, t0=0.0, t1=0.0, words=None, kind=None, nxt=None,
     send(ev)
 
 
-def clear(why="track"):
+def clear(why="track", track_id=None):
     """`why`: "track" (tema nuevo), "seek" (rebobinado) o "pause" (pausa/fin en
     pausa). El overlay lo usa para no re-sortear semilla/set/intro en un
     rebobinado o una pausa — compatible: quien no lo lee, no lo ve."""
     global _last_lyrics
     _last_lyrics = None        # otro tema, otra letra
-    send({"cmd": "clear", "why": why})
+    ev = {"cmd": "clear", "why": why}
+    if track_id is not None:
+        ev["id"] = track_id      # el overlay descarta el `art` de otro tema
+    send(ev)
 
 
 DEMO_LINES = [

@@ -151,7 +151,16 @@ class TestTrackChangeCleanup(unittest.TestCase):
         self.assertEqual(loop.track_id, "new")
         self.assertIsNone(loop.lyrics)
         self.assertEqual(loop.idx, -1)
-        loop._ipc.clear.assert_called_once_with(why="track")
+        loop._ipc.clear.assert_called_once_with(why="track", track_id="new")
+
+    def test_new_track_asks_for_the_cover_colours_with_its_id(self):
+        loop = make_loop()
+        loop.handle_track(track(id="new", art="u"), now=0.0)
+        args = loop._art.send_album_colors.call_args.args
+        self.assertEqual(args[:2], ("u", "new"))
+        self.assertTrue(args[2]())          # sigue siendo el tema que suena
+        loop.track_id = "otro"
+        self.assertFalse(args[2]())         # ya saltó: esa descarga no vale
 
     def test_new_track_kicks_off_a_lyrics_fetch(self):
         loop = make_loop()

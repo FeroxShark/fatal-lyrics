@@ -88,10 +88,16 @@ def album_colors(url):
     return colors
 
 
-def send_album_colors(url):
-    """Los saca en un hilo: descarga + ImageMagick no pueden trabar la letra."""
+def send_album_colors(url, track_id=None, is_current=None):
+    """Los saca en un hilo: descarga + ImageMagick no pueden trabar la letra.
+
+    El evento lleva el id del tema: el overlay ignora el de otro tema (una
+    descarga lenta que llega después de un salto). Sin tapa o sin colores va
+    `colors: []` — es la confirmación que le dice al tubo que suelte la paleta
+    del tema anterior. `is_current()` (opcional) corta acá lo que ya no suena."""
     def work():
-        colors = album_colors(url)
-        if colors:
-            ipc.send({"cmd": "art", "colors": colors})
+        colors = album_colors(url) or []
+        if is_current is not None and not is_current():
+            return
+        ipc.send({"cmd": "art", "id": track_id, "colors": colors})
     threading.Thread(target=work, daemon=True, name="art").start()

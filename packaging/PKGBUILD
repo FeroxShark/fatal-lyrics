@@ -7,7 +7,8 @@ arch=('any')
 url="https://github.com/FeroxShark/fatal-lyrics"
 license=('MIT')
 depends=('quickshell' 'playerctl' 'python')
-optdepends=('gtk3: ícono de bandeja del sistema' 'libayatana-appindicator: ícono de bandeja del sistema')
+optdepends=('gtk3: ícono de bandeja del sistema' 'libayatana-appindicator: ícono de bandeja del sistema'
+            'imagemagick: colores de la tapa del álbum (sin él, el tubo usa sus paletas)')
 makedepends=('git')
 provides=('fatal-lyrics')
 conflicts=('fatal-lyrics')
@@ -22,21 +23,10 @@ pkgver() {
 package() {
   cd fatal-lyrics
   install -d "$pkgdir/usr/share/fatal-lyrics/shell"
-  install -Dm644 shell/shell.qml "$pkgdir/usr/share/fatal-lyrics/shell/shell.qml"
-  install -Dm644 shell/Crt.qml "$pkgdir/usr/share/fatal-lyrics/shell/Crt.qml"
-  install -Dm644 shell/Motif.qml "$pkgdir/usr/share/fatal-lyrics/shell/Motif.qml"
-  install -Dm644 shell/Ocean.qml "$pkgdir/usr/share/fatal-lyrics/shell/Ocean.qml"
-  install -Dm644 shell/Pond.qml "$pkgdir/usr/share/fatal-lyrics/shell/Pond.qml"
-  install -Dm644 shell/settings.qml "$pkgdir/usr/share/fatal-lyrics/shell/settings.qml"
-  # los shaders van precompilados (.qsb); los .frag viajan como fuente
-  install -Dm644 shell/crt.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag.qsb"
-  install -Dm644 shell/crt.frag "$pkgdir/usr/share/fatal-lyrics/shell/crt.frag"
-  install -Dm644 shell/ocean.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/ocean.frag.qsb"
-  install -Dm644 shell/ocean.frag "$pkgdir/usr/share/fatal-lyrics/shell/ocean.frag"
-  install -Dm644 shell/pond.frag.qsb "$pkgdir/usr/share/fatal-lyrics/shell/pond.frag.qsb"
-  install -Dm644 shell/pond.frag "$pkgdir/usr/share/fatal-lyrics/shell/pond.frag"
-  # tanda 6, corrida 2: fuentes OFL de la letra + sus licencias
-  for f in shell/fonts/*; do
+  # todo lo que lee el overlay de shell/, por globs (una lista fija dejó afuera Motion.qml, los
+  # motifs y la membrana). Los shaders van precompilados (.qsb) y los .frag como fuente; las
+  # fuentes OFL de la letra van con sus licencias. tests/test_paquete.py compara con git ls-files
+  for f in shell/*.qml shell/*.js shell/*.frag shell/*.qsb shell/fonts/*; do
     install -Dm644 "$f" "$pkgdir/usr/share/fatal-lyrics/$f"
   done
   install -Dm755 cartelitos.py "$pkgdir/usr/share/fatal-lyrics/cartelitos.py"

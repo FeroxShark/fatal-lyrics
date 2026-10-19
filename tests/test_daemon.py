@@ -499,6 +499,12 @@ class TestMoodEvent(unittest.TestCase):
         loop.handle_track(track(id="t1"), now=0.0)
         self.assertEqual(len(mood_calls(loop)), 1)
 
+    def test_a_track_without_lyrics_gets_one_mood_not_one_per_tick(self):
+        loop = self._loop_with_fetch(None, status="none")
+        for i in range(10):
+            loop.handle_track(track(id="t1", pos=1.0 + i), now=float(i))
+        self.assertEqual(len(mood_calls(loop)), 1)
+
     def test_a_second_mood_fires_once_the_beat_settles_before_the_second_show(self):
         loop = self._loop_with_fetch([(0.0, "a"), (10.0, "b")], conf=0.0)
         loop._lyr.current_line_index.return_value = 0

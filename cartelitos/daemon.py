@@ -167,6 +167,10 @@ class DaemonLoop:
         # lo necesita para saber si "el segundo show" ya pasó).
         self.mood_count = 0
         self.show_count = 0
+        # la búsqueda de letra de este tema ya se recogió (con o sin letra):
+        # sin esto un tema instrumental o con error de red volvía a "recoger"
+        # y a mandar `mood` en cada tick
+        self.lyrics_taken = False
         self.paused_by_game = False
         self.crt_paused_by_game = False
         self.last_game_check = 0.0
@@ -318,6 +322,7 @@ class DaemonLoop:
             self._art.send_album_colors(t["art"], tid, lambda: self.track_id == tid)
             self.lyrics = None
             self.lyrics_kind = None
+            self.lyrics_taken = False
             self.plain_shown = False
             self.hang_sent = False
             self.last_show_at = now
@@ -329,7 +334,9 @@ class DaemonLoop:
                 self._lyr._fetch.update(id=None, lyrics=None, status=None, done=False)
 
         # la búsqueda corre en un hilo: se recoge cuando llega
-        if self.lyrics is None and self._lyr._fetch["done"] and self._lyr._fetch["id"] == self.track_id:
+        if (not self.lyrics_taken and self._lyr._fetch["done"]
+                and self._lyr._fetch["id"] == self.track_id):
+            self.lyrics_taken = True
             self.lyrics = self._lyr._fetch["lyrics"]
             self.lyrics_kind = self._lyr._fetch.get("status")
             # la letra entera, una sola vez: el `show` manda una línea por vez y

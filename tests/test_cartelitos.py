@@ -4531,6 +4531,50 @@ class TestTrayFallback(unittest.TestCase):
         self.assertFalse(created[0].is_alive(),
                           "el hilo de la bandeja se quedó colgado")
 
+    def test_crt_label_follows_the_switch_without_a_click(self):
+        # el tubo puede prenderse con la tecla (Hyprland) sin pasar por la bandeja:
+        # la etiqueta tiene que seguir el interruptor real solo, por el tick de 1 s
+        class _Item:
+            def __init__(self, label=None):
+                self.label = label
+            def connect(self, *a):
+                pass
+            def set_sensitive(self, *a):
+                pass
+            def get_label(self):
+                return self.label
+            def set_label(self, text):
+                self.label = text
+
+        fake_gi = mock.MagicMock()
+        fake_repo = mock.MagicMock()
+        made = []
+        fake_repo.Gtk.MenuItem.side_effect = lambda label=None: made.append(_Item(label)) or made[-1]
+        sys.modules["gi"] = fake_gi
+        sys.modules["gi.repository"] = fake_repo
+        state = {"on": False}
+        created = []
+        real_thread = threading.Thread
+
+        def spy_thread(*args, **kwargs):
+            t = real_thread(*args, **kwargs)
+            created.append(t)
+            return t
+
+        with mock.patch("cartelitos.tray.threading.Thread", side_effect=spy_thread), \
+             mock.patch("cartelitos.config.crt_on", side_effect=lambda: state["on"]), \
+             mock.patch.object(config, "_tray_refresh", None):
+            tray.start_tray()
+            created[0].join(timeout=5)
+            fake_repo.GLib.timeout_add.assert_called_once()
+            ms, tick = fake_repo.GLib.timeout_add.call_args[0]
+            self.assertEqual(ms, 1000)
+            crt = next(i for i in made if i.label and i.label.startswith("CRT mode"))
+            self.assertEqual(crt.label, "CRT mode: off")
+            state["on"] = True   # la tecla lo prendió: nadie tocó la bandeja
+            self.assertIs(tick(), True)   # se repite
+            self.assertEqual(crt.label, "CRT mode: on")
+
 
 class _patched_tray:
     def __init__(self, available):

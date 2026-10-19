@@ -83,12 +83,21 @@ def start_tray():
 
         def refresh():
             for it, text in labels:
-                it.set_label(text())
+                new = text()
+                if it.get_label() != new:   # no re-escribir el menú si nada cambió
+                    it.set_label(new)
             return False   # idle_add: una sola pasada
+
+        # el tubo también se prende con la tecla (Hyprland, sin pasar por la bandeja):
+        # sin este tick la etiqueta queda vieja y el click siguiente la APAGA
+        def tick():
+            refresh()
+            return True    # timeout: se repite cada segundo, en el hilo de GTK
 
         refresh()
         menu.show_all()
         indicator.set_menu(menu)
+        GLib.timeout_add(1000, tick)
         # el watcher corre en otro hilo; GTK sólo se toca desde el suyo
         config._tray_refresh = lambda: GLib.idle_add(refresh)
         Gtk.main()

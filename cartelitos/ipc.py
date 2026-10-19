@@ -28,6 +28,14 @@ _sock = None
 _last_np = None
 # la letra entera del tema (evento `lyrics`), para reenviarla al reconectar
 _last_lyrics = None
+# el estado POR TEMA que el overlay nuevo no tiene y el daemon manda una sola
+# vez (o sólo al cambiar): último evento de cada cmd, para reenviarlo al
+# reconectar. `clear(why="track")` lo vacía (menos `sing`, que el overlay
+# tampoco reinicia en un tema nuevo). El art lleva su `id`.
+TRACK_STATE_CMDS = ("art", "mood", "sec", "char", "sing")
+_track_state = {}
+# eventos que no se repiten solos: `send_soft` espera el lock en vez de tirarlos
+ONESHOT_CMDS = ("sec", "cue")
 # posición de la canción, para que el hilo de audio sepa en qué minuto está
 _song_where = {"pos": 0.0, "at": 0.0, "playing": False}
 
@@ -107,33 +115,51 @@ def _config_event():
     return ev
 
 
-def send(event):
-    """Manda un evento JSON al overlay; en cada reconexión manda la config primero
-    y reenvía el último Now Playing (el overlay nuevo arranca sin estado).
+def _line(ev):
+    return (json.dumps(ev, ensure_ascii=False) + "\n").encode()
 
-    Con el overlay muerto, cada llamada intenta reconectar: sin el backoff,
-    con el CRT prendido eso son varios connect() fallidos por segundo, cada
-    uno colgando hasta su timeout. Tras DEAD_AFTER fallos seguidos se deja de
-    intentar por DEAD_BACKOFF segundos."""
-    global _sock, _last_np, _dead_until, _fail_count
-    if event.get("cmd") == "np":
-        _last_np = event
-    data = (json.dumps(event, ensure_ascii=False) + "\n").encode()
-    with _send_lock:
-        now = time.monotonic()
-        if _sock is None and now < _dead_until:
-            return
+
+def _connect(event):
+    """Socket nuevo con el overlay y el estado que el overlay nuevo no tiene:
+    config, np, la letra y el estado del tema (art con su id, mood, sec, char,
+    sing). Lo que es el propio `event` no se reenvía: va justo después."""
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.settimeout(2)
+        s.connect(SOCK_PATH)
+        s.sendall(_line(_config_event()))
+        if _last_np is not None and _last_np is not event:
+            s.sendall(_line(_last_np))
+        if _last_lyrics is not None and _last_lyrics is not event:
+            s.sendall(_line(_last_lyrics))
+        for ev in list(_track_state.values()):
+            if ev is not event:
+                s.sendall(_line(ev))
+    except Exception:
+        try:
+            s.close()
+        except Exception:
+            pass
+        raise
+    return s
+
+
+def _send_locked(event, data):
+    """El envío en sí; el que llama tiene `_send_lock`.
+
+    Un socket reutilizado cuyo overlay se reinició falla recién en el primer
+    `sendall` (EPIPE): ese evento se perdía y la reconexión llegaba con el
+    siguiente. Se reconecta y se reenvía UNA vez (un `sendall` parcial deja
+    media línea de JSON; el overlay la descarta sin romperse)."""
+    global _sock, _dead_until, _fail_count
+    now = time.monotonic()
+    if _sock is None and now < _dead_until:
+        return
+    for retry in (True, False):
+        reused = _sock is not None
         try:
             if _sock is None:
-                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                s.settimeout(2)
-                s.connect(SOCK_PATH)
-                s.sendall((json.dumps(_config_event(), ensure_ascii=False) + "\n").encode())
-                if _last_np is not None and _last_np is not event:
-                    s.sendall((json.dumps(_last_np, ensure_ascii=False) + "\n").encode())
-                if _last_lyrics is not None and _last_lyrics is not event:
-                    s.sendall((json.dumps(_last_lyrics, ensure_ascii=False) + "\n").encode())
-                _sock = s
+                _sock = _connect(event)
             _sock.sendall(data)
             _fail_count = 0
             return
@@ -144,18 +170,53 @@ def send(event):
             except Exception:
                 pass
             _sock = None
-            _fail_count += 1
-            if _fail_count >= DEAD_AFTER:
-                _dead_until = now + DEAD_BACKOFF
+            if not (reused and retry):
+                break
+    _fail_count += 1
+    if _fail_count >= DEAD_AFTER:
+        _dead_until = now + DEAD_BACKOFF
+
+
+def _remember(event):
+    global _last_np
+    cmd = event.get("cmd")
+    if cmd == "np":
+        _last_np = event
+    elif cmd in TRACK_STATE_CMDS:
+        _track_state[cmd] = event
+
+
+def send(event):
+    """Manda un evento JSON al overlay; en cada reconexión manda la config primero
+    y reenvía el último Now Playing, la letra y el estado del tema (el overlay
+    nuevo arranca sin estado).
+
+    Con el overlay muerto, cada llamada intenta reconectar: sin el backoff,
+    con el CRT prendido eso son varios connect() fallidos por segundo, cada
+    uno colgando hasta su timeout. Tras DEAD_AFTER fallos seguidos se deja de
+    intentar por DEAD_BACKOFF segundos."""
+    _remember(event)
+    data = _line(event)
+    with _send_lock:
+        _send_locked(event, data)
 
 
 def send_soft(event):
     """Manda sin hacer cola. Si el socket está ocupado con un evento de letra,
-    este se descarta: perder un frame de animación no se ve, atrasar un verso sí."""
-    if not _send_lock.acquire(blocking=False):
+    este se descarta: perder un frame de animación no se ve, atrasar un verso sí.
+
+    Los one-shot (`sec`, `cue`) NO se descartan: no hay "siguiente frame" que
+    los cubra (el overlay se enteraría del cambio de parte 20-40 s tarde), así
+    que esperan el lock. Para el resto, tomar el lock y mandar es una sola
+    operación: soltarlo y llamar a `send` dejaba una ventana para otro hilo."""
+    _remember(event)
+    data = _line(event)
+    if not _send_lock.acquire(blocking=event.get("cmd") in ONESHOT_CMDS):
         return False
-    _send_lock.release()
-    send(event)
+    try:
+        _send_locked(event, data)
+    finally:
+        _send_lock.release()
     return True
 
 
@@ -297,7 +358,14 @@ def clear(why="track", track_id=None):
     pausa). El overlay lo usa para no re-sortear semilla/set/intro en un
     rebobinado o una pausa — compatible: quien no lo lee, no lo ve."""
     global _last_lyrics
-    _last_lyrics = None        # otro tema, otra letra
+    if why == "track":
+        # otro tema, otra letra y otro estado. Un rebobinado o una pausa son
+        # el MISMO tema: la letra se conserva (el overlay tampoco la vacía) y
+        # se reenvía si el overlay reconecta
+        _last_lyrics = None
+        for cmd in TRACK_STATE_CMDS:
+            if cmd != "sing":
+                _track_state.pop(cmd, None)
     ev = {"cmd": "clear", "why": why}
     if track_id is not None:
         ev["id"] = track_id      # el overlay descarta el `art` de otro tema

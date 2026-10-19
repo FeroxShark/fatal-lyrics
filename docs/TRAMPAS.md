@@ -1178,3 +1178,25 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   que una línea que NO es estribillo y asienta apaga el quemado, y el código hace eso; los "~6 s" son
   del otro disparador (`burnHoldTimer`, sin línea de estribillo). Es decir, no había gracia prometida.
 - `purge_cache` y `purge_profiles` corren en un hilo (`_purge_caches`) después de `mark_ready` (antes leían todos los JSON en el arranque).
+
+## IPC: estado por tema, seek y primer evento tras reiniciar (2026-10-19)
+
+- **Un seek o repetir el tema vaciaba la letra del tubo y el bpm:** `ipc.clear()` tiraba
+  `_last_lyrics` para cualquier `why`, y el overlay hacía `crtLines = []` y `bpm = 0` en todo
+  `clear`; el daemon sólo manda `lyrics` una vez por tema, así que el tubo perdía estribillo
+  (tensión, marea de texto) hasta el tema siguiente. Ahora sólo `why === "track"` (o ausente)
+  vacía letra y tempo, en daemon y en overlay.
+- **El overlay que reconecta a mitad de tema se quedaba sin paleta, mood, parte, carácter ni canto:**
+  son eventos de una vez (o sólo al cambiar). `ipc._track_state` guarda el último de cada uno
+  (`TRACK_STATE_CMDS`) y `_connect` los reenvía después de la letra; el `art` lleva su `id`.
+  `clear(track)` los suelta, menos `sing` (el overlay tampoco lo reinicia por tema).
+- **`send_soft` tiraba `sec`/`cue`:** si el lock estaba tomado se descartaban y el overlay se enteraba
+  de la parte 20-40 s tarde. Ahora esos dos (`ONESHOT_CMDS`) esperan el lock; el resto (`wave`,
+  `aud`, `char`) sigue descartándose. Además se acabó la ventana entre soltar el lock y llamar a
+  `send`: `_send_locked` se llama con el lock ya tomado.
+- **El primer evento tras reiniciar el overlay se perdía (EPIPE):** el socket reutilizado fallaba en
+  el primer `sendall`, y la reconexión llegaba con el evento siguiente. `_send_locked` reconecta y
+  reenvía UNA vez cuando el socket era reutilizado.
+- **`mood` en cada tick en temas sin letra / error de red:** la condición "recoger la letra" era
+  `self.lyrics is None`, que sigue verdadera si la búsqueda terminó sin letra; con POLL_IDLE de 1 s
+  eran ~60 `mood` por minuto. Ahora `lyrics_taken` (se reinicia en el tema nuevo).

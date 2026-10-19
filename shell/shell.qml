@@ -3982,8 +3982,6 @@ ShellRoot {
                             if (ev.id !== undefined && ev.id !== null)
                                 root.artTrackId = String(ev.id);
                             root.npShown = false;
-                            root.bpm = 0;      // otro tema, otro compás
-                            root.bpmConf = 0;
                             root.audComing = "";
                             root.motifPreCued = false;
                             // el tubo se queda sin señal y rota el fósforo
@@ -3995,6 +3993,15 @@ ShellRoot {
                             // dibujos". `why` ausente = daemon viejo, se trata
                             // como tema nuevo.
                             if (ev.why === "track" || ev.why === undefined) {
+                                // otro tema, otro compás y otra letra. En un
+                                // rebobinado o una pausa es el MISMO tema:
+                                // vaciar la letra dejaba el tubo sin estribillo
+                                // (tensión, marea de texto) y sin tempo hasta
+                                // 5 s después, y el daemon no la reenvía
+                                root.bpm = 0;
+                                root.bpmConf = 0;
+                                root.crtLines = [];
+                                root.crtLinesSynced = true;
                                 root.crtTrackSeed++;
                                 root.songChar = 0;
                                 root.movStat = Speed.newStat();
@@ -4036,12 +4043,10 @@ ShellRoot {
                                 // disimulado — ver `crtIntroStart`
                                 root.crtIntroStart();
                             }
-                            // otro tema: la letra y todo lo anticipado sobre la
-                            // anterior no valen nada. Sin esto los pedazos del
-                            // reparto viejo sobreviven al cambio de tema.
+                            // lo anticipado sobre la línea siguiente no vale
+                            // nada tras ningún `clear`. Sin esto los pedazos
+                            // del reparto viejo sobreviven.
                             root.crtNext = null;
-                            root.crtLines = [];
-                            root.crtLinesSynced = true;
                             root.crtForget();
                             // cascada: en vez de esfumarse, mueren en cadena (dominó CRT)
                             if (root.cascadeDeath && root.dialogList.length > 0) {

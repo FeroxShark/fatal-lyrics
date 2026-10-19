@@ -24,6 +24,14 @@ Item {
     property string fontFamily: ""
     // `crtFontBold`: sin archivo Bold, `bold` engorda en sintético
     property bool bold: true
+    // karaoke: la palabra que suena ahora (la de la ventana actual de la
+    // línea) toma `pal.hot`; al sonar la siguiente vuelve a la tinta. Lo
+    // calcula quien instancia (`reveal`/`dueFrac` viven en `crt`).
+    property bool sung: false
+    // la línea recién empieza (`reveal` en 0) cuando nace esta palabra: si
+    // nace ya `landed`, `onLandedChanged` no corre con el valor inicial y la
+    // palabra aparecería sin entrada
+    property bool bornAtStart: false
     property real letterSpacing: 3
     property real pixelSize: 24
     // == ctl.crtWordFlash
@@ -57,6 +65,17 @@ Item {
 
     opacity: landed ? 1 : 0
 
+    // la letra acompaña al fondo: si el fondo se lava en un segundo y la
+    // tinta salta de golpe, el salto de la tinta es el flash. El Behavior vive
+    // en la TINTA (`inkSmooth`) y no en el color del label: el karaoke
+    // (`sung`) es un ESTADO y cambia de golpe, sin la transición de 900 ms —
+    // dos animaciones de color en la misma palabra. (Las animaciones de
+    // entrada tampoco pasan por acá: un Behavior no intercepta lo que anima
+    // otro.)
+    property color inkSmooth: slot.pal.ink
+    Behavior on inkSmooth { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
+    readonly property color baseColor: slot.sung ? slot.pal.hot : slot.inkSmooth
+
     transform: [
         Scale { id: sc; origin.x: slot.width / 2; origin.y: slot.height / 2 },
         Translate { id: tr },
@@ -74,12 +93,7 @@ Item {
             : Array.from(slot.word.toUpperCase())
                 .slice(0, slot.typed).join("")
                 + (slot.typed < slot.chars ? "▮" : "")
-        color: slot.pal.ink
-        // la letra acompaña al fondo: si el fondo se lava en un segundo y la
-        // tinta salta de golpe, el salto de la tinta es el flash. (Las
-        // animaciones de entrada no pasan por acá: un Behavior no intercepta
-        // lo que anima otro.)
-        Behavior on color { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
+        color: slot.baseColor
         font.family: slot.fontFamily
         font.bold: slot.bold
         font.letterSpacing: slot.letterSpacing
@@ -113,16 +127,22 @@ Item {
     property bool cursorOn: false
     property bool pendingEmphasis: false
 
+    Component.onCompleted: {
+        if (landed && bornAtStart)
+            land();
+    }
     onLandedChanged: {
-        if (landed) {
-            typed = 0;
-            // la decisión se congela ACÁ, al aterrizar: `entry` tarda
-            // `Motion.enterMs` en terminar y el pulso arranca recién
-            // después — si se releyera `suppressEmphasis` en ese momento
-            // ya no describiría el instante del aterrizaje
-            pendingEmphasis = !slot.suppressEmphasis && slot.emphasis !== "none";
-            entry.restart();
-        }
+        if (landed)
+            land();
+    }
+    function land() {
+        typed = 0;
+        // la decisión se congela ACÁ, al aterrizar: `entry` tarda
+        // `Motion.enterMs` en terminar y el pulso arranca recién
+        // después — si se releyera `suppressEmphasis` en ese momento
+        // ya no describiría el instante del aterrizaje
+        pendingEmphasis = !slot.suppressEmphasis && slot.emphasis !== "none";
+        entry.restart();
     }
 
     // La entrada: la palabra llega como si el televisor recién la
@@ -130,15 +150,20 @@ Item {
     // (`word_flash`) porque pasa en CADA palabra — con el destello a full se
     // lee como que la letra titila todo el tiempo, y no es lo mismo que el
     // latido del tubo.
+    // la palabra 0 abre el verso (entra sola, `enterMs`); las demás entran
+    // ENCIMA de una línea que ya está pasando: `enterFastMs`, como pide la regla
+    // de movimiento. También adelanta el pulso de énfasis, que arranca al
+    // terminar la entrada
+    readonly property int enterDur: slot.index > 0 ? Motion.enterFastMs : Motion.enterMs
     readonly property color entryTint: slot.entryStyle === "overburn"
         // sobrequemada: blanco puro, pase lo que pase con `word_flash` — es
         // lo que define la entrada
         ? "#ffffff"
         : slot.flash <= 0.01
-        ? slot.pal.ink
+        ? slot.baseColor
         // proporción directa: el piso de 0.25 que tenía hacía que hasta en el
         // mínimo la palabra entrara clarita, y el mínimo tiene que ser "nada"
-        : Qt.tint(slot.pal.ink, Qt.rgba(1, 1, 1, slot.flash))
+        : Qt.tint(slot.baseColor, Qt.rgba(1, 1, 1, slot.flash))
 
     SequentialAnimation {
         id: entry
@@ -170,10 +195,10 @@ Item {
         ParallelAnimation {
             // el blanco del overburn baja despacio: es una quemadura del
             // fósforo, no un destello
-            ColorAnimation { target: label; property: "color"; to: slot.pal.ink; duration: slot.entryStyle === "overburn" ? 200 : Motion.enterFastMs; easing.type: Easing.OutQuad }
-            NumberAnimation { target: sc; property: "xScale"; to: 1; duration: Motion.enterMs; easing.type: Easing.OutExpo }
-            NumberAnimation { target: sc; property: "yScale"; to: 1; duration: Motion.enterMs; easing.type: Easing.OutExpo }
-            NumberAnimation { target: tr; property: "y"; to: 0; duration: Motion.enterMs; easing.type: Easing.OutExpo }
+            ColorAnimation { target: label; property: "color"; to: slot.baseColor; duration: slot.entryStyle === "overburn" ? 200 : Motion.enterFastMs; easing.type: Easing.OutQuad }
+            NumberAnimation { target: sc; property: "xScale"; to: 1; duration: slot.enterDur; easing.type: Easing.OutExpo }
+            NumberAnimation { target: sc; property: "yScale"; to: 1; duration: slot.enterDur; easing.type: Easing.OutExpo }
+            NumberAnimation { target: tr; property: "y"; to: 0; duration: slot.enterDur; easing.type: Easing.OutExpo }
             // los fantasmas de canal son la SALIDA del gesto: se van rápido
             // para no competir con el asentamiento de la palabra
             NumberAnimation { target: slot; property: "ghostOff"; to: 0; duration: Motion.exitMs; easing.type: Easing.OutExpo }
@@ -187,7 +212,7 @@ Item {
         // palabra se queda con el color viejo cuando la pantalla se contagia
         // otro
         ScriptAction {
-            script: label.color = Qt.binding(() => slot.pal.ink);
+            script: label.color = Qt.binding(() => slot.baseColor);
         }
         ScriptAction {
             script: {

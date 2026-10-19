@@ -13,6 +13,11 @@ Item {
     property string mode: "rows"
     // "fixed" = 3 px de siempre; "em" = 0.03 del cuerpo (tanda letra, `lyricTrackingEm`)
     property string tracking: "em"
+    // karaoke: índice de la palabra que suena (-1 = ninguna) y paleta
+    property int sungIdx: -1
+    property color inkC: "#9fe8ff"
+    property color hotC: "#ffffff"
+    property color bgC: "#06121f"
     property int sw: 1280
     property int sh: 720
     width: sw
@@ -29,7 +34,7 @@ Item {
     readonly property real ls: tracking === "em" ? px * 0.03 : 3
 
     FontLoader { source: "../../shell/fonts/SpaceMono-Bold.ttf" }
-    Rectangle { anchors.fill: parent; color: "#06121f" }
+    Rectangle { anchors.fill: parent; color: bench.bgC }
 
     Item {
         id: lyric
@@ -89,7 +94,8 @@ Item {
                             word: bench.words[modelData]
                             landed: true
                             fitWidth: bench.mode === "rows"
-                            pal: ({ ink: "#9fe8ff", hot: "#ffffff" })
+                            pal: ({ ink: bench.inkC, hot: bench.hotC })
+                            sung: modelData === bench.sungIdx
                             fontFamily: bench.fontFam
                             letterSpacing: bench.ls
                             pixelSize: bench.px

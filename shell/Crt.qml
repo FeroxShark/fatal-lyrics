@@ -662,6 +662,16 @@ PanelWindow {
         return acc / total;
     }
 
+    // karaoke: ¿suena AHORA la palabra `i`? Su ventana va de lo que tarda en
+    // entrar ella a lo que tarda la siguiente (la última, hasta el fin de la
+    // línea). Fuera de `burnMode`: ahí el compás es el reloj y la familia
+    // `burn` ya deja la palabra en `hot` por su cuenta.
+    function sounding(i) {
+        if (burnMode)
+            return false;
+        return reveal < (i + 1 < myWords.length ? dueFrac(i + 1) : 1);
+    }
+
     // un solo reloj para el contenido: qué pedazo va y cuánto lleva pintado.
     // Mientras quedan palabras por entrar (`reveal < 1`) late a 33 ms: a 80 ms
     // cada palabra llegaba hasta 80 ms tarde y dos pegadas caían en el mismo
@@ -1916,6 +1926,8 @@ PanelWindow {
                                         ? (modelData < crt.burnStep || crt.reveal >= 1)
                                         : crt.reveal >= crt.dueFrac(modelData)
                                     pal: crt.pal
+                                    sung: crt.sounding(modelData)
+                                    bornAtStart: crt.reveal <= 0
                                     fontFamily: crt.lyricFont
                                     bold: crt.lyricBold
                                     letterSpacing: crt.lyricLetterSpacing
@@ -1967,6 +1979,8 @@ PanelWindow {
                                 ? (index < crt.burnStep || crt.reveal >= 1)
                                 : crt.reveal >= crt.dueFrac(index)
                             pal: crt.pal
+                            sung: crt.sounding(index)
+                            bornAtStart: crt.reveal <= 0
                             fontFamily: crt.lyricFont
                             bold: crt.lyricBold
                             letterSpacing: crt.lyricLetterSpacing

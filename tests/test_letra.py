@@ -107,6 +107,30 @@ class TestCableado(unittest.TestCase):
         self.assertIn("letterSpacing: crt.lyricLetterSpacing", body[:body.index("onOverburnHit")])
         self.assertIn("letterSpacing: crt.lyricLetterSpacing", self.crt[self.crt.index("id: slot"):])
 
+    def test_karaoke_hot_is_a_state_not_a_second_animation(self):
+        # la palabra que suena toma `pal.hot`; el Behavior de 900 ms es de la TINTA, no del color
+        self.assertRegex(self.slot, r"baseColor:\s*slot\.sung\s*\?\s*slot\.pal\.hot\s*:\s*slot\.inkSmooth")
+        self.assertIn("Behavior on inkSmooth", self.slot)
+        self.assertNotIn("Behavior on color", self.slot)
+        self.assertRegex(self.slot, r"color:\s*slot\.baseColor")
+        self.assertIn("label.color = Qt.binding(() => slot.baseColor)", self.slot)
+        self.assertRegex(self.crt, r"function sounding\(i\)")
+        self.assertEqual(len(re.findall(r"sung: crt\.sounding\(", self.crt)), 2)
+
+    def test_every_palette_has_a_distinct_hot(self):
+        src = read("shell.qml")
+        pals = re.findall(r'ink: "(#\w{6})", hot: "(#\w{6})"', src)
+        self.assertGreaterEqual(len(pals), 10)
+        for ink, hot in pals:
+            self.assertNotEqual(ink.lower(), hot.lower())
+
+    def test_words_inside_a_verse_enter_fast_and_word_zero_always_enters(self):
+        self.assertRegex(self.slot, r"enterDur:\s*slot\.index\s*>\s*0\s*\?\s*Motion\.enterFastMs\s*:\s*Motion\.enterMs")
+        self.assertNotIn("duration: Motion.enterMs", self.slot)
+        # nace ya `landed` con la línea en 0: `onLandedChanged` no corre con el valor inicial
+        self.assertRegex(self.slot, r"Component\.onCompleted:\s*\{\s*if \(landed && bornAtStart\)\s*land\(\)")
+        self.assertEqual(len(re.findall(r"bornAtStart: crt\.reveal <= 0", self.crt)), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

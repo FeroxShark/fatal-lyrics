@@ -22,6 +22,8 @@ Item {
     property bool suppressEmphasis: false
     property var pal: ({ ink: "#e0e0e0", hot: "#ffffff" })
     property string fontFamily: ""
+    // `crtFontBold`: sin archivo Bold, `bold` engorda en sintético
+    property bool bold: true
     property real letterSpacing: 3
     property real pixelSize: 24
     // == ctl.crtWordFlash
@@ -79,7 +81,7 @@ Item {
         // lo que anima otro.)
         Behavior on color { ColorAnimation { duration: 900; easing.type: Easing.InOutQuad } }
         font.family: slot.fontFamily
-        font.bold: true
+        font.bold: slot.bold
         font.letterSpacing: slot.letterSpacing
         font.pixelSize: slot.pixelSize
     }

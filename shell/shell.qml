@@ -2546,6 +2546,15 @@ ShellRoot {
         burn:  ["space", "vt323", "chakra"],
         soft:  ["syne", "share", "plex", "system"],
     })
+    // ¿La letra va en `bold`? Sólo donde hay archivo Bold (Plex, Space, Chakra) o
+    // la fuente de sistema: VT323, Share Tech Mono, Syne Mono y DotGothic16 sólo
+    // traen Regular, y pedirles `bold` hace que Qt las engorde en sintético (en
+    // una fuente pixel corre los trazos y desalinea la grilla). Clave que falta
+    // = true (el `override` tipeado por Ferox conserva el peso de siempre).
+    readonly property var crtFontBold: ({
+        vt323: false, share: false, syne: false, dot: false,
+        plex: true, space: true, chakra: true, system: true,
+    })
     // CJK grueso (hiragana/katakana/kanji/hangul). DotGothic16 no cubre
     // hangul completo: para `가-힯` este regex igual matchea, pero
     // `crtFontFor` ya cae a "" (sistema) ahí a propósito (ver abajo).
@@ -2576,6 +2585,10 @@ ShellRoot {
     function crtFontFor(text, wordCount) {
         const key = crtFontKeyFor(text, wordCount);
         return key === "override" ? crtFont : crtFontFamilies[key];
+    }
+
+    function crtFontBoldFor(text, wordCount) {
+        return crtFontBold[crtFontKeyFor(text, wordCount)] !== false;
     }
 
     // Elige UN kind de `group`, sin repetir lo que ya salió en este set.

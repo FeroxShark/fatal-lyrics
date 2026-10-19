@@ -58,6 +58,27 @@ class TestCrtFonts(unittest.TestCase):
         self.assertNotIn("dot", used)          # DotGothic16 es sólo el camino de CJK
         self.assertEqual(used, fams - {"dot"})  # ninguna fuente cargada queda sin mazo
 
+    def test_bold_flag_only_where_a_bold_file_exists(self):
+        # tanda letra: `font.bold` sobre un Regular lo engorda Qt en sintético
+        qml = _qml()
+        bold = dict(re.findall(r"(\w+):\s*(true|false)", _block(qml, "crtFontBold")))
+        fams = dict(re.findall(r"(\w+): font(\w+)\.name", _block(qml, "crtFontFamilies")))
+        loaders = dict(re.findall(r'FontLoader \{ id: font(\w+); source: Qt\.resolvedUrl\("fonts/([^"]+)"\)', qml))
+        self.assertEqual(set(bold), set(fams) | {"system"})
+        for key, ident in fams.items():
+            self.assertEqual(bold[key] == "true", loaders[ident].split("-")[1].startswith("Bold"), key)
+        self.assertEqual(bold["system"], "true")
+
+    def test_lyric_text_follows_the_bold_flag(self):
+        with open(os.path.join(ROOT, "shell", "Crt.qml"), encoding="utf-8") as f:
+            crt = f.read()
+        for m in re.finditer(r"font\.family: crt\.lyricFont\n\s*(font\.bold: [^\n]+)", crt):
+            self.assertEqual(m.group(1), "font.bold: crt.lyricBold")
+        # los dos WordSlot (director y línea entera) también la reciben
+        self.assertEqual(len(re.findall(r"fontFamily: crt\.lyricFont\n\s*bold: crt\.lyricBold", crt)), 2)
+        with open(os.path.join(ROOT, "shell", "WordSlot.qml"), encoding="utf-8") as f:
+            self.assertIn("font.bold: slot.bold", f.read())
+
     def test_press_start_2p_is_gone(self):
         # tanda 8: Ferox no quiere la pixel de bloques gruesos
         self.assertFalse([n for n in os.listdir(FONTS) if "pressstart" in n.lower()])

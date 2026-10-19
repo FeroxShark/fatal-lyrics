@@ -1392,6 +1392,9 @@ PanelWindow {
     // Rótulos que no son la letra (instrumental, NO SIGNAL, sync, chrome,
     // carta de ajuste) siguen con `fontFamily` de arriba.
     readonly property string lyricFont: ctl.crtFontFor(lineText, myWords.length)
+    // ¿bold? Sólo con archivo Bold (`crtFontBold` en shell.qml): sin él Qt lo
+    // engorda en sintético
+    readonly property bool lyricBold: ctl.crtFontBoldFor(lineText, myWords.length)
     // Era 1 sólo para Press Start 2P (bitmap ancho), que se fue en la tanda 8.
     readonly property int lyricLetterSpacing: 3
     // La CLAVE (no el nombre de familia) de `lyricFont`, sólo para loguear
@@ -1691,7 +1694,7 @@ PanelWindow {
                 text: crt.ghostText.toUpperCase()
                 color: crt.pal.dim
                 font.family: crt.lyricFont
-                font.bold: true
+                font.bold: crt.lyricBold
                 font.letterSpacing: 2
                 font.pixelSize: Math.round(crt.shortSide * 0.30)
                 fontSizeMode: Text.Fit
@@ -1730,7 +1733,7 @@ PanelWindow {
                     text: crt.myText.toUpperCase()
                     color: crt.pal.ink
                     font.family: crt.lyricFont
-                    font.bold: true
+                    font.bold: crt.lyricBold
                     font.letterSpacing: 6
                     font.pixelSize: Math.round(crt.shortSide * 0.7)
                     fontSizeMode: Text.HorizontalFit
@@ -1798,7 +1801,7 @@ PanelWindow {
                     text: crt.lyricRows.map(r => r.map(i => crt.myWords[i]).join(" "))
                         .join("\n").toUpperCase()
                     font.family: crt.lyricFont
-                    font.bold: true
+                    font.bold: crt.lyricBold
                     font.letterSpacing: crt.lyricLetterSpacing
                     // una letra sola se merece la pantalla entera: es el golpe
                     // deletreado del estribillo, no una palabra más
@@ -1833,7 +1836,7 @@ PanelWindow {
                     }
                     textFormat: Text.StyledText
                     font.family: crt.lyricFont
-                    font.bold: true
+                    font.bold: crt.lyricBold
                     font.letterSpacing: crt.lyricLetterSpacing
                     font.pixelSize: measure.fontInfo.pixelSize
                     lineHeight: 0.94
@@ -1886,6 +1889,7 @@ PanelWindow {
                                         : crt.reveal >= crt.dueFrac(modelData)
                                     pal: crt.pal
                                     fontFamily: crt.lyricFont
+                                    bold: crt.lyricBold
                                     letterSpacing: crt.lyricLetterSpacing
                                     pixelSize: measure.fontInfo.pixelSize
                                     flash: crt.ctl.crtWordFlash
@@ -1936,6 +1940,7 @@ PanelWindow {
                                 : crt.reveal >= crt.dueFrac(index)
                             pal: crt.pal
                             fontFamily: crt.lyricFont
+                            bold: crt.lyricBold
                             letterSpacing: crt.lyricLetterSpacing
                             pixelSize: measure.fontInfo.pixelSize
                             flash: crt.ctl.crtWordFlash
@@ -2394,7 +2399,7 @@ PanelWindow {
                     text: "A fatal exception 0E has occurred at 0028:C0011E36 in VXD LYRICS(01) + 00010E36."
                     color: "#ffffff"
                     font.family: crt.lyricFont
-                    font.bold: true
+                    font.bold: crt.lyricBold
                     font.pixelSize: Math.round(crt.shortSide * 0.032)
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 10
@@ -2409,7 +2414,7 @@ PanelWindow {
                     text: crt.lineText
                     color: "#ffffff"
                     font.family: crt.lyricFont
-                    font.bold: true
+                    font.bold: crt.lyricBold
                     font.pixelSize: Math.round(crt.shortSide * 0.045)
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 12

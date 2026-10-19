@@ -94,3 +94,16 @@ class TestTarjetaSuaveAlSaltear(unittest.TestCase):
         body = re.search(r"function crtIntroStart\(\) \{(.*?)\n    \}\n", qml, re.S).group(1)
         m = re.search(r"if \(!crtScreenOff\) \{(.*?)return;", body, re.S).group(1)
         self.assertRegex(m, r'if \(crtIntroPhase !== ""\)\s*crtIntroEnd\(\);')
+
+
+class TestCorteDeLetraAlCambiarDeTema(unittest.TestCase):
+    def test_linea_vacia_deja_un_quemado_con_exitms(self):
+        # el `clear` no sube crtSerial: sin esto la letra se cortaba seca
+        b = code(read("Crt.qml"))
+        h = re.search(r"onNoLyricChanged: \{(.*?)\n    \}\n", b, re.S).group(1)
+        self.assertIn("ghostText = lastShownText", h)
+        self.assertIn("ghostCutAnim.restart()", h)
+        a = re.search(r"id: ghostCutAnim(.*?)\n    \}\n", b, re.S).group(1)
+        self.assertIn("Motion.exitMs", a)
+        self.assertIn("Easing.InQuad", a)
+        self.assertRegex(b, r"visible: crt\.ghostFade > 0\.01 && \(crt\.showsText \|\| crt\.ghostCutOn\)")

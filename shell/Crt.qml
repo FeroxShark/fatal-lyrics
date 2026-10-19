@@ -1270,6 +1270,25 @@ PanelWindow {
         fxFired = false;
         burnStep = 0;
         textArrivedAt = Date.now();
+        if (myText !== "")
+            lastShownText = myText;
+    }
+    // Último texto que esta pantalla mostró de verdad: el `clear` (cambio de
+    // tema) vacía la línea SIN subir `crtSerial`, así que `onCrtSerialChanged`
+    // no arma el quemado y la letra se cortaba en seco de un cuadro al otro.
+    property string lastShownText: ""
+    property bool ghostCutOn: false
+    onNoLyricChanged: {
+        if (noLyric && lastShownText !== "" && visible && !tubeDark) {
+            ghostText = lastShownText;
+            ghostCutOn = true;
+            ghostFade = 0.45;
+            ghostAnim.stop();
+            ghostCutAnim.restart();
+        } else if (!noLyric) {
+            ghostCutOn = false;
+            ghostCutAnim.stop();
+        }
     }
     // referenciar `reveal` fuerza la reevaluación con el mismo reloj de
     // arriba (el Timer de `crt.reveal`), sin un Timer nuevo por
@@ -1357,6 +1376,17 @@ PanelWindow {
             crt.burnStride = (beats > 0 && crt.myWords.length > beats) ? 2 : 1;
 
         }
+    }
+    // la salida de la letra al vaciarse la línea: `exitMs`, el idioma de todo
+    // lo que se va (no los `ghost_ms` del quemado de un verso al siguiente)
+    NumberAnimation {
+        id: ghostCutAnim
+        target: crt
+        property: "ghostFade"
+        to: 0
+        duration: Motion.exitMs
+        easing.type: Easing.InQuad
+        onFinished: crt.ghostCutOn = false
     }
     NumberAnimation {
         id: ghostAnim
@@ -1710,7 +1740,7 @@ PanelWindow {
                     },
                     Translate { x: crt.hopShift }
                 ]
-                visible: crt.ghostFade > 0.01 && crt.showsText
+                visible: crt.ghostFade > 0.01 && (crt.showsText || crt.ghostCutOn)
                 opacity: crt.ghostFade
                 text: crt.ghostText.toUpperCase()
                 color: crt.pal.dim

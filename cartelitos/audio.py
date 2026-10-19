@@ -996,7 +996,10 @@ class AudioAnalyzer:
         """Densidad de onsets de los últimos ~CHAR_ONSET_TAU s, sólo con música."""
         dt = 0.0 if self.onset_at is None else min(max(now - self.onset_at, 0.0), MOV_MAX_DT)
         self.onset_at = now
-        if rms < BEAT_FLOOR:
+        # "hay música" se mira contra el pico que decae (segundos de memoria), no
+        # contra el rms de este bloque: si no, el aire entre dos golpes ralos no
+        # contaría como tiempo y un tema espaciado saldría tan denso como uno lleno
+        if self.peak < BEAT_FLOOR:
             return
         self.onset_time += dt
         self.onset_long *= math.exp(-dt / CHAR_ONSET_TAU)

@@ -360,6 +360,8 @@ if __name__ == "__main__":
 FAKE_SYSTEMCTL = r"""#!/bin/sh
 # systemctl de mentira: anota cada llamada y contesta según $UNIT_STATE
 echo "$*" >> "$SYSTEMCTL_LOG"
+# como la unit de verdad: al arrancar deja vivo al daemon (su pidfile)
+case "$*" in *"--user start"*) [ -n "$FAKE_DAEMON_PIDFILE" ] && echo "$FAKE_DAEMON_PID" > "$FAKE_DAEMON_PIDFILE" ;; esac
 case "$*" in
     *" cat "*) [ "$UNIT_STATE" = none ] && exit 1; exit 0 ;;
     *is-active*) [ "$UNIT_STATE" = active ] && exit 0; exit 3 ;;
@@ -423,6 +425,15 @@ class FatalUnitTests(unittest.TestCase):
         crt = os.path.join(self.run_dir, "cartelitos-crt")
         with open(crt, "w") as f:
             f.write("1")
+        # el tubo se restaura sólo con el daemon vivo: la unit "arranca" uno de mentira
+        # (un proceso con cartelitos.py en el cmdline, como pide running())
+        daemon = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)",
+                                   os.path.join(self.tmp, "nada", "cartelitos.py")])
+        self.addCleanup(daemon.kill)
+        rundir = os.path.join(self.run_dir, "cartelitos")
+        os.makedirs(rundir, exist_ok=True)
+        self.env.update(FAKE_DAEMON_PID=str(daemon.pid),
+                        FAKE_DAEMON_PIDFILE=os.path.join(rundir, "daemon.pid"))
         out = self.fatal("restart", state="active")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(self.calls(), ["--user stop fatal-lyrics.service",

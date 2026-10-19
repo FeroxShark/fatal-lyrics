@@ -12,6 +12,8 @@
 //   · `section`: la relación de la figura (la misma idea del scope)
 //   · `drop`: la figura de la frase del drop se dibuja en `hot`
 //
+// La figura gira 15° por frase (`turnDeg`), todo el lienzo junto: ver `MShape` abajo.
+//
 // Costo en el overlay: un `MShape` con ~520 tramos cortos por figura (dos
 // mientras se cruzan); los puntos de cada figura se calculan una sola vez.
 import QtQuick
@@ -111,7 +113,18 @@ MotifBase {
             o.push(Qt.point(x + r * Math.cos(k * Math.PI / 8), y + r * Math.sin(k * Math.PI / 8)));
         return o;
     }
-    MShape { id: sh }
+    // La roseta GIRA despacio (15° por frase de 8 tiempos): la deriva uniforme que nunca
+    // para, también cuando la figura ya está completa. Gira el lienzo entero (un transform
+    // de la capa, cero CPU), no los puntos: el caché de `figurePts` no se invalida. Se cuenta
+    // en tiempos SIN envolver en 32, así que no hay vuelta atrás al cerrar el loop
+    readonly property real turnDeg: 15
+    // Girada, la caja de ±R de la figura sobresale por las esquinas (hasta 1,41 R en la
+    // diagonal) y contra el borde de la pantalla se cortaba: se achica 12 % en todo momento.
+    MShape {
+        id: sh
+        rotation: (m.beatN + m.bp) * m.turnDeg / 8
+        scale: 0.88
+    }
     function build() {
         const styles = [], geo = [];
         // la figura anterior se apaga en el primer tiempo de la nueva

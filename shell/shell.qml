@@ -936,6 +936,14 @@ ShellRoot {
             // viaja DESPUÉS de este `clear`: la tarjeta espera a `nowPlaying`
             // (si no, saldría con el título del tema anterior). `testcard`
             // no entra por acá: Ferox rechazó la carta de ajuste a mitad de tema.
+            //
+            // Si la tarjeta del tema anterior sigue puesta (se saltea de tema
+            // antes de que se cumplan sus `introCardSoftMs`), el timer ya se
+            // cortó arriba pero `crtIntroPhase` seguía en "card": quedaba
+            // pegada sin plazo y `nowPlaying` no la rearma (`!crtIntroOn`). Se
+            // corta acá, así el `np` nuevo arma la suya con su plazo.
+            if (crtIntroPhase !== "")
+                crtIntroEnd();
             crtIntroCardPending = crtIntroCard === "plain";
             return;
         }

@@ -85,3 +85,12 @@ class TestVidrio(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTarjetaSuaveAlSaltear(unittest.TestCase):
+    def test_intro_start_soft_cierra_la_tarjeta_vieja(self):
+        # saltear de tema antes de introCardSoftMs dejaba la tarjeta en "card" sin plazo
+        qml = code(read("shell.qml"))
+        body = re.search(r"function crtIntroStart\(\) \{(.*?)\n    \}\n", qml, re.S).group(1)
+        m = re.search(r"if \(!crtScreenOff\) \{(.*?)return;", body, re.S).group(1)
+        self.assertRegex(m, r'if \(crtIntroPhase !== ""\)\s*crtIntroEnd\(\);')

@@ -1009,3 +1009,18 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **`rise`/`fall` salían en `aud` y nadie los usaba.** `rise` cambia UNA pantalla (la más vieja, sólo
   si cumplió `pace.motifHoldMs`) y da un pulso en el canal del golpe (`bassMul`); `fall` alarga el hold
   (`fallHoldMs`, tope: empezar de cero). `wild` no alarga holds.
+
+## Instalable sin la mitad de `shell/` y README con la tecla vieja (instalación, 2026-10-19)
+
+- **El PKGBUILD tenía una lista fija de `shell/`** y se le escaparon `Motion.qml`, casi todos los
+  motifs, la membrana y 12 `.qsb`: el paquete de AUR arrancaba sin CRT y sin error claro. Ahora son
+  globs (`*.qml *.js *.frag *.qsb fonts/*`). Un archivo nuevo en `shell/` ya entra solo;
+  `tests/test_paquete.py` compara lo que expande bash con `git ls-files shell/`.
+- **El README decía `Super+Shift+C` y el bind real es `Y`**, y no mencionaba `packaging/hyprland.lua`:
+  sin el `dofile` los binds de CRT y sync no existen y fallan en silencio. Ahora hay una sección
+  Hyprland en Instalación; `TestHyprlandDocs` cuida que README y el `.lua` digan la misma tecla y ruta.
+- **`install.sh` no chequeaba Python**: con 3.10 instalaba todo y el daemon reventaba al importar
+  `tomllib`. Corta antes de tocar `HOME` (`tests/test_instalador.py`).
+- **La etiqueta "CRT mode" de la bandeja quedaba vieja** cuando la tecla prendía/apagaba el tubo: el
+  click siguiente la apagaba en vez de prenderla. Ahora `tray.py` la refresca cada segundo en el hilo
+  de GTK y sólo reescribe el texto si cambió.

@@ -538,15 +538,22 @@ class DaemonLoop:
             return POLL
         return max(due_in + DUE_LEAD, DUE_MIN_SLEEP)
 
+    def _purge_caches(self):
+        """Purga de los cachés de letras y de perfiles de audio (hilo de arranque)."""
+        now = time.time()
+        self._lyr.purge_cache(now)
+        self._audio.purge_profiles(now)
+
     def run(self):
         """El while True de siempre, delegando cada vuelta a tick()."""
         self._log("fatal-lyrics daemon started")
-        self._lyr.purge_cache(time.time())
-        self._audio.purge_profiles(time.time())
         # el modo CRT arranca como diga la config: un `fatal crt on` de la sesión
         # anterior no se hereda (tapa las tres pantallas, mejor que sea deliberado)
         self._config.set_crt(self._config.CFG["crt"]["enabled"])
         mark_ready()   # a partir de acá un `fatal crt on` ya no se pisa
+        # leer todos los JSON del caché no frena el arranque: va en un hilo, ya listo
+        threading.Thread(target=self._purge_caches, daemon=True,
+                         name="purge-cache").start()
         # las teclas del sync (tanda 3, C). `None` = arranque: lo que valga el
         # default no se toca, porque ese bind ya vive en la config de Hyprland
         # y escribirlo de nuevo sería tener el mismo atajo dos veces.

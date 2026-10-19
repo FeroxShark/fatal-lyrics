@@ -1146,3 +1146,40 @@ class TestVoiceActive(unittest.TestCase):
         loop.handle_track(track(pos=1.0), 1.0)
         loop.check_game(100.0)
         self.assertFalse(loop.voice_active)
+
+
+class TestPausedPos(unittest.TestCase):
+    """En pausa el overlay no extrapola la posición: el daemon le manda un
+    `pos` con `pl: false` al pausar (y uno por cada cambio de posición)."""
+
+    def pos_events(self, loop):
+        return [c.args[0] for c in loop._ipc.send.call_args_list
+                if c.args and isinstance(c.args[0], dict) and c.args[0].get("cmd") == "pos"]
+
+    def test_pausing_sends_one_pos_that_says_not_playing(self):
+        loop = make_loop()
+        loop.handle_track(track(pos=10.0), 5.0)
+        loop.handle_track(track(status="Paused", pos=10.4), 5.3)
+        loop.handle_track(track(status="Paused", pos=10.4), 5.6)
+        evs = self.pos_events(loop)
+        self.assertEqual(len(evs), 2)
+        self.assertNotIn("pl", evs[0])
+        self.assertIs(evs[1]["pl"], False)
+        self.assertEqual(evs[1]["p"], 10.4)
+
+    def test_resuming_sends_a_pos_without_waiting_a_second(self):
+        loop = make_loop()
+        loop.handle_track(track(pos=10.0), 5.0)
+        loop.handle_track(track(status="Paused", pos=10.4), 5.3)
+        loop.handle_track(track(status="Playing", pos=10.4), 5.5)
+        evs = self.pos_events(loop)
+        self.assertEqual(len(evs), 3)
+        self.assertNotIn("pl", evs[2])
+
+    def test_a_seek_while_paused_sends_the_new_position(self):
+        loop = make_loop()
+        loop.handle_track(track(status="Paused", pos=10.0), 0.0)
+        loop.handle_track(track(status="Paused", pos=60.0), 0.3)
+        evs = self.pos_events(loop)
+        self.assertEqual([e["p"] for e in evs], [10.0, 60.0])
+        self.assertTrue(all(e["pl"] is False for e in evs))

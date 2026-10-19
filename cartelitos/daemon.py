@@ -179,6 +179,8 @@ class DaemonLoop:
         self.resend_np = False
         self.crt_was_on = False
         self.last_pos_sent = 0.0
+        # posición del último `pos` mandado en pausa (None = sonando)
+        self.paused_pos_sent = None
         self.last_pos = 0.0
         self.last_show_at = 0.0
         self.hang_sent = False
@@ -359,11 +361,23 @@ class DaemonLoop:
         # el modo CRT los necesita SIEMPRE: el director reparte los pedazos en
         # tiempo de canción, y sin estos eventos el reloj se queda clavado
         if ((self._config.CFG["behavior"]["now_playing"] or self._config.CFG["display"]["karaoke"]
-                or self._config.crt_on())
-                and t["status"] == "Playing"
-                and t["length"] > 0 and now - self.last_pos_sent >= 1.0):
-            self.last_pos_sent = now
-            self._ipc.send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
+                or self._config.crt_on()) and t["length"] > 0):
+            if t["status"] == "Playing":
+                # el primer tick tras una pausa manda sin esperar el segundo: el
+                # overlay dejó de extrapolar al pausar y sigue clavado hasta acá
+                if self.paused_pos_sent is not None or now - self.last_pos_sent >= 1.0:
+                    self.paused_pos_sent = None
+                    self.last_pos_sent = now
+                    self._ipc.send({"cmd": "pos", "p": round(t["pos"], 2), "l": round(t["length"], 2)})
+            elif (self.paused_pos_sent is None
+                    or abs(t["pos"] - self.paused_pos_sent) > 0.05):
+                # en pausa el overlay NO extrapola (`pl: false`): sin esto el
+                # karaoke seguía corriendo hasta 1,5 s con la música parada y
+                # retrocedía al dar play. Un evento al pausar y otro por cada
+                # cambio de posición (rebobinar o adelantar en pausa).
+                self.paused_pos_sent = t["pos"]
+                self._ipc.send({"cmd": "pos", "p": round(t["pos"], 2),
+                                "l": round(t["length"], 2), "pl": False})
 
         # mood (b): el compás se terminó de estabilizar antes del segundo
         # verso — el set del tubo (tanda 6, corrida 1) todavía no se congeló,

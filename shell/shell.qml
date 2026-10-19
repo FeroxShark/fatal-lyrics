@@ -687,12 +687,15 @@ ShellRoot {
     property int clearGen: 0
 
     // posición de la canción (eventos "pos" a 1 Hz) para el karaoke;
-    // se extrapola con el reloj local, con tope por si el player se pausó
+    // se extrapola con el reloj local (tope de 1,5 s por si falta un evento);
+    // en pausa el daemon manda `pl: false` y NO se extrapola: el karaoke se
+    // adelantaba hasta 1,5 s con la música parada y retrocedía al dar play
     property real posAbs: 0
     property real posLen: 0
     property double posAt: 0
+    property bool posPlaying: true
     function songPos() {
-        return posAbs + Math.min((Date.now() - posAt) / 1000, 1.5);
+        return posAbs + (posPlaying ? Math.min((Date.now() - posAt) / 1000, 1.5) : 0);
     }
 
     function htmlEscape(s) {
@@ -3805,6 +3808,7 @@ ShellRoot {
                             root.posAbs = ev.p;
                             root.posLen = ev.l;
                             root.posAt = Date.now();
+                            root.posPlaying = ev.pl !== false;
                             // tanda 6, corrida 4: el outro es un umbral de
                             // posición, no una parte que mande el daemon —
                             // se mira acá, en el único reloj que lo sabe

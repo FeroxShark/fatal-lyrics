@@ -201,7 +201,7 @@ void main() {
     // arcoíris de una bobina que todavía no se calmó) y un destello chico al arrancar
     if (degauss > 0.001) {
         col = hueTurn(col, degauss * 2.4 * sin(dgd * 15.0 - t * 9.0));
-        col += tint * pow(degauss, 6.0) * 0.55 * smoothstep(1.1, 0.0, dgd);
+        col += tint * pow(degauss, 6.0) * 0.55 * (1.0 - smoothstep(0.0, 1.1, dgd));
     }
 
     // los agudos también enfrían los claros: el bajo es tibio (luz), lo de arriba
@@ -324,7 +324,7 @@ void main() {
     // rolling bar: the classic bright band sliding down an out-of-sync tube
     float by = rollPhase;
     float d = abs(fract(uv.y - by + 0.5) - 0.5);
-    col += tint * 0.05 * smoothstep(0.07, 0.0, d) * roll;
+    col += tint * 0.05 * (1.0 - smoothstep(0.0, 0.07, d)) * roll;
 
     // el tubo apagado: la señal se contrae a nada, y el ruido de fósforo (más
     // abajo) queda solo, no multiplicado por esto — es lo que se ve cuando NO
@@ -396,8 +396,9 @@ void main() {
 
     // glass: vignette, a dark bevel where the face meets the frame (14 px at
     // 1080p, 22 % at the very edge), the cut of the outline, and then what the
-    // glass REFLECTS: a thin phosphor edge hugging the border and
-    // a faint sheen off the top-left. The reflections come last and die with `cutDim`, so the dry
+    // glass REFLECTS: a faint broad sheen off the top-left, a soft fixed
+    // window-light ellipse in the same corner and a thin phosphor edge hugging
+    // the border. The reflections come last and die with `cutDim`, so the dry
     // cut still goes to black; they sit on the SCREEN (not on the warped uv),
     // so they stay put when the picture shakes.
     float v = pow(16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y), 0.22);
@@ -406,8 +407,13 @@ void main() {
     float bev = 1.0 - smoothstep(0.0, bevW, rimD);
     col *= 1.0 - 0.22 * bev * bev;
     col *= tubeCut;
-    vec3 refl = tint * 0.03 * exp(-pow(rimD / (0.0016 * sSide), 2.0));
-    col += vec3(0.012, 0.014, 0.02) * smoothstep(1.2, 0.0, uv.x + uv.y);
+    vec2 sp = qt_TexCoord0 * res / sSide - vec2(0.27, 0.21);
+    vec2 sr = vec2(sp.x * 0.94 + sp.y * 0.34, sp.y * 0.94 - sp.x * 0.34) / vec2(0.30, 0.13);
+    float window = exp(-dot(sr, sr));
+    float rim = exp(-pow(rimD / (0.0016 * sSide), 2.0));
+    vec3 refl = vec3(0.012, 0.014, 0.02) * (1.0 - smoothstep(0.0, 1.2, qt_TexCoord0.x + qt_TexCoord0.y))
+              + vec3(0.9, 0.95, 1.0) * 0.026 * window
+              + tint * 0.03 * rim;
     col += refl * (1.0 - cutDim) * tubeCut;
 
     fragColor = vec4(col, 1.0) * qt_Opacity;

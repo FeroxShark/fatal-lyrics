@@ -320,3 +320,15 @@ pudo repetir con el `mov` nuevo. Se usó como proxy una réplica offline: captur
   `crtProgress()`; `fxCheck` sale en la primera guarda). Sólo late a 33 ms con `reveal < 1`.
 - **Renglones centrados** (`Rows.js`): `pick` es JS puro, una DP de n² con n ≤ ~20 palabras por línea, una vez por
   línea (binding de `lyricRows`). Sin costo medible; el `Text.Fit` de `measure` ya corría antes sobre el mismo texto.
+
+## Análisis de audio: `feed()` antes/después (tanda de mejoras de Fatal Lyrics, 2026-10-19)
+
+- Método: `AudioAnalyzer.feed()` sobre 200 bloques de 512 muestras (32 ms) de PCM determinista (tonos de 60/220/1000 Hz
+  con amplitud que sube y baja, ruido de LCG, un golpe cada 8 bloques). Un analizador nuevo por ronda, 9 rondas por
+  corrida, `perf_counter`, mediana de rondas. 5 corridas intercaladas: HEAD (68f8c2c) contra el árbol nuevo
+  (`band_energy` con `sum(map(mul))`, decode con `struct.unpack`). Máquina con carga 2–3 (ajena).
+- Antes: mediana 0.715–0.739 ms/bloque (min 0.703–0.723). Después: 0.617–0.640 (min 0.612–0.620). Promedio de
+  medianas 0.728 → 0.627 ms/bloque: −0.10 ms, ~−14 %, ~0.3 % de un núcleo sobre un hop de 32 ms.
+- Igualdad: los 200 dicts del evento `aud` salen idénticos; `band_energy` difiere como mucho 1.1e-17; samples y rms
+  de los 200 bloques, bit a bit iguales al `int.from_bytes` anterior.
+- `power_spectrum` (FFT de 512 en Python puro) sigue siendo la parte más cara del bloque; no se tocó en esta tanda.

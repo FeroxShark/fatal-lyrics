@@ -1152,3 +1152,12 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   de neón en cualquier tema. La tapa sigue mandando el TONO. `shell.qml` pasa
   `(crtMoodLocked || crtMood).energy` (congelada con el primer verso: la paleta no se mueve a mitad
   de tema por el mood). Banco: `previews/colores/render.py` (tapas apagadas × tres energías).
+
+## Rendimiento del análisis de audio (tanda de mejoras de Fatal Lyrics, 2026-10-19)
+
+- **`sum()` no es bit a bit igual que el bucle:** desde CPython 3.12 `sum()` de floats compensa el error,
+  así que `band_energy` con `sum(map(mul, ...))` difiere del bucle en ~1e-17. No es un bug: los tests
+  comparan a 1e-9. Volver al bucle "para ser exacto" no da un resultado más exacto, da otro.
+- **El digest de `test_the_event_for_a_fixed_pcm_is_the_same_as_before` es a propósito:** fija 40 eventos de
+  `feed()` con PCM determinista. Un cambio de DSP legítimo lo rompe: regenerar el sha1 y decir por qué en el
+  commit. Si rompe SIN tocar el DSP, mirar primero si el redondeo a 3 decimales cambió por la libm de la máquina.

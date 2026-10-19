@@ -142,4 +142,5 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `previews/showreel/` — reel de 15 s con animaciones NUEVAS, sin integrar. Ver su `README.md`.
 - `previews/crt-motifs/` — banco de motivos de loop de 15 s, YA INTEGRADOS (Shapes vía `MShape.qml`, NUNCA Canvas de pantalla entera: TRAMPAS). `./sync-shell.sh` antes de renderizar el laberinto. Ver su `README.md`.
 
-Cachés: `~/.cache/cartelitos/{lyrics/,audio}` (letras; mapa de energía por tema).
+Cachés: `~/.cache/cartelitos/{lyrics/,audio}` (letras; mapa de energía por tema). Purga al arranque: letras
+`purge_cache` (OK 180 días, "no hay letra" 7), perfiles `audio.purge_profiles` (180 días sin escucharse, por mtime).

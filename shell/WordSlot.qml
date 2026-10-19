@@ -33,7 +33,10 @@ Item {
     // vive en `crt`, así que el que la instancia decide qué hacer
     signal overburnHit()
 
-    width: parent ? parent.width : label.implicitWidth
+    // renglones centrados (`Rows.js`): la palabra ocupa lo que mide, no el ancho
+    // del padre; con el ancho del padre cada una se queda con un renglón entero
+    property bool fitWidth: false
+    width: fitWidth || !parent ? label.implicitWidth : parent.width
     height: label.implicitHeight * 0.88
 
     // T3.5, estilo "type": la palabra no aparece, se escribe — un caracter

@@ -14,6 +14,7 @@ import Quickshell.Wayland
 import QtQuick
 import "React.js" as React
 import "Speed.js" as Speed
+import "Rows.js" as Rows
 
 PanelWindow {
     id: crt
@@ -1242,6 +1243,16 @@ PanelWindow {
     // ve (era un ReferenceError en runtime, no un error estático).
     readonly property bool wholeWordsOn: allMode && layout !== "split"
         && ctl.crtQuality >= 1
+    // Cómo se acomoda la línea entera: una palabra por renglón (lo de siempre, y
+    // lo único del director) o, en una línea larga de allMode, renglones
+    // centrados (`Rows.js`) — apilar 12 palabras la dejaba a ~84 px en una
+    // pantalla de 1080 (docs/tanda8-estado/letra-renglones-ancha.png). El
+    // tamaño final lo sigue poniendo el `Text.Fit` de `measure`, sobre ESTOS
+    // renglones. Las líneas cortas no cambian: `Rows.pick` pide ganar 25 %.
+    readonly property var lyricRows: wholeWordsOn
+        ? Rows.pick(myWords, width - 2 * pad, height - 2 * pad,
+                    shortSide * 0.46, 0.6, 0.94)
+        : myWords.map((w, i) => [i])
     Connections {
         target: crt.ctl
         enabled: crt.visible && crt.burnMode
@@ -1748,9 +1759,11 @@ PanelWindow {
                     id: measure
                     anchors.fill: parent
                     visible: false
-                    // se mide con una palabra por renglón, que es como se van a
-                    // acomodar: centradas y grandes, como los monitores del clip
-                    text: crt.myWords.join("\n").toUpperCase()
+                    // se mide con los renglones en que se van a acomodar (una
+                    // palabra por renglón, salvo línea larga en allMode):
+                    // centradas y grandes, como los monitores del clip
+                    text: crt.lyricRows.map(r => r.map(i => crt.myWords[i]).join(" "))
+                        .join("\n").toUpperCase()
                     font.family: crt.lyricFont
                     font.bold: true
                     font.letterSpacing: crt.lyricLetterSpacing
@@ -1807,35 +1820,50 @@ PanelWindow {
                 // pieza (12 palabras, allMode, 3 pantallas —
                 // docs/NUMEROS-MEDIDOS.md), y `crtQuality` ya baja sola
                 // cuando una pantalla viene lenta (línea 1077).
-                Flow {
+                Column {
                     id: wholeWords
                     anchors.centerIn: parent
                     width: parent.width
                     visible: crt.wholeWordsOn
-                    spacing: Math.round(measure.fontInfo.pixelSize * 0.3)
+                    spacing: Math.round(measure.fontInfo.pixelSize * 0.02)
 
                     Repeater {
                         id: wholeWordsRepeater
-                        model: crt.wholeWordsOn ? crt.myWords : []
+                        model: crt.wholeWordsOn ? crt.lyricRows : []
 
-                        WordSlot {
-                            id: wholeSlot
-                            required property string modelData
-                            word: modelData
-                            landed: crt.burnMode
-                                ? (index < crt.burnStep || crt.reveal >= 1)
-                                : crt.reveal >= crt.dueFrac(index)
-                            pal: crt.pal
-                            fontFamily: crt.lyricFont
-                            letterSpacing: crt.lyricLetterSpacing
-                            pixelSize: measure.fontInfo.pixelSize
-                            flash: crt.ctl.crtWordFlash
-                            entryStyle: crt.entryStyle
-                            emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
-                            suppressEmphasis: !crt.emphasisGateOpen
-                                || crt.tubeDark || crt.ctl.crtIntroOn
-                                || crt.ctl.crtRare.screen === crt.idx
-                            onOverburnHit: crt.burnFlash()
+                        Row {
+                            id: wholeRow
+                            required property var modelData
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: Math.round(measure.fontInfo.pixelSize * 0.3)
+
+                            Repeater {
+                                model: wholeRow.modelData
+
+                                WordSlot {
+                                    id: wholeSlot
+                                    // el índice de la palabra EN LA LÍNEA: el
+                                    // del Repeater es el del renglón
+                                    required property int modelData
+                                    index: modelData
+                                    word: crt.myWords[modelData]
+                                    fitWidth: true
+                                    landed: crt.burnMode
+                                        ? (modelData < crt.burnStep || crt.reveal >= 1)
+                                        : crt.reveal >= crt.dueFrac(modelData)
+                                    pal: crt.pal
+                                    fontFamily: crt.lyricFont
+                                    letterSpacing: crt.lyricLetterSpacing
+                                    pixelSize: measure.fontInfo.pixelSize
+                                    flash: crt.ctl.crtWordFlash
+                                    entryStyle: crt.entryStyle
+                                    emphasis: crt.ctl.crtSet ? crt.ctl.crtSet.family : "hard"
+                                    suppressEmphasis: !crt.emphasisGateOpen
+                                        || crt.tubeDark || crt.ctl.crtIntroOn
+                                        || crt.ctl.crtRare.screen === crt.idx
+                                    onOverburnHit: crt.burnFlash()
+                                }
+                            }
                         }
                     }
                 }

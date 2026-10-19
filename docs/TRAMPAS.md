@@ -1081,3 +1081,14 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   `pnoise` del shader es periódico en 15 s (costura del loop).
 - **Una flecha con una arista horizontal da división por cero en el test de paridad**: `cross_` compara
   `(a.y > p.y) != (b.y > p.y)` en vez de dividir.
+
+## El Flow del allMode apilaba una palabra por renglón (2026-10-19)
+
+- **`WordSlot` tiene `width: parent.width`**, así que dentro de un `Flow` cada palabra se quedaba con
+  una fila entera: el "Flow" era un apilado, y `measure` (una palabra por renglón) acertaba de casualidad.
+  Una línea de 12 palabras quedaba a 56 px en una pantalla de 1080 (`previews/letra/`: antes 56 px,
+  después 134 px). Ahora `wholeWords` es un `Column` de `Row`s centrados (`Rows.js`) y los slots llevan
+  `fitWidth: true` (miden lo que miden). Un `Flow` NO sirve para esto: alinea cada fila a la izquierda.
+- **El índice del `Repeater` interno es el del renglón**, no el de la línea: `dueFrac`/`burnStep`/`landed`
+  leen `modelData` (el índice global). `tests/test_letra.py` lo vigila.
+- La pantalla vertical (1080x1920) no cambia: ahí el ancho manda y apilar ya era lo mejor.

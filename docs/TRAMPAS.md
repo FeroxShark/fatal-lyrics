@@ -45,6 +45,27 @@ Movido tal cual desde `CLAUDE.md` el 2026-09-05.
   es la duración (±3 s) — no sacar ese filtro. Su LRC además trae la ficha técnica
   como versos con marca de tiempo (`作词`/`作曲`/`制作人`): sin filtrarla, el tema
   arranca con tres cartelitos de créditos.
+- **La duración no alcanza: también el nombre** (`same_track`, en `lrclib_search` y
+  `netease_pick`). Título distinto veta siempre; artista distinto sólo veta si el título
+  no es idéntico (Spotify pone "Arcane" donde NetEase tiene a quienes lo cantan). El
+  título se compara sin paréntesis, `feat.`, sufijos de edición ni apóstrofes, y **no por
+  contención** ("Song" ≠ "Other Song"). Un hit sin nombre, o CJK contra latino, no se
+  veta: manda el largo, como antes. Medido 2026-10-19 contra los 13 temas del log
+  (red real): el primer hit sincronizado de lrclib pasó 4/4 y NetEase tenía algún
+  candidato válido en 12/13 (el que falla no está en NetEase). El caché en disco NO
+  guarda el nombre del hit, así que no se puede medir sin red.
+- **`clean_title` dejaba "ed"**: `" - 2008 Remastered"` se cortaba en `" - 2008 Remaster"`
+  y quedaba "My Wayed". Corregido (`(ed)?`) y sumados los paréntesis (Remastered/Deluxe/
+  Live/Radio Edit…).
+- **Letras `plain` caducan a los 7 días (`PLAIN_TTL`) pero NO se purgan:** son el
+  resguardo de `_work`. Si el reintento da `error` se muestra la plana vieja (sin
+  re-cachearla); si da `none`, se re-cachea con sello nuevo. `purge_cache` las borra recién
+  a los 180 días.
+- **Reintento tardío por red caída** (`LATE_RETRY_DELAYS = (30, 90, 270)` s ±20 %):
+  agotados los `RETRIES` de `_work`, un `Timer` vuelve a lanzar el MISMO tema (misma
+  `gen`) hasta tres veces. Se cancela al cambiar de tema y no corre si ya hay letra.
+  Los tests lo apagan en `setUp` (`LATE_RETRY_DELAYS = ()`): un Timer vivo se cuela en
+  el test siguiente.
 - **Los tiempos por palabra tienen que ser tantos como `texto.split()`.** En el LRC
   "enhanced" un tramo `<t>` puede traer dos palabras; si contara como una, todo lo
   que sigue queda corrido. `_parse_words` le da a CADA palabra del tramo el tiempo

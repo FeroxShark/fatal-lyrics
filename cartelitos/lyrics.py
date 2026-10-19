@@ -16,6 +16,7 @@ from .util import FIELD_SEP, RUN_DIR, UA, log, run_dir
 CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "cartelitos", "lyrics")
 NONE_TTL = 7 * 86400    # cuánto vale un "este tema no tiene letra" cacheado
 OK_TTL = 180 * 86400    # una letra encontrada tampoco es para siempre: el cache no crece sin límite
+PLAIN_TTL = 7 * 86400   # la letra sin tiempos es un resguardo: se vuelve a buscar la sincronizada
 
 TS_RE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
 # LRC "enhanced": además de la marca de la línea, cada palabra puede traer la
@@ -383,8 +384,12 @@ def _cache_path(track):
     return os.path.join(CACHE_DIR, hashlib.sha1(key.encode()).hexdigest() + ".json")
 
 
-def cache_get(track):
+def cache_get(track, stale_plain=False):
     """(estado, líneas, proveedor) guardado, o None si no hay / caducó.
+
+    Una letra "plain" caduca a los PLAIN_TTL para que se busque de nuevo la
+    sincronizada; con `stale_plain=True` se devuelve igual la vencida, que es
+    lo que se muestra si el reintento no llega (mejor la plana que nada).
 
     El status se guarda explícito desde T0.14: "ok" y "plain" son ambos
     `lines` con contenido, y sin el campo no se podrían distinguir al leer
@@ -404,6 +409,9 @@ def cache_get(track):
         if time.time() - data.get("at", 0) > NONE_TTL:
             return None
         return "none", None, provider
+    if (status == "plain" and not stale_plain
+            and time.time() - data.get("at", 0) > PLAIN_TTL):
+        return None
     return status, [_cached_line(row) for row in data["lines"]], provider
 
 
@@ -437,7 +445,9 @@ def cache_put(track, status, lines, provider):
 def purge_cache(now):
     """Borra del cache lo que ya no vale la pena guardar: un "no hay letra"
     más viejo que NONE_TTL, o una letra encontrada de hace más de OK_TTL —
-    ninguna de las dos vive para siempre, o el cache crece sin límite."""
+    ninguna de las dos vive para siempre, o el cache crece sin límite. La
+    "plain" vencida (PLAIN_TTL) NO se purga a los 7 días: es el resguardo que
+    `_work` muestra si el reintento no llega."""
     try:
         names = os.listdir(CACHE_DIR)
     except OSError:
@@ -537,7 +547,7 @@ def _publish(gen, status, lines, provider):
     return True
 
 
-def _work(track, gen):
+def _work(track, gen, rnd=0):
     hit = cache_get(track)
     if hit:
         status, lines, provider = hit
@@ -545,6 +555,9 @@ def _work(track, gen):
             log(f"cached lyrics: {len(lines)} lines ({provider})" if lines
                 else "no synced lyrics (cached)")
         return
+    # una plana vencida: si la búsqueda no trae algo mejor, es lo que se muestra
+    old = cache_get(track, stale_plain=True)
+    old_plain = old if old and old[0] == "plain" else None
     for attempt in range(RETRIES + 1):
         t0 = time.monotonic()
         status, lines, provider = fetch_lyrics(track)
@@ -553,11 +566,18 @@ def _work(track, gen):
         if status != "error":
             break
         if attempt == RETRIES:
-            log("no lyrics provider answered, giving up on this track")
+            if old_plain:
+                # sin red no se pierde la plana de la semana pasada (y sin
+                # cachear: el próximo intento vuelve a buscar la sincronizada)
+                log("no lyrics provider answered, keeping the old unsynced text")
+                _publish(gen, *old_plain)
+                return
+            log("no lyrics provider answered, giving up for now")
             with _fetch_lock:
                 stale = not _mine(gen)
             if not stale:
                 write_state("error")
+                _schedule_late_retry(track, gen, rnd)
             return
         # red caída: esperar y reintentar, salvo que ya haya cambiado de tema
         delay = _retry_delay()
@@ -566,6 +586,8 @@ def _work(track, gen):
             time.sleep(0.5)
             if not _mine(gen):
                 return
+    if status == "none" and old_plain:
+        status, lines, provider = old_plain     # sigue sin haber sincronizada
     cache_put(track, status, lines, provider)
     if _publish(gen, status, lines, provider):
         log(f"synced lyrics: {len(lines)} lines ({provider})" if status == "ok"
@@ -573,14 +595,57 @@ def _work(track, gen):
             else "no synced lyrics (no dialogs)")
 
 
-def _worker(track, gen):
+# Cuando la red cae al arrancar un tema (vuelve el wifi tras un suspend) y los
+# reintentos de `_work` se agotan, el tema sonaba sin letra toda la canción: acá
+# se vuelve a probar con backoff y tope. Mismo tema (misma `gen`), sin tocar
+# lo que ya se muestre: sólo corre si sigue sin letra y sigue sonando.
+LATE_RETRY_DELAYS = (30, 90, 270)
+_late_timer = None      # protegido por _fetch_lock
+
+
+def _cancel_late_retry():
+    global _late_timer
+    with _fetch_lock:
+        timer, _late_timer = _late_timer, None
+    if timer:
+        timer.cancel()
+
+
+def _schedule_late_retry(track, gen, rnd):
+    global _late_timer
+    if rnd >= len(LATE_RETRY_DELAYS):
+        log("lyrics: out of late retries for this track")
+        return
+    delay = LATE_RETRY_DELAYS[rnd] * (1 + random.uniform(-RETRY_JITTER, RETRY_JITTER))
+    log(f"lyrics: trying again in {delay:.0f}s")
+    timer = threading.Timer(delay, _late_retry, (track, gen, rnd + 1))
+    timer.daemon = True
+    timer.name = "lyrics-retry"
+    with _fetch_lock:
+        if not _mine(gen):
+            return
+        old, _late_timer = _late_timer, timer
+    if old:
+        old.cancel()
+    timer.start()
+
+
+def _late_retry(track, gen, rnd):
+    with _fetch_lock:
+        if not _mine(gen) or _fetch["done"]:
+            return
+    write_state("searching")
+    _dispatch(track, gen, rnd)
+
+
+def _worker(track, gen, rnd=0):
     """Atiende un tema y, si quedó otro esperando, sigue con ése sin morirse:
     el hilo es el lugar, no el trabajo."""
     global _inflight, _pending
     while True:
         try:
             if _mine(gen):   # el que esperaba puede haber quedado viejo
-                _work(track, gen)
+                _work(track, gen, rnd)
         except Exception as e:
             log(f"lyrics thread died ({e})")
         with _fetch_lock:
@@ -589,8 +654,29 @@ def _worker(track, gen):
             if _pending is None:
                 _inflight -= 1
                 return
-            track, gen = _pending
+            track, gen, rnd = _pending
             _pending = None
+
+
+def _dispatch(track, gen, rnd=0):
+    """Arranca el hilo de la búsqueda, o la deja esperando lugar si el cupo
+    está lleno (`_pending`: sólo importa la última)."""
+    global _inflight, _pending
+    with _fetch_lock:
+        if not _mine(gen):      # un reintento tardío que llegó después de un cambio de tema
+            return
+        if _inflight >= MAX_INFLIGHT:
+            _pending = (track, gen, rnd)
+            return
+        _inflight += 1
+    try:
+        threading.Thread(target=_worker, args=(track, gen, rnd), daemon=True, name="lyrics").start()
+    except RuntimeError as e:
+        # sin lugar para un hilo más: devolver el cupo, o queda tomado para
+        # siempre y la letra no vuelve nunca
+        with _fetch_lock:
+            _inflight -= 1
+        log(f"couldn't start the lyrics thread ({e})")
 
 
 def fetch_lyrics_async(track):
@@ -598,30 +684,15 @@ def fetch_lyrics_async(track):
     10s de timeout por request: hecha en el loop principal, un proveedor lento o
     caído congelaba todo — detección de juego, eventos de progreso y limpieza
     incluidos."""
-    global _inflight, _pending
+    _cancel_late_retry()
     with _fetch_lock:
         _fetch["gen"] += 1
         gen = _fetch["gen"]
         _fetch.update(id=track["id"], lyrics=None, status=None, provider=None, done=False)
-        queued = _inflight >= MAX_INFLIGHT
-        if queued:
-            _pending = (track, gen)
-        else:
-            _inflight += 1
     # el status no puede seguir mostrando la letra del tema anterior mientras
     # se busca la de éste, ni siquiera si este tema quedó esperando lugar
     write_state("searching")
-    if queued:
-        return
-
-    try:
-        threading.Thread(target=_worker, args=(track, gen), daemon=True, name="lyrics").start()
-    except RuntimeError as e:
-        # sin lugar para un hilo más: devolver el cupo, o queda tomado para
-        # siempre y la letra no vuelve nunca
-        with _fetch_lock:
-            _inflight -= 1
-        log(f"couldn't start the lyrics thread ({e})")
+    _dispatch(track, gen)
 
 def current_line_index(lyrics, pos):
     idx = -1

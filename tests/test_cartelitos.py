@@ -931,6 +931,32 @@ class TestLyricsCache(unittest.TestCase):
         lyrics.CACHE_DIR = self.dir.name
         self.addCleanup(lambda: setattr(lyrics, "CACHE_DIR", self._old))
 
+    def age(self, seconds):
+        path = lyrics._cache_path(TRACK)
+        with open(path) as f:
+            data = json.load(f)
+        data["at"] = int(time.time()) - seconds
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+    def test_an_old_plain_lyric_expires_but_can_still_be_read_as_a_fallback(self):
+        c.cache_put(TRACK, "plain", [(0.0, "words", None)], "lrclib")
+        self.assertEqual(c.cache_get(TRACK)[0], "plain")
+        self.age(lyrics.PLAIN_TTL + 60)
+        self.assertIsNone(c.cache_get(TRACK))
+        self.assertEqual(c.cache_get(TRACK, stale_plain=True)[0], "plain")
+
+    def test_a_synced_lyric_does_not_expire_after_a_week(self):
+        c.cache_put(TRACK, "ok", [(1.0, "one", None)], "lrclib")
+        self.age(lyrics.PLAIN_TTL + 60)
+        self.assertEqual(c.cache_get(TRACK)[0], "ok")
+
+    def test_purge_keeps_an_expired_plain_lyric_for_the_fallback(self):
+        c.cache_put(TRACK, "plain", [(0.0, "words", None)], "lrclib")
+        self.age(lyrics.PLAIN_TTL + 60)
+        c.purge_cache(time.time())
+        self.assertEqual(c.cache_get(TRACK, stale_plain=True)[0], "plain")
+
     def test_miss_on_an_empty_cache(self):
         self.assertIsNone(c.cache_get(TRACK))
 
@@ -1234,6 +1260,12 @@ class TestFetchAsync(unittest.TestCase):
             lyrics._inflight = 0
             lyrics._pending = None
         self.addCleanup(self.wait_quiet)
+        # el reintento tardío (30 s+) no corre en los tests que no lo piden, y
+        # un temporizador vivo no se cuela en el test que viene
+        old_late = lyrics.LATE_RETRY_DELAYS
+        lyrics.LATE_RETRY_DELAYS = ()
+        self.addCleanup(lambda: setattr(lyrics, "LATE_RETRY_DELAYS", old_late))
+        self.addCleanup(lyrics._cancel_late_retry)
 
     def lyrics_threads(self):
         return [t for t in threading.enumerate() if t.name == "lyrics" and t.is_alive()]
@@ -1345,6 +1377,57 @@ class TestFetchAsync(unittest.TestCase):
         self.assertFalse(c._fetch["done"])
         self.assertIsNone(c.cache_get(TRACK))
 
+    def fast_retries(self, late=(0.05, 0.05)):
+        for name, val in (("RETRY_DELAY", 0), ("LATE_RETRY_DELAYS", late)):
+            old = getattr(lyrics, name)
+            setattr(lyrics, name, val)
+            self.addCleanup(lambda n=name, o=old: setattr(lyrics, n, o))
+
+    def test_a_network_failure_is_retried_later_and_then_published(self):
+        self.fast_retries()
+        calls = []
+
+        def back_later(track):
+            calls.append(1)
+            if len(calls) <= c.RETRIES + 1:     # se agota la primera ronda
+                return "error", None, None
+            return "ok", [(1.0, "one", None)], "lrclib"
+        self.patch_fetch(back_later)
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+        self.assertEqual(c._fetch["lyrics"], [(1.0, "one", None)])
+        self.assertEqual(len(calls), c.RETRIES + 2)
+
+    def test_the_late_retries_have_a_cap(self):
+        self.fast_retries(late=(0.05, 0.05))
+        calls = []
+
+        def down(track):
+            calls.append(1)
+            return "error", None, None
+        self.patch_fetch(down)
+        c.fetch_lyrics_async(TRACK)
+        time.sleep(0.8)
+        self.wait_quiet()
+        self.assertEqual(len(calls), (c.RETRIES + 1) * 3)   # la ronda inicial + 2 tardías
+        self.assertFalse(c._fetch["done"])
+
+    def test_a_track_change_cancels_the_late_retry(self):
+        self.fast_retries(late=(0.3,))
+        calls = []
+
+        def down_then_ok(track):
+            calls.append(track["id"])
+            return ("error", None, None) if track["id"] == "/t/1" else ("ok", [(1.0, "two", None)], "lrclib")
+        self.patch_fetch(down_then_ok)
+        c.fetch_lyrics_async(TRACK)
+        time.sleep(0.15)    # la ronda inicial ya se agotó y el reintento está en espera
+        c.fetch_lyrics_async(dict(TRACK, id="/t/2", title="B"))
+        self.assertTrue(self.wait_done())
+        time.sleep(0.5)
+        self.assertEqual(calls.count("/t/1"), c.RETRIES + 1)    # el tardío del tema 1 nunca corrió
+        self.assertEqual(c._fetch["id"], "/t/2")
+
     def test_no_lyrics_publishes_an_empty_result(self):
         self.patch_fetch(lambda t: ("none", None, None))
         c.fetch_lyrics_async(TRACK)
@@ -1427,6 +1510,43 @@ class TestFetchAsync(unittest.TestCase):
         self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)], "lrclib"))
         c.fetch_lyrics_async(TRACK)
         self.assertTrue(self.wait_done())
+
+    def stale_plain(self):
+        c.cache_put(TRACK, "plain", [(0.0, "old words", None)], "lrclib")
+        path = lyrics._cache_path(TRACK)
+        with open(path) as f:
+            data = json.load(f)
+        data["at"] = int(time.time()) - lyrics.PLAIN_TTL - 60
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+    def test_an_expired_plain_lyric_is_searched_again_and_replaced_by_the_synced_one(self):
+        self.stale_plain()
+        self.patch_fetch(lambda t: ("ok", [(1.0, "one", None)], "lrclib"))
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+        self.assertEqual(c._fetch["status"], "ok")
+        self.assertEqual(c.cache_get(TRACK)[0], "ok")
+
+    def test_an_expired_plain_lyric_is_shown_when_the_retry_cant_reach_anyone(self):
+        self.stale_plain()
+        old_delay = lyrics.RETRY_DELAY
+        lyrics.RETRY_DELAY = 0
+        self.addCleanup(lambda: setattr(lyrics, "RETRY_DELAY", old_delay))
+        self.patch_fetch(lambda t: ("error", None, None))
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+        self.assertEqual((c._fetch["status"], c._fetch["lyrics"]), ("plain", [(0.0, "old words", None)]))
+        # sin cachear de nuevo: sigue vencida, así que el próximo tema vuelve a buscar
+        self.assertIsNone(c.cache_get(TRACK))
+
+    def test_an_expired_plain_lyric_survives_a_none_answer_and_gets_a_fresh_stamp(self):
+        self.stale_plain()
+        self.patch_fetch(lambda t: ("none", None, None))
+        c.fetch_lyrics_async(TRACK)
+        self.assertTrue(self.wait_done())
+        self.assertEqual(c._fetch["status"], "plain")
+        self.assertEqual(c.cache_get(TRACK)[0], "plain")
 
     def test_the_retry_waits_the_jittered_delay(self):
         # el reintento duerme lo que dice el jitter, no el número pelado

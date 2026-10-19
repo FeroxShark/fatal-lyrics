@@ -11,6 +11,8 @@ Item {
     id: bench
     property string line: "JUST AS YOU TAKE MY HAND"
     property string mode: "rows"
+    // "fixed" = 3 px de siempre; "em" = 0.03 del cuerpo (tanda letra, `lyricTrackingEm`)
+    property string tracking: "em"
     property int sw: 1280
     property int sh: 720
     width: sw
@@ -24,6 +26,7 @@ Item {
         ? Rows.pick(words, sw - 2 * pad, sh - 2 * pad, 0.46 * shortSide, 0.6, 0.94)
         : words.map((w, i) => [i])
     readonly property real px: measure.fontInfo.pixelSize
+    readonly property real ls: tracking === "em" ? px * 0.03 : 3
 
     FontLoader { source: "../../shell/fonts/SpaceMono-Bold.ttf" }
     Rectangle { anchors.fill: parent; color: "#06121f" }
@@ -32,6 +35,23 @@ Item {
         id: lyric
         anchors { fill: parent; margins: bench.pad }
 
+        // primera pasada sin tracking, como en `Crt.qml` (`measure0`)
+        Text {
+            id: measure0
+            anchors.fill: parent
+            visible: false
+            text: measure.text
+            font.family: bench.fontFam
+            font.bold: true
+            font.pixelSize: Math.round(bench.shortSide * 0.46)
+            fontSizeMode: Text.Fit
+            minimumPixelSize: 12
+            lineHeight: 0.94
+            wrapMode: Text.NoWrap
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
         Text {
             id: measure
             anchors.fill: parent
@@ -39,7 +59,7 @@ Item {
             text: bench.rows.map(r => r.map(i => bench.words[i]).join(" ")).join("\n").toUpperCase()
             font.family: bench.fontFam
             font.bold: true
-            font.letterSpacing: 3
+            font.letterSpacing: bench.tracking === "em" ? measure0.fontInfo.pixelSize * 0.03 : 3
             font.pixelSize: Math.round(bench.shortSide * 0.46)
             fontSizeMode: Text.Fit
             minimumPixelSize: 12
@@ -71,7 +91,7 @@ Item {
                             fitWidth: bench.mode === "rows"
                             pal: ({ ink: "#9fe8ff", hot: "#ffffff" })
                             fontFamily: bench.fontFam
-                            letterSpacing: 3
+                            letterSpacing: bench.ls
                             pixelSize: bench.px
                             emphasis: "none"
                         }

@@ -1395,8 +1395,19 @@ PanelWindow {
     // ¿bold? Sólo con archivo Bold (`crtFontBold` en shell.qml): sin él Qt lo
     // engorda en sintético
     readonly property bool lyricBold: ctl.crtFontBoldFor(lineText, myWords.length)
-    // Era 1 sólo para Press Start 2P (bitmap ancho), que se fue en la tanda 8.
-    readonly property int lyricLetterSpacing: 3
+    // Tracking de la letra: UNA regla, proporcional al cuerpo (0.03 em) y no
+    // fija en píxeles — 3 px eran 0.006 em en un verso de dos renglones (cuerpo
+    // ~500) y 0.05 em en uno de seis (cuerpo ~60). Sale del tamaño que MIDE
+    // `measure` (el que dibujan las palabras), no del nominal: `Text.Fit` achica
+    // y el tracking tiene que achicar con él. El fantasma del quemado y la
+    // palabra sola (IOWN) llevan su propio `Text.Fit` y quedan con su valor fijo:
+    // un tracking que dependa del tamaño que ellos mismos ajustan es un loop.
+    readonly property real lyricTrackingEm: 0.03
+    readonly property real lyricLetterSpacing: measure.fontInfo.pixelSize * lyricTrackingEm
+    // cuerpo tope de la letra: una letra sola se merece la pantalla entera (el
+    // golpe deletreado del estribillo), lo demás el 46 % del lado corto
+    readonly property int lyricNominalPx: Math.round(shortSide
+        * (myText.replace(/[^0-9a-zà-ÿ]/gi, "").length <= 2 ? 0.78 : 0.46))
     // La CLAVE (no el nombre de familia) de `lyricFont`, sólo para loguear
     // (mismo patrón que `motifKind`/`onMotifKindChanged`, más abajo): así un
     // driver puede confirmar que una línea con CJK cae a `dot` sin tener que
@@ -1788,6 +1799,26 @@ PanelWindow {
                 // que todavía no se apagó: así se lee la frase entera de un vistazo
                 opacity: crt.burned ? 0.42 : 1
 
+                // primera pasada, sin tracking: da el cuerpo del que sale el
+                // tracking de `measure` (segunda pasada, la que vale). El
+                // tracking sale un pelo grande (el cuerpo final es menor): del
+                // lado seguro, el verso no se pasa del ancho
+                Text {
+                    id: measure0
+                    anchors.fill: parent
+                    visible: false
+                    text: measure.text
+                    font.family: crt.lyricFont
+                    font.bold: crt.lyricBold
+                    font.pixelSize: crt.lyricNominalPx
+                    fontSizeMode: Text.Fit
+                    minimumPixelSize: 12
+                    lineHeight: 0.94
+                    wrapMode: Text.NoWrap
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
                 // Texto invisible que sólo sirve para saber a qué tamaño entra el
                 // pedazo entero: las palabras sueltas después usan ESE tamaño, así
                 // no queda cada una de un tamaño distinto.
@@ -1802,11 +1833,8 @@ PanelWindow {
                         .join("\n").toUpperCase()
                     font.family: crt.lyricFont
                     font.bold: crt.lyricBold
-                    font.letterSpacing: crt.lyricLetterSpacing
-                    // una letra sola se merece la pantalla entera: es el golpe
-                    // deletreado del estribillo, no una palabra más
-                    font.pixelSize: Math.round(crt.shortSide
-                        * (crt.myText.replace(/[^0-9a-zà-ÿ]/gi, "").length <= 2 ? 0.78 : 0.46))
+                    font.letterSpacing: measure0.fontInfo.pixelSize * crt.lyricTrackingEm
+                    font.pixelSize: crt.lyricNominalPx
                     fontSizeMode: Text.Fit
                     minimumPixelSize: 12
                     lineHeight: 0.94

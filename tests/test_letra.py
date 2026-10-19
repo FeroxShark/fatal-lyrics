@@ -97,6 +97,16 @@ class TestCableado(unittest.TestCase):
     def test_wordslot_fits_its_width_only_when_asked(self):
         self.assertRegex(self.slot, r"width:\s*fitWidth\s*\|\|\s*!parent\s*\?\s*label\.implicitWidth\s*:\s*parent\.width")
 
+    def test_tracking_is_proportional_to_the_measured_body(self):
+        # una sola regla (0.03 em del cuerpo que mide `measure`), nada de 3 px fijos
+        self.assertRegex(self.crt, r"lyricTrackingEm:\s*0\.03")
+        self.assertRegex(self.crt, r"lyricLetterSpacing:\s*measure\.fontInfo\.pixelSize\s*\*\s*lyricTrackingEm")
+        # primera pasada sin tracking para sacar el cuerpo del que sale el de `measure`
+        self.assertRegex(self.crt, r"id: measure0.*?id: measure\b.*?measure0\.fontInfo\.pixelSize\s*\*\s*crt\.lyricTrackingEm", re.S)
+        body = self.crt[self.crt.index("id: wholeSlot"):]
+        self.assertIn("letterSpacing: crt.lyricLetterSpacing", body[:body.index("onOverburnHit")])
+        self.assertIn("letterSpacing: crt.lyricLetterSpacing", self.crt[self.crt.index("id: slot"):])
+
 
 if __name__ == "__main__":
     unittest.main()

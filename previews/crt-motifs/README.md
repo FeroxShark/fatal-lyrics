@@ -98,3 +98,25 @@ monitor vectorial, harmonógrafo). Ninguno es un espectro de reproductor (regla 
 `./render.py maze --egg smiley|dialog|exit|rat|rock|flip` fuerza un huevo (la costura del loop sólo
 cierra así) y `--rate <r>` fija el ritmo de la marcha. `LoopFeed.qml` da un `cut` y un `hf` sintéticos.
 Estado: `docs/tanda8-estado/laberinto.md`.
+
+## Testeo 2026-10-19: golpe físico y carácter del tema (NO están en el sorteo)
+
+Pedido de Ferox: cada golpe del bajo SE VE, adaptado al carácter del tema (calmo =
+suave y lento, agitado = fuerte y seco), y ninguna pantalla plana ni quieta. Tres
+motivos 2D que fingen 3D, sobre `motifs/ThumpBase.qml` + `Thump.js`:
+
+- `membrana` — parche de bombo en perspectiva (malla de fósforo, voxel space por píxel).
+- `cintas` — cintas a distintas profundidades que el golpe pulsa y retuerce.
+- `giroscopio` — cardán de 3..6 aros en raymarch, un resorte por aro.
+
+Qué hace cada uno con cada señal: el encabezado de su `.qml`.
+
+Lo nuevo del feed (`LoopFeed.qml`, `Stage.qml`): `thump`/`thumpAmt` (un golpe por
+tiempo en el preview), `mov`, `valence`, `moodEnergy` y `bpm` (el loop se estira al
+tempo). Carácter: `./render.py membrana --temper calmo|agitado` (78 BPM / 140 BPM,
+tabla `TEMPERS` de `render.py`); `./bench.py membrana cintas giroscopio --temper agitado`.
+Salidas: `out/<kind>-<temper>.mp4` y `out/<kind>-tira.png` (8 cuadros por carácter).
+
+Al integrar: `thump` NO existe todavía en el overlay; se ata al detector de bombo
+del frente "golpe de bajo". La costura del loop no es exacta (la deriva se acumula):
+en el overlay no hay loop, así que no importa.

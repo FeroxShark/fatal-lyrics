@@ -1092,3 +1092,6 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 - **El índice del `Repeater` interno es el del renglón**, no el de la línea: `dueFrac`/`burnStep`/`landed`
   leen `modelData` (el índice global). `tests/test_letra.py` lo vigila.
 - La pantalla vertical (1080x1920) no cambia: ahí el ancho manda y apilar ya era lo mejor.
+- **`crt.layout` "stack"/"plain"/"type" no cambia nada en el director** (2026-10-19): la `Column` del director
+  apila SIEMPRE una palabra por renglón, y fuera de allMode `layout` sólo se lee para `!== "split"`. Subir el
+  tope de "stack" de 2 a 4 palabras en pantalla vertical (idea de un revisor) no tendría efecto visible.

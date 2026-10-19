@@ -563,11 +563,11 @@ PanelWindow {
         onTriggered: crt.resting = true
     }
     onPausedChanged: {
-        if (!paused) {
+        if (!paused && !standby)
+            deepSleep = false;       // despertó de la pausa larga (ver el Timer de arriba)
+        if (!paused)
             resting = false;
-            if (!standby)
-                deepSleep = false;   // despertó de la pausa larga (ver el Timer de arriba)
-        } else
+        else
             burnFade("pausa");
     }
     onRestingChanged: if (ctl.crtOn) console.log("crt: rest " + idx + (resting ? " on" : " off"))

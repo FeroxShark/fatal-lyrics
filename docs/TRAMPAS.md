@@ -1226,7 +1226,6 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   `ring_gap`. El aro no se arma mientras corre la tarjeta/estática del intro (`crtIntroOn`): entra
   después, con menos de 8 s si el intro es corto.
 
-
 ## Control y primer uso (tanda 50, 2026-10-19)
 
 - **`fatal on` decía ON con media instancia.** `start` imprimía "fatal ON" tras esperar al daemon sin

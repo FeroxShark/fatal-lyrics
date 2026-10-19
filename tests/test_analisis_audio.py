@@ -53,6 +53,12 @@ class TestFeedIsPinned(unittest.TestCase):
         self.assertEqual(digest, "21634a4b17425f89fefd16482d3b1ab2c660034f")
 
 
+    def test_a_stray_byte_at_the_end_is_ignored(self):
+        pcm = fixed_blocks(1)[0]
+        self.assertEqual(audio.AudioAnalyzer().feed(pcm + b"\x01", 0.0),
+                         audio.AudioAnalyzer().feed(pcm, 0.0))
+
+
 class TestBandEnergyIsTheLoop(unittest.TestCase):
     """La suma de Python (`sum(map(mul, ...))`) redondea distinto que el bucle en el
     último bit: se pide 1e-9, no igualdad exacta."""

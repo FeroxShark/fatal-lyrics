@@ -1051,9 +1051,10 @@ class AudioAnalyzer:
         n = len(pcm) // 2
         if n == 0:
             return None
-        samples = [int.from_bytes(pcm[i * 2:i * 2 + 2], "little", signed=True) / 32768.0
-                   for i in range(n)]
-        rms = math.sqrt(sum(x * x for x in samples) / n)
+        # un unpack en C (s16le = "<h"): antes eran n int.from_bytes por bloque, uno por
+        # hop (31 por segundo), sobre el mono que downmix_stereo acababa de empaquetar
+        samples = [v / 32768.0 for v in struct.unpack(f"<{n}h", pcm[:n * 2])]
+        rms = math.sqrt(sum(map(mul, samples, samples)) / n)
 
         # pico con decaimiento: se adapta al volumen del sistema sin saltos
         self.peak = max(rms, self.peak * LEVEL_PEAK_DECAY, LEVEL_PEAK_FLOOR)

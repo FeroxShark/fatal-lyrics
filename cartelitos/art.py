@@ -59,10 +59,11 @@ def album_colors(url):
     if not tool:
         return None
     path = None
+    tmp = None
+    failed = False
     try:
         if url.startswith("file://"):
             path = urllib.parse.unquote(url[7:])
-            tmp = None
         else:
             req = urllib.request.Request(url, headers={"User-Agent": UA})
             with urllib.request.urlopen(req, timeout=8) as resp:
@@ -78,13 +79,16 @@ def album_colors(url):
     except Exception as e:
         log(f"couldn't read the cover's colours ({e})")
         colors = None
+        failed = True
     finally:
         if tmp is not None and path:
             try:
                 os.unlink(path)
             except OSError:
                 pass
-    _art_cache[url] = colors
+    # un fallo (sin red, timeout, 404) no se cachea: el próximo play reintenta
+    if not failed:
+        _art_cache[url] = colors
     return colors
 
 

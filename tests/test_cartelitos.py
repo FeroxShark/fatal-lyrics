@@ -2446,6 +2446,17 @@ class TestAlbumColours(unittest.TestCase):
     def test_no_cover_no_colours(self):
         self.assertIsNone(c.album_colors(""))
 
+    def test_download_failure_is_not_cached_and_does_not_raise(self):
+        import urllib.error
+        c.art._art_cache.pop("http://x/fail.jpg", None)
+        with mock.patch.object(c.art.shutil, "which", return_value="/bin/magick"), \
+             mock.patch.object(c.art.urllib.request, "urlopen",
+                               side_effect=urllib.error.URLError("sin red")) as uo:
+            self.assertIsNone(c.art.album_colors("http://x/fail.jpg"))
+            self.assertIsNone(c.art.album_colors("http://x/fail.jpg"))
+        self.assertEqual(uo.call_count, 2)    # el segundo play reintenta
+        self.assertNotIn("http://x/fail.jpg", c.art._art_cache)
+
 
 class TestAlbumEventCarriesTheTrack(unittest.TestCase):
     """El `art` lleva el id del tema; sin tapa va `colors: []` (suelta la paleta anterior)."""

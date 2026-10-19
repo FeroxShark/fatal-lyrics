@@ -13,6 +13,7 @@ import traceback
 
 from . import config
 from . import ipc
+from . import mood
 from .util import FIELD_SEP, log
 
 # --------------------------------------------------------- perfil del tema
@@ -607,6 +608,200 @@ MOV_FALL_S = 0.7                   # ...y baja en ~1 s (antes 3.0): un pasaje qu
 MOV_MAX_DT = 0.25                  # un hueco más largo que esto no cuenta como tiempo continuo
 
 
+# ---- golpes separados por instrumento, novedad y carácter (2026-10-19)
+# Ferox, revisión del CRT: "cada golpe del bajo SE VE", pero adaptado al tema.
+# `b` es rms de banda completa: un hi-hat fuerte dispara igual que un bombo, y
+# la pantalla no puede saber cuál fue. Estas señales son SÓLO del daemon; qué se
+# hace con ellas lo decide el overlay. Todas reusan la FFT que ya se calcula
+# para `dirt`/`hf`: no hay transformada nueva por bloque.
+def band_amp(spec, rate, lo_hz, hi_hz):
+    """Amplitud (equivalente a la de un seno) de la banda [lo_hz, hi_hz] del
+    espectro de potencia con Hann de `power_spectrum`. Un seno de amplitud `a`
+    centrado en un bin deja a²N²/16 en el bin y un cuarto de eso en cada vecino:
+    de ahí el 1.5 y el 4/N. 0.0 si no hay espectro o no hay banda."""
+    if not spec:
+        return 0.0
+    n = (len(spec) - 1) * 2
+    lo = max(1, int(lo_hz * n / rate))
+    hi = min(len(spec) - 1, int(hi_hz * n / rate))
+    if hi < lo:
+        return 0.0
+    return math.sqrt(sum(spec[lo:hi + 1]) / 1.5) * 4.0 / n
+
+
+# `k` — el bombo. Energía en 40-150 Hz contra SU promedio corto (no contra el rms
+# total: ahí un hi-hat también "sobresale"). Fuerza 0..1 = qué tan filoso fue el
+# golpe (ratio) por qué tanto pesa en la mezcla (contra `peak`): un bombo filoso
+# pero enterrado debajo de todo late, pero chico.
+KICK_LO_HZ = 40.0
+KICK_HI_HZ = 150.0
+KICK_RATIO = 1.5           # amplitud contra el promedio corto de la banda para contar
+KICK_RATIO_FULL = 4.0      # ...y a partir de cuánto el golpe ya es "todo lo filoso"
+KICK_FLOOR = 0.01          # piso absoluto de la banda (mismo orden que BEAT_FLOOR)
+KICK_REFRACTORY = 0.2      # un bombo dura ~150 ms: no contarlo dos veces
+KICK_SLOW_KEEP = 0.85      # el promedio corto: ~0.2 s de memoria a 31 bloques/s
+KICK_MIN_FORCE = 0.05      # un golpe detectado nunca manda 0 (0 = "no hubo")
+
+# `ht` — los agudos (hi-hat, platillo, consonantes). Flujo espectral relativo en
+# 2.5-8 kHz, la misma técnica invariante a escala de `hf` (spectral_flux_ratio).
+# `hf` NO se mueve a esta banda: `mov` comparte su `hf_raw` y la pantalla ya está
+# calibrada con 125-6000 Hz. `ht` es el evento puntual; `hf`, el pulso suavizado.
+HAT_LO_HZ = 2500.0
+HAT_HI_HZ = 8000.0
+HAT_THRESH = 0.4           # fracción de la energía ACTUAL de la banda que es nueva
+HAT_FLOOR = 0.003          # piso absoluto (~-50 dBFS): sin él, la fuga del Hann de
+                           # un bombo en una banda vacía da ratio 1.0
+HAT_REFRACTORY = 0.06      # semicorcheas a 200 BPM son 75 ms: entran todas
+
+# `nov` — novedad: ¿lo que suena ahora es OTRA cosa que hace dos segundos? Una capa
+# que entra al mismo volumen no mueve `l` ni `sec`, pero cambia la forma del
+# espectro. Distancia coseno entre el vector de 6 bandas promedio de los últimos
+# NOV_WIN segundos y los NOV_WIN anteriores. Las bandas salen de la FFT, no de
+# `band_energy`: ésa mide UN bin por banda, y un tono entre dos centros (2 kHz)
+# no aparece en ninguna. Amplitud (raíz de la energía), no energía: si no, el
+# bajo pesa tanto que el vector siempre apunta para el mismo lado.
+NOV_EDGES = (31.0, 100.0, 250.0, 600.0, 1500.0, 4000.0, 8000.0)
+NOV_WIN = 2.0              # segundos de cada ventana
+NOV_GAIN = 2.0             # 1-cos de una capa nueva pareja da ~0.3: x2 llena el rango
+NOV_MIN_AMP = 1e-4         # ventana casi muda: sin forma que comparar, nov = 0
+
+# `rise` / `fall` — el tema crece o se apaga SOSTENIDO (no un golpe): EMA de 2 s
+# menos EMA de 8 s, de `mov` y del nivel en dB (no de `l`: ése va contra un pico
+# que se adapta solo y una subida de volumen se le escapa en segundos). Evento de
+# un bloque, con la magnitud 0..1; se rearma cuando la diferencia vuelve cerca
+# de 0, así un crescendo largo dispara una vez y no un chorro.
+TREND_FAST_S = 2.0
+TREND_SLOW_S = 8.0
+TREND_HOLD_S = 1.0         # tiene que sostenerse esto antes de avisar
+TREND_MOV = 0.08           # diferencia de `mov` que ya cuenta como "está subiendo"
+TREND_DB = 0.06            # ídem en el nivel (0..1 = -60..0 dBFS: 0.06 ≈ 3.6 dB)
+TREND_REARM = 0.5          # se rearma debajo de esta fracción del umbral
+TREND_FULL = 3.0           # magnitud 1.0 = tres veces el umbral
+
+# `char` — el carácter del tema, calmo (0) .. agitado (1). Es lo que decide si el
+# golpe se ve suave y lento o fuerte: nunca "default de dubstep" para todo. Lento
+# a propósito (CHAR_TAU): es del TEMA, no del compás. Se arma con lo que haya:
+# BPM si es confiable, mood.energy (del perfil guardado, o del que se va midiendo
+# cuando ya hay bastante) y la densidad de onsets promedio de los últimos ~20 s.
+CHAR_ONSET_TAU = 20.0      # ventana larga de la densidad de onsets
+CHAR_DENS_LO = 1.5         # onsets/s de un pasaje flojo (ronda 3 de `mov`: 1-3)...
+CHAR_DENS_HI = 8.5         # ...y de uno ocupado (7-9)
+CHAR_BPM_LO = 70.0
+CHAR_BPM_HI = 170.0
+CHAR_BPM_CONF = 0.5        # debajo de esta confianza el BPM no entra
+CHAR_W_BPM = 0.35
+CHAR_W_ENERGY = 0.35
+CHAR_W_DENS = 0.30
+CHAR_TAU = 6.0             # EMA del valor final: no salta golpe a golpe
+CHAR_SEND_DELTA = 0.05     # se avisa cuando se movió más que esto
+CHAR_WARMUP = 3.0          # sin perfil, la densidad necesita unos segundos de música
+
+
+def char_target(bpm, conf, energy, dens_rate):
+    """El carácter crudo (sin suavizar) con lo que se sepa: promedio pesado de
+    los términos disponibles. `energy` None = todavía no hay de dónde sacarla;
+    `dens_rate` None = todavía no hubo música. Sin nada: 0.5."""
+    terms = []
+    if bpm and bpm > 0 and conf >= CHAR_BPM_CONF:
+        terms.append((CHAR_W_BPM, (bpm - CHAR_BPM_LO) / (CHAR_BPM_HI - CHAR_BPM_LO)))
+    if energy is not None:
+        terms.append((CHAR_W_ENERGY, energy))
+    if dens_rate is not None:
+        terms.append((CHAR_W_DENS, (dens_rate - CHAR_DENS_LO) / (CHAR_DENS_HI - CHAR_DENS_LO)))
+    if not terms:
+        return 0.5
+    w = sum(t[0] for t in terms)
+    return min(max(sum(t[0] * min(max(t[1], 0.0), 1.0) for t in terms) / w, 0.0), 1.0)
+
+
+CHAR_EVERY = 1.0           # se recalcula una vez por segundo (mood.energy recorre el perfil)
+
+
+def _char_energy(prof):
+    """mood.energy del perfil: el guardado si se conocía; si no, el que se va
+    midiendo, cuando ya hay bastante (PROFILE_MIN_SAMPLES). None = todavía no."""
+    heard = sum(1 for v in prof.rms if v > 0.0)
+    if not prof.known and heard < PROFILE_MIN_SAMPLES:
+        return None
+    return mood.energy({"known": True, "rms": prof.rms, "gain": prof.gain}, 0.0)
+
+
+class CharTracker:
+    """`char` estable por tema. `seed()` al cambiar de tema: si el perfil ya se
+    conocía, arranca directo en su valor (sin rampa desde 0.5)."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.value = None
+        self.at = None
+        self.sent = None
+
+    def seed(self, target):
+        self.value = target
+        self.at = None
+
+    def step(self, target, now):
+        """Avanza la EMA; devuelve el evento a mandar o None."""
+        if self.value is None:
+            self.value = target
+        else:
+            dt = 0.0 if self.at is None else max(now - self.at, 0.0)
+            self.value += (target - self.value) * (1.0 - math.exp(-dt / CHAR_TAU))
+        self.at = now
+        if self.sent is None or abs(self.value - self.sent) > CHAR_SEND_DELTA:
+            self.sent = self.value
+            return {"cmd": "char", "v": round(self.value, 2)}
+        return None
+
+
+class _Trend:
+    """EMA corta menos EMA larga de una señal, con evento de subida/bajada
+    sostenida (ver TREND_*)."""
+
+    def __init__(self, thresh):
+        self.thresh = thresh
+        self.fast = self.slow = None
+        self.at = None
+        self.up_since = self.down_since = None
+        self.up_armed = self.down_armed = True
+
+    def step(self, x, now):
+        """Devuelve (rise, fall): magnitud 0..1 en el bloque que dispara, si no 0."""
+        if self.fast is None:
+            self.fast = self.slow = x
+            self.at = now
+            return 0.0, 0.0
+        dt = min(max(now - self.at, 0.0), MOV_MAX_DT)
+        self.at = now
+        self.fast += (x - self.fast) * (1.0 - math.exp(-dt / TREND_FAST_S))
+        self.slow += (x - self.slow) * (1.0 - math.exp(-dt / TREND_SLOW_S))
+        d = self.fast - self.slow
+        rise = fall = 0.0
+        if d > self.thresh:
+            if self.up_since is None:
+                self.up_since = now
+            if self.up_armed and now - self.up_since >= TREND_HOLD_S:
+                self.up_armed = False
+                rise = min(d / (self.thresh * TREND_FULL), 1.0)
+        else:
+            self.up_since = None
+            if d < self.thresh * TREND_REARM:
+                self.up_armed = True
+        if d < -self.thresh:
+            if self.down_since is None:
+                self.down_since = now
+            if self.down_armed and now - self.down_since >= TREND_HOLD_S:
+                self.down_armed = False
+                fall = min(-d / (self.thresh * TREND_FULL), 1.0)
+        else:
+            self.down_since = None
+            if d > -self.thresh * TREND_REARM:
+                self.down_armed = True
+        return rise, fall
+
+
 class AudioAnalyzer:
     """PCM crudo → nivel, bandas, centroide (proxy del tono) y golpes.
 
@@ -640,6 +835,25 @@ class AudioAnalyzer:
         self.mov_bright_at = None
         self.mov = 0.0
         self.mov_at = None
+        self.mov_attack = False
+        # bombo: promedio corto de la banda grave y último golpe
+        self.kick_slow = 0.0
+        self.last_kick = None
+        self.last_hat = None
+        # novedad: vectores de 6 bandas de los últimos 2·NOV_WIN segundos, en dos
+        # mitades con su suma corrida (O(6) por bloque, no recorrer la ventana)
+        self.nov_hops = max(1, int(round(NOV_WIN * rate / AUDIO_HOP)))
+        self.nov_recent = []
+        self.nov_prev = []
+        self.nov_sum_recent = [0.0] * (len(NOV_EDGES) - 1)
+        self.nov_sum_prev = [0.0] * (len(NOV_EDGES) - 1)
+        self.trend_mov = _Trend(TREND_MOV)
+        self.trend_db = _Trend(TREND_DB)
+        # densidad de onsets larga, para `char`: contador que decae + cuánto
+        # tiempo CON MÚSICA se lleva midiendo (las pausas no la diluyen)
+        self.onset_long = 0.0
+        self.onset_time = 0.0
+        self.onset_at = None
 
     def _smooth_dirt(self, raw, now):
         """EMA asimétrica en el tiempo real (no por bloque): sube con tau 0.5 s, baja con 1.5 s."""
@@ -687,6 +901,7 @@ class AudioAnalyzer:
             self.mov_last_attack is None or now - self.mov_last_attack > MOV_ATTACK_REFRACTORY)
         if attack:
             self.mov_last_attack = now
+        self.mov_attack = attack
         dt = 0.0 if self.mov_rate_at is None else min(max(now - self.mov_rate_at, 0.0), MOV_MAX_DT)
         self.mov_rate_at = now
         self.mov_rate *= math.exp(-dt / MOV_RATE_TAU)
@@ -707,6 +922,87 @@ class AudioAnalyzer:
         tau = MOV_RISE_S if raw > self.mov else MOV_FALL_S
         self.mov += (raw - self.mov) * (1.0 - math.exp(-dt / tau))
         return self.mov
+
+    def _kick_step(self, spec, now):
+        """`k`: fuerza 0..1 del bombo en este bloque, 0.0 si no hubo (ver KICK_*)."""
+        amp = band_amp(spec, self.rate, KICK_LO_HZ, KICK_HI_HZ)
+        slow = self.kick_slow
+        self.kick_slow = slow * KICK_SLOW_KEEP + amp * (1.0 - KICK_SLOW_KEEP)
+        if amp < KICK_FLOOR or amp < slow * KICK_RATIO:
+            return 0.0
+        if self.last_kick is not None and now - self.last_kick < KICK_REFRACTORY:
+            return 0.0
+        self.last_kick = now
+        ratio = amp / slow if slow > 1e-9 else KICK_RATIO_FULL
+        sharp = min((ratio - 1.0) / (KICK_RATIO_FULL - 1.0), 1.0)
+        # cuánto pesa en la mezcla: el rms de un seno es a/√2
+        weight = min(amp * 0.7071 / max(self.peak, LEVEL_PEAK_FLOOR), 1.0)
+        return max(sharp * (0.5 + 0.5 * weight), KICK_MIN_FORCE)
+
+    def _hat_step(self, spec, now):
+        """`ht`: fuerza 0..1 del onset de agudos en este bloque, 0.0 si no hubo."""
+        if band_amp(spec, self.rate, HAT_LO_HZ, HAT_HI_HZ) < HAT_FLOOR:
+            return 0.0
+        ratio = spectral_flux_ratio(spec, self.prev_spec, self.rate, HAT_LO_HZ, HAT_HI_HZ)
+        if ratio < HAT_THRESH:
+            return 0.0
+        if self.last_hat is not None and now - self.last_hat < HAT_REFRACTORY:
+            return 0.0
+        self.last_hat = now
+        return ratio
+
+    def _nov_step(self, spec):
+        """`nov` 0..1: distancia coseno entre la forma del espectro de los últimos
+        NOV_WIN segundos y la de los NOV_WIN anteriores (ver NOV_*)."""
+        if not spec:
+            return 0.0
+        n = (len(spec) - 1) * 2
+        vec = []
+        for lo_hz, hi_hz in zip(NOV_EDGES, NOV_EDGES[1:]):
+            lo = max(1, int(lo_hz * n / self.rate))
+            hi = min(len(spec) - 1, int(hi_hz * n / self.rate))
+            vec.append(math.sqrt(sum(spec[lo:hi])) * 4.0 / n if hi > lo else 0.0)
+        self.nov_recent.append(vec)
+        for i, v in enumerate(vec):
+            self.nov_sum_recent[i] += v
+        if len(self.nov_recent) > self.nov_hops:
+            old = self.nov_recent.pop(0)
+            self.nov_prev.append(old)
+            for i, v in enumerate(old):
+                self.nov_sum_recent[i] -= v
+                self.nov_sum_prev[i] += v
+            if len(self.nov_prev) > self.nov_hops:
+                gone = self.nov_prev.pop(0)
+                for i, v in enumerate(gone):
+                    self.nov_sum_prev[i] -= v
+        if len(self.nov_prev) < self.nov_hops:
+            return 0.0      # todavía no hay "antes" entero con qué comparar
+        a, b = self.nov_sum_recent, self.nov_sum_prev
+        na = math.sqrt(sum(x * x for x in a)) / self.nov_hops
+        nb = math.sqrt(sum(x * x for x in b)) / self.nov_hops
+        if na < NOV_MIN_AMP or nb < NOV_MIN_AMP:
+            return 0.0
+        cos = sum(x * y for x, y in zip(a, b)) / (na * nb * self.nov_hops * self.nov_hops)
+        return min(max((1.0 - cos) * NOV_GAIN, 0.0), 1.0)
+
+    def _onset_long_step(self, rms, now):
+        """Densidad de onsets de los últimos ~CHAR_ONSET_TAU s, sólo con música."""
+        dt = 0.0 if self.onset_at is None else min(max(now - self.onset_at, 0.0), MOV_MAX_DT)
+        self.onset_at = now
+        if rms < BEAT_FLOOR:
+            return
+        self.onset_time += dt
+        self.onset_long *= math.exp(-dt / CHAR_ONSET_TAU)
+        if self.mov_attack:
+            self.onset_long += 1.0
+
+    def onset_rate(self):
+        """Onsets por segundo promedio (para `char`), o None si todavía no sonó
+        lo bastante. Corrige el arranque de la EMA: con 5 s medidos, divide por
+        lo que la EMA llegó a juntar en 5 s y no por la ventana entera."""
+        if self.onset_time < CHAR_WARMUP:
+            return None
+        return self.onset_long / (CHAR_ONSET_TAU * (1.0 - math.exp(-self.onset_time / CHAR_ONSET_TAU)))
 
     def _cut_step(self, level, now):
         """Corte seco: (cut sostenido, fuerza de vuelta en este frame o 0.0). Ver
@@ -805,6 +1101,13 @@ class AudioAnalyzer:
         mov = self._smooth_mov(
             MOV_W_DENS * dens + MOV_W_BEAT * pulse + MOV_W_BRIGHT * bright
             + MOV_W_ENERGY * erel, now)
+        kick = self._kick_step(spec, now)
+        hat = self._hat_step(spec, now)
+        nov = self._nov_step(spec)
+        db = min(max((20.0 * math.log10(max(rms, 1e-6)) + 60.0) / 60.0, 0.0), 1.0)
+        rise_m, fall_m = self.trend_mov.step(mov, now)
+        rise_l, fall_l = self.trend_db.step(db, now)
+        self._onset_long_step(rms, now)
         self.prev_spec = spec
 
         return {
@@ -821,6 +1124,13 @@ class AudioAnalyzer:
             "cutf": round(cutf, 3),
             "hf": round(hf, 3),
             "mov": round(mov, 3),
+            # golpes por instrumento, novedad y tendencia (ver KICK_*, HAT_*,
+            # NOV_*, TREND_*): `k`/`ht`/`rise`/`fall` son de UN bloque, 0 si no
+            "k": round(kick, 2),
+            "ht": round(hat, 2),
+            "nov": round(nov, 2),
+            "rise": round(max(rise_m, rise_l), 2),
+            "fall": round(max(fall_m, fall_l), 2),
         }
 
 
@@ -1383,6 +1693,9 @@ def _capture_loop():
         # el compás: lo alimentan los mismos golpes que ya se detectan
         bpm = BpmTracker()
         last_bpm_logged = 0.0
+        # el carácter del tema (calmo..agitado), lento: ver CHAR_*
+        char = CharTracker()
+        last_char = 0.0
         last_save = time.monotonic()
         quiet_since = time.monotonic()
         last_sink_check = time.monotonic()
@@ -1441,7 +1754,10 @@ def _capture_loop():
                     log(f"peak {gate.count}/{gate.cap}"
                         + (f" ({cur_pct:.0%} of the track)" if cur_pct is not None
                            else " (no map yet)"))
-                if ev["b"] or ev["cutf"] or now - last >= AUDIO_MIN_SEND:
+                # los eventos de UN bloque (golpe, bombo, agudo, corte, tendencia)
+                # salen siempre: si caen en un bloque salteado, se pierden
+                if (ev["b"] or ev["cutf"] or ev["k"] or ev["ht"] or ev["rise"]
+                        or ev["fall"] or now - last >= AUDIO_MIN_SEND):
                     last = now
                     ipc.send_soft(ev)
 
@@ -1458,6 +1774,13 @@ def _capture_loop():
                     # arranca, pero el del perfil (si ya se escuchó) sí
                     bpm.reset()
                     bpm.seed(prof.bpm, prof.conf)
+                    # el carácter también: con perfil guardado arranca en su
+                    # valor; sin perfil, desde el medio, y lo va armando la música
+                    char.reset()
+                    an.onset_long = an.onset_time = 0.0
+                    if prof.known:
+                        char.seed(char_target(prof.bpm, prof.conf,
+                                              _char_energy(prof), None))
                 # el número vive en el perfil, que es quien lo guarda: set_profile
                 # salva el perfil VIEJO desde el hilo del daemon, así que el valor
                 # ya tiene que estar escrito acá cuando eso pase
@@ -1467,6 +1790,12 @@ def _capture_loop():
                 prof.gain = cur_gain
                 # se guarda cada tanto, no sólo al cambiar de tema: si el daemon
                 # se cae en la mitad, el mapa de lo escuchado no se pierde
+                if now - last_char >= CHAR_EVERY:
+                    last_char = now
+                    msg = char.step(char_target(bpm.bpm, bpm.conf, _char_energy(prof),
+                                                an.onset_rate()), now)
+                    if msg:
+                        ipc.send_soft(msg)
                 if now - last_save > PROFILE_SAVE_EVERY:
                     last_save = now
                     prof.save()

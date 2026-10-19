@@ -47,6 +47,20 @@ def _hyprland():
     return False
 
 
+def is_ad(t):
+    """¿Lo que reporta el player es un anuncio de Spotify y no un tema?
+
+    Spotify (cuenta free) publica el anuncio como una pista más: el trackid
+    cuelga de `/com/spotify/ad/` (o `spotify:ad:`) y a veces el título es
+    "Advertisement" con el artista vacío. Sin esto cada anuncio limpiaba la
+    pared, buscaba letra y sacaba colores de una tapa que no es un disco."""
+    tid = str(t.get("id") or "").lower()
+    if "/com/spotify/ad/" in tid or "spotify:ad:" in tid:
+        return True
+    return (str(t.get("title") or "").strip().lower() == "advertisement"
+            and not str(t.get("artist") or "").strip())
+
+
 def playerctl_state():
     """Devuelve dict con track+posición del player, o None si no hay."""
     fmt = FIELD_SEP.join([

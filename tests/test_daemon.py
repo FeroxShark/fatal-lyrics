@@ -1274,3 +1274,67 @@ class TestPlainLyricsPoll(unittest.TestCase):
         loop, fast = self.run_tick("synced")
         self.assertTrue(fast)
         self.assertLessEqual(loop._next_sleep(fast, 1.0), daemon.POLL)
+
+
+class TestSpotifyAds(unittest.TestCase):
+    """Un anuncio de Spotify se trata como una pausa: ni clear, ni np, ni letra,
+    ni colores; y al volver el mismo tema no se rehace nada."""
+
+    AD = dict(id="/com/spotify/ad/abc123", title="Advertisement", artist="", album="",
+              art="ad.png", pos=3.0, length=30.0)
+
+    def loop_for(self, *states):
+        loop = make_loop(playerctl_state=mock.Mock(side_effect=list(states)))
+        return loop
+
+    def test_is_ad(self):
+        from cartelitos import system
+        self.assertTrue(system.is_ad(track(id="/com/spotify/ad/x")))
+        self.assertTrue(system.is_ad(track(id="spotify:ad:x")))
+        self.assertTrue(system.is_ad(track(id="/x", title="Advertisement", artist="")))
+        self.assertFalse(system.is_ad(track(id="/com/spotify/track/x")))
+        self.assertFalse(system.is_ad(track(id="/x", title="Advertisement", artist="Banda")))
+
+    def test_an_ad_touches_nothing(self):
+        loop = self.loop_for(track(id="t1", pos=50.0), track(**self.AD))
+        loop.tick()
+        for m in (loop._ipc.clear, loop._ipc.send, loop._art.send_album_colors,
+                  loop._lyr.fetch_lyrics_async):
+            m.reset_mock()
+        loop.tick()
+        loop._ipc.clear.assert_not_called()
+        loop._art.send_album_colors.assert_not_called()
+        loop._lyr.fetch_lyrics_async.assert_not_called()
+        cmds = [c.args[0].get("cmd") for c in loop._ipc.send.call_args_list]
+        self.assertEqual(cmds, ["pos"])
+        self.assertIs(loop._ipc.send.call_args.args[0]["pl"], False)
+        self.assertEqual(loop.track_id, "t1")
+        self.assertFalse(loop.voice_active)
+
+    def test_the_same_track_after_the_ad_redoes_nothing(self):
+        loop = self.loop_for(track(id="t1", pos=50.0), track(**self.AD),
+                             track(id="t1", pos=50.5))
+        loop.tick()
+        loop.tick()
+        for m in (loop._ipc.clear, loop._art.send_album_colors, loop._lyr.fetch_lyrics_async):
+            m.reset_mock()
+        loop._ipc.send.reset_mock()
+        loop.tick()
+        loop._ipc.clear.assert_not_called()
+        loop._art.send_album_colors.assert_not_called()
+        loop._lyr.fetch_lyrics_async.assert_not_called()
+        cmds = [c.args[0].get("cmd") for c in loop._ipc.send.call_args_list]
+        self.assertNotIn("np", cmds)
+
+    def test_an_ad_with_no_track_before_it_does_nothing(self):
+        loop = self.loop_for(track(**self.AD))
+        loop.tick()
+        loop._ipc.clear.assert_not_called()
+        loop._ipc.send.assert_not_called()
+        self.assertIsNone(loop.track_id)
+
+    def test_the_ad_is_logged_once(self):
+        loop = self.loop_for(track(**self.AD), track(**self.AD))
+        loop.tick()
+        loop.tick()
+        self.assertEqual(sum("ad:" in str(c) for c in loop._log.call_args_list), 1)

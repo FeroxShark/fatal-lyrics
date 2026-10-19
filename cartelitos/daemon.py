@@ -183,6 +183,9 @@ class DaemonLoop:
         self.paused_pos_sent = None
         # se mostró una línea con la música parada (seek en pausa): sin `v_end`
         self.paused_show = False
+        # sonando un anuncio: se trata como una pausa, el tema de antes sigue en pie
+        self.in_ad = False
+        self.last_len = 0.0
         self.last_pos = 0.0
         self.last_show_at = 0.0
         self.hang_sent = False
@@ -321,6 +324,7 @@ class DaemonLoop:
             self.idx = -1
             self._log("seek while paused: reshow")
         self.last_pos = t["pos"]
+        self.last_len = t["length"]
 
         if t["id"] != self.track_id:
             self.track_id = t["id"]
@@ -566,8 +570,30 @@ class DaemonLoop:
             self._sleep(1.5)
             return
 
+        if self._system.is_ad(t):
+            self._handle_ad()
+            self._sleep(POLL)
+            return
+        self.in_ad = False
+
         fast = self.handle_track(t, now)
         self._sleep(self._next_sleep(fast, now))
+
+    def _handle_ad(self):
+        """Un anuncio de Spotify suena como si fuera un tema: se trata como una
+        pausa. Ni `clear`, ni `np`, ni búsqueda de letra, ni colores: el tema de
+        antes (si lo había) queda en pie, y si Spotify vuelve al mismo, no se
+        rehace nada. El overlay sólo se entera de que la posición dejó de correr."""
+        if self.in_ad:
+            return
+        self.in_ad = True
+        self.voice_active = False
+        self._ipc._song_where["playing"] = False
+        self._log("ad: treated as a pause")
+        if self.track_id is not None and self.last_len > 0:
+            self.paused_pos_sent = self.last_pos
+            self._ipc.send({"cmd": "pos", "p": round(self.last_pos, 2),
+                            "l": round(self.last_len, 2), "pl": False})
 
     def _next_sleep(self, fast, now):
         """Cuánto dormir hasta la próxima vuelta. Con la letra sincronizada

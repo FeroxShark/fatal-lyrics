@@ -1279,7 +1279,10 @@ PanelWindow {
     // no arma el quemado y la letra se cortaba en seco de un cuadro al otro.
     property string lastShownText: ""
     property bool ghostCutOn: false
+    // Un solo handler (QML no admite dos): el quemado del estribillo se va
+    // con la letra, y la línea que estaba deja su fantasma.
     onNoLyricChanged: {
+        if (noLyric) burnFade("sin letra");
         if (noLyric && lastShownText !== "" && visible && !tubeDark) {
             ghostText = lastShownText;
             ghostCutOn = true;
@@ -3092,7 +3095,6 @@ PanelWindow {
         interval: Motion.burnFadeMs + 60
         onTriggered: crt.burnWipe("fade")
     }
-    onNoLyricChanged: if (noLyric) burnFade("sin letra")
     // Se toma cuando la línea ya ASENTÓ: la cámara quieta (`cameraMs`) y el rayo
     // del salto (360 + 150 ms) ya pasó, más un puente (`bridgeMs`): si no, la
     // silueta llevaría el encuadre a medio camino o la cabeza del rayo.

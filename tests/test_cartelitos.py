@@ -3241,7 +3241,7 @@ class TestSettingsSchema(unittest.TestCase):
         self.assertNotIn("\n", text)
         self.assertEqual(settings.detail("crt.no_such_knob"), "")
         multi = {"crt": {"x": "first one\nstill first\n\nsecond paragraph"}}
-        with mock.patch.object(c, "_CONFIG_COMMENTS", multi):
+        with mock.patch.object(config, "_CONFIG_COMMENTS", multi):
             self.assertEqual(settings.detail("crt.x"), "first one still first")
 
     def test_the_snapshot_carries_a_detail_for_each_commented_knob(self):

@@ -859,6 +859,59 @@ class TestLineFiresAtItsInstant(unittest.TestCase):
         self.assertAlmostEqual(loop._sleep.call_args.args[0], 0.06 + daemon.DUE_LEAD)
 
 
+class TestTickSurvives(unittest.TestCase):
+    """Una excepción en un tick no mata el daemon ni apaga el tubo."""
+
+    def _loop(self, clock):
+        loop = make_loop(monotonic=mock.Mock(side_effect=clock))
+        loop.track_id = "t1"
+        loop.idx = 4
+        return loop
+
+    def test_the_failure_is_logged_with_its_traceback_and_state_is_reset(self):
+        loop = self._loop(lambda: 0.0)
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            loop._tick_failed()
+        msg = loop._log.call_args.args[0]
+        self.assertIn("ValueError: boom", msg)
+        self.assertIsNone(loop.track_id)
+        self.assertEqual(loop.idx, -1)
+        loop._sleep.assert_called_once_with(daemon.TICK_RETRY)
+
+    def test_a_repeating_error_logs_once_per_window(self):
+        times = iter([0.0, 1.0, 2.0, daemon.LOG_EVERY + 1])
+        loop = self._loop(lambda: next(times))
+        for _ in range(4):
+            try:
+                raise RuntimeError("again")
+            except RuntimeError:
+                loop._tick_failed()
+        self.assertEqual(loop._log.call_count, 2)
+        self.assertEqual(loop.tick_errors, 4)
+
+    def test_run_keeps_looping_after_a_tick_raises(self):
+        loop = make_loop()
+        loop._config.CFG.update(crt={"enabled": False}, keys={})
+        calls = []
+
+        def tick():
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("boom")
+            if len(calls) == 3:
+                raise KeyboardInterrupt   # corta el while True del test
+        loop.tick = tick
+        with mock.patch.object(daemon.threading, "Thread"), \
+                mock.patch.object(daemon.signal, "signal"), \
+                mock.patch.object(daemon, "mark_ready"):
+            with self.assertRaises(KeyboardInterrupt):
+                loop.run()
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(loop.tick_errors, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
 

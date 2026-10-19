@@ -1043,6 +1043,12 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
   `pos`/`aud` lo despierta. Con el tubo apagado (carteles Win95) el `pause_clear` de 15 s sigue igual.
   Además, las pausas cortas (< `PAUSE_FAST`, 8 s) siguen con el poll de 0.3 s: el play despierta la
   pared en ~0.3 s y no en hasta 1 s (~1 % de un core esos 8 s; después vuelve el de 1 s).
+- **Un tick que revienta ya no mata el daemon.** `run()` no tenía try: cualquier excepción salía con 1,
+  systemd lo levantaba a los 3 s y el arranque (`set_crt(config)`) apagaba el tubo que estaba
+  prendido — posible causa del "el daemon se muere solo tras una pausa larga" de NUMEROS-MEDIDOS
+  (hipótesis, sin confirmar). Ahora `_tick_failed` loguea el traceback en `daemon.log` (una vez por
+  minuto como mucho, con el conteo), suelta el tema y reintenta a los 2 s. Si el log muestra
+  `tick failed`, ahí está la causa real: buscarla antes de tapar el síntoma.
 
 ## Instalable sin la mitad de `shell/` y README con la tecla vieja (instalación, 2026-10-19)
 

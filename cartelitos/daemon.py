@@ -5,6 +5,7 @@ import signal
 import sys
 import threading
 import time
+import traceback
 
 from . import audio
 from . import art
@@ -28,6 +29,11 @@ POLL_IDLE = 1.0     # en pausa: un playerctl por segundo alcanza
 # En una pausa CORTA el poll sigue siendo el rápido: el play despierta la pared en
 # ~0.3 s y no en hasta 1 s. Pasados estos segundos de pausa vuelve el de 1 s.
 PAUSE_FAST = 8.0
+# Un tick que revienta no mata el daemon (ver `_tick_failed`): el traceback va al
+# log una vez cada LOG_EVERY segundos, no cada vuelta, para que un error
+# determinístico no llene daemon.log.
+TICK_RETRY = 2.0
+LOG_EVERY = 60.0
 DUE_LEAD = 0.02
 DUE_MIN_SLEEP = 0.03
 # T4.5: silencio con la letra cargada y el tema sonando. Un instrumental largo
@@ -175,6 +181,8 @@ class DaemonLoop:
         # segundos (de posición cruda) que faltan para el próximo `show`, tal
         # como los dejó el último handle_track; None = no hay próximo conocido
         self.next_due_in = None
+        self.tick_errors = 0
+        self.last_error_log = None
         # T5.2: el modo karaoke. `voice_active` es "hay letra sonando ahora":
         # sin canción no se está cantando, se está hablando.
         self.sing = SingGate()
@@ -554,7 +562,27 @@ class DaemonLoop:
         threading.Thread(target=self._audio.voice_loop, daemon=True, name="voice").start()
         signal.signal(signal.SIGUSR1, self._ipc.demo)
         while True:
-            self.tick()
+            try:
+                self.tick()
+            except Exception:
+                self._tick_failed()
+
+    def _tick_failed(self):
+        """Un tick con una excepción (un playerctl que devuelve algo raro, una
+        letra mal formada, un socket caído) no puede matar el proceso: `run()` no
+        tenía try, `fatal run` salía con 1, systemd lo levantaba a los 3 s y
+        `set_crt(config)` del arranque apagaba el tubo que estaba prendido.
+        Se loguea el traceback (limitado: ver LOG_EVERY), se suelta el tema para
+        que el próximo tick rearme todo desde el player, y se espera un poco."""
+        self.tick_errors += 1
+        now = self._monotonic()
+        if self.last_error_log is None or now - self.last_error_log >= LOG_EVERY:
+            self.last_error_log = now
+            self._log(f"tick failed ({self.tick_errors} so far), carrying on:\n"
+                      + traceback.format_exc().rstrip())
+        self.track_id = None
+        self.idx = -1
+        self._sleep(TICK_RETRY)
 
 
 _instance_lock = None   # el descriptor tiene que vivir tanto como el proceso

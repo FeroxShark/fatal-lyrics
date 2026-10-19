@@ -111,6 +111,17 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `audio._cut_step`/`_smooth_hf` + campos `cut`/`cutf`/`hf` de `aud` (`audio.py`) — `cut`/`cutf`
   marcan un corte seco al bajar de golpe y la fuerza de vuelta; `hf` es flujo espectral, reusa el
   espectro que `dirt` ya calculaba. Detalle: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
+- Golpes por instrumento y carácter (`audio.py`, 2026-10-19; el overlay todavía NO los usa), todo
+  sobre la misma FFT, sin perfil (sirve en la primera escucha). Campos de `aud`: `k` bombo
+  (40-150 Hz contra su promedio corto, refractario 200 ms; fuerza 0..1 = filo × peso en la mezcla,
+  0 = no hubo); `ht` agudos (flujo relativo 2.5-8 kHz, 60 ms; `hf` queda en 125-6000 Hz porque
+  `mov` comparte su `hf_raw`); `nov` 0..1 (coseno entre la forma de 6 bandas de los últimos 2 s y
+  los 2 s previos: capa que entra al mismo volumen); `rise`/`fall` (EMA 2 s − EMA 8 s de `mov` y
+  del nivel en dB, sostenida >1 s; un bloque, magnitud 0..1, mudos los primeros 4 s). `k`/`ht`/
+  `rise`/`fall` fuerzan el envío (si no, caen en el bloque salteado por `AUDIO_MIN_SEND`). Evento
+  aparte `char {v}` 0..1 calmo..agitado (`CharTracker`, EMA 6 s, se manda al moverse >0.05):
+  BPM con conf ≥0.5 + `mood.energy` (perfil guardado, o el en vivo desde 20 s) + onsets/s de ~20 s.
+  Tests: `tests/test_golpes.py`. CPU: +0.05 ms por bloque (~+0.15 % de un núcleo).
 - `shell/React.js` — funciones puras del reloj del tubo (`cutDim`, `backFlash`, `fizz`, `grain`,
   `grainAdvance`) que llaman `Crt.qml` Y el banco `previews/reaccion/` (misma fuente). Mapean
   `cut`/`cutf`/`hf` a uniforms de `crt.frag` sin sumar animación por pantalla. Fase del grano

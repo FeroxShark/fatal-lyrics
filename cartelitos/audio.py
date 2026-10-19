@@ -4,6 +4,7 @@ import json
 import math
 import os
 import re
+from operator import mul
 import shutil
 import struct
 import subprocess
@@ -329,10 +330,10 @@ def band_energy(samples, rate, freq):
     if n == 0:
         return 0.0
     cos_t, sin_t = _band_table(n, rate, freq)
-    re = im = 0.0
-    for i, x in enumerate(samples):
-        re += x * cos_t[i]
-        im += x * sin_t[i]
+    # sum(map(mul)) corre en C: el bucle de 512 vueltas en Python era la mitad del costo
+    # del análisis. Redondea distinto en el último bit (sum() compensa), no en el dict.
+    re = sum(map(mul, samples, cos_t))
+    im = sum(map(mul, samples, sin_t))
     return (re * re + im * im) / (n * n)
 
 

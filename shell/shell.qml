@@ -271,6 +271,15 @@ ShellRoot {
             // un pasaje quieto (`mov` 0) y en uno nervioso (`mov` 1); 1 = como estaba.
             // `movKick`: cuánto empuja la velocidad un golpe (× ritmo, decae en 0.42 s)
             movMin: 0.60, movMax: 1.50, movKick: 0.40,
+            // el GOLPE visible (excepción a "una animación por pantalla" y a "la cámara se
+            // queda quieta", ver CLAUDE.md): cada bombo pulsa la cámara (`kickCam`, fracción
+            // de zoom) y el tubo (`kickTube`, fogonazo) y empuja un poco el dibujo
+            // (`kickMotif`, fracción de tamaño). Es el techo, el de un tema agitado
+            // (`crtCharacter` 1): `kickAmpMin` es la fracción que queda en un tema lento
+            // (carácter 0), y la caída va de `kickSlowMs` a `kickFastMs`. `kickHat`: el brillo
+            // del destello de los agudos en el dibujo
+            kickCam: 0.014, kickTube: 0.60, kickMotif: 0.030, kickHat: 0.60,
+            kickAmpMin: 0.25, kickSlowMs: 420, kickFastMs: 150,
         },
         normal: {
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
@@ -285,6 +294,8 @@ ShellRoot {
             fxGapMs: 6000,
             cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
             movMin: 0.40, movMax: 2.20, movKick: 0.70,
+            kickCam: 0.022, kickTube: 0.90, kickMotif: 0.050, kickHat: 0.85,
+            kickAmpMin: 0.30, kickSlowMs: 400, kickFastMs: 120,
         },
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
@@ -311,6 +322,9 @@ ShellRoot {
             // el valor más fuerte y no el cero
             cutDepth: 0.75, cutFlash: 0.45, fizzAmt: 1.0, grainMove: 1.0,
             movMin: 0.30, movMax: 2.80, movKick: 1.00,
+            // la tanda 3 no tenía golpe por bombo: como `dirtMax`, `wild` se lleva el más fuerte
+            kickCam: 0.040, kickTube: 1.30, kickMotif: 0.090, kickHat: 1.00,
+            kickAmpMin: 0.40, kickSlowMs: 340, kickFastMs: 90,
         },
     })
     readonly property var pace: crtPaceTable[crtPace] || crtPaceTable.normal
@@ -496,6 +510,19 @@ ShellRoot {
     // música AHORA (densidad de ataques + brillo que cambia + energía relativa al tema),
     // 0..1, ya suavizado del otro lado (sube ~0.25 s, baja ~0.7 s). Lo usa `crtMovRate`.
     property real audMov: 0
+    // Ganchos de las señales nuevas de `audio.py` (otro frente; en 0 / sin ver mientras no
+    // lleguen y todo cae a lo que ya había). `audKick` = contador de bombos reales (`k`: el
+    // grave solo, sin hi-hat); sin él el golpe es `audBeat`. `audHat` = hi-hat (`ht`, 0..1);
+    // sin él, los agudos que cambian (`audHf`). `audNov` = novedad espectral (`nov`, 0..1),
+    // suma a la densidad. `songChar` = carácter del tema (`char`, 0 calmo .. 1 agitado; 0 =
+    // no llega, y `crtCharacter` lo saca de BPM + mood).
+    property int audKick: 0
+    property bool audKickSeen: false
+    property real audHat: 0
+    property bool audHatSeen: false
+    property real audNov: 0
+    property real songChar: 0
+    readonly property real hatLevel: audHatSeen ? audHat : audHf
     // sin audio vivo no hay corte: si el daemon deja de mandar `aud` en medio de
     // uno, el tubo no puede quedar clavado a media luz
     readonly property bool crtCut: audLive && audCut
@@ -1030,7 +1057,7 @@ ShellRoot {
             // usar: "la letra prende el tubo" sigue arriba de la escena)
             const n = activeCrtScreens.length;
             const mask = (crtSceneOn && crtFocusMode !== "all" && n > 1)
-                ? crtSceneFor(audSection, false, n, crtShot.focus) : null;
+                ? crtSceneFor(audSection, false, n, crtShot.focus, crtDensity) : null;
             if (!mask || mask[i] === true || crtNextFocusBlocks(i))
                 crtSetDark(i, false);
             crtMotifRefresh(true);
@@ -1857,11 +1884,14 @@ ShellRoot {
     //   build → todas                drop  → todas, siempre (pasa por
     //                                         encima del outro)
     //   outro (afuera del drop)      → sólo el foco
-    function crtSceneFor(section, outro, n, focus) {
+    //   verse con densidad >= 0.75 (`crtDensity`) → todas, como el build: la música nerviosa
+    //   no se queda con una pantalla viva esperando el `sec`
+    function crtSceneFor(section, outro, n, focus, dens) {
         if (n <= 0)
             return [];
         const f = (focus >= 0 && focus < n) ? focus : 0;
-        if (section === "build" || section === "drop")
+        if (section === "build" || section === "drop"
+                || (!outro && section === "verse" && dens >= 0.75))
             return new Array(n).fill(true);
         if (n === 1)
             return [true];
@@ -1925,7 +1955,7 @@ ShellRoot {
             return;
         crtLastSceneAt = Date.now();
         const f = (focus >= 0 && focus < n) ? focus : 0;
-        const mask = crtSceneFor(section, false, n, f);
+        const mask = crtSceneFor(section, false, n, f, crtDensity);
         for (let i = 0; i < n; i++) {
             // corrida 7: la pantalla de un raro en curso no la toca la
             // escena — la deja terminar su máquina de estados
@@ -1950,7 +1980,7 @@ ShellRoot {
         if (n <= 1)
             return;
         const f = (focus >= 0 && focus < n) ? focus : 0;
-        const mask = crtSceneFor(section, true, n, f);
+        const mask = crtSceneFor(section, true, n, f, crtDensity);
         crtLastSceneAt = Date.now();
         console.log("crt: scene " + section + " lit=" + JSON.stringify(mask.map(b => b ? 1 : 0)));
         const queue = [];
@@ -2142,6 +2172,44 @@ ShellRoot {
     property real crtMovRate: audLive
         ? Speed.push(Speed.rate(movFit.mov, pace.movMin, pace.movMax, crtMovAmount, movFit.pivot),
                      crtMovKick, crtMovAmount) : 1
+
+    // ---- el GOLPE visible. Ferox 2026-10-19: cada golpe del bajo se ve, pero a la medida
+    // del tema. `crtCharacter` (0 calmo .. 1 agitado) es `songChar` si llega; si no, el
+    // tempo medido (70..180 BPM) y la energía del mood a medias; sin compás, sólo el mood.
+    readonly property real crtCharacter: {
+        if (songChar > 0)
+            return Math.min(1, songChar);
+        const m = crtMoodLocked || crtMood;
+        const e = m ? m.energy : 0.5;
+        if (!bpmLive)
+            return e;
+        return 0.5 * Math.max(0, Math.min(1, (bpm - 70) / 110)) + 0.5 * e;
+    }
+    // la perilla `flicker` baja el golpe pero ya no lo borra al cuadrado: 0.25 -> 0.75
+    readonly property real kickKnob: crtFlicker <= 0.01 ? 0 : Math.min(1, 0.45 + 1.2 * crtFlicker)
+    // 1 = tema agitado, `kickAmpMin` = tema lento
+    readonly property real kickAmp: (pace.kickAmpMin + (1 - pace.kickAmpMin) * crtCharacter) * kickKnob
+    // la caída: larga en un tema lento, seca en uno agitado; con compás nunca pasa de 0.6 tiempos
+    readonly property int kickMs: {
+        const ms = pace.kickSlowMs + (pace.kickFastMs - pace.kickSlowMs) * crtCharacter;
+        return Math.round(bpmLive ? Math.min(ms, Math.max(beatMs * 0.6, pace.kickFastMs)) : ms);
+    }
+    readonly property real kickCamAmt: pace.kickCam * kickAmp * Math.min(crtCamera, 1.5)
+    readonly property real kickTubeAmt: pace.kickTube * kickAmp
+    readonly property real kickMotifAmt: pace.kickMotif * kickAmp
+    // cada golpe: Crt.qml (cámara, tubo) y Motif.qml (dibujo) escuchan el contador
+    property int bassGen: 0
+    function bassHit(hard) {
+        if (!crtOn || !audLive)
+            return;
+        bassGen++;
+        movKickHit(Speed.kickStrength(hard) * (0.6 + 0.8 * crtCharacter));
+    }
+
+    // cuánto se mueve la música ahora, 0..1 con la mediana del tema en 0.5 (`Speed.fit`);
+    // suma la novedad espectral. Sin captura vale 0.5 (neutro). Lo usan el sorteo del
+    // dibujo (`crtSoundNow`), el hold y la máscara de escena (`crtSceneFor`)
+    readonly property real crtDensity: audLive ? Math.min(1, movFit.mov + 0.25 * audNov) : 0.5
 
     // la primera palabra de la línea que viene ("" si no hay próxima)
     readonly property string crtNextWord: {
@@ -2838,7 +2906,10 @@ ShellRoot {
         const m = crtMoodLocked || crtMood;
         const eSec = audSection === "quiet" ? 0.1 : audSection === "build" ? 0.72
             : audSection === "drop" ? 0.95 : 0.45;
-        const e = 0.55 * eSec + 0.3 * cl(audLevel2s / 0.8) + 0.15 * (m ? m.energy : 0.5);
+        // la densidad (`crtDensity`) pesa desde el primer segundo: `audSection` no existe en la
+        // primera escucha (se queda en "verse") y no puede ser lo único que mueva el sorteo
+        const e = 0.40 * eSec + 0.25 * cl(audLevel2s / 0.8) + 0.10 * (m ? m.energy : 0.5)
+            + 0.25 * crtDensity;
         // centroide: 0.12 (muy oscuro) .. 0.40 (muy brillante), medido sobre
         // los 343 temas del cache (mediana por tema 0.24)
         const bNorm = c => cl((c - 0.12) / 0.28);
@@ -2910,7 +2981,7 @@ ShellRoot {
         // `wild` no escala el hold con la energía (ya es de 3 s); lo que sí
         // cambió ahí también: de a una pantalla por vez y una por cambio de parte
         const hold = crtPace === "wild" ? pace.motifHoldMs
-            : pace.motifHoldMs * (1.35 - 0.7 * crtSoundNow().e);
+            : pace.motifHoldMs * (1.35 - 0.7 * crtSoundNow().e) * (1.12 - 0.24 * crtDensity);
         const gap = Math.min(4000, hold / 3);
         // la palabra clave se lleva UNA sola pantalla, no todas — y sólo si esa
         // pantalla ya cumplió su hold: si no, cualquier letra que hable de ojos
@@ -3704,6 +3775,13 @@ ShellRoot {
                             root.audDirt = ev.d || 0;
                             root.audHf = ev.hf || 0;
                             root.audMov = ev.mov || 0;
+                            root.audNov = ev.nov || 0;
+                            if (ev.ht !== undefined) {
+                                root.audHatSeen = true;
+                                root.audHat = +ev.ht || 0;
+                            }
+                            if (ev["char"] > 0)
+                                root.songChar = ev["char"];
                             if (ev.cutf > 0) {
                                 root.audCutF = ev.cutf;
                                 root.audCutGen++;
@@ -3714,9 +3792,16 @@ ShellRoot {
                             // seguir el registro del tema, no cada sílaba
                             root.pitchAvg = root.pitchAvg * 0.96 + ev.c * 0.04;
                             root.pitchRef = root.pitchRef * 0.998 + ev.c * 0.002;
-                            if (ev.b) {
+                            // el golpe: `k` (bombo real) si el daemon lo manda, si no `b`
+                            const kSeen = ev.k !== undefined;
+                            if (kSeen)
+                                root.audKickSeen = true;
+                            if (ev.b)
                                 root.audBeat++;
-                                root.movKickHit(Speed.kickStrength(!!ev.h));
+                            if (kSeen ? ev.k : ev.b) {
+                                if (kSeen)
+                                    root.audKick++;
+                                root.bassHit(!!ev.h);
                             }
                             // el pico lo elige el daemon (es el que sabe dónde
                             // cae este momento dentro de la canción entera)
@@ -3779,6 +3864,7 @@ ShellRoot {
                             // como tema nuevo.
                             if (ev.why === "track" || ev.why === undefined) {
                                 root.crtTrackSeed++;
+                                root.songChar = 0;
                                 root.movStat = Speed.newStat();
                                 root.movSpan = Speed.span(root.movStat);
                                 // tema nuevo: lo que ya salió era del tema

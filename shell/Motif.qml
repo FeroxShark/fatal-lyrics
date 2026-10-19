@@ -124,6 +124,77 @@ Item {
     // `kick` es un contador: cada vez que sube, se dispara el empujón.
     property int kick: 0
     property real surge: 0
+    // El golpe del bajo, cada bombo (Ferox 2026-10-19): `bass` es el contador, `bassAmt` el
+    // tirón de tamaño (ya escalado por el carácter del tema) y `bassMs` lo que tarda en
+    // volver. Aparte de `surge` (el pico del tema, uno cada tanto): éste pasa en CADA golpe.
+    property int bass: 0
+    property real bassAmt: 0.02
+    property int bassMs: 150
+    property real bump: 0
+    onBassChanged: {
+        bumpDecay.stop();
+        bump = 1;
+        bumpDecay.start();
+    }
+    NumberAnimation {
+        id: bumpDecay
+        target: motif
+        property: "bump"
+        to: 0
+        duration: motif.bassMs
+        easing.type: Easing.OutQuad
+    }
+    // Los agudos (hi-hat, o los que cambian si no llega): un destello CHICO y propio sobre
+    // el dibujo, una crucecita que aparece en otro lugar cada vez y se apaga rápido. `hat`
+    // es un nivel 0..1; cada subida marcada dispara uno (`hatAmt` = el brillo, de `pace`).
+    property real hat: 0
+    property real hatAmt: 0.85
+    property real hatPrev: 0
+    property int glintN: 0
+    property double glintAt: 0
+    onHatChanged: {
+        const rise = hat - hatPrev;
+        hatPrev = hat;
+        const now = Date.now();
+        if (hat > 0.2 && rise > 0.06 && now - glintAt > 90 && !dark && spinning) {
+            glintAt = now;
+            glintN++;
+            const g = glints.itemAt(glintN % 4);
+            if (g)
+                g.fire(Math.min(1, 0.45 + hat));
+        }
+    }
+    Repeater {
+        id: glints
+        model: 4
+        delegate: Item {
+            id: glint
+            // por encima del dibujo (el Loader, declarado antes, queda abajo)
+            z: 5
+            property real a: 0
+            readonly property real arm: Math.max(4, motif.span * 0.022)
+            function fire(k) {
+                x = motif.width * (0.12 + 0.76 * Math.random()) - arm;
+                y = motif.height * (0.12 + 0.76 * Math.random()) - arm;
+                glintAnim.stop();
+                a = k * motif.hatAmt;
+                glintAnim.start();
+            }
+            width: arm * 2
+            height: arm * 2
+            visible: a > 0.01
+            opacity: Math.min(a, 1)
+            NumberAnimation on a {
+                id: glintAnim
+                running: false
+                to: 0
+                duration: 170
+                easing.type: Easing.OutQuad
+            }
+            Rectangle { anchors.centerIn: parent; width: parent.width; height: Math.max(1.5, glint.arm * 0.16); color: motif.hot }
+            Rectangle { anchors.centerIn: parent; width: Math.max(1.5, glint.arm * 0.16); height: parent.height; color: motif.hot }
+        }
+    }
     onKickChanged: {
         surgeDecay.stop();
         surge = 1;
@@ -210,8 +281,8 @@ Item {
     transform: Scale {
         origin.x: motif.width / 2
         origin.y: motif.height / 2
-        xScale: 1 + motif.scaleAmt * motif.surge
-        yScale: 1 + motif.scaleAmt * motif.surge
+        xScale: 1 + motif.scaleAmt * motif.surge + motif.bassAmt * motif.bump
+        yScale: 1 + motif.scaleAmt * motif.surge + motif.bassAmt * motif.bump
     }
 
     // T3.A2: UN solo dibujo por pantalla, garantizado por construcción.
@@ -356,8 +427,10 @@ Item {
 
                 // cuántas vueltas hay que dibujar para que cierre: el denominador de la
                 // relación (3/2 cierra en dos, 4/3 en tres)
+                // (de `target` y no de `ratio`: `ratio` viaja 600 ms entre dos valores y en el
+                // camino pasa por otros, así que las vueltas saltaban y la figura se cortaba)
                 readonly property int turns: !motif.bpmLive ? 3
-                    : (Math.abs(ratio - 1.5) < 0.02 ? 2 : (Math.abs(ratio - 4 / 3) < 0.02 ? 3 : 1))
+                    : (Math.abs(target - 1.5) < 0.02 ? 2 : (Math.abs(target - 4 / 3) < 0.02 ? 3 : 1))
 
                 // de dónde sale lo que se dibuja: "synthetic" | "lissajous" | "phase"
                 // (sólo para el log `crt: scope ...` al cambiar)

@@ -696,6 +696,29 @@ PanelWindow {
         easing.type: Easing.OutQuad
     }
 
+    // ---- el GOLPE del bajo (Ferox 2026-10-19: "cada golpe se ve"). Un pulso por bombo en
+    // la cámara (`camS`) y el tubo (`pulse`, `bloom`), de toda la pared a la vez. Amplitud y
+    // caída salen del carácter del tema (`ctl.kickAmp`, `ctl.kickMs`): suave y lento en un
+    // tema calmo, grande y seco en uno agitado. Es la excepción a "la cámara se mueve una
+    // vez y se queda quieta"; vuelve a 1 solo, siempre.
+    property real kickPulse: 0
+    NumberAnimation {
+        id: kickAnim
+        target: crt
+        property: "kickPulse"
+        from: 1
+        to: 0
+        duration: crt.ctl.kickMs
+        easing.type: Easing.OutQuad
+    }
+    Connections {
+        target: crt.ctl
+        enabled: crt.visible
+        function onBassGenChanged() {
+            kickAnim.restart();
+        }
+    }
+
     // ---- el pulso del compás
     // El fogonazo del pico es un momento del tema (flickerGen, un par por
     // canción). Esto es lo otro: el tubo respirando EN TIEMPO, todo el tema,
@@ -1489,6 +1512,7 @@ PanelWindow {
     // de `camera` y el quemado, que tiene que deshacerlo para ubicar la letra
     readonly property real camS: camZoom * cueZoom * sectionZoom
         * (1 + ctl.pace.camBeat * beatPulse + ctl.pace.camGrid * gridPulse * ctl.crtFlicker)
+        * (1 + ctl.kickCamAmt * kickPulse)
     readonly property real textPlane: sectionZoomOn
         ? Math.max(1 - 0.15 * cam, 0.5) : 1
 
@@ -1984,6 +2008,12 @@ PanelWindow {
                     // Va por contador y no por magnitud: aunque el parpadeo esté
                     // bajito, cuando pasa se tiene que ver acompañado.
                     kick: crt.surgeGen
+                    // el golpe del bajo (cada bombo) y los agudos, con la medida del tema
+                    bass: crt.ctl.bassGen
+                    bassAmt: crt.ctl.kickMotifAmt
+                    bassMs: crt.ctl.kickMs
+                    hat: crt.live ? crt.ctl.hatLevel : 0
+                    hatAmt: crt.ctl.pace.kickHat
                     clock: crt.tubeTime
                     // tanda 8, slice movimiento: el ritmo de la música, y lo que ya le
                     // corrió al reloj de dibujo. `clock` sigue siendo el real: con él
@@ -2977,7 +3007,7 @@ PanelWindow {
         // está blanca: es lo que hace que se lea como quemada y no como
         // una palabra clara
         property real bloom: crt.showsText
-            ? crt.ctl.tubeBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt)
+            ? crt.ctl.tubeBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt + 0.25 * crt.kickPulse * crt.ctl.kickAmp)
                 * (1 + 2 * crt.burnGlow) : 0
         // el cambio de canal se lleva puesta la perilla: la estática de la
         // transición no es "ruido de fondo", es la pantalla sin señal
@@ -3018,6 +3048,7 @@ PanelWindow {
         // intensidad general: es lo primero que uno quiere bajar
         property real pulse: crt.beatPulse * (0.55 + 0.45 * crt.ctl.sectionEnergy)
             * (crt.focused ? 1 : 0.6) * crt.ctl.flickerAmt
+            + crt.kickPulse * crt.ctl.kickTubeAmt
         property real blink: crt.beatBlink
         // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
         property real interlacePhase: crt.interlacePhase

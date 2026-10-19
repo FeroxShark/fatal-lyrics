@@ -677,6 +677,8 @@ TREND_MOV = 0.08           # diferencia de `mov` que ya cuenta como "está subie
 TREND_DB = 0.06            # ídem en el nivel (0..1 = -60..0 dBFS: 0.06 ≈ 3.6 dB)
 TREND_REARM = 0.5          # se rearma debajo de esta fracción del umbral
 TREND_FULL = 3.0           # magnitud 1.0 = tres veces el umbral
+TREND_WARMUP_S = 4.0       # recién abierta la captura, `mov` sube desde 0 aunque el
+                           # tema venga parejo: eso no es una subida, es el arranque
 
 # `char` — el carácter del tema, calmo (0) .. agitado (1). Es lo que decide si el
 # golpe se ve suave y lento o fuerte: nunca "default de dubstep" para todo. Lento
@@ -771,7 +773,7 @@ class _Trend:
         """Devuelve (rise, fall): magnitud 0..1 en el bloque que dispara, si no 0."""
         if self.fast is None:
             self.fast = self.slow = x
-            self.at = now
+            self.at = self.t0 = now
             return 0.0, 0.0
         dt = min(max(now - self.at, 0.0), MOV_MAX_DT)
         self.at = now
@@ -779,6 +781,11 @@ class _Trend:
         self.slow += (x - self.slow) * (1.0 - math.exp(-dt / TREND_SLOW_S))
         d = self.fast - self.slow
         rise = fall = 0.0
+        if now - self.t0 < TREND_WARMUP_S:
+            # desarmado: lo que venga subiendo desde el arranque tiene que
+            # asentarse (volver cerca de 0) antes de poder avisar
+            self.up_armed = self.down_armed = False
+            return rise, fall
         if d > self.thresh:
             if self.up_since is None:
                 self.up_since = now

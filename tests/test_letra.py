@@ -102,7 +102,7 @@ class TestCableado(unittest.TestCase):
         self.assertRegex(self.crt, r"lyricTrackingEm:\s*0\.03")
         self.assertRegex(self.crt, r"lyricLetterSpacing:\s*measure\.fontInfo\.pixelSize\s*\*\s*lyricTrackingEm")
         # primera pasada sin tracking para sacar el cuerpo del que sale el de `measure`
-        self.assertRegex(self.crt, r"id: measure0.*?id: measure\b.*?measure0\.fontInfo\.pixelSize\s*\*\s*crt\.lyricTrackingEm", re.S)
+        self.assertRegex(self.crt, re.compile(r"id: measure0.*?id: measure\b.*?measure0\.fontInfo\.pixelSize\s*\*\s*crt\.lyricTrackingEm", re.S))
         body = self.crt[self.crt.index("id: wholeSlot"):]
         self.assertIn("letterSpacing: crt.lyricLetterSpacing", body[:body.index("onOverburnHit")])
         self.assertIn("letterSpacing: crt.lyricLetterSpacing", self.crt[self.crt.index("id: slot"):])

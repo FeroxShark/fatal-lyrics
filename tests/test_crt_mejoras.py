@@ -34,5 +34,19 @@ class TestPuenteDeDibujo(unittest.TestCase):
         self.assertIn("visible: crt.motifSeen", b)
 
 
+class TestSorteoSinRepetir(unittest.TestCase):
+    def test_draw_skips_the_last_wall_motifs_and_falls_back_when_empty(self):
+        q = code(read("shell.qml"))
+        d = re.search(r"function crtMotifDraw\(i, taken\) \{(.*?)crtMotifRoll\+\+", q, re.S).group(1)
+        self.assertIn("crtMotifRecent.indexOf(k) < 0", d)
+        self.assertRegex(d, r"fresh\.length > 0 \? fresh : free\.length > 0 \? free : base")
+        self.assertRegex(q, r"crtMotifRecentN: 5")
+
+    def test_every_pick_is_recorded_and_the_keyword_does_not_repeat_the_screen(self):
+        q = code(read("shell.qml"))
+        self.assertRegex(q, r"crtMotifRecent = crtMotifRecent\.filter\(k => k !== pick\)")
+        self.assertIn('wanted !== "" && taken.indexOf(wanted) < 0 && wanted !== kinds[i]', q)
+
+
 if __name__ == "__main__":
     unittest.main()

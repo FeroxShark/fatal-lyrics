@@ -2982,10 +2982,16 @@ ShellRoot {
     // `src` es de dónde salió el pick (`crt: motif` lo loguea en
     // `crtMotifRefresh`). Sin set (`crt.set = "off"`) el sorteo es parejo,
     // como siempre.
+    //
+    // Tanda 8 (r5): tampoco vuelve ninguno de los últimos `crtMotifRecentN` dibujos de la PARED
+    // (`crtMotifRecent`): sólo se excluía lo que se ve en ese momento, así que A→B→A en 30 s era
+    // posible. Si con eso el pool queda vacío se cae al pool sin la regla. La palabra clave
+    // (`crtMotifRefresh`) no pasa por acá.
     function crtMotifDraw(i, taken) {
         const base = motifPool(motifKinds);
         const free = base.filter(k => taken.indexOf(k) < 0);
-        const pool = free.length > 0 ? free : base;
+        const fresh = free.filter(k => crtMotifRecent.indexOf(k) < 0);
+        const pool = fresh.length > 0 ? fresh : free.length > 0 ? free : base;
         crtMotifRoll++;
         const r = crtHash(crtMotifRoll * 17 + i * 11 + 3);
         if (!crtSet)
@@ -3015,6 +3021,8 @@ ShellRoot {
     //     su dibujo ya tuvo `floorMs`. Devuelve si cambió algo (el pulso depende de eso)
     // El filtro de validez (un dibujo que ya no tiene con qué dibujarse)
     // cambia en el acto, siempre.
+    readonly property int crtMotifRecentN: 5
+    property var crtMotifRecent: []
     function crtMotifRefresh(force, one, floorMs) {
         const n = activeCrtScreens.length;
         if (n <= 0)
@@ -3068,7 +3076,7 @@ ShellRoot {
             // apagadas: ver arriba)
             const taken = kinds.filter((k, j) => j !== i && k !== "" && crtDark[j] !== true);
             let pick, src;
-            if (i === chosen && wanted !== "" && taken.indexOf(wanted) < 0) {
+            if (i === chosen && wanted !== "" && taken.indexOf(wanted) < 0 && wanted !== kinds[i]) {
                 pick = wanted;
                 src = "word";
             } else {
@@ -3085,6 +3093,8 @@ ShellRoot {
             const used = Object.assign({}, crtMotifUsed);
             used[pick] = (used[pick] || 0) + 1;
             crtMotifUsed = used;
+            crtMotifRecent = crtMotifRecent.filter(k => k !== pick).concat([pick])
+                .slice(-crtMotifRecentN);
             if (!force)
                 crtMotifLastOneAt = now;
             console.log("crt: motif screen=" + i + " kind=" + pick + " src=" + src

@@ -3404,6 +3404,21 @@ class TestSettingsSchema(unittest.TestCase):
             self.assertIn(needle, qml)
         self.assertTrue(settings.SETTINGS_PATH.endswith("cartelitos-settings"))
 
+    def test_the_help_reads_whole_and_a_dimmed_row_dims_only_its_control(self):
+        # r16.1: la ayuda de cada perilla se lee entera (ni "…" en los deslizadores) y
+        # la fila atenuada baja sólo su control; el nombre y la ayuda quedan claros
+        with open(os.path.join(self.SHELL, "settings.qml"), encoding="utf-8") as f:
+            qml = f.read()
+        self.assertRegex(qml, r'component Hint95: Text \{\s*color: "#404040"')
+        self.assertIn("Hint95 { width: parent.width; text: rowItem.modelData.hint }", qml)
+        self.assertNotIn("opacity: root.dimmed", qml)
+        self.assertIn("readonly property real ctlAlpha: root.dimmed(modelData) ? 0.45 : 1", qml)
+        rows = qml[qml.index("id: toggleRow"):qml.index("// botonera")]
+        controls = list(re.finditer(r"(Check95|Radio95|Button95|Field95|id: track) ?\{?", rows))
+        self.assertGreater(len(controls), 15)
+        for m in controls:
+            self.assertIn("opacity: rowItem.ctlAlpha", rows[m.end():m.end() + 200], m.group(0))
+
 
 def _options(row_id):
     """Los valores que ofrece una fila de botones de opción de la ventana de Ajustes."""

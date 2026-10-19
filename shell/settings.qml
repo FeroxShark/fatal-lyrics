@@ -379,8 +379,9 @@ ShellRoot {
         font.pixelSize: 12
     }
 
+    // #404040 sobre #c0c0c0 da ~5.7:1 (la #505050 de antes, ~4.4:1, no llegaba a 4.5)
     component Hint95: Text {
-        color: "#505050"
+        color: "#404040"
         font.pixelSize: 11
         wrapMode: Text.WordWrap
     }
@@ -582,7 +583,9 @@ ShellRoot {
                                                                 readonly property string rid: modelData.id
                                                                 width: group.width - 22
                                                                 height: loader.item ? loader.item.implicitHeight : 0
-                                                                opacity: root.dimmed(modelData) ? 0.45 : 1
+                                                                // la fila atenuada atenúa sólo su control: el nombre y
+                                                                // la ayuda se leen igual (dicen por qué está apagada)
+                                                                readonly property real ctlAlpha: root.dimmed(modelData) ? 0.45 : 1
 
                                                                 // apuntar la fila llena el panel de detalle
                                                                 HoverHandler {
@@ -605,6 +608,7 @@ ShellRoot {
                                                                     Item {
                                                                         implicitHeight: toggleText.implicitHeight
                                                                         Check95 {
+                                                                            opacity: rowItem.ctlAlpha
                                                                             y: 1
                                                                             checked: root.vals[rowItem.rid] === true
                                                                         }
@@ -635,6 +639,7 @@ ShellRoot {
                                                                             Repeater {
                                                                                 model: rowItem.modelData.options
                                                                                 Radio95 {
+                                                                                    opacity: rowItem.ctlAlpha
                                                                                     required property var modelData
                                                                                     text: modelData.label
                                                                                     checked: root.vals[rowItem.rid] === modelData.value
@@ -650,20 +655,13 @@ ShellRoot {
                                                                     id: sliderRow
                                                                     Column {
                                                                         spacing: 2
-                                                                        // nombre, para qué es y el número, en una línea:
-                                                                        // diez sliders con la pista abajo de cada uno
-                                                                        // estiraban la columna al doble que las otras
+                                                                        // nombre y número en una línea (la pista abajo de
+                                                                        // cada uno estiraba la columna al doble que las otras);
+                                                                        // la ayuda entera debajo, sin "…": se lee siempre
                                                                         Item {
                                                                             width: parent.width
                                                                             height: sliderName.implicitHeight
                                                                             Label95 { id: sliderName; text: rowItem.modelData.label }
-                                                                            Hint95 {
-                                                                                anchors { left: sliderName.right; leftMargin: 6; right: sliderNum.left
-                                                                                          rightMargin: 6; baseline: sliderName.baseline }
-                                                                                text: rowItem.modelData.hint
-                                                                                wrapMode: Text.NoWrap
-                                                                                elide: Text.ElideRight
-                                                                            }
                                                                             Label95 {
                                                                                 id: sliderNum
                                                                                 anchors.right: parent.right
@@ -671,8 +669,10 @@ ShellRoot {
                                                                                 font.family: "monospace"
                                                                             }
                                                                         }
+                                                                        Hint95 { width: parent.width; text: rowItem.modelData.hint }
                                                                         Item {
                                                                             id: track
+                                                                            opacity: rowItem.ctlAlpha
                                                                             readonly property var spec: rowItem.modelData
                                                                             readonly property real frac: Math.max(0, Math.min(1,
                                                                                 ((root.vals[spec.id] ?? spec.min) - spec.min) / (spec.max - spec.min)))
@@ -737,6 +737,7 @@ ShellRoot {
                                                                         Label95 { text: rowItem.modelData.label }
                                                                         Hint95 { width: parent.width; text: rowItem.modelData.hint + " · Enter saves" }
                                                                         Field95 {
+                                                                            opacity: rowItem.ctlAlpha
                                                                             id: textField
                                                                             width: parent.width
                                                                             onDone: textCol.save()
@@ -753,6 +754,7 @@ ShellRoot {
                                                                             Repeater {
                                                                                 model: rowItem.modelData.suggest === "players" ? root.players : []
                                                                                 Radio95 {
+                                                                                    opacity: rowItem.ctlAlpha
                                                                                     required property var modelData
                                                                                     text: modelData
                                                                                     checked: textCol.saved === modelData
@@ -791,6 +793,7 @@ ShellRoot {
                                                                             Repeater {
                                                                                 model: scrCol.row.specials
                                                                                 Radio95 {
+                                                                                    opacity: rowItem.ctlAlpha
                                                                                     required property var modelData
                                                                                     text: modelData.label
                                                                                     checked: root.vals[rowItem.rid] === modelData.value
@@ -806,7 +809,7 @@ ShellRoot {
                                                                                 readonly property var info: root.monitors.find(m => m.name === modelData)
                                                                                 width: scrCol.width
                                                                                 height: 16
-                                                                                Check95 { y: 1; checked: scrCol.picked.indexOf(mon.modelData) >= 0 }
+                                                                                Check95 { opacity: rowItem.ctlAlpha; y: 1; checked: scrCol.picked.indexOf(mon.modelData) >= 0 }
                                                                                 Label95 { id: monName; x: 20; text: mon.modelData }
                                                                                 Hint95 {
                                                                                     anchors { left: monName.right; leftMargin: 6; right: parent.right
@@ -846,11 +849,13 @@ ShellRoot {
                                                                             width: parent.width
                                                                             spacing: 2
                                                                             Radio95 {
+                                                                                opacity: rowItem.ctlAlpha
                                                                                 text: "Left to right"
                                                                                 checked: root.vals[rowItem.rid] === "auto"
                                                                                 onClicked: root.commit(rowItem.rid, "auto", true)
                                                                             }
                                                                             Radio95 {
+                                                                                opacity: rowItem.ctlAlpha
                                                                                 text: "By hand"
                                                                                 checked: ordCol.list.length > 0
                                                                                 onClicked: if (!checked && root.monitors.length)
@@ -870,12 +875,14 @@ ShellRoot {
                                                                                     text: `${ordItem.index + 1}. ${ordItem.modelData}`
                                                                                 }
                                                                                 Button95 {
+                                                                                    opacity: rowItem.ctlAlpha
                                                                                     text: "▲"
                                                                                     implicitWidth: 23
                                                                                     enabled: ordItem.index > 0
                                                                                     onClicked: if (enabled) ordCol.move(ordItem.index, -1)
                                                                                 }
                                                                                 Button95 {
+                                                                                    opacity: rowItem.ctlAlpha
                                                                                     text: "▼"
                                                                                     implicitWidth: 23
                                                                                     enabled: ordItem.index < ordCol.list.length - 1
@@ -886,11 +893,13 @@ ShellRoot {
                                                                         Row {
                                                                             spacing: 6
                                                                             Button95 {
+                                                                                opacity: rowItem.ctlAlpha
                                                                                 text: "Show numbers"
                                                                                 onClicked: root.run(["crt", "setup"],
                                                                                     "a big number on each screen: read them left to right")
                                                                             }
                                                                             Button95 {
+                                                                                opacity: rowItem.ctlAlpha
                                                                                 text: "Hide them"
                                                                                 onClicked: root.run(["crt", "setup", "off"], "screen numbers off")
                                                                             }
@@ -903,7 +912,7 @@ ShellRoot {
                                                                     id: crtRow
                                                                     Item {
                                                                         implicitHeight: crtText.implicitHeight
-                                                                        Check95 { y: 1; checked: root.crtOn }
+                                                                        Check95 { opacity: rowItem.ctlAlpha; y: 1; checked: root.crtOn }
                                                                         Column {
                                                                             id: crtText
                                                                             x: 20
@@ -942,10 +951,12 @@ ShellRoot {
                                                                         Row {
                                                                             spacing: 6
                                                                             Button95 {
+                                                                                opacity: rowItem.ctlAlpha
                                                                                 text: "Later  −0.1 s"
                                                                                 onClicked: root.run(["sync", "-"], "lyric 0.1 s later")
                                                                             }
                                                                             Button95 {
+                                                                                opacity: rowItem.ctlAlpha
                                                                                 text: "Earlier  +0.1 s"
                                                                                 onClicked: root.run(["sync", "+"], "lyric 0.1 s earlier")
                                                                             }
@@ -953,6 +964,7 @@ ShellRoot {
                                                                         // `reset` sin nombre: el artista que suena. El
                                                                         // daemon se entera en el próximo tema
                                                                         Button95 {
+                                                                            opacity: rowItem.ctlAlpha
                                                                             text: "Forget this artist"
                                                                             onClicked: root.run(["sync", "reset"],
                                                                                 "learned sync for this artist forgotten (from the next track)")

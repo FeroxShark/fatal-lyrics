@@ -13,11 +13,21 @@ import "Ease.js" as E
 QtObject {
     id: f
     property real t: 0
+    // Testeo 2026-10-19: el mismo tema a otro tempo. La partitura se estira entera
+    // (`m`, el tiempo MUSICAL = t · bpm/128); el reloj del tubo (`clock`) sigue
+    // siendo tiempo real. Con 128 todo queda como antes.
+    property real bpm: L.BPM
+    property real valence: 0.5
+    property real moodEnergy: 0.5
+    readonly property real ts: bpm / L.BPM
+    readonly property real m: t * ts
 
-    readonly property real lt: E.wrap(t, L.LOOP)
-    readonly property int lap: Math.floor(t / L.LOOP)
+    readonly property real lt: E.wrap(m, L.LOOP)
+    readonly property int lap: Math.floor(m / L.LOOP)
     // el reloj del tubo (tubeTime): lejos del cero, como en el overlay
     readonly property real clock: L.CLOCK0 + t
+    // el reloj musical (contadores y golpes del tubo)
+    readonly property real mclock: L.CLOCK0 + m
 
     readonly property var ev: L.events()
 
@@ -57,19 +67,27 @@ QtObject {
     readonly property real pitch: E.clamp01(0.35 + 0.4 * riserAmt + (dropOn ? 0.1 : 0))
     // contadores: suben en cada tiempo (tick, beat) y en cada compás (kick, el
     // golpe del tubo, que en el overlay pasa como mucho cada `hitGapMs`)
-    readonly property int tick: Math.floor((clock + 1e-6) / L.BEAT)
+    readonly property int tick: Math.floor((mclock + 1e-6) / L.BEAT)
     readonly property int beat: tick
-    readonly property int kick: Math.floor((clock + 1e-6) / L.BAR)
-    readonly property real beatMs: L.BEAT * 1000
+    readonly property int kick: Math.floor((mclock + 1e-6) / L.BAR)
+    readonly property real beatMs: L.BEAT * 1000 / ts
+    // testeo 2026-10-19: un golpe por BOMBO (acá, uno por tiempo) y su fuerza: la
+    // estrofa pega a media fuerza, la subida crece, el drop pega entero
+    readonly property int thump: tick
+    readonly property real thumpAmt: section === "verse" ? 0.55
+        : section === "build" ? 0.55 + 0.3 * (lt / L.BEAT - 16) / 8 : 1.0
+    // `audMov`: quieto en la estrofa, se mueve con la subida, lleno en el drop
+    readonly property real mov: section === "verse" ? 0.22
+        : section === "build" ? 0.22 + 0.5 * (lt / L.BEAT - 16) / 8 : 0.85
     readonly property bool bpmLive: true
     // el empujón del golpe del tubo (Motif: 1 → 0 en 460 ms, OutQuad)
     readonly property real surge: {
-        const p = E.wrap(clock, L.BAR) / 0.46;
+        const p = E.wrap(mclock, L.BAR) / 0.46;
         return p < 1 ? (1 - p) * (1 - p) : 0;
     }
     // el fogonazo del tubo (Crt.qml beatPulse: 40 % del tiempo, OutQuad)
     readonly property real beatPulse: {
-        const p = E.wrap(clock, L.BEAT) / (0.4 * L.BEAT);
+        const p = E.wrap(mclock, L.BEAT) / (0.4 * L.BEAT);
         return p < 1 ? (1 - p) * (1 - p) : 0;
     }
     readonly property int barNo: Math.floor(lt / L.BAR)

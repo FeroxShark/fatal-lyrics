@@ -47,17 +47,23 @@ Item {
     })
     readonly property var pal: schemes[scheme] || schemes.ado
     readonly property var tb: tubes[tube] || tubes.trinitron
-    readonly property real shaderT: E.wrap(t, L.LOOP)
+    // testeo 2026-10-19: tempo y mood del tema (LoopFeed estira la partitura)
+    property real bpm: L.BPM
+    property real valence: 0.5
+    property real moodEnergy: 0.5
+    readonly property real loopS: L.LOOP * L.BPM / bpm
+    readonly property real shaderT: E.wrap(t, loopS)
 
     FontLoader { id: vt323; source: "../../shell/fonts/VT323-Regular.ttf" }
     FontLoader { id: pixel; source: "../../shell/fonts/VT323-Regular.ttf" }
 
-    LoopFeed { id: feed; t: stage.t }
+    LoopFeed { id: feed; t: stage.t; bpm: stage.bpm; valence: stage.valence; moodEnergy: stage.moodEnergy }
 
     // lo que el motivo lee del root, con los nombres de Motif.qml
     readonly property var contract: ["clock", "level", "low", "high", "pitch", "energy", "drop",
         "section", "tick", "beat", "kick", "beatMs", "bpmLive", "surge", "nextWord", "lineNo",
-        "lines", "linesSynced", "waveL", "waveR", "cut", "hf"]
+        "lines", "linesSynced", "waveL", "waveR", "cut", "hf",
+        "thump", "thumpAmt", "mov", "valence", "moodEnergy"]
     // huevo de pascua forzado del laberinto (smiley|dialog|exit|rat|rock|flip); vacío = sin huevos
     property string egg: ""
     // ritmo de la música (1 = el de siempre) que se le pasa al motivo, para probar la marcha
@@ -155,7 +161,7 @@ Item {
         property real glitch: 0
         property real roll: stage.tb.roll
         // una vuelta cada 4 tiempos (crt.beat_lock): 8 vueltas en el loop
-        property real rollPhase: E.wrap(stage.t / (4 * L.BEAT), 1)
+        property real rollPhase: E.wrap(feed.m / (4 * L.BEAT), 1)
         property real alarm: 0
         property real vignette: stage.tb.vignette
         // pantalla sin foco: × 0.6, flicker default 0.25² de la perilla

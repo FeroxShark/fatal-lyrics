@@ -50,6 +50,24 @@ MOTIFS = {
     "vector": ("green", "poison"),
     "harmonograph": ("amber", "bone"),
 }
+# testeo 2026-10-19 (golpe con física + carácter del tema): NO están en el sorteo
+# ni en `--all`; se renderizan de a uno con `--bpm/--valence/--menergy`.
+TESTEO = {
+    "membrana": ("trinitron", "ado"),
+    "cintas": ("arcade", "bloodline"),
+    "giroscopio": ("pvm", "dragons"),
+}
+# el carácter del tema: (bpm, valence, energy del mood)
+TEMPERS = {"calmo": (78, 0.6, 0.2), "agitado": (140, 0.35, 0.9)}
+
+
+def set_bpm(bpm):
+    """El mismo loop (32 tiempos) a otro tempo: dura 32 tiempos de ESE tempo."""
+    global BPM, BEAT, LOOP, FRAMES
+    BPM = bpm
+    BEAT = 60 / BPM
+    LOOP = 32 * BEAT
+    FRAMES = int(round(LOOP * FPS))
 
 
 def _qt_log(mode, ctx, msg):
@@ -60,7 +78,8 @@ qInstallMessageHandler(_qt_log)
 
 
 class Stage:
-    def __init__(self, kind, tube, scheme, portrait=False, glass=True, egg="", rate=1.0):
+    def __init__(self, kind, tube, scheme, portrait=False, glass=True, egg="", rate=1.0,
+                 bpm=128.0, valence=0.5, menergy=0.5):
         self.w, self.h = (1080, 1920) if portrait else (1920, 1080)
         self.app = QGuiApplication.instance() or QGuiApplication(sys.argv[:1])
         self.view = QQuickView()
@@ -78,6 +97,9 @@ class Stage:
         self.root.setProperty("glassOn", glass)
         self.root.setProperty("egg", egg)
         self.root.setProperty("rate", rate)
+        self.root.setProperty("bpm", float(bpm))
+        self.root.setProperty("valence", float(valence))
+        self.root.setProperty("moodEnergy", float(menergy))
         self.root.setProperty("kind", kind)
         # precalentamiento: los relojes capturados (último tiempo, drop) se
         # arman con el loop anterior, como si el tema viniera sonando
@@ -242,9 +264,19 @@ def main():
     ap.add_argument("--stills", help="tiempos separados por coma")
     ap.add_argument("--egg", default="", help="laberinto: huevo forzado (smiley|dialog|exit|rat|rock|flip)")
     ap.add_argument("--rate", type=float, default=1.0, help="laberinto: ritmo de la música (1 = normal)")
+    ap.add_argument("--temper", choices=list(TEMPERS), help="testeo: carácter del tema (bpm, valence, energy)")
+    ap.add_argument("--bpm", type=float, help="tempo del tema (estira la partitura)")
+    ap.add_argument("--valence", type=float, default=0.5)
+    ap.add_argument("--menergy", type=float, default=0.5, help="energy del mood (0..1)")
     a = ap.parse_args()
+    if a.temper:
+        b, v, e = TEMPERS[a.temper]
+        a.bpm = a.bpm or b
+        a.valence, a.menergy = v, e
+    a.bpm = a.bpm or 128.0
+    set_bpm(a.bpm)
     os.makedirs(OUT, exist_ok=True)
-    wav = os.path.join(OUT, "loop.wav")
+    wav = os.path.join(OUT, "loop.wav" if a.bpm == 128 else f"loop-{a.bpm:g}.wav")
     if not os.path.exists(wav):
         write_wav(wav, synth())
 
@@ -266,15 +298,16 @@ def main():
     if not a.kind:
         ap.error("falta el kind (o --all)")
     kind = a.kind
-    tube, scheme = MOTIFS.get(kind, ("trinitron", "ado"))
+    tube, scheme = MOTIFS.get(kind) or TESTEO.get(kind) or ("trinitron", "ado")
     tube, scheme = a.tube or tube, a.scheme or scheme
-    st = Stage(kind, tube, scheme, a.portrait, not a.flat, a.egg, a.rate)
+    st = Stage(kind, tube, scheme, a.portrait, not a.flat, a.egg, a.rate, a.bpm, a.valence, a.menergy)
+    suffix = ("-" + a.temper) if a.temper else ""
     if a.stills:
-        tag = kind + ("-portrait" if a.portrait else "") + ("-flat" if a.flat else "")
+        tag = kind + suffix + ("-portrait" if a.portrait else "") + ("-flat" if a.flat else "")
         for p in render_stills(st, [float(x) for x in a.stills.split(",")], os.path.join(OUT, "stills"), tag):
             print(p)
         return
-    out = os.path.join(OUT, f"{kind}{'-portrait' if a.portrait else ''}.mp4")
+    out = os.path.join(OUT, f"{kind}{suffix}{'-portrait' if a.portrait else ''}.mp4")
     mean, mx = render_loop(st, out, wav)
     print(f"{out}  costura: media {mean:.3f} máx {mx}")
 

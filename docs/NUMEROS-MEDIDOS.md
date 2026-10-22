@@ -332,3 +332,18 @@ pudo repetir con el `mov` nuevo. Se usó como proxy una réplica offline: captur
 - Igualdad: los 200 dicts del evento `aud` salen idénticos; `band_energy` difiere como mucho 1.1e-17; samples y rms
   de los 200 bloques, bit a bit iguales al `int.from_bytes` anterior.
 - `power_spectrum` (FFT de 512 en Python puro) sigue siendo la parte más cara del bloque; no se tocó en esta tanda.
+
+## Grilla de tiempos: error contra el bombo verdadero (2026-10-22)
+
+`tests/test_ritmo.py`, `simulate()`: tema a 123.4 BPM, 120 s, bombos con jitter ±15 ms, 8 % perdidos,
+contratiempos a la corchea (40 %) y golpes sueltos (6 %); el onset llega con la latencia del análisis.
+Se mide `now - phase` del evento `bpm` contra el tiempo VERDADERO del bombo (20 semillas).
+
+| | σ del error | error máximo | sesgo | enganche |
+|---|---|---|---|---|
+| antes (edad del último onset) | 113 ms | ~media corchea | – | – |
+| ahora (`BeatGrid`) | 5.7 ms (peor semilla 8.6) | 17.6 ms de media (peor 33) | 0.0 ms | peor caso 8.8 s, mediana < 1 s |
+
+Sin deriva en 150 s con el tempo del tracker moviéndose 121..124 BPM (primer tercio vs último < 12 ms);
+seek de 210 ms re-engancha en ≤ 8 tiempos; cambio 123 → 100 BPM seguido (σ < 15 ms tras 35 s).
+En la máquina real el chequeo es el log `crt: beat tick late avg/max` (cada 32 tiempos) y `beat+<ms>` de los glitches.

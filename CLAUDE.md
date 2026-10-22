@@ -28,21 +28,22 @@ de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` s
   0 en 220 ms) en vez de contar encima de él. Excepciones: el rayo del salto (va por el BORDE de
   la pantalla del medio) y el GOLPE del bajo (Ferox 2026-10-19): cada bombo pulsa cámara, tubo y
   tamaño del motivo de TODA la pared, más un destello chico de agudos; vuelve a 1 solo.
-- **REGLA: hay UN lenguaje de movimiento, y vive en `shell/Motion.qml`.** Todo lo que entra
-  entra igual — snap `OutExpo` con asentamiento visible (`enterMs`, 320 ms; `enterFastMs` para
-  lo que entra encima de algo que ya está pasando) —, todo lo que se va se va rápido (`exitMs`,
-  140, `InQuad`), la cámara se mueve una vez y se queda quieta (`cameraMs`; salvo el golpe,
-  `kickCam`), y el glitch es un
-  PUENTE de dos o tres cuadros entre escena y escena (`bridgeMs`), nunca un efecto que dura. Un
-  `Behavior` con otra duración tiene que justificarla. Sale del video de Ferox
-  (`docs/plans/2026-09-04-fluidez-referencia.md`): lo fluido no son más cuadros: es una sola
-  gramática, holds largos y una deriva uniforme por debajo que nunca para.
+- **REGLA: hay UN lenguaje de movimiento, y vive en `shell/Motion.qml`.** Lo que entra
+  entra igual — snap `OutExpo` con asentamiento (`enterMs` 320; `enterFastMs` si entra encima de
+  algo) —, lo que se va se va rápido (`exitMs` 140, `InQuad`), la cámara se mueve una vez y se
+  queda quieta (`cameraMs`; salvo `kickCam`), y el glitch es un PUENTE de 2-3 cuadros entre
+  escenas (`bridgeMs`), nunca un efecto que dura. Un `Behavior` con otra duración tiene que
+  justificarla. Lo fluido es una sola gramática, holds largos y deriva uniforme por debajo.
+- **REGLA: hay UNA grilla de tiempos** (Ferox 2026-10-22: "todo al ritmo"): `BeatGrid` en `audio.py`
+  (PLL, resta `BEAT_LATENCY_S`, se suelta en pausa/seek) y, del lado del overlay, `lastBeatAt` +
+  `msToNextBeat()`/`beatTick` (`shell.qml`). Un efecto al compás cuelga de ahí: NADA de `Timer`
+  con su período propio ni de otra cuenta del próximo tiempo. El reloj fino del equipo es
+  `crt.beat_offset`. Los golpes del bajo siguen al onset real a propósito. `docs/TRAMPAS.md`.
 - **REGLA: los eventos tienen PRESUPUESTO, y es la perilla `pace`** (`calm | normal | wild`,
   default `normal`, tabla `crtPaceTable` en `shell.qml`). No es una velocidad: nada se mueve más
-  despacio. Es cuántas cosas tienen permiso de pasar por minuto — cuánto dura el dibujo de una
-  pantalla antes de poder cambiar (12 s), cada cuánto la pared puede cambiar de canal (20 s),
-  cada cuánto una pantalla puede romperse (4 s), y qué tan grande es el latido de la cámara y
-  del motivo. `wild` devuelve los números de la tanda 3 (salvo las columnas `kick*`, nuevas). El
+  despacio. Es cuántas cosas pueden pasar por minuto — cuánto dura el dibujo de una
+  pantalla (12 s), cada cuánto cambia de canal la pared (20 s), cada cuánto se rompe una pantalla
+  (4 s), y qué tan grande es el latido de cámara y motivo. `wild` devuelve los números de la tanda 3 (salvo `kick*`). El
   golpe escala por CARÁCTER del tema (`crtCharacter`: `char` del daemon, o BPM + energía del
   mood): tema lento = pulso chico y lento, agitado = grande y seco. Un número de amplitud o de
   frecuencia nuevo va a la TABLA: repartido en ternarios, `wild` deja de ser verificable.
@@ -72,8 +73,7 @@ docs/plans/motif-force.py dunes DP-2 10 --shot t4-dunes   # + captura, y deja to
 
 **NUNCA pescar un motif con palabras clave ni rerollear con `cue drop`** (`drive-motif.py`/`motif-hunt.py`
 son OBSOLETOS). El forzado pisa pool, hold, filtro y
-palabra clave, y se ve sin música. Kinds válidos: `fatal crt motif --help`. `splitflap` y `testcard`
-(pantallas planas) ya no entran al sorteo; sólo se ven forzados.
+palabra clave, y se ve sin música. Kinds: `fatal crt motif --help`. `splitflap` y `testcard` sólo forzados.
 
 Hyprland: binds y `no_anim` de las capas viven en `packaging/hyprland.lua` (`dofile` desde
 `~/.config/hypr/hyprland.lua`). Autostart: **UNO solo**, la unit de usuario

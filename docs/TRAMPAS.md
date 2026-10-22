@@ -1428,3 +1428,45 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 ## Bandeja: bucle de recarga de la config (2026-10-21)
 
 - **`Gtk.CheckMenuItem.set_active()` emite "activate", no sólo "toggled".** El `refresh()` de la bandeja dejaba el tilde en el estado real con `set_active`; eso corría el `on_click` (que invierte la perilla), que reescribía el TOML y recargaba la config, que refrescaba la bandeja otra vez: ~700 "config reloaded" por segundo y el TOML alternando `dialogs = true/false`, desde que se tocó `display.dialogs` en Ajustes. Ahora `tray.sync_checks` mueve el tilde con un candado (`syncing`) que enmudece el handler, `set_option` no hace nada si la perilla ya vale eso y `_save_config` no toca el archivo si el texto no cambia. `tests/test_bucle_config.py` usa un ítem que se porta como GTK (el fake de `test_carteles.py` no emitía "activate" y por eso no lo vio).
+
+## Todo al ritmo: una sola grilla de tiempos (2026-10-22)
+
+Ferox: "algunas animaciones siguen el ritmo y otras no". Había tres cuentas distintas de dónde
+cae el tiempo y ninguna compensaba la latencia. Ahora hay UNA grilla (`BeatGrid`, `audio.py`) y
+UNA función de consulta (`msToNextBeat`, `shell.qml`).
+
+- **Fase = ancla de la grilla, no el último golpe.** Antes `bpm.phase` era la edad del ÚLTIMO
+  onset detectado — un contratiempo (palma, hi-hat) movía el ancla media corchea (σ ≈ 113 ms
+  contra el bombo). `BeatGrid` engancha sólo onsets que caen en la grilla (PLL de primer orden,
+  período propio y lento, histéresis para cambiarlo, EMA de aciertos para re-engancharse si
+  quedó clavada en el contratiempo). `unlock()` en pausa y en salto de posición (seek).
+- **Latencia restada.** El análisis ve el golpe ~26 ms tarde (medio hop de 32 ms + ~10 ms de
+  captura de pw-record): `BEAT_LATENCY_S` se resta al anclar. El resto (compositor + pantalla) es
+  del equipo: perilla `crt.beat_offset` (ms, ±300; + = más tarde), pestaña CRT > Pace.
+- **El pulso apunta, no sondea.** `beatTick` era un poll de 25 ms: llegaba hasta 25 ms tarde y,
+  con cada re-anclaje del `bpm`, a veces dos veces seguidas. Ahora un Timer apuntado a la marca
+  (`beatSync()`: pasos del 85 % con `beatStepAim`, porque el Timer de QML es grueso ±5 %). El
+  Timer NO lleva binding de `running` (restart() lo rompe): se arma a mano en cada cambio.
+  `hit()` pregunta la misma cuenta (`msToNextBeat`). Con log: `crt: beat tick late avg/max` cada 32
+  tiempos y `crt: hit ... beat+<ms>`.
+- **Pausa apaga la grilla** (`posPlaying` en `bpmLive`): antes el daemon la extrapolaba y el
+  tubo seguía "latiendo" sobre música parada hasta 15 s.
+- **Reloj del tubo = tiempo real.** El Timer lento (instrumental, 20 fps) sumaba el `interval`
+  nominal a `tubeTime`/`movOff`; con un Timer grueso y carga se atrasaba contra la pared y
+  los motifs (`MotifBase.bp`, `lt`) se corrían del compás. Ahora suma `Date.now()` delta (tope 0.25 s).
+- **Se queda reactivo A PROPÓSITO:** golpe del bajo (`bassHit`: pulsa en el bombo real, no en la
+  grilla — un bombo fuera de grilla se ve fuera de grilla, que es lo que se oye), aro/salto/cambio
+  de canal (atados a la letra o al daemon, no al compás), y los glitches con `urgent`.
+- **Fuera de alcance:** los glitches del modo normal (cartelitos) son timers al azar y no hay
+  grilla — la captura de audio sólo corre con el CRT. Prenderla para el modo normal es decisión de rumbo.
+
+| animación | antes | ahora |
+|---|---|---|
+| pulso `beatTick` (gridAnim, aro, motifs) | poll 25 ms contra edad del último golpe | Timer apuntado a la grilla |
+| glitch `beat_lock` (`hit()`) | su propia cuenta contra `lastBeatAt` | `msToNextBeat` (misma que el pulso) |
+| barra que rueda (`rollPhaseFor`) | `lastBeatAt` crudo | idem + `crt.beat_offset` + grilla estable |
+| motifs (`bp`, `tick`, `beatN`) | `tickAt` + `tubeTime` nominal | `tubeTime` en tiempo real; `tick` apuntado |
+| punto REC | 700 ms libres | un parpadeo por tiempo (700 ms sin compás) |
+| golpe del bajo, destello de agudos | reactivo al onset real | igual (a propósito) |
+| aro, salto, cámara, entradas de letra | posición de Spotify / eventos del daemon | igual |
+| glitches modo normal | timers al azar | igual (sin audio en ese modo) |

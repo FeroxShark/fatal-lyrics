@@ -2118,22 +2118,23 @@ class TestBpmTracker(unittest.TestCase):
         self.assertEqual(tr.bpm, 0.0)
         self.assertIsNone(tr.event(200.0))
 
-    def test_it_only_speaks_up_when_it_changes_or_every_five_seconds(self):
+    def test_it_only_speaks_up_when_it_changes_or_every_two_seconds(self):
         tr = c.BpmTracker()
         t = self.feed(tr, [0.5] * 12)
         first = tr.event(t)
         self.assertIsNotNone(first)
         self.assertAlmostEqual(first["v"], 120.0, delta=2.0)
         self.assertIsNone(tr.event(t + 1.0))          # mismo tempo, hace nada
-        self.assertIsNotNone(tr.event(t + 6.0))       # ...pero cada 5 s avisa igual
+        self.assertIsNotNone(tr.event(t + 3.0))       # ...pero cada 2 s avisa igual (re-ancla la grilla)
 
     def test_the_phase_travels_as_an_age_not_as_a_timestamp(self):
         # el reloj del daemon y el del overlay no son el mismo: lo único que
-        # significa algo del otro lado es hace cuánto fue el último golpe
+        # significa algo del otro lado es hace cuánto cayó el último tiempo de la grilla
+        # (con la latencia del análisis ya restada: `BEAT_LATENCY_S`)
         tr = c.BpmTracker()
         t = self.feed(tr, [0.5] * 12)
         ev = tr.event(t + 0.2)
-        self.assertAlmostEqual(ev["phase"], 0.2, delta=0.01)
+        self.assertAlmostEqual(ev["phase"], 0.2 + c.BEAT_LATENCY_S, delta=0.01)
 
     def test_a_new_track_starts_from_scratch_but_can_be_seeded(self):
         tr = c.BpmTracker()

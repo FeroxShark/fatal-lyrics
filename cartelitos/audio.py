@@ -1185,7 +1185,37 @@ BPM_HARMONIC_SHARE = 0.4  # cuánto tiene que pesar el pico rápido para ganarle
 # y el conteo arranca del golpe siguiente.
 BPM_MAX_GAP = 2 * BPM_MAX_MS / 1000.0
 BPM_SEND_DELTA = 2.0      # BPM de diferencia que ameritan avisar antes de tiempo
-BPM_SEND_EVERY = 5.0      # ...y cada cuánto se avisa igual aunque no cambie
+BPM_SEND_EVERY = 2.0      # ...y cada cuánto se avisa igual aunque no cambie (re-ancla la grilla del overlay)
+
+# ---- la grilla de tiempos: UNA sola fuente de "cuándo cae el próximo tiempo"
+# Antes la fase del compás era la edad del ÚLTIMO golpe detectado: un golpe suelto
+# (una palma, un bombo corrido, un hi-hat que sobresale) movía toda la grilla del
+# overlay unas decenas de ms, y cada aviso la re-anclaba a otro golpe. Ahora la
+# fase la lleva un lazo de enganche (PLL de primer orden) sobre los golpes que
+# caen CERCA de la grilla: cada uno la corrige una fracción (`GRID_KP`), los que
+# caen lejos (contratiempos) no la tocan, y si cinco seguidos caen lejos la
+# grilla se vuelve a enganchar con la media circular de los últimos golpes.
+# Y los golpes se fechan CON la latencia del análisis (`BEAT_LATENCY_S`).
+#
+# Latencia del análisis: el golpe se decide al final del bloque de 32 ms que lo
+# contiene (en promedio 16 ms antes de ese instante) y pw-record entrega en
+# trozos de `--latency=20ms` (~10 ms de promedio hasta que Python lo lee). Es
+# una ESTIMACIÓN de lo que pasa dentro del daemon; lo que queda afuera (la
+# placa de sonido, el monitor) es de cada máquina y lo ajusta `crt.beat_offset`.
+BEAT_LATENCY_S = AUDIO_HOP / AUDIO_RATE / 2 + 0.010
+GRID_TOL = 0.22           # fracción del período: más lejos de la grilla que esto es contratiempo
+GRID_KP = 0.3             # cuánto de su error corrige cada golpe en tiempo
+GRID_KF = 0.05            # cuánto sigue el período de la grilla al que estima el tracker
+GRID_KI = 0.05            # y cuánto lo afina la fase (error en segundos -> período en segundos)
+GRID_SNAP = 0.04          # más lejos que esto del período propio: cambió el tempo, se reemplaza
+GRID_SNAP_N = 8           # ...pero sólo si el tracker lo sostiene tantos golpes seguidos
+GRID_SCORE_A = 0.15       # cuánto pesa cada golpe en la puntería de la grilla (EMA de en-tiempo/contratiempo)
+GRID_RELOCK_SCORE = 0.45  # por debajo de esta puntería la grilla está sobre los contratiempos: se re-engancha
+GRID_RELOCK_MIN = 6       # ...y sólo con tantos golpes en la ventana
+GRID_WINDOW = 12          # cuántos golpes mira el re-enganche
+GRID_SETTLE = 4           # golpes después de enganchar de cero para afinar con la media circular
+SEEK_JUMP_S = 0.75        # la posición se movió más que el reloj: seek, la fase de antes no vale
+GRID_RELOCK_MIN_R = 0.25  # largo de la resultante circular para fiarse de la fase media (bombos contra contratiempos: ~0.4)
 
 
 def _fold_interval(dt_ms):
@@ -1206,6 +1236,99 @@ def _fold_interval(dt_ms):
     return None
 
 
+class BeatGrid:
+    """La grilla de tiempos del tema: `anchor` es el instante (reloj del daemon,
+    monotonic) de un tiempo, y los demás caen cada `period` segundos. Todo lo que
+    en el overlay "va al ritmo" cuelga de esto y de nada más."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.anchor = None
+        self.period = 0.0
+        self.score = 1.0
+        self.recent = []
+        self.fresh = False
+        self.snap = 0
+
+    def unlock(self):
+        """Salto de posición (seek) o pausa: la fase de antes no vale. El próximo
+        golpe la vuelve a armar desde cero."""
+        self.anchor = None
+        self.score = 1.0
+        self.recent = []
+        self.fresh = False
+
+    def _rebase(self, now):
+        """Re-referencia el ancla al tiempo más reciente anterior a `now`: así
+        cambiar el período no corre los tiempos pasados ni mueve el actual."""
+        if self.anchor is not None and self.period > 0:
+            self.anchor += math.floor((now - self.anchor) / self.period) * self.period
+
+    def onset(self, t, period_s):
+        """Un golpe en `t` (ya con la latencia restada) y el período vigente."""
+        if period_s <= 0:
+            return
+        if self.anchor is None or self.period <= 0:
+            self.anchor = t
+            self.period = period_s
+            self.recent = [t]
+            self.fresh = True       # el primer golpe puede ser un contratiempo: se afina enseguida
+            return
+        self._rebase(t)
+        # el período de la grilla es PROPIO y se mueve despacio: el que estima el
+        # tracker oscila un par de BPM entre golpes (±2 % = ±10 ms por tiempo) y
+        # seguirlo tiempo a tiempo era la mayor fuente de error. Sólo un cambio
+        # grande (tema nuevo, tempo de verdad distinto) lo reemplaza de una.
+        if abs(period_s - self.period) > GRID_SNAP * self.period:
+            self.snap += 1
+            if self.snap >= GRID_SNAP_N:        # sostenido, no un estimado suelto
+                self.period = period_s
+                self.snap = 0
+        else:
+            self.snap = 0
+            self.period += GRID_KF * (period_s - self.period)
+        period_s = self.period
+        self.recent.append(t)
+        del self.recent[:-GRID_WINDOW]
+        if self.fresh and len(self.recent) >= GRID_SETTLE:
+            self.fresh = False
+            self._relock()
+            return
+        n = round((t - self.anchor) / period_s)
+        err = t - (self.anchor + n * period_s)
+        if abs(err) <= GRID_TOL * period_s:
+            self.anchor += n * period_s + GRID_KP * err
+            # error persistente del mismo signo = el período está corrido: se afina
+            self.period += GRID_KI * err / max(n, 1)
+            self.score += GRID_SCORE_A * (1.0 - self.score)
+            return
+        self.score -= GRID_SCORE_A * self.score
+        if self.score < GRID_RELOCK_SCORE and len(self.recent) >= GRID_RELOCK_MIN:
+            self._relock()
+
+    def _relock(self):
+        pts = self.recent
+        P = self.period
+        w = 2 * math.pi / P
+        x = sum(math.cos(w * t) for t in pts)
+        y = sum(math.sin(w * t) for t in pts)
+        r = math.hypot(x, y) / len(pts)
+        if r >= GRID_RELOCK_MIN_R:
+            ph = math.atan2(y, x) / w
+            self.anchor = ph + P * math.floor((pts[-1] - ph) / P)
+        elif self.fresh:
+            self.anchor = pts[-1]
+        self.score = GRID_RELOCK_SCORE + 0.2    # tras re-enganchar, un respiro antes de otro
+
+    def age(self, now):
+        """Hace cuánto cayó el último tiempo de la grilla (segundos), o None."""
+        if self.anchor is None or self.period <= 0:
+            return None
+        return (now - self.anchor) % self.period
+
+
 class BpmTracker:
     """De los golpes al compás: cuántos BPM y con cuánta confianza.
 
@@ -1221,6 +1344,7 @@ class BpmTracker:
         self.last_beat = None
         self.last_sent = 0.0
         self.sent_bpm = 0.0
+        self.grid = BeatGrid()
 
     def reset(self):
         """Tema nuevo: el compás anterior no dice nada del que arranca."""
@@ -1229,6 +1353,7 @@ class BpmTracker:
         self.conf = 0.0
         self.last_beat = None
         self.sent_bpm = 0.0
+        self.grid.reset()
 
     def seed(self, bpm, conf):
         """Arranca sabiendo lo que se midió la vez pasada (viene del perfil del
@@ -1248,7 +1373,11 @@ class BpmTracker:
                     self.intervals.append(folded)
                     del self.intervals[:-BPM_HISTORY]
         self.last_beat = now
-        return self._estimate()
+        period = self._estimate()
+        # la grilla se fecha con la latencia del análisis, no con el momento en
+        # que Python se enteró; los intervalos no la necesitan (se restan entre sí)
+        self.grid.onset(now - BEAT_LATENCY_S, period / 1000.0)
+        return period
 
     def _bin(self, ms):
         return int((ms - BPM_MIN_MS) // BPM_BIN_MS)
@@ -1302,10 +1431,11 @@ class BpmTracker:
     def event(self, now):
         """El evento para el overlay, o None si no toca mandar nada todavía.
 
-        `phase` va como la EDAD del último golpe, no como su marca de tiempo: el
-        reloj del daemon (`time.monotonic`) y el del overlay (`Date.now`) no son
-        el mismo, así que un instante crudo del daemon allá no significa nada.
-        La edad sí: el overlay hace `Date.now() - phase*1000` y queda anclado."""
+        `phase` va como la EDAD del último tiempo de la grilla (`BeatGrid`, ya con
+        la latencia del análisis), no como su marca de tiempo: el reloj del
+        daemon (`time.monotonic`) y el del overlay (`Date.now`) no son el mismo,
+        así que un instante crudo del daemon allá no significa nada. La edad sí:
+        el overlay hace `Date.now() - phase*1000` y queda anclado."""
         if self.bpm <= 0 or self.conf <= 0:
             return None
         if (abs(self.bpm - self.sent_bpm) <= BPM_SEND_DELTA
@@ -1313,8 +1443,10 @@ class BpmTracker:
             return None
         self.last_sent = now
         self.sent_bpm = self.bpm
-        age = 0.0 if self.last_beat is None else max(now - self.last_beat, 0.0)
-        return {"cmd": "bpm", "v": round(self.bpm, 1), "conf": round(self.conf, 2),
+        age = self.grid.age(now)
+        if age is None:
+            age = 0.0 if self.last_beat is None else max(now - self.last_beat, 0.0)
+        return {"cmd": "bpm", "v": round(self.bpm, 2), "conf": round(self.conf, 2),
                 "phase": round(age, 3)}
 
 
@@ -1726,6 +1858,7 @@ def _capture_loop():
         # el compás: lo alimentan los mismos golpes que ya se detectan
         bpm = BpmTracker()
         last_bpm_logged = 0.0
+        last_pos = None        # (posición, now) del chequeo anterior: detecta seek y pausa
         # el carácter del tema (calmo..agitado), lento: ver CHAR_*
         char = CharTracker()
         last_char = 0.0
@@ -1833,8 +1966,17 @@ def _capture_loop():
                     last_save = now
                     prof.save()
                 pos = ipc._song_pos()
+                # re-sincronización con la reproducción real: pausa o salto de
+                # posición (seek) tiran la fase de la grilla — la música sigue en
+                # otro punto del compás, y el próximo golpe la vuelve a armar
                 if pos is None:
+                    last_pos = None
+                    bpm.grid.unlock()
                     continue
+                if last_pos is not None and abs((pos - last_pos[0]) - (now - last_pos[1])) > SEEK_JUMP_S:
+                    log("tempo: position jump, relocking the beat grid")
+                    bpm.grid.unlock()
+                last_pos = (pos, now)
                 rms = ev["l"] * an.peak      # el rms crudo, sin la normalización
                 prof.record(pos, rms, ev["c"])
                 kind, pct, changed = prof.update(pos, rms, now)

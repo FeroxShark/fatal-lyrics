@@ -2134,7 +2134,7 @@ class TestBpmTracker(unittest.TestCase):
         tr = c.BpmTracker()
         t = self.feed(tr, [0.5] * 12)
         ev = tr.event(t + 0.2)
-        self.assertAlmostEqual(ev["phase"], 0.2 + c.BEAT_LATENCY_S, delta=0.01)
+        self.assertAlmostEqual(ev["phase"], 0.2 + audio.BEAT_LATENCY_S, delta=0.01)
 
     def test_a_new_track_starts_from_scratch_but_can_be_seeded(self):
         tr = c.BpmTracker()

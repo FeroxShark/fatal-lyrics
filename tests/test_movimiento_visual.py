@@ -124,7 +124,9 @@ class TestMovWiring(unittest.TestCase):
         # radar y lluvia dibujan con el reloj de dibujo; las estrellas acumulan con rate
         self.assertIn("rotation: radar.angle", motif)
         self.assertIn("rain.base + rain.kph", motif)
-        self.assertIn("frameTime * stars.speed * motif.rate", motif)
+        # (ahora en Stars.qml: acumula con su `rate`, que Motif le pasa)
+        self.assertIn("frameTime * stars.speed * stars.rate", read("Stars.qml"))
+        self.assertRegex(motif, r"id: starsC\n\s+Stars \{[^}]*rate: motif\.rate|Stars \{[^}]*rate: motif\.rate")
         self.assertIn("readonly property real mclock: clock + movOff", motif)
 
     def test_no_motif_base_child_shadows_rate_or_mov_off(self):

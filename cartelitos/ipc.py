@@ -65,6 +65,7 @@ CONFIG_EVENT_MAP = (
     ("screen", "display", "screen"), ("max_dialogs", "display", "max_dialogs"),
     ("scale", "display", "scale"), ("current_scale", "display", "current_scale"),
     ("spawn_area", "display", "spawn_area"), ("karaoke", "display", "karaoke"),
+    ("dialogs", "display", "dialogs"),
     ("glitch", "effects", "glitch"), ("effects_on_current", "effects", "effects_on_current"),
     ("tearing", "effects", "tearing"), ("death_age_min", "effects", "death_age_min"),
     ("death_age_max", "effects", "death_age_max"), ("max_lifetime", "effects", "max_lifetime"),

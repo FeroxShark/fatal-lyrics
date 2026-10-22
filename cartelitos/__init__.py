@@ -23,9 +23,9 @@ from .util import (
 
 from .config import (
     CFG, CONFIG_DIR, CONFIG_PATH, CRT_PATH, DEFAULT_CONFIG, DEFAULTS,
-    SING_PATH, apply_config, crt_on, load_config, parse_sing,
+    CARTELES_PATH, SING_PATH, apply_config, crt_on, load_config, parse_sing,
     read_config,
-    reload_config, set_crt, set_option, watch_config, watch_sing,
+    reload_config, set_crt, set_option, watch_carteles, watch_config, watch_sing,
     _save_config, _toml_val,
 )
 

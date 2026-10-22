@@ -40,6 +40,11 @@ ShellRoot {
     // en sí, eso sólo elige entre estos tres)
     property string cascadeMode: "age"
     property bool karaokeOn: false
+    // `[display] dialogs`: el interruptor de TODO el modo normal. Apagado no
+    // nace ningún cartel, la funda y el rótulo de teclas se callan y los que
+    // estaban vivos se van por su muerte de siempre (shouldDie). El tubo no
+    // mira esto: es otro modo.
+    property bool dialogsOn: true
     property string npCorner: "top-right"
     property int npMargin: 14
     property bool npVinyl: true
@@ -3366,6 +3371,12 @@ ShellRoot {
         onLoadFailed: root.crtSetupOn = false
     }
 
+    onDialogsOnChanged: {
+        // la funda no se queda "a medias" para reaparecer al volver a prender
+        if (!dialogsOn)
+            npShown = false;
+    }
+
     // Al prender el tubo se barren los carteles: si no, los que ya estaban vivos
     // quedan esperando abajo y reaparecen enteros al salir (se veía como si el
     // modo viejo hubiera estado corriendo todo el tiempo).
@@ -3538,6 +3549,10 @@ ShellRoot {
     }
 
     function pushDialog(entry, markCurrent) {
+        // única puerta de los carteles (verso, colgado, sync, "No"): con
+        // `dialogs = false` ninguno nace
+        if (!root.dialogsOn)
+            return;
         const pos = spawnPos();
         entry.serial = root.serial++;
         entry.rx = pos.rx;
@@ -3816,7 +3831,7 @@ ShellRoot {
         npInfo = artist + (album ? " — " + album : "");
         npArt = art || "";
         npProgress = 0;
-        npShown = !crtOn;
+        npShown = !crtOn && dialogsOn;
         npDocked = false;
         npSerial++;
         // intro sin apagón: el título ya llegó, la tarjeta entra en el foco
@@ -3873,7 +3888,7 @@ ShellRoot {
         effects_on_current: "effectsOnCurrent", tearing: "tearingOn",
         death_age_min: "deathAgeMin", death_age_max: "deathAgeMax", max_lifetime: "maxLifetime",
         click_through: "clickThrough", troll_no: "trollNo", burn_in: "burnIn",
-        cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn",
+        cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn", dialogs: "dialogsOn",
         mirror: "mirrorOn",
         np_corner: "npCorner", np_margin: "npMargin", np_vinyl: "npVinyl",
         sing: "singMode",
@@ -4413,6 +4428,7 @@ ShellRoot {
                     readonly property bool hung: modelData.kind === "hang"
                     readonly property bool shouldDie: modelData.serial === root.dyingSerial
                         || (hung && modelData.gen < root.lyricGen)
+                        || !root.dialogsOn
                     onShouldDieChanged: {
                         if (shouldDie && !dying)
                             die();
@@ -4649,14 +4665,14 @@ ShellRoot {
                     }
                     Timer {
                         id: deathEnd
-                        interval: root.burnIn ? 2900 : 380
+                        interval: root.burnIn && root.dialogsOn ? 2900 : 380
                         onTriggered: root.dismiss(win.modelData.serial)
                     }
 
                     // burn-in: tras el colapso queda una sombra quemada estática que se apaga
                     Timer {
                         interval: 370
-                        running: win.dying && root.burnIn
+                        running: win.dying && root.burnIn && root.dialogsOn
                         onTriggered: {
                             win.ghosting = true;
                             win.burst = false;
@@ -5176,7 +5192,7 @@ ShellRoot {
             // de su propia ayuda.
             PanelWindow {
                 id: keysWin
-                visible: !root.crtOn && root.keysHint !== "" && root.keysHintOpacity > 0.01
+                visible: !root.crtOn && root.dialogsOn && root.keysHint !== "" && root.keysHintOpacity > 0.01
                 screen: perScreen.scr
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.namespace: "cartelitos-keys"
@@ -5232,7 +5248,7 @@ ShellRoot {
             // de progreso Win95. Ventana propia full-screen con máscara solo en la funda.
             PanelWindow {
                 id: npWin
-                visible: root.npShown && !root.crtOn
+                visible: root.npShown && !root.crtOn && root.dialogsOn
                 screen: perScreen.scr
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.namespace: "cartelitos-np"

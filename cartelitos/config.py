@@ -36,6 +36,9 @@ _CONFIG_COMMENTS = {
         "current_scale": "extra size factor for the current-line dialog",
         "spawn_area": "full | top | bottom | left | right | edges (leaves the center clear)",
         "karaoke": "current line paints word by word (estimated timing)",
+        "dialogs": "false = no error dialogs (nor sleeve): the app stays on without them.\n"
+                   "The CRT tube is separate. Switch it from anywhere with:\n"
+                   "fatal carteles on | off | toggle",
     },
     "effects": {
         "glitch": "off | soft | normal | aggressive",
@@ -383,6 +386,7 @@ DEFAULTS = {
     "display": {
         "screen": "auto", "max_dialogs": 0, "scale": 1.0,
         "current_scale": 1.3, "spawn_area": "full", "karaoke": False,
+        "dialogs": True,
     },
     "effects": {
         "glitch": "normal", "effects_on_current": False, "tearing": True,
@@ -549,33 +553,47 @@ def parse_sing(text, current):
     return None
 
 
-def watch_sing():
-    """Aplica lo que pide `fatal sing`. Se anota el mtime que YA estaba al
-    arrancar: un timbre que quedó de la sesión anterior no puede abrir el
-    micrófono solo al boot."""
+def _watch_bell(path, section, key, name):
+    """Aplica lo que pide un timbre (`fatal sing`, `fatal carteles`) a la perilla
+    `[section] key`. Se anota el mtime que YA estaba al arrancar: un timbre que
+    quedó de la sesión anterior no puede cambiar nada solo al boot."""
     try:
-        last = os.stat(SING_PATH).st_mtime_ns
+        last = os.stat(path).st_mtime_ns
     except OSError:
         last = None
     while True:
         time.sleep(0.35)
         try:
-            stamp = os.stat(SING_PATH).st_mtime_ns
+            stamp = os.stat(path).st_mtime_ns
         except OSError:
             continue
         if stamp == last:
             continue
         last = stamp
         try:
-            with open(SING_PATH) as f:
+            with open(path) as f:
                 raw = f.read()
         except OSError:
             continue
-        want = parse_sing(raw, CFG["behavior"]["sing"])
-        if want is None or want == CFG["behavior"]["sing"]:
+        want = parse_sing(raw, CFG[section][key])
+        if want is None or want == CFG[section][key]:
             continue
-        log(f"sing mode {'on' if want else 'off'}")
-        set_option("sing", "behavior", want)
+        log(f"{name} {'on' if want else 'off'}")
+        set_option(key, section, want)
+
+
+def watch_sing():
+    """Aplica lo que pide `fatal sing` (abre el micrófono: sólo si se pide)."""
+    _watch_bell(SING_PATH, "behavior", "sing", "sing mode")
+
+
+# `fatal carteles on|off|toggle`: mismo timbre, otra perilla (`[display] dialogs`).
+CARTELES_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "cartelitos-carteles")
+
+
+def watch_carteles():
+    """Aplica lo que pide `fatal carteles`."""
+    _watch_bell(CARTELES_PATH, "display", "dialogs", "dialogs")
 
 
 def watch_config():

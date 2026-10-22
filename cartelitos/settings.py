@@ -80,6 +80,8 @@ TABS = ["Dialogs", "Behavior", "CRT", "CRT scenes", "CRT glass"]
 GROUPS = [
     # ---------------------------------------------------------------- Dialogs
     {"title": "Dialogs", "tab": 0, "column": 0, "rows": [
+        _toggle("display", "dialogs", "Show dialogs",
+                "off = none appear (sleeve too); the CRT tube is separate"),
         _toggle("display", "karaoke", "Karaoke", "the current line paints word by word"),
         _slider("display", "scale", "Size", "all dialogs", 0.5, 3.0, 0.1),
         _slider("display", "current_scale", "Current line", "extra size", 0.5, 3.0, 0.1),

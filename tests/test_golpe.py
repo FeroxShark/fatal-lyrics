@@ -21,12 +21,12 @@ def lst(qml, name):
 
 
 class TestSinPantallasPlanas(unittest.TestCase):
-    def test_splitflap_and_testcard_are_out_of_the_draw(self):
+    def test_splitflap_testcard_and_textsea_are_out_of_the_draw(self):
         qml = read("shell.qml")
         kinds = lst(qml, r"readonly property var motifKinds")
         self.assertGreater(len(kinds), 15)
         groups = re.search(r"motifGroups:\s*\(\{(.*?)\}\)", qml, re.S).group(1)
-        for flat in ("splitflap", "testcard"):
+        for flat in ("splitflap", "testcard", "textsea"):
             self.assertNotIn(flat, kinds)
             self.assertNotIn('"%s"' % flat, groups)
 

@@ -2614,7 +2614,7 @@ ShellRoot {
                   "harmonograph", "julia", "vitral"],
         hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar",
                   "pipes", "vector", "mystify", "maze", "membrana", "cintas", "pixelsort", "estela"],
-        neutral: ["textsea", "eyes", "rain", "swarm", "defrag", "giroscopio", "cascada", "truchet"],
+        neutral: ["eyes", "rain", "swarm", "defrag", "giroscopio", "cascada", "truchet"],
     })
     // Familias de entradas para cuando hay set puesto (el wiring adentro de
     // `crtEntriesFor`/`crtPickEntry` es un paso aparte; acá sólo se define
@@ -3053,7 +3053,8 @@ ShellRoot {
 
     readonly property var motifKinds: ["eye", "scope", "radar", "stars",
                                        "rain", "ocean", "pond", "dunes", "static",
-                                       "textsea", "eyes", "ekg",
+                                       // textsea fuera del sorteo (Ferox 2026-10-22): para volverla, sumarla acá y en motifGroups.neutral
+                                       "eyes", "ekg",
                                        "rorschach", "plasma", "tunnel",
                                        // los de loop de 15 s (previews/crt-motifs)
                                        "swarm", "maze", "pipes",

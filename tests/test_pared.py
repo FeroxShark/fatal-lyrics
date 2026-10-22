@@ -63,6 +63,29 @@ class TestLienzo(unittest.TestCase):
                         " {x: 0, y: 293}, 1, 1)")
         self.assertEqual(v, {"x": 247, "y": 617, "w": 1920, "h": 1080})
 
+    def test_fit_mirrors_the_short_side_onto_the_long_one(self):
+        # la letra en el medio: DP-2 (lado corto) se espeja sobre el eje de HDMI-A-1 y cae
+        # dentro de DP-1 (el lienzo no cambia); DP-1 y la letra dibujan su rectángulo
+        f = self.run_js("fit([%s, %s, %s], 1, 'mirror')" % (DP2, HDMI, DP1))
+        self.assertEqual((f["ax"], f["at"]), ("x", 2040))
+        self.assertEqual(f["s"][0], {"x": 3000, "y": -370, "fx": True, "fy": False})
+        self.assertEqual(f["s"][1], {"x": 1080, "y": 0, "fx": False, "fy": False})
+        self.assertEqual(f["s"][2], {"x": 3000, "y": 247, "fx": False, "fy": False})
+
+    def test_fit_leaves_the_wall_alone_without_text_at_an_edge_or_behind(self):
+        plain = [{"x": 0, "y": -370, "fx": False, "fy": False}, {"x": 1080, "y": 0, "fx": False, "fy": False},
+                 {"x": 3000, "y": 247, "fx": False, "fy": False}]
+        for t, mode in ((-1, "mirror"), (0, "mirror"), (2, "mirror"), (1, "behind")):
+            f = self.run_js("fit([%s, %s, %s], %d, '%s')" % (DP2, HDMI, DP1, t, mode))
+            self.assertEqual((f["ax"], f["s"]), ("", plain), (t, mode))
+
+    def test_fit_mirrors_stacked_screens_in_y(self):
+        rs = "[{x: 0, y: 0, w: 1920, h: 1080}, {x: 0, y: 1080, w: 1920, h: 1080}, {x: 0, y: 2160, w: 1920, h: 1080}]"
+        f = self.run_js("fit(%s, 1, 'mirror')" % rs)
+        self.assertEqual((f["ax"], f["at"]), ("y", 1620))
+        self.assertEqual(f["s"][0], {"x": 0, "y": 2160, "fx": False, "fy": True})
+        self.assertEqual(self.run_js("mirror({x: 10, y: 100}, %s)" % json.dumps(f)), {"x": 10, "y": 3140})
+
     def test_every_canvas_point_lands_where_the_whole_wall_would_scale_it(self):
         # el motivo dibuja `view` en su pantalla, la cámara escala `s` sobre `local`: el punto P
         # del lienzo tiene que verse en pv + s·z·(P − pv), desde cualquier pantalla
@@ -107,6 +130,26 @@ class TestCableado(unittest.TestCase):
         # al nacer, en el primer dibujo y en el puente: nunca a mitad de un dibujo
         self.assertEqual(len(re.findall(r"wallLatch\(\);", src)), 3)
         self.assertIn("sh.seed === undefined", src)
+
+    def test_each_wall_motif_declares_how_it_shares_the_wall_with_the_text(self):
+        # campos que salen del foco → espejo; movimiento con dirección → detrás (`Wall.fit`)
+        want = {"truchet": "mirror", "pond": "mirror", "stars": "mirror", "tunnel": "mirror",
+                "mystify": "behind", "pipes": "behind", "dunes": "behind", "ocean": "behind"}
+        for k in WALL_KINDS:
+            self.assertRegex(read(k.capitalize() + ".qml"), r'\n    wallFit: "%s"\n' % want[k], k)
+        for base in ("MotifBase.qml", "WallBase.qml", "WallItem.qml"):
+            self.assertIn('property string wallFit: "behind"', read(base), base)
+            self.assertIn("property real wallEcho: 0", read(base), base)
+
+    def test_the_text_screen_stays_clean(self):
+        src = read("Crt.qml")
+        # ni forzado: con la letra en esta pantalla la pared no se dibuja debajo
+        self.assertIn("(motifForced && !(wallWants && showsText))", src)
+        self.assertIn("Wall.fit(ctl.crtWallRects, text, motifView.wallFit)", src)
+        self.assertIn("xScale: crt.wallMine.fx ? -1 : 1", src)
+        # el espejo cambia de lado en el puente
+        self.assertRegex(src, r"onWallTextWantsChanged: \{(.|\n)*?motifBridge\.restart\(\)")
+        self.assertIn("readonly property int crtWallText:", read("shell.qml"))
 
     def test_no_shader_property_is_called_focus(self):
         # `focus` es FINAL en Item: un ShaderEffect con esa propiedad no carga (TRAMPAS)

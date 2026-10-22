@@ -219,6 +219,11 @@ _CONFIG_COMMENTS = {
                   "data, hyperspace, a test card, the sea, a pond, dunes,\n"
                   "snow that almost forms a shape, the whole lyric running\n"
                   "by, a heart monitor, an inkblot, a lava lamp and a tunnel",
+        "wall": "true (default) = with two screens or more, some drawings (truchet,\n"
+                "mystify, pipes) don't repeat per screen: when one comes up, every\n"
+                "screen takes it and shows its piece of ONE picture as wide as the\n"
+                "whole wall (the screen with the lyric hides its piece). false = every\n"
+                "screen draws its own",
         "water": "the two water animations: a sea of loose points seen in\n"
                  "perspective, and a dish of water that stands still and\n"
                  "SHIVERS at the frequency of what is playing. They take their\n"
@@ -432,7 +437,7 @@ DEFAULTS = {
         "pace": "normal", "rare": 1, "ghost_ms": 550,
         "iown": True, "foreshadow": True, "ring": True, "ring_gap": 10,
         "hop": "both",
-        "motifs": True,
+        "motifs": True, "wall": True,
         "water": True, "water_amp": 0.55, "camera": 1.0, "section_zoom": True,
         "quality": 1.0,
         "exit_on": "mouse", "font": "", "chrome": False, "intensity": 0.45,

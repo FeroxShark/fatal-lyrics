@@ -3380,6 +3380,14 @@ ShellRoot {
         const live = i => crtDark[i] !== true && crtRare.screen !== i;
         const valid = i => kinds[i] !== "" && motifAllowed(kinds[i])
             && (crtWater || (kinds[i] !== "ocean" && kinds[i] !== "pond"));
+        // PARED (`crtWallSettle`): la pared cambia entera, con su hold o con un corte de escena —
+        // ni el cambio de parte ni el `rise` se llevan una pantalla suelta, ni la palabra clave
+        const wallWas = crtWallOf(kinds, live);
+        if (wallWas !== "" && !force && (one || floorMs !== undefined))
+            return false;
+        if (wallWas !== "")
+            wanted = "";
+        const prevKinds = kinds.slice(), prevSeeds = seeds.slice(), moved = [];
         // la única que cambia sin `force`: la más vieja entre las candidatas
         let single = -1;
         if (!force) {
@@ -3414,6 +3422,7 @@ ShellRoot {
             since[i] = now;
             seeds[i] = crtHash(crtMotifRoll * 31 + i * 7 + 13);
             changed = true;
+            moved.push(i);
             const used = Object.assign({}, crtMotifUsed);
             used[pick] = (used[pick] || 0) + 1;
             crtMotifUsed = used;
@@ -3424,6 +3433,9 @@ ShellRoot {
             console.log("crt: motif screen=" + i + " kind=" + pick + " src=" + src
                         + (force ? " (all)" : one ? " (section)" : floorMs !== undefined ? " (rise)" : ""));
         }
+        if (crtWall && n >= 2 && (wallWas !== "" || moved.length > 0))
+            changed = crtWallSettle(kinds, since, seeds, prevKinds, prevSeeds, live, moved,
+                                    wallWas, force, now) || changed;
         // arrays nuevos, no mutados: si no, el binding de Crt.qml no se entera
         if (changed || crtMotifKinds.length !== n) {
             crtMotifKinds = kinds;
@@ -3626,6 +3638,146 @@ ShellRoot {
     // el zoom de foco y el latido sobre el mismo punto global, así la costura no se parte.
     readonly property var crtWallPivot: Wall.pivot(activeCrtScreens.map(
         s => ({ x: s.x, y: s.y, w: s.width, h: s.height })))
+
+    // ---- PARED de motivos (`docs/PARED.md`, perilla `crt.wall`). Con dos pantallas o más, un
+    // dibujo que sabe extenderse (`motifWall`) no se dibuja por pantalla: cuando le toca a una,
+    // lo toman TODAS las pantallas vivas y cada una muestra su recorte de UN lienzo — la caja de
+    // todas las pantallas (`Wall.canvas`), con los huecos entre monitores y la pantalla de la
+    // letra como mundo que nadie ve. El reparto vive en `crtMotifRefresh` (`crtWallSettle`);
+    // acá, lo que comparten: el lienzo, el tipo, la semilla, el reloj, el estado y el foco.
+    property bool crtWall: true
+    readonly property var motifWall: ["truchet", "mystify", "pipes"]
+    readonly property var crtWallCanvas: Wall.canvas(activeCrtScreens.map(
+        s => ({ x: s.x, y: s.y, w: s.width, h: s.height })))
+    // las pantallas que muestran el dibujo de pared ahora (el del sorteo, o el forzado de
+    // `fatal crt motif <kind> --screen all`): las vivas con el mismo dibujo de pared, si son
+    // dos o más. [] = no hay pared.
+    readonly property var crtWallIds: {
+        const n = activeCrtScreens.length;
+        if (!crtWall || n < 2)
+            return [];
+        const by = {};
+        for (let i = 0; i < n; i++) {
+            const k = crtDark[i] === true ? "" : crtMotifFor(i);
+            if (motifWall.indexOf(k) >= 0)
+                by[k] = (by[k] || []).concat([i]);
+        }
+        for (const k in by)
+            if (by[k].length >= 2)
+                return by[k];
+        return [];
+    }
+    readonly property string crtWallKind: crtWallIds.length > 0 ? crtMotifFor(crtWallIds[0]) : ""
+    readonly property real crtWallSeed: crtWallIds.length === 0 ? 0
+        : crtMotifForced(crtWallIds[0]) ? 0.37 : (crtMotifSeeds[crtWallIds[0]] || 0)
+    // la pantalla que le da los colores a la pared (cada pantalla tiene su cara, `crtFace`, y
+    // con dos caras el lienzo se partiría en la costura): la primera que no tiene la letra
+    readonly property int crtWallRef: {
+        const ids = crtWallIds;
+        for (let j = 0; j < ids.length; j++)
+            if (ids[j] !== crtShot.focus || crtLine.text === "")
+                return ids[j];
+        return ids.length > 0 ? ids[0] : -1;
+    }
+    // el reloj y el estado de la pared arrancan con cada pared nueva: `crtWallShare` es el
+    // objeto que comparten las instancias (MotifBase: lo mutan sin avisar)
+    property double crtWallEpoch: Date.now()
+    property var crtWallShare: ({})
+    onCrtWallKindChanged: {
+        crtWallEpoch = Date.now();
+        crtWallShare = {};
+        if (crtOn)
+            console.log("crt: wall " + (crtWallKind || "off") + " screens=" + crtWallIds.join(","));
+    }
+    onCrtWallChanged: crtMotifRefresh(true)
+    // el foco en px de lienzo: el centro de la pantalla con la letra (de ahí salen las ondas del
+    // truchet y el aro de los caños); sin letra, el centro del lienzo. Se mueve como la cámara.
+    readonly property point crtWallFocusTo: {
+        const cv = crtWallCanvas, f = crtShot.focus, s = activeCrtScreens[f];
+        if (crtLine.text === "" || !s)
+            return Qt.point(cv.w / 2, cv.h / 2);
+        return Qt.point(s.x - cv.x + s.width / 2, s.y - cv.y + s.height / 2);
+    }
+    property real crtWallFx: crtWallFocusTo.x
+    property real crtWallFy: crtWallFocusTo.y
+    Behavior on crtWallFx { NumberAnimation { duration: Motion.cameraMs; easing.type: Easing.OutExpo } }
+    Behavior on crtWallFy { NumberAnimation { duration: Motion.cameraMs; easing.type: Easing.OutExpo } }
+    // el dibujo de pared que traía el reparto (en `kinds`, sin contar el forzado): "" = ninguno
+    function crtWallOf(kinds, live) {
+        if (!crtWall || kinds.length < 2)
+            return "";
+        const by = {};
+        for (let i = 0; i < kinds.length; i++)
+            if (live(i) && motifWall.indexOf(kinds[i]) >= 0)
+                by[kinds[i]] = (by[kinds[i]] || 0) + 1;
+        for (const k in by)
+            if (by[k] >= 2)
+                return k;
+        return "";
+    }
+    // Después de cada reparto: si una pantalla sacó un dibujo de pared, lo toman todas las vivas
+    // (con UNA semilla); si la pared que corría se queda, se suma la que entró (una que estaba
+    // apagada, o una con su dibujo vencido); si la que vencía era la pared, tiene un tiro más
+    // para seguir en pared y si no sale, cada pantalla vuelve a su dibujo propio en el acto
+    // (sin dibujos de pared: uno solo no es pared). Devuelve si cambió algo.
+    function crtWallSettle(kinds, since, seeds, prev, prevSeeds, live, moved, was, force, now) {
+        const n = kinds.length;
+        const lives = [];
+        for (let i = 0; i < n; i++)
+            if (live(i))
+                lives.push(i);
+        if (lives.length < 2)
+            return false;
+        const capable = k => motifWall.indexOf(k) >= 0;
+        const others = i => kinds.filter((x, j) => j !== i && x !== "" && crtDark[j] !== true);
+        const wallMoved = was !== "" && moved.some(i => prev[i] === was);
+        let k = "", seed = 0;
+        if (was !== "" && !wallMoved && !force) {
+            k = was;
+            for (let i = 0; i < n && seed === 0; i++)
+                if (prev[i] === was)
+                    seed = prevSeeds[i];
+        } else {
+            for (let j = 0; j < moved.length && k === ""; j++)
+                if (capable(kinds[moved[j]]))
+                    k = kinds[moved[j]];
+            if (k === "" && wallMoved && !force) {
+                const d = crtMotifDraw(moved[0], others(moved[0]).concat([was]));
+                if (capable(d.kind))
+                    k = d.kind;
+            }
+        }
+        let changed = false;
+        if (k !== "") {
+            if (seed === 0)
+                seed = crtHash(crtMotifRoll * 31 + 97);
+            for (const i of lives) {
+                if (kinds[i] === k && seeds[i] === seed)
+                    continue;
+                kinds[i] = k;
+                since[i] = now;
+                seeds[i] = seed;
+                changed = true;
+                console.log("crt: motif screen=" + i + " kind=" + k + " src=wall");
+            }
+            if (changed && k !== was && crtMotifRecent.indexOf(k) < 0)
+                crtMotifRecent = crtMotifRecent.concat([k]).slice(-crtMotifRecentN);
+            return changed;
+        }
+        if (was === "")
+            return false;
+        for (const i of lives) {
+            if (kinds[i] !== was && !capable(kinds[i]))
+                continue;
+            const d = crtMotifDraw(i, others(i).concat(motifWall));
+            kinds[i] = d.kind;
+            since[i] = now;
+            seeds[i] = crtHash(crtMotifRoll * 31 + i * 7 + 13);
+            changed = true;
+            console.log("crt: motif screen=" + i + " kind=" + d.kind + " src=" + d.src + " (wall end)");
+        }
+        return changed;
+    }
 
     function randomIcon() {
         const r = Math.random();
@@ -4057,7 +4209,7 @@ ShellRoot {
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
         crt_ring_gap: "crtRingGap", crt_hop: "crtHopMode",
         crt_pace: "crtPace", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
-        crt_motifs: "crtMotifs", crt_camera: "crtCamera",
+        crt_motifs: "crtMotifs", crt_wall: "crtWall", crt_camera: "crtCamera",
         crt_section_zoom: "crtSectionZoom", crt_quality: "crtQualityCeiling",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",
         crt_water: "crtWater", crt_water_amp: "crtWaterAmp",

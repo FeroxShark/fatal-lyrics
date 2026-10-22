@@ -207,6 +207,8 @@ GROUPS = [
     ]},
     {"title": "Drawings", "tab": 3, "column": 1, "rows": [
         _toggle("crt", "motifs", "Show drawings", "animations on the screens without lyric"),
+        _needs(_toggle("crt", "wall", "Span the wall", "some drawings cross every screen as one"),
+               "crt.motifs"),
         _toggle("crt", "water", "Water drawings", "a sea and a shivering pond"),
         _needs(_slider("crt", "water_amp", "Water motion", "sea swell and pond shiver", 0.0, 1.0),
                "crt.motifs", "crt.water"),

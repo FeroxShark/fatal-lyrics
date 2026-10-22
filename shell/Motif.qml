@@ -287,11 +287,21 @@ Item {
         energy * (1 + surgeK * surge), drop ? driveDrop : driveMax))
 
     // y un tirón de tamaño, corto, para que el golpe se vea y no sólo se acelere
+    readonly property real zoomNow: 1 + scaleAmt * surge + bassAmt * bump
+    // ---- PARED (`docs/PARED.md`): los dibujos que saben extenderse (`motifWall` en shell.qml)
+    // reciben de Crt.qml el lienzo de la pared (null = la pantalla sola), el factor de la
+    // cámara del tubo y el foco en px de lienzo. En pared el tirón NO va por este Scale: sobre
+    // el centro de cada pantalla partiría la costura. Lo aplica el dibujo sobre el pivote de
+    // pared (`Wall.view`).
+    property var wall: null
+    property real wallCamS: 1
+    property point wallFocus: Qt.point(0, 0)
+    readonly property vector4d wallCam: Qt.vector4d(zoomNow, wallCamS, wallFocus.x, wallFocus.y)
     transform: Scale {
         origin.x: motif.width / 2
         origin.y: motif.height / 2
-        xScale: 1 + motif.scaleAmt * motif.surge + motif.bassAmt * motif.bump
-        yScale: 1 + motif.scaleAmt * motif.surge + motif.bassAmt * motif.bump
+        xScale: motif.wall ? 1 : motif.zoomNow
+        yScale: motif.wall ? 1 : motif.zoomNow
     }
 
     // T3.A2: UN solo dibujo por pantalla, garantizado por construcción.
@@ -1458,6 +1468,9 @@ Item {
         id: pipesC
 
         Pipes {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
             colour: motif.colour
             hot: motif.hot
             bg: motif.bg
@@ -1532,6 +1545,9 @@ Item {
         id: mystifyC
 
         Mystify {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
             colour: motif.colour
             hot: motif.hot
             bg: motif.bg
@@ -1911,6 +1927,9 @@ Item {
         id: truchetC
 
         Truchet {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
             colour: motif.colour
             hot: motif.hot
             bg: motif.bg

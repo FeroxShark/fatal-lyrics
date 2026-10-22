@@ -1,11 +1,11 @@
 #!/bin/sh
 # Copia de shell/ al banco lo que el laberinto necesita (imports "../X.js"):
-#   ./sync-shell.sh          # MotifBase, ThumpBase, Maze, Mystify, Membrana, Cintas, Giroscopio, Cascada, Estela, Pixelsort, Julia, Truchet, Vitral, Pipes, MShape, Dunes, Ocean, Pond, WallBase, sus shaders (.qsb), Maze.js, Mystify.js, React.js, Speed.js, Thump.js, Ease.js, Wall.js
+#   ./sync-shell.sh          # MotifBase, ThumpBase, Maze, Mystify, Membrana, Cintas, Giroscopio, Cascada, Estela, Pixelsort, Julia, Truchet, Vitral, Pipes, Tunnel, Stars, WallItem, MShape, Dunes, Ocean, Pond, WallBase, sus shaders (.qsb), Maze.js, Mystify.js, React.js, Speed.js, Thump.js, Ease.js, Wall.js
 # shell/ es la fuente: se edita ahí y se corre esto antes de renderizar.
 set -e
 cd "$(dirname "$0")"
 S=../../shell
-for f in Maze Mystify Swarm MotifBase ThumpBase Membrana Cintas Giroscopio Cascada Estela Pixelsort Julia Truchet Vitral Pipes MShape Dunes Ocean Pond WallBase Tunnel; do
+for f in Maze Mystify Swarm MotifBase ThumpBase Membrana Cintas Giroscopio Cascada Estela Pixelsort Julia Truchet Vitral Pipes MShape Dunes Ocean Pond WallBase Tunnel Stars WallItem; do
   # `Motion` es un singleton de shell/ (qmldir): en el banco va su valor (levelMs = 420)
   # Los `Behavior` de `level`/`pitch` (dunes, ocean, pond) corren en tiempo REAL, y el banco
   # pinta más rápido que eso: con duración 0 el banco es determinista (la pared contra su

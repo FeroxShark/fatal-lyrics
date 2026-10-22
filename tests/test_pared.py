@@ -24,7 +24,7 @@ from cartelitos import config, ipc, settings  # noqa: E402
 DP2 = "{x: 0, y: -370, w: 1080, h: 1920}"
 HDMI = "{x: 1080, y: 0, w: 1920, h: 1080}"
 DP1 = "{x: 3000, y: 247, w: 1920, h: 1080}"
-WALL_KINDS = ("truchet", "mystify", "pipes", "dunes", "ocean", "pond")
+WALL_KINDS = ("truchet", "mystify", "pipes", "dunes", "ocean", "pond", "stars", "tunnel")
 
 
 def read(name, base=SHELL):
@@ -122,7 +122,8 @@ class TestCableado(unittest.TestCase):
 
 
 class TestShaders(unittest.TestCase):
-    UNIFORMS = {"truchet": ("view", "foc", "wallK"), "mystify": ("win", "orig")}
+    UNIFORMS = {"truchet": ("view", "foc", "wallK"), "mystify": ("win", "orig"),
+                "tunnel": ("win", "foc", "spn")}
 
     def test_frags_declare_the_canvas(self):
         for k, names in self.UNIFORMS.items():
@@ -143,15 +144,16 @@ class TestBancoSinDeriva(unittest.TestCase):
     """`shell/` es la fuente; el banco tiene copias (`./sync-shell.sh`)."""
 
     def test_qml_copies_match_up_to_imports(self):
-        for name in ("MotifBase", "ThumpBase", "Truchet", "Mystify", "Pipes"):
+        for name in ("MotifBase", "ThumpBase", "Truchet", "Mystify", "Pipes", "WallItem", "Stars", "Tunnel"):
             src = re.sub(r'import "([A-Za-z]*)\.js"', r'import "../\1.js"', read(name + ".qml"))
-            src = src.replace("Motion.levelMs", "420")
+            src = src.replace("Motion.levelMs", "420").replace("Motion.cameraMs", "520")
             self.assertEqual(src, read(name + ".qml", os.path.join(BANCO, "motifs")),
                              f"motifs/{name}.qml difiere de shell/: correr previews/crt-motifs/sync-shell.sh")
 
     def test_js_and_shader_copies_are_identical(self):
         self.assertEqual(read("Wall.js"), read("Wall.js", BANCO))
-        for name in ("truchet.frag", "truchet.frag.qsb", "mystify.frag", "mystify.frag.qsb"):
+        for name in ("truchet.frag", "truchet.frag.qsb", "mystify.frag", "mystify.frag.qsb",
+                     "tunnel.frag", "tunnel.frag.qsb"):
             with open(os.path.join(SHELL, name), "rb") as a, \
                     open(os.path.join(BANCO, "motifs", name), "rb") as b:
                 self.assertEqual(a.read(), b.read(), name)

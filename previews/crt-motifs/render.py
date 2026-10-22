@@ -66,6 +66,7 @@ TESTEO = {
     "vitral": ("trinitron", "dragons"),
     # los de shader por punto/aro, sólo para el banco de costo y el diff (tanda shaders 2026-10-19)
     "tunnel": ("trinitron", "ado"),
+    "stars": ("trinitron", "ado"),
     "dunes": ("trinitron", "bone"),
     "ocean": ("trinitron", "ado"),
     "pond": ("trinitron", "vapor"),

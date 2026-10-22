@@ -808,55 +808,17 @@ Item {
     Component {
         id: starsC
 
-        Item {
-            id: stars
-            anchors.fill: parent
-
-            // el salto al hiperespacio: entra y sale con rampa, nunca de golpe
-            property real warp: motif.drop ? 1 : 0
-            Behavior on warp { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
-            // en la calma casi se paran: un cielo que se arrastra es lo que hace
-            // que después el drop se sienta
-            readonly property real speed: (motif.level < 0.12 && !motif.drop
-                ? 0.04 : 0.22 + 0.5 * motif.level) * motif.drive * (1 + 3 * stars.warp)
-
-            property real travel: 0
-            FrameAnimation {
-                running: stars.visible && motif.spinning
-                onTriggered: stars.travel += frameTime * stars.speed * motif.rate
-            }
-
-            // T4.3b: eran 46 y en la cara clara del tubo se leían como cuatro
-            // puntos. La densidad y el brillo son lo que hace que un campo de
-            // estrellas sea un campo: 46 puntos repartidos por fase dejan la
-            // mitad cerca del centro, donde casi no se ven.
-            readonly property int count: 110
-
-            Repeater {
-                model: stars.visible ? stars.count : 0
-
-                Rectangle {
-                    required property int index
-                    readonly property real ang: index * 2.399963      // ángulo áureo: reparte parejo
-                    readonly property real phase: (stars.travel + index / stars.count) % 1
-                    // llegan hasta el borde: con 0.75 el campo terminaba antes
-                    // que la pantalla y quedaba un marco vacío alrededor
-                    readonly property real dist: phase * motif.span * 1.05
-                    x: stars.width / 2 + Math.cos(ang) * dist - width / 2
-                    y: stars.height / 2 + Math.sin(ang) * dist - height / 2
-                    // la estela: en el hiperespacio el punto deja de ser un punto
-                    width: Math.max(3, motif.span * 0.009 + dist * 0.03 * (1 + 4 * stars.warp))
-                    height: Math.max(3, motif.span * 0.008)
-                    radius: height / 2
-                    rotation: ang * 180 / Math.PI
-                    color: index % 7 === 0 ? motif.hot
-                        : Qt.tint(motif.colour, Qt.rgba(motif.hot.r, motif.hot.g,
-                                                        motif.hot.b, 0.75 * stars.warp))
-                    // el piso de brillo: una estrella que nace invisible y
-                    // tarda media pantalla en aparecer no es una estrella
-                    opacity: Math.min(1, 0.30 + phase * 1.1) * (1 - 0.35 * phase * phase)
-                }
-            }
+        Stars {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
+            colour: motif.colour
+            hot: motif.hot
+            level: motif.level
+            drive: motif.drive
+            rate: motif.rate
+            drop: motif.drop
+            running: motif.spinning
         }
     }
 
@@ -1281,6 +1243,9 @@ Item {
         id: tunnelC
 
         Tunnel {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
             colour: motif.colour
             rate: motif.rate
             hot: motif.hot

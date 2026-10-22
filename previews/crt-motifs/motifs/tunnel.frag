@@ -127,6 +127,9 @@ layout(std140, binding = 0) uniform buf {
     vec2 res;
     vec3 ink;
     vec3 hot;
+    vec4 win;       // WALL: this screen's window on the shared canvas, px (no wall: 0, 0, res)
+    vec2 foc;       // WALL: the vanishing point, canvas px (no wall: the middle of the screen)
+    float spn;      // WALL: the short side that measures the rings (no wall: min(res))
 };
 
 // Past this depth the bend stops winding: beyond it the whole far end shares
@@ -261,11 +264,16 @@ float ign(vec2 p) {
 }
 
 void main() {
-    vec2 uv = qt_TexCoord0;
     // normalised by the SHORT side: the short edge runs -0.5..0.5 and the long
-    // one overflows, so the same ring is the same size on every screen
-    float minres = max(min(res.x, res.y), 1.0);
-    vec2 q = (uv - 0.5) * (res / minres);
+    // one overflows, so the same ring is the same size on every screen.
+    // WALL (docs/PARED.md): the point is read off the shared canvas and the vanishing
+    // point is the focus (the screen with the lyric), so the screens are one tunnel seen
+    // from the inside. On one screen win = (0, 0, res), foc = res / 2, spn = min(res):
+    // exactly (uv - 0.5) * res / min(res).
+    float spnx = max(spn, 1.0);
+    vec2 q = (win.xy + qt_TexCoord0 * win.zw - foc) / spnx;
+    // one pixel, in q units (1 / min(res) on one screen)
+    float pxq = win.z / max(res.x, 1.0) / spnx;
 
     // 1/r is the depth. Never divide by nothing: at the exact centre that is a
     // NaN, and a NaN is a hole punched in the picture.
@@ -304,8 +312,8 @@ void main() {
     // The pixel footprint in world units (a brick is 1 deep, BW wide): radially
     // one pixel is `dz²/2` of a course over the short side, round the tube it is
     // `dz` of a brick width. The larger of the two is the filter.
-    float fpR = dz * dz * 0.5 / minres;
-    float fpC = dz / minres;
+    float fpR = dz * dz * 0.5 * pxq;
+    float fpC = dz * pxq;
     float wp = max(fpR, fpC);
     // the corner light: which way this side of the wall turns toward the top
     // left of the screen. The tangent is perpendicular to the radius.

@@ -88,14 +88,15 @@ Rectangle {
                             it.colour = Qt.binding(() => pared.pal.ink);
                             if ("hot" in it) it.hot = Qt.binding(() => pared.pal.hot);
                             if ("bg" in it) it.bg = Qt.binding(() => pared.pal.bg);
-                            it.seed = 0.37;
+                            if ("seed" in it) it.seed = 0.37;
                             it.wallCam = Qt.binding(() => Qt.vector4d(pared.zoom, pared.camS, pared.foco.x, pared.foco.y));
                             it.wall = {
                                 x: slot.r.x - pared.cv.x, y: slot.r.y - pared.cv.y,
                                 cw: pared.cv.w, ch: pared.cv.h, span: pared.cv.span,
                                 px: pared.pv.x - pared.cv.x, py: pared.pv.y - pared.cv.y,
-                                ox: slot.o.x, oy: slot.o.y, epoch: 0, share: pared.share
+                                ox: slot.o.x, oy: slot.o.y, epoch: 0, share: pared.share, now: () => pared.t
                             };
+                            if ("wallT" in it) it.wallT = Qt.binding(() => pared.t);
                         }
                     }
                 }

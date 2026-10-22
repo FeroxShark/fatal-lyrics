@@ -3646,7 +3646,7 @@ ShellRoot {
     // letra como mundo que nadie ve. El reparto vive en `crtMotifRefresh` (`crtWallSettle`);
     // acá, lo que comparten: el lienzo, el tipo, la semilla, el reloj, el estado y el foco.
     property bool crtWall: true
-    readonly property var motifWall: ["truchet", "mystify", "pipes", "dunes", "ocean", "pond"]
+    readonly property var motifWall: ["truchet", "mystify", "pipes", "dunes", "ocean", "pond", "stars", "tunnel"]
     readonly property var crtWallCanvas: Wall.canvas(activeCrtScreens.map(
         s => ({ x: s.x, y: s.y, w: s.width, h: s.height })))
     // las pantallas que muestran el dibujo de pared ahora (el del sorteo, o el forzado de

@@ -19,9 +19,15 @@
 // La curva slithera con un reloj aparte (`ct`), que corre aunque el tema esté
 // callado: si dependiera sólo de la distancia, en el silencio el túnel quedaría
 // clavado y se leería como un dibujo pintado en el vidrio.
+//
+// PARED (`docs/PARED.md`): con lienzo común el túnel es UNO que cruza las pantallas, visto desde
+// adentro: el punto de fuga es el foco (la pantalla de la letra, o el medio del lienzo) y cada
+// pantalla dibuja su ventana (`wallPx`). Lo que acumula el túnel (distancia, reloj, giro, la luz
+// que corre) vive entonces en `wall.share.tun`: la primera instancia que corre en un cuadro lo
+// avanza y las demás lo leen. Una sola pantalla: todo como siempre.
 import QtQuick
 
-Item {
+WallItem {
     id: tube
 
     property color colour: "#4fe8ff"
@@ -30,7 +36,7 @@ Item {
     property real stepMin: 1 / 60
     property real pending: 0
     property real level: 0.35
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { enabled: !tube.wallExternal; NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
     // Cuánto se dobla, en RADIOS DE TUBO: cuánto se aparta el eje del túnel de
     // la línea de la vista. En pantalla eso vale una fracción del radio de cada
     // anillo (`c = r·C/2`), así que la boca no se corre y el fondo sí. Tiene
@@ -38,7 +44,7 @@ Item {
     // salen garras encima de los anillos del medio.
     property real bend: 0.45
     property real pitch: 0.5          // el registro: la torsión
-    Behavior on pitch { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+    Behavior on pitch { enabled: !tube.wallExternal; NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
     property bool drop: false
     property real seed: 0
     property real dim: 1.0
@@ -58,7 +64,7 @@ Item {
     // si no llega ninguno de los dos, de un período fijo — un túnel sin luz que
     // corra es un dibujo quieto.
     property real low: 0.4
-    Behavior on low { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on low { enabled: !tube.wallExternal; NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
     property int beat: 0
     property int tick: 0
     property bool bpmLive: false
@@ -74,15 +80,33 @@ Item {
     // está corriendo. Dos luces con 100 ms de diferencia son dos eventos, y por
     // pantalla va uno.
     onKickChanged: {
-        if (lightAmt > 0.15)
+        if (wallShared) {
+            // en pared el empujón de 0,25 no existe: dura un cuadro, y cada pantalla se lo
+            // sumaría a su copia. Si la luz ya corre, el golpe no planta otra.
+            if (wallLightAmt() <= 0.15)
+                lightRun(0.85);
+            wallLightSync();
+        } else if (lightAmt > 0.15) {
             lightAmt = Math.min(1.0, lightAmt + 0.25);
-        else
+        } else {
             lightRun(0.85);
+        }
     }
 
     function lightRun(gain) {
         if (!running || !visible)
             return;
+        if (wallShared) {
+            // UNA luz para toda la pared: el primero que llega la planta y las demás pantallas,
+            // que reciben el mismo tiempo en el mismo cuadro, la ven ya plantada
+            const T = wallState(), t = wallNow();
+            if (t - T.lightAt >= 0.14) {
+                T.lightAt = t;
+                T.lightPeak = Math.min(1.0, gain * (0.45 + 0.9 * Math.max(0, low - 0.30)));
+            }
+            wallLightSync();
+            return;
+        }
         var now = Date.now();
         if (now - lastLightAt < 140)
             return;
@@ -116,8 +140,14 @@ Item {
     Timer {
         interval: 1400
         repeat: true
-        running: tube.running && tube.visible
-        onTriggered: if (Date.now() - tube.lastLightAt > 1300) tube.lightRun(0.7)
+        running: tube.running && tube.visible && !tube.wallExternal
+        onTriggered: {
+            if (tube.wallShared) {
+                if (tube.wallNow() - tube.wallState().lightAt > 1.3) tube.lightRun(0.7);
+            } else if (Date.now() - tube.lastLightAt > 1300) {
+                tube.lightRun(0.7);
+            }
+        }
     }
 
     // distancia viajada (anillos), los segundos pelados para la deriva de la
@@ -142,7 +172,14 @@ Item {
     // filtro que nunca llega.
     property real rush: 1
     property real blur: 0
-    onDropChanged: rushAnim.restart()
+    onDropChanged: {
+        if (wallExternal) {
+            rush = drop ? 2.4 : 1.0;
+            blur = drop ? 1.0 : 0.0;
+        } else {
+            rushAnim.restart();
+        }
+    }
     ParallelAnimation {
         id: rushAnim
         NumberAnimation {
@@ -156,9 +193,52 @@ Item {
             duration: 520; easing.type: Easing.OutExpo
         }
     }
+    // ---- PARED: el estado que acumula el túnel, compartido
+    function wallState() {
+        const S = wall.share;
+        if (!S.tun)
+            S.tun = { at: wallNow(), travel: 0, clock: 0, roll: 0, lightAt: -1e9, lightPeak: 0.6 };
+        return S.tun;
+    }
+    // cuánta luz queda (la misma curva que `lightRunAnim`: InQuad de pico a 0 en 900 ms)
+    function wallLightAmt() {
+        const T = wallState(), p = Math.min(1, Math.max(0, (wallNow() - T.lightAt) / 0.9));
+        return T.lightAt < -1e8 ? 0 : T.lightPeak * (1 - p * p);
+    }
+    function wallStep() {
+        const T = wallState(), now = wallNow();
+        let dt = now - T.at;
+        if (dt >= tube.stepMin - 0.001) {
+            // pausa o pantalla dormida: no teletransporta (la distancia se ACUMULA)
+            dt = Math.min(dt, 0.25);
+            const speed = 0.78 * (1 + 0.06 * (tube.level - 0.4)) * tube.rush;
+            T.travel += dt * speed * tube.rate;
+            T.clock += dt;
+            T.roll += dt * tube.rate * (0.012 + 0.055 * (tube.pitch - 0.5));
+            T.at = now;
+        }
+        tube.travel = T.travel;
+        tube.clock = T.clock;
+        tube.roll = T.roll;
+        wallLightSync();
+    }
+    // la luz, de la misma forma que `lightRunAnim`: OutQuad de 0,5 a 13 y InQuad de pico a 0.
+    // Cada pantalla la recalcula al plantarse (el orden de las señales entre instancias no
+    // puede dejar a una con la luz de un cuadro atrás).
+    function wallLightSync() {
+        const T = wallState(), p = Math.min(1, Math.max(0, (wallNow() - T.lightAt) / 0.9)), planted = T.lightAt > -1e8;
+        tube.lightAhead = planted ? 0.5 + 12.5 * (1 - (1 - p) * (1 - p)) : 0;
+        tube.lightAmt = planted ? T.lightPeak * (1 - p * p) : 0;
+    }
+
+    onWallTChanged: if (wallExternal && wallShared && running) wallStep()
     FrameAnimation {
-        running: tube.running && tube.visible
+        running: tube.running && tube.visible && !tube.wallExternal
         onTriggered: {
+            if (tube.wallShared) {
+                tube.wallStep();
+                return;
+            }
             // T4.3: el techo de cuadros. La velocidad se ACUMULA (la distancia
             // recorrida es del túnel, no `reloj * velocidad`), así que juntar
             // dos cuadros en uno no lo teletransporta: recorre lo mismo.
@@ -201,6 +281,9 @@ Item {
         property real lightDepth: tube.travel + tube.lightAhead
         property real lightAmt: tube.lightAmt
         property real dim: tube.dim
+        property vector4d win: tube.wallPx
+        property variant foc: tube.wallFocus
+        property real spn: tube.span
         property variant res: Qt.vector2d(Math.max(width, 1), Math.max(height, 1))
         property variant ink: Qt.vector3d(tube.colour.r, tube.colour.g, tube.colour.b)
         property variant hot: Qt.vector3d(tube.hot.r, tube.hot.g, tube.hot.b)

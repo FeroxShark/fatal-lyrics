@@ -10,6 +10,9 @@
 //   · densidad (`dens`) — giran más casillas por tiempo.
 // La red se desliza sola (`drift`, acumulada): nunca queda quieta.
 //
+// PARED (`docs/PARED.md`): con lienzo común la red es UNA sola que cruza las pantallas (`wallView`)
+// y las ondas del bombo salen del foco de la pared.
+//
 // Costo: UN ShaderEffect de pantalla completa, UNA casilla por píxel (sin vecinos, sin texturas).
 import QtQuick
 import "../Ease.js" as E
@@ -28,7 +31,6 @@ ThumpBase {
         property vector4d hitSeed: m.hitSeed
         property vector4d phys: m.physV
         property real physN: m.physN
-        property variant res: Qt.vector2d(width, height)
         property real drift: m.drift
         property real dens: m.dens
         property real fizz: m.fizz
@@ -39,6 +41,10 @@ ThumpBase {
         property real dropAmt: m.dropAmt
         // fija: cambiarla en vivo desplazaría toda la red
         property real cells: 8
+        property vector4d view: m.wallView
+        property variant foc: Qt.vector2d((m.wallFocus.x - m.wallArea.x / 2) / m.span,
+                                            (m.wallFocus.y - m.wallArea.y / 2) / m.span)
+        property real wallK: m.walled ? 1 : 0
         fragmentShader: Qt.resolvedUrl("truchet.frag.qsb")
     }
 }

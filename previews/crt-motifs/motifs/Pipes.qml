@@ -31,6 +31,11 @@
 // lo lejano hacia el fondo. Abajo, una grilla de piso (muy tenue) da la
 // profundidad que le faltaba al negro.
 //
+// PARED (`docs/PARED.md`): con lienzo común la grilla toma la forma del lienzo (7 casillas por
+// lado corto de pantalla, como sola), nacen más caños por frase, todo se proyecta en px de
+// lienzo y cada pantalla corta su ventana (`wallWin`): lo que cae afuera no se arma. El aro del
+// piso sale debajo del foco.
+//
 // Costo en el overlay: un `MShape` con 5 capas × (4 paletas × 5 tonos + 11) +
 // el piso; sólo cambia la geometría por cuadro. Dos caños comparten paleta
 // (k y k+4): el estilo es de la paleta, no del caño.
@@ -43,13 +48,17 @@ ThumpBase {
 
     readonly property int steps: 4            // tramos por tiempo
     readonly property int beatsPerPipe: 8
-    readonly property var dims: portrait ? [7, 12, 6] : [12, 7, 6]
+    readonly property var dims: walled
+        ? [E.clamp(Math.round(7 * wallArea.x / span), 5, 30), E.clamp(Math.round(7 * wallArea.y / span), 5, 30), 6]
+        : portrait ? [7, 12, 6] : [12, 7, 6]
+    // caños que nacen por frase: 2 en una pantalla, más en una grilla de pared más grande
+    readonly property int perPhrase: walled ? E.clamp(Math.round(dims[0] * dims[1] / 42), 2, 6) : 2
     // la posición dentro del loop, en tiempos (0..32)
     readonly property real q: E.wrap(beatN, 32) + bp
 
     // ---- el recorrido, una vez por semilla ----------------------------------
-    readonly property var pipes: build(seed, dims)
-    function build(sd, d) {
+    readonly property var pipes: build(seed, dims, perPhrase)
+    function build(sd, d, per) {
         let r = Math.floor(sd * 1e6) + 11;
         const rnd = () => { r = (r * 1103515245 + 12345) % 2147483648; return r / 2147483648; };
         const used = {};
@@ -57,7 +66,7 @@ ThumpBase {
         const inside = p => p[0] >= 0 && p[1] >= 0 && p[2] >= 0 && p[0] < d[0] && p[1] < d[1] && p[2] < d[2];
         const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
         const out = [];
-        const n = 32 / beatsPerPipe * 2;
+        const n = 32 / beatsPerPipe * per;
         for (let k = 0; k < n; k++) {
             let p;
             for (let tries = 0; tries < 50; tries++) {
@@ -70,7 +79,7 @@ ThumpBase {
             // el último caño deja libre el último tiempo: es el de la limpieza
             // el segundo de cada frase es la mitad de largo: la pantalla no se
             // tapa entera antes de la limpieza
-            const len = (k % 2 ? beatsPerPipe * steps / 2 : beatsPerPipe * steps) - (k >= n - 2 ? steps : 0);
+            const len = (k % 2 ? beatsPerPipe * steps / 2 : beatsPerPipe * steps) - (k >= n - per ? steps : 0);
             for (let s = 0; s < len; s++) {
                 const opts = [];
                 for (const dd of dirs) {
@@ -87,8 +96,8 @@ ThumpBase {
                 used[key(p)] = true;
                 pts.push(p);
             }
-            // de a dos por frase; el segundo sale medio tiempo después
-            out.push({ pts: pts, born: Math.floor(k / 2) * beatsPerPipe + (k % 2) * 0.5, grp: k % nGrp });
+            // de a `per` por frase (dos en una pantalla), cada uno medio tiempo después del anterior
+            out.push({ pts: pts, born: Math.floor(k / per) * beatsPerPipe + (k % per) * 0.5, grp: k % nGrp });
         }
         return out;
     }
@@ -113,7 +122,7 @@ ThumpBase {
     readonly property real thick: 0.3 + 0.1 * E.hash(seed * 4.3 + 0.9)
     readonly property real orbit: 0.14 + 0.18 * E.hash(seed * 6.7 + 0.5)
     readonly property int slabs: 5
-    readonly property int nPipes: 8
+    readonly property int nPipes: 32 / beatsPerPipe * perPhrase
     readonly property int nGrp: 4                       // paletas de caño
     // grosor relativo de cada tono y cuánto se corre hacia la luz (en diámetros)
     readonly property var tones: [1, 0.88, 0.64, 0.36, 0.13]
@@ -174,11 +183,15 @@ ThumpBase {
         const D = Math.max(d[0], d[1]) * 2.2;
         const zoomC = 1 + 0.05 * Math.sin(ph + 2.1);
         const zoom = Math.round(zoomC * 50) / 50;
-        const f = Math.min(width / d[0], height / d[1]) * D * 0.8 * zoomC;
+        // en px de lienzo y pasado a esta pantalla: p = (p_lienzo - ventana) · kz (sin pared,
+        // ventana = la pantalla y kz = 1). `kz` es el tirón del motivo, que en pared va acá.
+        const win = wallWin, kz = win.w > 0 ? width / win.w : 1;
+        const kzq = walled ? Math.round(kz * 50) / 50 : 1;     // para los grosores: se cuantiza como `zoom`
+        const f = Math.min(wallArea.x / d[0], wallArea.y / d[1]) * D * 0.8 * zoomC * kz;
         // el rebote del bombo: el resorte (sube, se pasa, vuelve) empuja la imagen para abajo
         const kpos = T.sum(phys, clock, hitT, hitA, 0) * kAmp;
         const bounce = span * 0.012 * kpos;
-        const cxS = width / 2, cyS = height * 0.47 + bounce;
+        const cxS = (wallArea.x / 2 - win.x) * kz, cyS = (wallArea.y * 0.47 + bounce - win.y) * kz;
         const proj = (x, y, z) => {
             const x2 = x * cy + z * sy, z2 = -x * sy + z * cy;
             const y2 = y * cp - z2 * sp, z3 = y * sp + z2 * cp;
@@ -198,10 +211,23 @@ ThumpBase {
         const geo = [];
         for (let t = 0; t < fx + slabs * perSlab; t++) geo.push([]);
         const base0 = L => fx + L * perSlab;
-        const fW = f / zoomC * zoom;
+        const fW = f / zoomC * zoom / kz * kzq;
+        // pared: lo que cae fuera de esta pantalla no se arma (los codos sí se anotan: los
+        // destellos los sortean igual en todas las pantallas)
+        const cullM = 3 * f * R / zNear;
+        const off = pts => {
+            if (!walled) return false;
+            let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+            for (const p of pts) {
+                x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
+                y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+            }
+            return x1 < -cullM || y1 < -cullM || x0 > width + cullM || y0 > height + cullM;
+        };
         const W = L => 2 * fW * R / zOf(L);
         // un tono de una capa: la polilínea corrida hacia la luz. `wm` = grosor extra (collares)
         const put = (idx, w, pts, wm) => {
+            if (off(pts)) return;
             for (let j = 0; j < nT; j++) {
                 const sh0 = (1 - tones[j]) * 0.5 * litK * w * wm;
                 const ox = litX * sh0, oy = litY * sh0;
@@ -212,6 +238,7 @@ ThumpBase {
         const COLLAR = nGrp * nT, HOT = (nGrp + 1) * nT, GLINT = (nGrp + 2) * nT;
         // una bocha de radio relativo `rMul` (1 = el del caño): círculos concéntricos corridos hacia la luz
         const ball = (L, g, p, rMul, isHot) => {
+            if (off([p])) return;
             const w = W(L), rb = f * R * rMul / p[2];
             const idx = base0(L) + (isHot ? HOT : g * nT);
             for (let j = 0; j < nT; j++) {
@@ -224,6 +251,8 @@ ThumpBase {
         // ---- el piso: grilla tenue y los aros del bombo ----
         const fy = cy0 + 0.95;
         const gx0 = -cx0 - 2, gx1 = cx0 + 2, gz0 = -cz0 - 2.5, gz1 = cz0 + 2.5;
+        // el aro sale debajo del foco (sin pared, el foco es el medio: x = 0)
+        const rx = E.clamp((wallFocus.x - wallArea.x / 2) * kz * D / f, gx0, gx1);
         for (let x = Math.ceil(gx0 - 0.5); x <= gx1 + 0.5; x++)
             geo[1].push([proj(x, fy, gz0), proj(x, fy, gz1)].map(p => Qt.point(p[0], p[1])));
         for (let z = Math.ceil(gz0 - 0.5); z <= gz1 + 0.5; z++)
@@ -235,7 +264,7 @@ ThumpBase {
             const ring = [];
             for (let k = 0; k <= 48; k++) {
                 const a = k * Math.PI / 24;
-                const p = proj(rr * Math.cos(a) * 1.3, fy, rr * Math.sin(a));
+                const p = proj(rx + rr * Math.cos(a) * 1.3, fy, rr * Math.sin(a));
                 ring.push(Qt.point(p[0], p[1]));
             }
             geo[2 + Math.min(3, Math.floor(age / 0.28))].push(ring);
@@ -370,7 +399,7 @@ ThumpBase {
             colCacheKey = colKey;
             styleKey = "";
         }
-        const wKey = [kq, zoom, width, height].join("|");
+        const wKey = [kq, zoom, kzq, width, height].join("|");
         if (wKey !== styleKey) {
             const cs = colCache, st = [];
             const wL = [];

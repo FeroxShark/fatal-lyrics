@@ -42,7 +42,7 @@ ThumpBase {
         // fija: cambiarla en vivo desplazaría toda la red
         property real cells: 8
         property vector4d view: m.wallView
-        property variant focus: Qt.vector2d((m.wallFocus.x - m.wallArea.x / 2) / m.span,
+        property variant foc: Qt.vector2d((m.wallFocus.x - m.wallArea.x / 2) / m.span,
                                             (m.wallFocus.y - m.wallArea.y / 2) / m.span)
         property real wallK: m.walled ? 1 : 0
         fragmentShader: Qt.resolvedUrl("truchet.frag.qsb")

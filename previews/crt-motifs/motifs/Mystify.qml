@@ -18,6 +18,9 @@
 //     todo llega a 0 exacto (Mystify.js), así el loop del banco cierra
 //   · `drop`: entra un tercer polígono desde el centro, con el snap de Motion
 //
+// PARED (`docs/PARED.md`): con lienzo común los polígonos rebotan contra el borde de la PARED
+// y cada pantalla muestra su ventana (`wallPx`); el tercero entra desde el foco.
+//
 // El dibujo vive en `mystify.frag` (por píxel, analítico); acá sólo se reparten
 // los vértices y los números del cuadro.
 // Costo en el overlay: UN ShaderEffect de pantalla completa. Cero geometría por
@@ -40,7 +43,14 @@ MotifBase {
     // rebotes por loop de cada vértice [x, y], y su arranque
     // (no se llama `rate`: esa es la propiedad del ritmo que hereda de MotifBase, y un
     // método del hijo la PISA — `base.rate` leería la función y el ritmo daría NaN)
-    function bounces(p, v, axis) { return 2 + Math.floor(E.hash(p * 13.1 + v * 3.7 + axis * 1.9 + seed) * 4); }
+    function bounces(p, v, axis) {
+        const b = 2 + Math.floor(E.hash(p * 13.1 + v * 3.7 + axis * 1.9 + seed) * 4);
+        return walled ? Math.max(1, Math.round(b * (axis === 0 ? wallKx : wallKy))) : b;
+    }
+    // pared: en el eje largo del lienzo, menos rebotes (enteros: el loop sigue cerrando), así un
+    // vértice no cruza la pared al doble de velocidad que una pantalla sola
+    readonly property real wallKx: Math.min(1, 1.8 * span / wallArea.x)
+    readonly property real wallKy: Math.min(1, 1.8 * span / wallArea.y)
     function start(p, v, axis) { return E.hash(p * 7.3 + v * 11.9 + axis * 5.1 + seed * 3); }
 
     // Las 4 columnas de una matriz = 4 vértices; fila = (rebotes x, rebotes y, arranque x,
@@ -106,7 +116,9 @@ MotifBase {
         property variant c1: m.verts(2, 4)
         property color ink: m.colour
         property color hot: m.hot
-        property variant res: Qt.vector2d(width, height)
+        property variant res: m.wallArea
+        property vector4d win: m.wallPx
+        property variant orig: m.wallFocus
         property real lt: m.ltShow
         property real gap: m.gap
         property real echoes: m.echoes

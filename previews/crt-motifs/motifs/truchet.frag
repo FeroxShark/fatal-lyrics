@@ -12,6 +12,9 @@
 //   · densidad (`dens`): giran más casillas por tiempo
 //   · drop (`dropAmt`): los cables frescos se ponen al rojo
 // La red se desliza sola (`drift`) aunque no suene nada.
+// PARED (`docs/PARED.md`): `view` es la ventana de esta pantalla en el lienzo común (en
+// unidades del lado corto, desde el centro del lienzo); con `wallK` las ondas salen del foco
+// (la pantalla de la letra, o el medio del lienzo) y cruzan la pared.
 //
 // Build:  /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' -o truchet.frag.qsb truchet.frag
 
@@ -28,7 +31,6 @@ layout(std140, binding = 0) uniform buf {
     vec4 hitAmp;      // fuerza 0..1
     vec4 hitSeed;     // de dónde sale la onda (0..1)
     vec4 phys;        // (w, wd, zeta·w, 1/rise) del resorte
-    vec2 res;
     float physN;      // normalización a pico 1
     float drift;      // fase acumulada, nunca para
     float dens;       // 0..1
@@ -39,6 +41,9 @@ layout(std140, binding = 0) uniform buf {
     float seed;
     float dropAmt;    // 0..1
     float cells;      // casillas por el lado corto
+    vec4 view;        // uv = view.xy + qt_TexCoord0 · view.zw (sin pared: la pantalla centrada)
+    vec2 foc;         // de dónde salen las ondas en pared (mismas unidades que `uv`)
+    float wallK;      // 1 = pared
 };
 
 float h11(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
@@ -51,7 +56,10 @@ float envl(float age) {
 }
 // la onda del golpe en el punto `p` (unidades de casilla): viaja a ~6 casillas por s
 float wave(vec2 p, float age, float amp, float sd) {
-    vec2 o = vec2(h11(sd * 91.7), h11(sd * 53.3 + 7.0)) * cells * 1.1 - cells * 0.1;
+    vec2 h = vec2(h11(sd * 91.7), h11(sd * 53.3 + 7.0));
+    // pared: cerca del foco (con la red, que se desliza), así la onda cruza las pantallas
+    vec2 o = wallK > 0.5 ? foc * cells + vec2(drift * 0.11, drift * 0.07) + (h - 0.5) * cells * 0.8
+                         : h * cells * 1.1 - cells * 0.1;
     float d = length(p - o);
     float a = age - d / 6.5;
     float band = exp(-a * a * 20.0) * step(-0.3, a);
@@ -59,7 +67,7 @@ float wave(vec2 p, float age, float amp, float sd) {
 }
 
 void main() {
-    vec2 uv = (qt_TexCoord0 - 0.5) * res / min(res.x, res.y);
+    vec2 uv = view.xy + qt_TexCoord0 * view.zw;
     vec2 p = uv * cells + vec2(drift * 0.11, drift * 0.07) + vec2(37.0, 11.0);
     vec2 id = floor(p);
     vec2 f = fract(p) - 0.5;

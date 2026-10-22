@@ -42,7 +42,7 @@ layout(std140, binding = 0) uniform buf {
     float dropAmt;    // 0..1
     float cells;      // casillas por el lado corto
     vec4 view;        // uv = view.xy + qt_TexCoord0 · view.zw (sin pared: la pantalla centrada)
-    vec2 focus;       // de dónde salen las ondas en pared (mismas unidades que `uv`)
+    vec2 foc;         // de dónde salen las ondas en pared (mismas unidades que `uv`)
     float wallK;      // 1 = pared
 };
 
@@ -58,7 +58,7 @@ float envl(float age) {
 float wave(vec2 p, float age, float amp, float sd) {
     vec2 h = vec2(h11(sd * 91.7), h11(sd * 53.3 + 7.0));
     // pared: cerca del foco (con la red, que se desliza), así la onda cruza las pantallas
-    vec2 o = wallK > 0.5 ? focus * cells + vec2(drift * 0.11, drift * 0.07) + (h - 0.5) * cells * 0.8
+    vec2 o = wallK > 0.5 ? foc * cells + vec2(drift * 0.11, drift * 0.07) + (h - 0.5) * cells * 0.8
                          : h * cells * 1.1 - cells * 0.1;
     float d = length(p - o);
     float a = age - d / 6.5;

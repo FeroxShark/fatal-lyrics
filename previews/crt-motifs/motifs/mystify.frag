@@ -31,7 +31,7 @@ layout(std140, binding = 0) uniform buf {
     mat4 c1;
     vec4 ink;
     vec4 hot;
-    vec2 res;         // píxeles
+    vec2 res;         // px del lienzo (sin pared: la pantalla)
     float lt;         // fase del loop (0..15): la integrada de la música, quieta durante un corte seco
     float gap;        // segundos entre ecos
     float echoes;     // cuántos ecos (≤ 24)
@@ -45,6 +45,8 @@ layout(std140, binding = 0) uniform buf {
     float lead1;
     float lead2;
     float hf;         // flujo de agudos 0..1 (con la curva de React.fizz): color a `hot` y brillo del resplandor
+    vec4 win;         // PARED: la ventana de esta pantalla en el lienzo, en px (sin pared: 0, 0, res)
+    vec2 orig;        // de dónde entra el tercer polígono (el foco; sin pared: el medio)
 };
 
 float tri(float u) { return 1.0 - abs(2.0 * fract(u) - 1.0); }
@@ -54,7 +56,7 @@ vec2 vtx(vec4 q, float t, float k) {
     float u = (lt - t) / 15.0;
     vec2 p = vec2(tri(u * q.x + q.z), tri(u * q.y + q.w));
     p = vec2(margin) + p * (res - vec2(2.0 * margin));
-    return mix(res * 0.5, p, k);
+    return mix(orig, p, k);
 }
 
 float seg(vec2 p, vec2 a, vec2 b) {
@@ -111,7 +113,7 @@ vec3 tint(float age, float phase, float lead) {
 }
 
 void main() {
-    vec2 p = qt_TexCoord0 * res;
+    vec2 p = win.xy + qt_TexCoord0 * win.zw;
     vec3 rgb = vec3(0.0);
     float alpha = 0.0;
 

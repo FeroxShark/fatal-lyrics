@@ -266,8 +266,16 @@ PanelWindow {
     property var motifWall: null
     readonly property bool motifWalled: motifWall !== null
     function wallLatch() {
-        motifWall = wallWants ? { epoch: ctl.crtWallEpoch, share: ctl.crtWallShare, seed: ctl.crtWallSeed }
-                              : null;
+        if (!wallWants) {
+            motifWall = null;
+            return;
+        }
+        // la semilla también va en el estado compartido: la que se suma tarde (una pantalla que
+        // se prende, un enchufe) toma la de las que ya están, aunque el root haya resorteado
+        const sh = ctl.crtWallShare;
+        if (sh.seed === undefined)
+            sh.seed = ctl.crtWallSeed;
+        motifWall = { epoch: ctl.crtWallEpoch, share: sh, seed: sh.seed };
     }
     // el mismo dibujo pasa a pared o vuelve a la pantalla sola: también lleva puente
     onWallWantsChanged: {

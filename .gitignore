@@ -7,3 +7,6 @@ __pycache__/
 /docs/plans/
 /docs/demo1.gif
 /docs/demo2-crt.gif
+
+# salidas de render del banco de calidad del CRT
+/previews/crt-calidad/out/

@@ -1424,3 +1424,7 @@ larga (24 s) entre `wild` y `chorus`. Si "no cambia": `grep "crt: faces" qs.log`
 ## QML: la misma clave dos veces en un objeto (2026-10-19)
 
 - **Dos `onNoLyricChanged:` en la raíz de Crt.qml: "Property value set multiple times", el overlay no cargó y los 1002 tests pasaban.** qmllint no lo marca (sólo ve `width: 1; width: 2`, no handlers); lo caza `tests/test_qml_duplicados.py`.
+
+## Bandeja: bucle de recarga de la config (2026-10-21)
+
+- **`Gtk.CheckMenuItem.set_active()` emite "activate", no sólo "toggled".** El `refresh()` de la bandeja dejaba el tilde en el estado real con `set_active`; eso corría el `on_click` (que invierte la perilla), que reescribía el TOML y recargaba la config, que refrescaba la bandeja otra vez: ~700 "config reloaded" por segundo y el TOML alternando `dialogs = true/false`, desde que se tocó `display.dialogs` en Ajustes. Ahora `tray.sync_checks` mueve el tilde con un candado (`syncing`) que enmudece el handler, `set_option` no hace nada si la perilla ya vale eso y `_save_config` no toca el archivo si el texto no cambia. `tests/test_bucle_config.py` usa un ítem que se porta como GTK (el fake de `test_carteles.py` no emitía "activate" y por eso no lo vio).

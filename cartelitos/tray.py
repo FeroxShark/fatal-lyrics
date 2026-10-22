@@ -61,6 +61,32 @@ def icon_name():
     return "dialog-warning"
 
 
+def guarded(on_click, syncing):
+    """El `activate` de un ítem, mudo mientras `syncing[0]` esté en True."""
+    def handler(*_):
+        if not syncing[0]:
+            on_click()
+    return handler
+
+
+def sync_checks(checks, syncing):
+    """Deja cada tilde en el estado REAL (la config puede haber rechazado el
+    click, o cambiar por `fatal carteles` / la ventana de Ajustes).
+
+    GTK3: `CheckMenuItem.set_active` emite "activate" además de "toggled". Sin
+    el candado, mover el tilde corría on_click, que invertía la perilla, que
+    refrescaba la bandeja, que movía el tilde: un bucle de ~700 reescrituras
+    del TOML por segundo (docs/TRAMPAS.md)."""
+    for it, state in checks:
+        want = state()
+        if it.get_active() != want:
+            syncing[0] = True
+            try:
+                it.set_active(want)
+            finally:
+                syncing[0] = False
+
+
 def start_tray():
     """Ícono en la bandeja del sistema mientras el daemon está vivo (StatusNotifierItem
     vía AyatanaAppIndicator3). Opcional: si gtk3/libayatana-appindicator no están
@@ -82,13 +108,14 @@ def start_tray():
     fatal_bin = shutil.which("fatal") or os.path.expanduser("~/.local/bin/fatal")
     labels = []   # [(item, función que devuelve el texto)] para refrescar
     checks = []   # [(item, función que devuelve el estado real)]
+    syncing = [False]   # True mientras refresh() mueve un tilde (ver sync_checks)
 
     def item(menu, label, on_click=None, dynamic=None, checked=None):
         it = Gtk.MenuItem(label=label) if checked is None else Gtk.CheckMenuItem(label=label)
         if checked is not None:
             checks.append((it, checked))
         if on_click:
-            it.connect("activate", lambda *_: on_click())
+            it.connect("activate", guarded(on_click, syncing))
         else:
             it.set_sensitive(False)
         if dynamic:
@@ -136,12 +163,7 @@ def start_tray():
                 new = text()
                 if it.get_label() != new:   # no re-escribir el menú si nada cambió
                     it.set_label(new)
-            for it, state in checks:
-                # el click ya movió el tilde; esto lo deja en el estado REAL
-                # (la config puede haber rechazado el cambio, o cambiar por
-                # `fatal carteles` / la ventana de Ajustes)
-                if it.get_active() != state():
-                    it.set_active(state())
+            sync_checks(checks, syncing)
             return False   # idle_add: una sola pasada
 
         # el tubo también se prende con la tecla (Hyprland, sin pasar por la bandeja):

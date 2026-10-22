@@ -629,7 +629,8 @@ def _save_config(changes):
     un `scale` suelto en otra sección no se toca. Si no estaba, la agrega al
     final de la suya (o crea la sección)."""
     with open(CONFIG_PATH) as f:
-        lines = f.read().split("\n")
+        original = f.read()
+    lines = original.split("\n")
     section = None
     pending = dict(changes)
     key_re = re.compile(r"^(\s*)([a-z_]+)(\s*=\s*)([^#]*?)(\s*#.*)?$")
@@ -653,12 +654,19 @@ def _save_config(changes):
             lines.insert(end, f"{key} = {_toml_val(val)}")
         else:
             lines += [f"[{sec}]", f"{key} = {_toml_val(val)}", ""]
+    text = "\n".join(lines)
+    if text == original:
+        return False   # mismo contenido: tocar el mtime despierta a watch_config para nada
     with open(CONFIG_PATH, "w") as f:
-        f.write("\n".join(lines))
+        f.write(text)
+    return True
 
 
 def set_option(key, section, value):
     """Escribe una clave y la aplica ya. Mismo camino que el menú y que editar el
-    TOML a mano: se escribe el archivo y se relee."""
+    TOML a mano: se escribe el archivo y se relee. Si la perilla ya vale eso no
+    hace nada (ni escribe, ni recarga, ni avisa)."""
+    if CFG[section][key] == value:
+        return
     _save_config({key: (section, value)})
     apply_config()

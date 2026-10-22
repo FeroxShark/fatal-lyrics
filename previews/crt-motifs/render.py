@@ -56,6 +56,10 @@ TESTEO = {
     "membrana": ("trinitron", "ado"),
     "cintas": ("arcade", "bloodline"),
     "giroscopio": ("pvm", "dragons"),
+    # 2026-10-22: tres animaciones Win95 (ya están en el sorteo; se renderizan de a una)
+    "cascada": ("trinitron", "ado"),
+    "estela": ("arcade", "vapor"),
+    "pixelsort": ("pvm", "bloodline"),
     # los de shader por punto/aro, sólo para el banco de costo y el diff (tanda shaders 2026-10-19)
     "dunes": ("trinitron", "bone"),
     "ocean": ("trinitron", "ado"),

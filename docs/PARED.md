@@ -1,4 +1,4 @@
-# La PARED de motivos (fase 1, 2026-10-22)
+# La PARED de motivos (fases 1 y 2, 2026-10-22)
 
 Pedido de Ferox: en el CRT, cuando no hay letra (instrumental) o la letra ocupa una pantalla, las
 demás no repiten cada una su dibujo: lo extienden entre pantallas como UN lienzo continuo. Con la
@@ -32,7 +32,7 @@ letra en el medio tiene que verse armónico. Una pantalla sola: nada cambia. Per
   glitch (`motifBridge`), nunca a mitad de un dibujo. `fatal crt motif <kind> --screen all` con un
   kind de pared muestra la pared.
 
-## Los tres motivos de esta fase
+## Los motivos de la fase 1
 
 - **truchet**: el shader recibe `view` (ventana en unidades de `span`), `foc` (el foco) y `wallK`;
   las ondas salen del foco (la letra) en vez de una esquina al azar.
@@ -40,6 +40,28 @@ letra en el medio tiene que verse armónico. Una pantalla sola: nada cambia. Per
   del lienzo (`wallKx/Ky`) para que el polígono cruce la pared a la misma velocidad aparente.
 - **pipes**: la grilla 3D crece con el lienzo (5..30 celdas por eje), más caños por frase, y el
   aro sale del foco. Los caños fuera de la ventana no se dibujan.
+
+## Los motivos de la fase 2 (dunes, ocean, pond)
+
+Los tres llevan reloj propio y no heredan de `MotifBase`: heredan de `shell/WallBase.qml`, que les
+da lo mismo en chico (`wall`, `wallCam`, `tubeClock`, `seed`, `wallView`/`wallCfg`, `wallFocusU`,
+`wallTime(rate)`, `wallHash(n)`, `wallStamp(n, now)`). Sin `wall` no se usa nada: `wcfg.x = 0` y
+el shader sigue la misma cuenta de antes (`S = res.y`, `yy = uv.y`).
+
+- **Reloj**: con `tubeClock >= 0` el reloj de las tres instancias es UNO (`wallTime`, acumulado
+  en `wall.share`); el banco (`tubeClock -1`) se lo pasa de afuera y el FrameAnimation no corre.
+- **Azar**: pisotones y piedras salen de `wallHash(beat)` (semilla de la pared), no de
+  `Math.random`; `wallStamp` fija el instante del golpe para todas y `slot = beat & 1`. El x del
+  pisotón se reparte por el ancho del lienzo.
+- **dunes / ocean**: UNA cámara en perspectiva para todo el lienzo: el horizonte es una sola raya
+  (30 % / 34 % del alto del lienzo), la unidad es `span` y cada pantalla dibuja su ventana
+  (`view`). DP-1 queda con su horizonte en el borde de arriba: es lo que pasa si el lienzo es UNO.
+- **pond**: el agua es una sola; la retícula queda anclada al lienzo y los anillos salen del foco
+  (la pantalla con la letra, o el medio): `fo` y `R = wallReach` (la esquina más lejana).
+- Uniforms nuevos (`view`, `wcfg`, `fo`) al FINAL del bloque std140; `.qsb` recompilados.
+- **Banco**: `sync-shell.sh` pone en 0 las duraciones de los `Behavior` y de `liftAnim` de estos
+  tres en las copias (si no, cada instancia anima en tiempo real y la comparación no es
+  cuadro a cuadro: una diferencia de ~1 px que crecía hacia abajo era la arena levitando).
 
 ## Hacer un motif extensible (receta)
 
@@ -71,10 +93,15 @@ Resultado 2026-10-22 (media por pantalla 0..255, recorte contra la referencia): 
 (3-truchet, 3-pipes, 3i-mystify, 2-pipes) el dibujo sigue de una pantalla a la otra. Pantalla
 sola contra `3e63bbf` (apaisada y vertical): media 0,0.
 
+Fase 2 (dunes, ocean, pond): sin cámara, peor 0,01 en los 4 layouts; con `--cam 1.06 --zoom 1.04`,
+peor 0,17. Pantalla sola: el camino sin pared del shader es idéntico por construcción (el diff del
+shader sólo agrega ramas con `wcfg.x`); `render.py` no sirve para compararlo a píxel porque los
+pisotones y piedras de una pantalla sola salen de `Math.random` y el reloj de tiempo real.
+
 ## Supuestos (fase 1) y lo que sigue
 
 - El mundo sigue por detrás de la pantalla de la letra (no se re-encuadra el lienzo sin ella).
 - Una cámara con `camS` distinta por pantalla no se corrige: la pared se ve continua cuando todas
   laten igual (el golpe ya es de pared). DP-1 participa.
-- Fase 2: más motifs extensibles (dunes, ocean, pond, stars, tunnel son los candidatos naturales),
-  verlo con música real en el equipo, y decidir si el sorteo debería preferir la pared.
+- Fase 3: más motifs extensibles (stars, tunnel son los candidatos naturales), verlo con música
+  real en el equipo, y decidir si el sorteo debería preferir la pared.

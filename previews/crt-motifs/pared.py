@@ -92,7 +92,7 @@ def check(times, cam, zoom):
                 cmd = [sys.executable, __file__, layout, kind, "--stills", ",".join(map(str, times)),
                        "--cam", str(cam), "--zoom", str(zoom)] + (["--ref"] if ref else [])
                 r = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, LC_ALL="C"))
-                errs = [ln for ln in r.stderr.splitlines() if "qml:" in ln or "Error" in ln]
+                errs = [ln for ln in r.stderr.splitlines() if ("qml:" in ln or "Error" in ln) and "locale" not in ln]
                 if r.returncode != 0 or errs:
                     print(f"{layout} {kind} ref={ref}: rc={r.returncode}\n  " + "\n  ".join(errs[:8]))
             for t in times:

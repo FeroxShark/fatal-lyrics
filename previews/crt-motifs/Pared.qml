@@ -56,10 +56,11 @@ Rectangle {
                                                : pared.rects[index]
             readonly property bool isText: !pared.ref && index === pared.textIdx
             readonly property var o: Wall.local(r, pared.pv)
-            x: Math.round((r.x - pared.cv.x) * pared.sc)
-            y: Math.round((r.y - pared.cv.y) * pared.sc)
-            width: Math.round(r.w * pared.sc)
-            height: Math.round(r.h * pared.sc)
+            // sin redondear: la referencia cae en el mismo medio píxel que la pantalla
+            x: (r.x - pared.cv.x) * pared.sc
+            y: (r.y - pared.cv.y) * pared.sc
+            width: r.w * pared.sc
+            height: r.h * pared.sc
             clip: true
             Item {
                 width: slot.r.w

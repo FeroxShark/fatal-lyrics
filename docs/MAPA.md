@@ -76,9 +76,14 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   scheme y fuente, de una semilla atada a `crtTrackSeed`. Los DIBUJOS no salen del set:
   `crtMotifDraw` sortea con dados cargados por lo que suena. `crt.set = "off"` vuelve al sorteo
   plano. Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
-- `crtFontPools` (`shell.qml`) — mazo de fuentes por familia de entrada, elegido con el mismo dado
-  que la fuente del set (sin Press Start 2P, no le gustaba): plex, space, chakra, syne, vt323,
-  share, system — créditos: `shell/fonts/LICENSE-*.txt`.
+- `crtFontPools` + `crtFontTraits` + `crtFontPick` (`shell.qml`) — mazo de fuentes por familia de
+  entrada, sorteado con el mismo dado que la fuente del set pero PONDERADO: peso base × cercanía del
+  mood (energía/valencia) a la `e`/`v` de cada fuente (sin Press Start 2P, no le gustaba). Quince:
+  plex, space, chakra, syne, vt323, share, departure, anon, b612, sarpanch, wallpoet, nova, xanh,
+  glitch (raro, `w` .4), system; `crtFontBold` dice cuáles van en Bold real. Perilla nueva = fila en
+  `crtFontTraits`. Créditos: `shell/fonts/LICENSE-*.txt`. Banco con el vidrio real:
+  `previews/fuentes-crt/render.py` (lee los FontLoader de `shell.qml`; muestras en
+  `docs/tanda8-estado/fuentes-crt/`).
 - `shell/Faces.js` + `crt.face_mode` — tres caras por paleta, la sección las reparte. TRAMPAS: "Tres caras".
 - `cartelitos/mood.py` — `mood_for(lines, profile_summary, bpm)`: valence/energy/bright/contrast
   determinísticos, sin red ni IA (`feedback_ia_sin_creditos`). El daemon lo manda por el socket

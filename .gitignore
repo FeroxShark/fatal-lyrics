@@ -10,3 +10,6 @@ __pycache__/
 
 # salidas de render del banco de calidad del CRT
 /previews/crt-calidad/out/
+
+# salidas de render del banco de fuentes del CRT (las muestras buenas van a docs/tanda8-estado/fuentes-crt/)
+/previews/fuentes-crt/out/

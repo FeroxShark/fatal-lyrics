@@ -2642,9 +2642,24 @@ ShellRoot {
     FontLoader { id: fontChakra; source: Qt.resolvedUrl("fonts/ChakraPetch-Bold.ttf") }
     FontLoader { id: fontSyne; source: Qt.resolvedUrl("fonts/SyneMono-Regular.ttf") }
     FontLoader { id: fontDot; source: Qt.resolvedUrl("fonts/DotGothic16-Regular.ttf") }
+    // tanda fuentes 2: ocho más (OFL, `shell/fonts/LICENSE-*.txt`). Departure Mono es
+    // un pixel mono fino y limpio (nada de bloques: Ferox descartó Press Start); el
+    // resto de época o de tubo: terminal clásico, cabina, sci-fi, una máquina de
+    // escribir seria, y el único display con glitch propio.
+    FontLoader { id: fontDeparture; source: Qt.resolvedUrl("fonts/DepartureMono-Regular.otf") }
+    FontLoader { id: fontAnon; source: Qt.resolvedUrl("fonts/AnonymousPro-Bold.ttf") }
+    FontLoader { id: fontB612; source: Qt.resolvedUrl("fonts/B612Mono-Bold.ttf") }
+    FontLoader { id: fontSarpanch; source: Qt.resolvedUrl("fonts/Sarpanch-Bold.ttf") }
+    FontLoader { id: fontWallpoet; source: Qt.resolvedUrl("fonts/Wallpoet-Regular.ttf") }
+    FontLoader { id: fontNova; source: Qt.resolvedUrl("fonts/NovaMono-Regular.ttf") }
+    FontLoader { id: fontXanh; source: Qt.resolvedUrl("fonts/XanhMono-Regular.ttf") }
+    FontLoader { id: fontGlitch; source: Qt.resolvedUrl("fonts/RubikGlitch-Regular.ttf") }
     readonly property var crtFontFamilies: ({
         vt323: fontVt323.name, share: fontShare.name, plex: fontPlex.name,
         space: fontSpace.name, chakra: fontChakra.name, syne: fontSyne.name,
+        departure: fontDeparture.name, anon: fontAnon.name, b612: fontB612.name,
+        sarpanch: fontSarpanch.name, wallpoet: fontWallpoet.name, nova: fontNova.name,
+        xanh: fontXanh.name, glitch: fontGlitch.name,
         dot: fontDot.name, system: "",
     })
     // Qué fuentes puede sacar `crtSetFor` según la familia de entradas del
@@ -2653,19 +2668,43 @@ ShellRoot {
     // `crtFontFamilies` salvo "dot" está en al menos un mazo; "dot" no entra
     // nunca, es sólo el camino de CJK (`crtFontFor`), no una elección del set.
     readonly property var crtFontPools: ({
-        typed: ["vt323", "plex", "share"],
-        hard:  ["chakra", "space", "system"],
-        burn:  ["space", "vt323", "chakra"],
-        soft:  ["syne", "share", "plex", "system"],
+        typed: ["vt323", "plex", "share", "departure", "anon"],
+        hard:  ["chakra", "space", "system", "sarpanch", "wallpoet", "b612"],
+        burn:  ["space", "vt323", "chakra", "departure", "sarpanch", "wallpoet", "glitch"],
+        soft:  ["syne", "share", "plex", "system", "xanh", "nova", "anon", "b612"],
     })
-    // ¿La letra va en `bold`? Sólo donde hay archivo Bold (Plex, Space, Chakra) o
+    // Carácter de cada fuente, para que el sorteo del mazo NO sea parejo
+    // (`crtFontPick`): e = energía del tema donde se luce (0 calmo .. 1 agitado),
+    // v = valencia (-1 oscuro .. 1 luminoso), w = peso base (lo raro pesa poco:
+    // `glitch` ya es un efecto en sí, `system` es lo que sea que tenga el equipo).
+    // Una fuente que no está acá pesa como e .5 / v 0 / w 1.
+    readonly property var crtFontTraits: ({
+        vt323:     { e: 0.40, v:  0.00, w: 1.0 },
+        share:     { e: 0.35, v:  0.00, w: 1.0 },
+        plex:      { e: 0.50, v:  0.10, w: 1.0 },
+        space:     { e: 0.75, v:  0.00, w: 1.0 },
+        chakra:    { e: 0.80, v: -0.20, w: 1.0 },
+        syne:      { e: 0.25, v: -0.10, w: 1.0 },
+        departure: { e: 0.55, v:  0.20, w: 1.0 },
+        anon:      { e: 0.30, v: -0.10, w: 1.0 },
+        b612:      { e: 0.55, v:  0.30, w: 1.0 },
+        sarpanch:  { e: 0.85, v: -0.30, w: 1.0 },
+        wallpoet:  { e: 0.90, v: -0.20, w: 0.7 },
+        nova:      { e: 0.30, v:  0.40, w: 1.0 },
+        xanh:      { e: 0.15, v: -0.50, w: 1.0 },
+        glitch:    { e: 0.95, v: -0.60, w: 0.4 },
+        system:    { e: 0.50, v:  0.00, w: 0.6 },
+    })
+    // ¿La letra va en `bold`? Sólo donde hay archivo Bold (Plex, Space, Chakra, Anonymous, B612, Sarpanch) o
     // la fuente de sistema: VT323, Share Tech Mono, Syne Mono y DotGothic16 sólo
     // traen Regular, y pedirles `bold` hace que Qt las engorde en sintético (en
     // una fuente pixel corre los trazos y desalinea la grilla). Clave que falta
     // = true (el `override` tipeado por Ferox conserva el peso de siempre).
     readonly property var crtFontBold: ({
         vt323: false, share: false, syne: false, dot: false,
-        plex: true, space: true, chakra: true, system: true,
+        departure: false, wallpoet: false, nova: false, xanh: false, glitch: false,
+        plex: true, space: true, chakra: true, anon: true, b612: true, sarpanch: true,
+        system: true,
     })
     // CJK grueso (hiragana/katakana/kanji/hangul). DotGothic16 no cubre
     // hangul completo: para `가-힯` este regex igual matchea, pero
@@ -2701,6 +2740,31 @@ ShellRoot {
 
     function crtFontBoldFor(text, wordCount) {
         return crtFontBold[crtFontKeyFor(text, wordCount)] !== false;
+    }
+
+    // Sorteo PONDERADO de la fuente: `r` (0..1, el dado de siempre) recorre los
+    // pesos del mazo. Peso = `w` base × cercanía del mood del tema a la `e`/`v`
+    // de la fuente (campana; piso 0.08 para que ninguna sea imposible). Sin
+    // mood: energía .5, valencia 0 (el set arranca antes del primer verso).
+    // Pura: mismo `r` + mismo mood → misma fuente. Un mood lento y triste
+    // reparte entre Xanh/Syne/Anonymous; uno agitado, entre Sarpanch/Wallpoet/
+    // Chakra, y sólo ahí asoma `glitch`.
+    function crtFontPick(pool, r, mood) {
+        const e = mood ? mood.energy : 0.5;
+        const v = mood ? mood.valence : 0;
+        const ws = pool.map(k => {
+            const t = crtFontTraits[k] || { e: 0.5, v: 0, w: 1 };
+            const de = (e - t.e) / 0.35;
+            const dv = (v - t.v) / 0.7;
+            return t.w * Math.max(0.08, Math.exp(-0.5 * (de * de + dv * dv)));
+        });
+        let left = r * ws.reduce((a, b) => a + b, 0);
+        for (let i = 0; i < pool.length; i++) {
+            left -= ws[i];
+            if (left < 0)
+                return pool[i];
+        }
+        return pool[pool.length - 1];
     }
 
     // Elige UN kind de `group`, sin repetir lo que ya salió en este set.
@@ -2751,9 +2815,9 @@ ShellRoot {
             : schemes.map(s => s.key);
         const schemeKey = schemeKeys[Math.floor(crtHash(seed * 7 + 5) * schemeKeys.length)];
         const scheme = schemes.findIndex(s => s.key === schemeKey);
-        // fuente: del mazo de la familia, mismo dado de siempre (`seed*7+3`)
-        const fontPool = crtFontPools[family] || ["system"];
-        const font = fontPool[Math.floor(crtHash(seed * 7 + 3) * fontPool.length)];
+        // fuente: del mazo de la familia, mismo dado de siempre (`seed*7+3`),
+        // pesado por qué tan bien le queda al mood (`crtFontPick`)
+        const font = crtFontPick(crtFontPools[family] || ["system"], crtHash(seed * 7 + 3), mood);
         // el tubo del tema, para `crt.tube = auto`: sólo los de color
         const tube = crtTubeAutoKeys[Math.floor(crtHash(seed * 7 + 6) * crtTubeAutoKeys.length)];
         return { motifs: motifs, family: family, scheme: scheme, font: font, tube: tube };

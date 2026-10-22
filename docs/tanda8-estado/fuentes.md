@@ -59,3 +59,25 @@ dos previews que cargaban el archivo, README (créditos) y un test nuevo. Nada d
 - Regenerar la hoja: `python3 previews/showreel/fontsheet.py [salida.png]`.
 - Cambiar el reparto: sólo la tabla `crtFontPools` en `shell/shell.qml`; `tests/test_fonts.py` avisa
   si una fuente queda sin mazo o un mazo nombra una clave que no existe.
+
+## Segunda vuelta (2026-10-22): ocho fuentes más y sorteo por mood
+- Nuevas (todas OFL 1.1, `shell/fonts/` + `LICENSE-*.txt`; cubren áéíóúñüÁÉÍÓÚÑÜ¿¡): **Departure Mono**
+  (pixel terminal fino, de github.com/rektdeckard/departure-mono, v1.500, .otf), **Anonymous Pro Bold**,
+  **B612 Mono Bold**, **Sarpanch Bold**, **Wallpoet** (stencil), **Nova Mono**, **Xanh Mono**,
+  **Rubik Glitch** (display con glitch propio; raro). El resto de google/fonts.
+- Descartadas tras verlas en el vidrio: Jacquard 12 (blackletter pixel: en mayúsculas no se lee),
+  Micro 5 (bloques), Michroma (muy ancha, `Fit` la achica), Lekton (x-height chica), Cutive Mono
+  (máquina de escribir, como Courier Prime), Fragment Mono/Cousine (gemelas de Plex/Anonymous), Bungee.
+  Sin licencia libre clara o sin ttf estable: VCR OSD Mono, Glass TTY VT220, W95FA, Fixedsys Excelsior.
+- Criterio: el mazo sigue saliendo de la familia de entradas del set (tipeada→terminal, dura→filo…) y
+  ahora `crtFontPick` pondera por mood: `crtFontTraits` da a cada fuente energía `e`, valencia `v` y
+  peso `w`; peso = `w` × campana(mood − e/v), piso 0,08. Mismo dado `seed*7+3`, sigue siendo puro.
+  Distribución medida (mazo `burn`, 1000 dados): tema lento/triste 40 % vt323 · 21 % departure ·
+  2 % glitch; agitado/oscuro 22 % sarpanch · 21 % chakra · 15 % wallpoet · 8 % glitch.
+- Nitidez: el banco pasa la letra por el tubo real (texturas ×2, `signal.frag`, `crt.frag`) en 4 tubos;
+  Departure Mono (celda de 1/11 em) se lee limpia aun a ~34 px con `Text.Fit` sin ajustar el cuerpo a la
+  grilla del pixel; las Regular-only siguen sin `bold` sintético (`crtFontBold`).
+- Banco: `previews/fuentes-crt/render.py [--tube pvm] [--only a,b] [--extra ruta.ttf[:bold]]`
+  → `docs/tanda8-estado/fuentes-crt/{trinitron-p1..3,arcade-p1}.png`.
+- Los cartelitos del modo normal siguen con la fuente del sistema a propósito (el chrome Win95 no tiene
+  equivalente libre; W95FA/Fixedsys no son OFL): `crt.font` sólo toca el CRT.

@@ -29,7 +29,7 @@ class TestCrtFonts(unittest.TestCase):
     def test_every_bundled_font_ships_its_license(self):
         # repo público: cada ttf con su LICENSE-<nombre>.txt al lado
         for name in os.listdir(FONTS):
-            if not name.endswith(".ttf"):
+            if not name.endswith((".ttf", ".otf")):
                 continue
             stem = name.split("-")[0].lower()
             lic = os.path.join(FONTS, "LICENSE-%s.txt" % stem)
@@ -38,7 +38,7 @@ class TestCrtFonts(unittest.TestCase):
                 self.assertIn("SIL Open Font License", f.read())
 
     def test_no_orphan_licenses(self):
-        stems = {n.split("-")[0].lower() for n in os.listdir(FONTS) if n.endswith(".ttf")}
+        stems = {n.split("-")[0].lower() for n in os.listdir(FONTS) if n.endswith((".ttf", ".otf"))}
         for name in os.listdir(FONTS):
             if name.startswith("LICENSE-"):
                 self.assertIn(name[len("LICENSE-"):-len(".txt")], stems, name)
@@ -57,6 +57,16 @@ class TestCrtFonts(unittest.TestCase):
             used |= set(keys)
         self.assertNotIn("dot", used)          # DotGothic16 es sólo el camino de CJK
         self.assertEqual(used, fams - {"dot"})  # ninguna fuente cargada queda sin mazo
+
+    def test_every_pickable_font_has_traits_for_the_mood_weighting(self):
+        qml = _qml()
+        fams = set(re.findall(r"(\w+):", _block(qml, "crtFontFamilies")))
+        traits = _block(qml, "crtFontTraits")
+        self.assertEqual(set(re.findall(r"^\s{8}(\w+):", traits, re.M)), fams - {"dot"})
+        for m in re.finditer(r"e: ([\d.]+), v: *(-?[\d.]+), w: ([\d.]+)", traits):
+            e, v, w = (float(x) for x in m.groups())
+            self.assertTrue(0 <= e <= 1 and -1 <= v <= 1 and 0 < w <= 1, m.group(0))
+        self.assertIn("crtFontPick(crtFontPools[family]", qml)   # el set sortea ponderado, no parejo
 
     def test_bold_flag_only_where_a_bold_file_exists(self):
         # tanda letra: `font.bold` sobre un Regular lo engorda Qt en sintético

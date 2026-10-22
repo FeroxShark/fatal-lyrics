@@ -665,7 +665,9 @@ rm -rf ~/.config/cartelitos   # optional: delete config
 ## Fonts
 
 The CRT lyric line ships with bundled fonts, one per theme picked from a pool that
-depends on the theme's entrance family (`shell/fonts/`), each released under the SIL Open
+depends on the theme's entrance family, weighted by the theme's mood (a slow, sad track leans on
+Xanh/Syne/Anonymous, a frantic one on Sarpanch/Wallpoet/Chakra; Rubik Glitch only shows up rarely, in
+the loud ones) (`shell/fonts/`), each released under the SIL Open
 Font License 1.1 (full text alongside each font as `LICENSE-<name>.txt`), sourced from
 [Google Fonts](https://github.com/google/fonts):
 
@@ -675,6 +677,14 @@ Font License 1.1 (full text alongside each font as `LICENSE-<name>.txt`), source
 - [Space Mono](https://github.com/google/fonts/tree/main/ofl/spacemono) by Colophon Foundry (Bold)
 - [Chakra Petch](https://github.com/google/fonts/tree/main/ofl/chakrapetch) by Cadson Demak (Bold)
 - [Syne Mono](https://github.com/google/fonts/tree/main/ofl/synemono) by Bonjour Monde
+- [Departure Mono](https://github.com/rektdeckard/departure-mono) by Helena Zhang (pixel terminal)
+- [Anonymous Pro](https://github.com/google/fonts/tree/main/ofl/anonymouspro) by Mark Simonson (Bold)
+- [B612 Mono](https://github.com/google/fonts/tree/main/ofl/b612mono) by the B612 Project (Bold, cockpit display)
+- [Sarpanch](https://github.com/google/fonts/tree/main/ofl/sarpanch) by Indian Type Foundry (Bold)
+- [Wallpoet](https://github.com/google/fonts/tree/main/ofl/wallpoet) by Lars Berggren (stencil)
+- [Nova Mono](https://github.com/google/fonts/tree/main/ofl/novamono) by wmk69
+- [Xanh Mono](https://github.com/google/fonts/tree/main/ofl/xanhmono) by Yellow Type Foundry
+- [Rubik Glitch](https://github.com/google/fonts/tree/main/ofl/rubikglitch) by the Rubik Filtered Project (glitch display)
 - [DotGothic16](https://github.com/google/fonts/tree/main/ofl/dotgothic16) by JAPAN FONTWORKS,
   used as the fallback for CJK lyrics that the others can't render
 

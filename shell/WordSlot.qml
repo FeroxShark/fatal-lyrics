@@ -103,20 +103,21 @@ Item {
     // fantasmas de canal desalineado: mientras entra (`ghostOff`/`ghostFade`)
     // o durante el pulso de énfasis `hard` (`emGhostOff`/`emGhostFade`) — se
     // suman, nunca compiten porque el pulso arranca cuando `entry` ya bajó
-    // los suyos a 0
+    // los suyos a 0. La opacidad máxima es la mitad (0.55 → 0.275): son el
+    // color que más se lee como parpadeo en cada palabra
     Text {
         x: label.x - (slot.ghostOff + slot.emGhostOff)
         text: label.text
         font: label.font
         color: "#ff2d00"
-        opacity: Math.min(1, slot.ghostFade + slot.emGhostFade) * 0.55
+        opacity: Math.min(1, slot.ghostFade + slot.emGhostFade) * 0.275
     }
     Text {
         x: label.x + (slot.ghostOff + slot.emGhostOff)
         text: label.text
         font: label.font
         color: "#00c8ff"
-        opacity: Math.min(1, slot.ghostFade + slot.emGhostFade) * 0.55
+        opacity: Math.min(1, slot.ghostFade + slot.emGhostFade) * 0.275
     }
     property real ghostOff: 0
     property real ghostFade: 0
@@ -155,15 +156,17 @@ Item {
     // de movimiento. También adelanta el pulso de énfasis, que arranca al
     // terminar la entrada
     readonly property int enterDur: slot.index > 0 ? Motion.enterFastMs : Motion.enterMs
+    // Mitad de blanco en el destello (2026-10-22: la letra parpadeaba de más;
+    // antes 100 % blanco en sobrequemada y el `word_flash` entero en el resto)
     readonly property color entryTint: slot.entryStyle === "overburn"
-        // sobrequemada: blanco puro, pase lo que pase con `word_flash` — es
+        // sobrequemada: blanco a medias, pase lo que pase con `word_flash` — es
         // lo que define la entrada
-        ? "#ffffff"
+        ? Qt.tint(slot.baseColor, Qt.rgba(1, 1, 1, 0.5))
         : slot.flash <= 0.01
         ? slot.baseColor
         // proporción directa: el piso de 0.25 que tenía hacía que hasta en el
         // mínimo la palabra entrara clarita, y el mínimo tiene que ser "nada"
-        : Qt.tint(slot.baseColor, Qt.rgba(1, 1, 1, slot.flash))
+        : Qt.tint(slot.baseColor, Qt.rgba(1, 1, 1, slot.flash * 0.5))
 
     SequentialAnimation {
         id: entry
@@ -265,7 +268,7 @@ Item {
     ColorAnimation {
         id: wordBurnAnim
         target: label; property: "color"
-        from: "#ffffff"; to: slot.pal.hot
+        from: Qt.tint(slot.pal.hot, Qt.rgba(1, 1, 1, 0.5)); to: slot.pal.hot
         duration: 200; easing.type: Easing.OutQuad
     }
 }

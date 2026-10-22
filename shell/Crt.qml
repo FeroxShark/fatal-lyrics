@@ -3322,9 +3322,11 @@ PanelWindow {
         // el overburn multiplica el fósforo por tres mientras la palabra
         // está blanca: es lo que hace que se lea como quemada y no como
         // una palabra clara
+        // el halo de la letra late con el bombo a la mitad (0.25 → 0.125) y el
+        // sobrequemado pasa de ×3 a ×2: es lo que más se lee como parpadeo del texto
         property real bloom: crt.showsText
-            ? crt.ctl.tubeBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt + 0.25 * crt.kickPulse * crt.ctl.kickAmp)
-                * (1 + 2 * crt.burnGlow) : 0
+            ? crt.ctl.tubeBloom * (0.72 + 0.55 * crt.pump * crt.ctl.flickerAmt + 0.125 * crt.kickPulse * crt.ctl.kickAmp)
+                * (1 + crt.burnGlow) : 0
         // el cambio de canal se lleva puesta la perilla: la estática de la
         // transición no es "ruido de fondo", es la pantalla sin señal
         // tubo apagado (tanda 6, corrida 0): un resto de ruido de fósforo
@@ -3334,7 +3336,7 @@ PanelWindow {
         property real noiseAmt: crt.tubeDark ? crt.ctl.tubeNoise * 0.06
             : crt.chanNoise > 0 ? 1
             : crt.ctl.tubeNoise * (0.35 + 0.65 * crt.rest) * crt.ctl.crtDirtMult
-            * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 1 : 1.6)) * crt.sleepMix
+            * (crt.standby && !crt.motifForced ? 3.5 : (crt.showsText ? 0.5 : 1.6)) * crt.sleepMix
         property real tubeLevel: crt.tubeLevel
         property real degauss: crt.degauss
         property real cutDim: crt.cutDimNow

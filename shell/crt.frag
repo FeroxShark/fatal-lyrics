@@ -238,7 +238,7 @@ void main() {
     // own uniform term.
     vec2 cq = qt_TexCoord0 * 2.0 - 1.0;
     float conv = 0.3 + 0.7 * 0.5 * dot(cq, cq);
-    float ca = chroma * 0.0016 * conv + glitch * 0.007;
+    float ca = chroma * 0.0016 * conv + glitch * 0.0035;
     float cav = chroma * 0.0016 * 0.22 * cq.y * conv;
     vec3 col;
     col.r = bicubic(uv + vec2(ca, cav)).r;
@@ -280,10 +280,11 @@ void main() {
 
     // los agudos también enfrían los claros: el bajo es tibio (luz), lo de arriba
     // es frío. El corrimiento (-r, +b) está pesado para que la luminancia no se
-    // mueva: 0.299·0.05 = 0.114·0.131.
+    // mueva: 0.299·0.025 = 0.114·0.0655.
     if (fizz > 0.001) {
         float hl = smoothstep(0.30, 0.90, dot(col, vec3(0.299, 0.587, 0.114)));
-        col += vec3(-0.05, 0.0, 0.131) * fizz * hl;
+        // (la mitad del corrimiento: 2026-10-22, el color de la letra temblaba con los agudos)
+        col += vec3(-0.025, 0.0, 0.0655) * fizz * hl;
     }
 
     // fósforo de un solo color (tanda 7, corrida 2): P1 verde, P3 ámbar. La
@@ -440,23 +441,28 @@ void main() {
         float bandv = pow(0.5 + 0.5 * sin(ph * 6.2831853), 6.0);
         namp *= 1.0 + grain * (2.2 * bandv - 0.5);
     }
-    col += (n - 0.5) * (namp + glitch * 0.22);
+    col += (n - 0.5) * (namp + glitch * 0.11);
 
-    // block corruption during a burst
+    // block corruption during a burst (la mitad de color: 0.6 → 0.3)
     if (glitch > 0.01) {
         vec2 bs = vec2(hash11(floor(t * 9.0)) * 60.0 + 20.0);
         vec2 cell = floor(fc / bs);
         float b = hash21(cell + floor(t * 9.0));
         if (b > 1.0 - 0.30 * glitch)
-            col = mix(col, col.gbr * 1.4 + tint * 0.25, 0.6 * glitch);
+            col = mix(col, col.gbr * 1.4 + tint * 0.25, 0.3 * glitch);
     }
 
     // El titileo. La parte fija es el tubo (60 Hz y su inestabilidad), pero lo
     // que se ve es el otro: `pulse` llega con cada golpe de la canción, así que
     // la pantalla late CON la música en vez de parpadear por su cuenta.
     // el escalón al azar es lo que hace que un tubo parezca vivo, pero de más se lee como una
-    // lámpara que falla: va bajito. A 30 Hz (era 24: caía con cadencia despareja sobre 60 Hz)
-    col *= 1.0 - 0.022 * sin(t * 377.0) - 0.010 * hash11(floor(t * 30.0));
+    // lámpara que falla: va bajito. A 30 Hz (era 24: caía con cadencia despareja sobre 60 Hz).
+    // Mitad de amplitud (2026-10-22: se leía como parpadeo en la letra) y el escalón a 30 Hz
+    // se interpola: antes cada cuadro saltaba a otro valor al azar.
+    float flFrac = fract(t * 30.0);
+    flFrac = flFrac * flFrac * (3.0 - 2.0 * flFrac);
+    float flRand = mix(hash11(floor(t * 30.0)), hash11(floor(t * 30.0) + 1.0), flFrac);
+    col *= 1.0 - 0.011 * sin(t * 377.0) - 0.005 * flRand;
     // el golpe se ve como PICO de luz (la caída la da `beatAnim`). Tanda 8: sin el temblor al
     // azar a 11 Hz que tenía (±10 % de luz en toda la pared, en la banda de 10–20 Hz donde el
     // ojo es más sensible al parpadeo); el 0.15 es la media de lo que era 0.10 + 0.10·U(0,1)

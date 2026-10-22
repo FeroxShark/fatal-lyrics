@@ -309,7 +309,7 @@ ShellRoot {
             // (`crtCharacter` 1): `kickAmpMin` es la fracción que queda en un tema lento
             // (carácter 0), y la caída va de `kickSlowMs` a `kickFastMs`. `kickHat`: el brillo
             // del destello de los agudos en el dibujo
-            kickCam: 0.014, kickTube: 0.60, kickMotif: 0.030, kickHat: 0.60,
+            kickCam: 0.014, kickTube: 0.30, kickMotif: 0.030, kickHat: 0.60,
             kickAmpMin: 0.25, kickSlowMs: 420, kickFastMs: 150,
             // el `rise` de la tendencia (ver `riseHit`): el pulso que da, × el golpe de un bombo
             // (`kickRise`, columna kick* = excepción), y cuánto alarga el hold un `fall`
@@ -338,7 +338,7 @@ ShellRoot {
             cutDepth: 0.55, cutFlash: 0.30, fizzAmt: 0.70, grainMove: 0.80,
             movMin: 0.40, movMax: 2.20, movKick: 0.70,
             movNov: 0.25,
-            kickCam: 0.022, kickTube: 0.90, kickMotif: 0.050, kickHat: 0.85,
+            kickCam: 0.022, kickTube: 0.45, kickMotif: 0.050, kickHat: 0.85,
             kickAmpMin: 0.30, kickSlowMs: 400, kickFastMs: 120,
             kickRise: 0.70, fallHoldMs: 5000,
             kickThump: 1.00,
@@ -371,7 +371,7 @@ ShellRoot {
             movMin: 0.30, movMax: 2.80, movKick: 1.00,
             movNov: 0,
             // la tanda 3 no tenía golpe por bombo: como `dirtMax`, `wild` se lleva el más fuerte
-            kickCam: 0.040, kickTube: 1.30, kickMotif: 0.090, kickHat: 1.00,
+            kickCam: 0.040, kickTube: 0.65, kickMotif: 0.090, kickHat: 1.00,
             // `wild` no alarga holds (es el modo rápido, y la tanda 3 no tenía `fall`): 0
             kickAmpMin: 0.40, kickSlowMs: 340, kickFastMs: 90,
             kickRise: 1.00, fallHoldMs: 0,
@@ -4439,7 +4439,7 @@ ShellRoot {
                         NumberAnimation { target: win; property: "deathScale"; from: 0.04; to: 1; duration: 140; easing.type: Easing.OutQuad }
                         NumberAnimation { target: win; property: "deathOpacity"; from: 0; to: 1; duration: 140; easing.type: Easing.OutQuad }
                         SequentialAnimation {
-                            PropertyAction { target: win; property: "spawnFlash"; value: 1 }
+                            PropertyAction { target: win; property: "spawnFlash"; value: 0.5 }
                             NumberAnimation { target: win; property: "spawnFlash"; to: 0; duration: 60 }
                         }
                     }
@@ -4523,6 +4523,9 @@ ShellRoot {
                     property real jy: 0
                     property real burstOpacity: 1
                     property real holoOpacity: 1
+                    // el paso del holograma (cada 140 ms) se asienta en `levelMs` y no
+                    // salta: el cartel respira en vez de titilar
+                    Behavior on holoOpacity { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
                     property color burstTint: "#ff00ff"
                     property var burstSeed: []
 
@@ -4639,7 +4642,7 @@ ShellRoot {
                     function scramble(strength) {
                         jx = (Math.random() - 0.5) * 26 * strength;
                         jy = (Math.random() - 0.5) * 16 * strength;
-                        burstOpacity = 1 - Math.random() * 0.5 * Math.min(strength, 1.2);
+                        burstOpacity = 1 - Math.random() * 0.25 * Math.min(strength, 1.2);
                         burstTint = gpuPalette[Math.floor(Math.random() * 5)];
                         let seed = [];
                         const n = 3 + Math.floor(Math.random() * (4 + 6 * strength));
@@ -4651,7 +4654,7 @@ ShellRoot {
                                 w: block ? 0.12 + Math.random() * 0.45 : 1.2,
                                 h: block ? 8 + Math.random() * 34 * strength : 2 + Math.random() * 5,
                                 c: gpuPalette[Math.floor(Math.random() * gpuPalette.length)],
-                                o: 0.5 + Math.random() * 0.45,
+                                o: 0.25 + Math.random() * 0.225,
                             });
                         }
                         burstSeed = seed;
@@ -4721,7 +4724,7 @@ ShellRoot {
                         interval: 140
                         repeat: true
                         running: !win.dying && win.fx && root.gStr > 0
-                        onTriggered: win.holoOpacity = 1 - Math.random() * (0.16 + 0.1 * win.glitchiness) * root.gStr
+                        onTriggered: win.holoOpacity = 1 - Math.random() * (0.08 + 0.05 * win.glitchiness) * root.gStr
                     }
 
                     // bursts de glitch espontáneos y frecuentes. Con compás medido caen sobre un
@@ -5172,7 +5175,7 @@ ShellRoot {
                                 anchors.fill: parent
                                 visible: win.burst
                                 color: win.burstTint
-                                opacity: win.dying ? 0.35 : 0.18
+                                opacity: win.dying ? 0.175 : 0.09
                             }
 
                             // bloques y scanlines de corrupción tipo artefactos de GPU

@@ -64,6 +64,13 @@ class TestHyprlandDocs(unittest.TestCase):
         self.assertIn('hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd("fatal ajustes"))', readme)
         self.assertIn("`Super+Shift+A`", readme)
 
+    def test_the_dialogs_key_in_the_readme_is_the_bound_one(self):
+        lua = self._read("packaging", "hyprland.lua")
+        readme = self._read("README.md")
+        self.assertIn('hl.bind("SUPER + SHIFT + U", hl.dsp.exec_cmd(FATAL .. " carteles toggle"))', lua)
+        self.assertIn('hl.bind("SUPER + SHIFT + U", hl.dsp.exec_cmd("fatal carteles toggle"))', readme)
+        self.assertIn("`Super+Shift+U`", readme)
+
     def test_the_load_path_in_the_readme_is_the_one_in_the_lua(self):
         lua = self._read("packaging", "hyprland.lua")
         readme = self._read("README.md")

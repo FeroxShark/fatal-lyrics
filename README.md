@@ -284,6 +284,7 @@ keybind, and the command itself.
 bind = SUPER SHIFT, Y, exec, fatal crt toggle   # Hyprland (hyprlang .conf)
 hl.bind("SUPER + SHIFT + Y", hl.dsp.exec_cmd("fatal crt toggle"))   -- Hyprland 0.56+ (Lua config)
 hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd("fatal ajustes"))      -- the Settings window
+hl.bind("SUPER + SHIFT + U", hl.dsp.exec_cmd("fatal carteles toggle"))  -- error dialogs on/off
 ```
 
 It is **opt-in** and never turns itself on. The switch is a file in
@@ -356,7 +357,8 @@ fatal-lyrics.service` to stop that). While the unit is installed, `fatal on`,
 
 ### Hyprland keys
 
-The CRT switch (`Super+Shift+Y`), the Settings window (`Super+Shift+A`) and the sync
+The CRT switch (`Super+Shift+Y`), the Settings window (`Super+Shift+A`), the dialogs
+switch (`Super+Shift+U`) and the sync
 keys (`Super+Alt+←/→`) are binds in `packaging/hyprland.lua`, and Hyprland 0.56+
 only loads them if your config does. `install.sh` prints these two lines with the
 real path of your checkout; add them to `~/.config/hypr/hyprland.lua` (the path
@@ -391,6 +393,7 @@ fatal restart    # restart it
 fatal status     # ON / HALF / OFF, the CRT and karaoke state, plus anything optional that's missing and what it costs you
 fatal help       # the command list
 fatal ajustes    # the Settings window: every option, live (aliases: settings, config, setup)
+fatal carteles on|off|toggle   # the error dialogs of the normal mode (`[display] dialogs`); the CRT is separate
 fatal edit       # opens the raw config.toml in $EDITOR, for people who prefer that
 fatal demo       # throws a few fake dialogs, to try settings without music
 fatal crt on|off|toggle   # CRT mode: the tube takes over every screen (needs fatal on first)

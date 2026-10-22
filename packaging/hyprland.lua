@@ -34,6 +34,12 @@ hl.bind("SUPER + SHIFT + Y", hl.dsp.exec_cmd(FATAL .. " crt toggle"))
 -- tuya no, cambiá la tecla acá y en el README.
 hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd(FATAL .. " ajustes"))
 
+-- Los carteles de error del modo normal, prendidos/apagados (`fatal carteles toggle`, la perilla
+-- [display] dialogs): la app sigue andando, con el tubo si lo usás, sin los diálogos. Bind fijo,
+-- como el de Ajustes. Super+Shift+U estaba libre en la config de Ferox; si en la tuya no, cambiá
+-- la tecla acá y en el README.
+hl.bind("SUPER + SHIFT + U", hl.dsp.exec_cmd(FATAL .. " carteles toggle"))
+
 -- Sync fino ±0.1 s. Tienen que ser las mismas que [keys] de fábrica ("Super+Alt, Right/Left"):
 -- mientras la perilla no cambie, el daemon no toca estos binds. Super+Shift+flechas ya mueve
 -- ventanas (docs/TRAMPAS.md).

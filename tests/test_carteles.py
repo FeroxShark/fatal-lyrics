@@ -103,3 +103,60 @@ class TestFatalCarteles(unittest.TestCase):
             if os.path.exists(bell):
                 os.remove(bell)
         self.assertEqual(calls, [("dialogs", "display", False)])
+
+
+class TestBandeja(unittest.TestCase):
+    def test_dialogs_is_a_check_item_that_toggles_and_shows_the_real_state(self):
+        from unittest import mock
+        import threading
+        from cartelitos import tray
+
+        self.assertIn(("dialogs", "display", "Dialogs"), tray.TRAY_TOGGLES)
+
+        class Item:
+            def __init__(self, label=None):
+                self.label, self.active, self.on_click = label, False, None
+            def connect(self, _sig, cb): self.on_click = cb
+            def set_sensitive(self, *a): pass
+            def get_label(self): return self.label
+            def set_label(self, t): self.label = t
+            def get_active(self): return self.active
+            def set_active(self, v): self.active = v
+
+        made = []
+        repo = mock.MagicMock()
+        repo.Gtk.CheckMenuItem.side_effect = lambda label=None: made.append(Item(label)) or made[-1]
+        repo.Gtk.MenuItem.side_effect = lambda label=None: made.append(Item(label)) or made[-1]
+        created, real = [], threading.Thread
+
+        def spy(*a, **k):
+            t = real(*a, **k)
+            created.append(t)
+            return t
+
+        saved = {k: sys.modules.get(k) for k in ("gi", "gi.repository")}
+        sys.modules["gi"], sys.modules["gi.repository"] = mock.MagicMock(), repo
+        sets = []
+        try:
+            with mock.patch("cartelitos.tray.threading.Thread", side_effect=spy), \
+                    mock.patch.object(config, "set_option", lambda *a: sets.append(a)), \
+                    mock.patch.object(config, "_tray_refresh", None), \
+                    mock.patch.dict(config.CFG["display"], {"dialogs": False}):
+                tray.start_tray()
+                created[0].join(timeout=5)
+                item = next(i for i in made if i.label and i.label.startswith("Dialogs"))
+                self.assertEqual(item.label, "Dialogs: off")
+                self.assertFalse(item.active)
+                item.on_click()
+                self.assertEqual(sets, [("dialogs", "display", True)])
+                config.CFG["display"]["dialogs"] = True   # lo que haría set_option
+                tick = repo.GLib.timeout_add.call_args[0][1]
+                tick()
+                self.assertEqual(item.label, "Dialogs: on")
+                self.assertTrue(item.active)
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v

@@ -11,6 +11,7 @@ from .util import log
 # texto. Todo lo demás vive en la ventana de Ajustes (`fatal ajustes`): con los
 # ocho submenús de antes el menú pasaba las veinte filas.
 TRAY_TOGGLES = [
+    ("dialogs", "display", "Dialogs"),
     ("karaoke", "display", "Karaoke"),
 ]
 
@@ -65,10 +66,10 @@ def start_tray():
     vía AyatanaAppIndicator3). Opcional: si gtk3/libayatana-appindicator no están
     instalados, el daemon sigue andando igual, sin bandeja.
 
-    El menú es corto a propósito: abrir Ajustes, prender el tubo, el karaoke y
-    salir. El estado va en el TEXTO de cada ítem ("Karaoke: on"), no en
-    checkboxes: DBusMenu los expone, pero varios shells (caelestia, entre otros)
-    dibujan sólo ícono + texto y el tilde no se ve."""
+    El menú es corto a propósito: abrir Ajustes, prender el tubo, los carteles,
+    el karaoke y salir. Las perillas (TRAY_TOGGLES) son ítems con tilde, y el
+    estado va TAMBIÉN en el texto ("Dialogs: on"): varios shells (caelestia,
+    entre otros) dibujan sólo ícono + texto y el tilde no se ve."""
     try:
         import gi
         gi.require_version("Gtk", "3.0")
@@ -80,9 +81,12 @@ def start_tray():
 
     fatal_bin = shutil.which("fatal") or os.path.expanduser("~/.local/bin/fatal")
     labels = []   # [(item, función que devuelve el texto)] para refrescar
+    checks = []   # [(item, función que devuelve el estado real)]
 
-    def item(menu, label, on_click=None, dynamic=None):
-        it = Gtk.MenuItem(label=label)
+    def item(menu, label, on_click=None, dynamic=None, checked=None):
+        it = Gtk.MenuItem(label=label) if checked is None else Gtk.CheckMenuItem(label=label)
+        if checked is not None:
+            checks.append((it, checked))
         if on_click:
             it.connect("activate", lambda *_: on_click())
         else:
@@ -121,7 +125,8 @@ def start_tray():
             item(menu, title,
                  on_click=lambda k=key, s=section: config.set_option(k, s, not config.CFG[s][k]),
                  dynamic=lambda t=title, k=key, s=section:
-                     f"{t}: {'on' if config.CFG[s][k] else 'off'}")
+                     f"{t}: {'on' if config.CFG[s][k] else 'off'}",
+                 checked=lambda k=key, s=section: bool(config.CFG[s][k]))
 
         menu.append(Gtk.SeparatorMenuItem())
         item(menu, "Quit", on_click=lambda: subprocess.Popen([fatal_bin, "off"]))
@@ -131,6 +136,12 @@ def start_tray():
                 new = text()
                 if it.get_label() != new:   # no re-escribir el menú si nada cambió
                     it.set_label(new)
+            for it, state in checks:
+                # el click ya movió el tilde; esto lo deja en el estado REAL
+                # (la config puede haber rechazado el cambio, o cambiar por
+                # `fatal carteles` / la ventana de Ajustes)
+                if it.get_active() != state():
+                    it.set_active(state())
             return False   # idle_add: una sola pasada
 
         # el tubo también se prende con la tecla (Hyprland, sin pasar por la bandeja):

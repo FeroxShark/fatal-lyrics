@@ -964,13 +964,13 @@ PanelWindow {
         hitPending = true;
         hitPendingAmt = amount;
         hitPendingSrc = src || "";
-        // el tiempo se calcula EXACTO contra la grilla del daemon, no se espera al `beatTick`:
-        // sale de un poll de 25 ms (+ la carga de la máquina) y el glitch entraba ~45 ms tarde; y
-        // cada re-anclaje de la grilla (evento `bpm`) lo dispara una vez de más, en cualquier
-        // momento, así que soltar el pendiente ahí lo ponía FUERA de tiempo. `hitFallback` es la
-        // red por si el compás se pierde a mitad de la espera.
+        // el tiempo se calcula EXACTO contra la grilla (`ctl.msToNextBeat`, la misma cuenta que
+        // apunta el `beatTick`), no se espera al `beatTick`: cada re-anclaje de la grilla (evento
+        // `bpm`) lo dispara una vez de más, en cualquier momento, así que soltar el pendiente ahí
+        // lo ponía FUERA de tiempo. `hitFallback` es la red por si el compás se pierde a mitad
+        // de la espera.
         const b = ctl.beatMs;
-        hitDueAt = now + b - (((now - ctl.lastBeatAt) % b) + b) % b;
+        hitDueAt = now + ctl.msToNextBeat(now);
         beatStep();
         hitFallback.interval = Math.round(b) + 40;
         hitFallback.restart();
@@ -988,7 +988,7 @@ PanelWindow {
             releaseHit(true);
             return;
         }
-        hitOnBeat.interval = Math.max(1, Math.round(left > 40 ? left * 0.85 : left));
+        hitOnBeat.interval = ctl.beatStepAim(left);
         hitOnBeat.restart();
     }
     function releaseHit(onBeat) {
@@ -1575,9 +1575,17 @@ PanelWindow {
         interval: crt.deepSleep || crt.tubeIdle ? 200 : crt.resting ? 66 : 50
         repeat: true
         running: crt.visible && (crt.tubeIdle || ((!crt.showsText || crt.resting) && (!crt.standby || crt.deepSleep)))
+        // tiempo REAL transcurrido, no el nominal: un Timer gruso (±5 %) y la carga de la máquina
+        // lo atrasan, y `tubeTime`/`movOff` son el reloj de dibujo de los motifs (`MotifBase.bp`):
+        // contando `interval` se les iba de la música. Tope 0.25 s para que un tirón no salte.
+        property double lastAt: 0
+        onRunningChanged: lastAt = 0
         onTriggered: {
-            crt.tubeTime += interval / 1000;
-            crt.movOff = Speed.advance(crt.movOff, interval / 1000, crt.ctl.crtMovRate);
+            const now = Date.now();
+            const dt = lastAt > 0 ? Math.min((now - lastAt) / 1000, 0.25) : interval / 1000;
+            lastAt = now;
+            crt.tubeTime += dt;
+            crt.movOff = Speed.advance(crt.movOff, dt, crt.ctl.crtMovRate);
         }
     }
 
@@ -2761,11 +2769,19 @@ PanelWindow {
                     opacity: on ? 1 : 0.15
                     property bool on: true
 
+                    // con compás parpadea EN el tiempo (uno por `beatTick`); sin él, su reloj de siempre
                     Timer {
                         interval: 700
                         repeat: true
-                        running: crt.visible
+                        running: crt.visible && !crt.ctl.bpmLive
                         onTriggered: recDot.on = !recDot.on
+                    }
+                    Connections {
+                        target: crt.ctl
+                        enabled: crt.visible && crt.ctl.bpmLive
+                        function onBeatTickChanged() {
+                            recDot.on = !recDot.on;
+                        }
                     }
                 }
 

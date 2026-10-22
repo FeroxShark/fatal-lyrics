@@ -173,6 +173,7 @@ GROUPS = [
         _choice("crt", "pace", "How busy", "how much may happen per minute (nothing moves slower)", [
             ("Calm", "calm"), ("Normal", "normal"), ("Wild", "wild")]),
         _slider("crt", "rare", "Odd screens", "fake crash, no signal", 0.0, 2.0, 0.05),
+        _count("crt", "beat_offset", "Beat offset", "ms, + = later (sound arrives late)", -300, 300, 5),
     ]},
     {"title": "The lyric", "tab": 2, "column": 2, "rows": [
         _choice("crt", "split", "Line across screens", "whether a short line is cut in pieces", [

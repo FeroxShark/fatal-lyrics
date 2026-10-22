@@ -306,6 +306,12 @@ _CONFIG_COMMENTS = {
                      "beat. Glitches tied to something else (the jump ray, the ring,\n"
                      "the channel change, the camera) still land at once.\n"
                      "Without a tempo nothing changes. false = as before",
+        "beat_offset": "ms to shift every beat-timed effect: the glitches that land on\n"
+                       "the beat, the beat tick of the drawings, the rolling bar. The\n"
+                       "daemon already subtracts its own analysis delay (~26 ms); what\n"
+                       "is left (the sound card, an HDMI monitor, the display) depends\n"
+                       "on the machine. + = later (sound reaches you late), - = earlier.\n"
+                       "0 = only the daemon's own correction",
         "word_fx": "a few words fire a one-off effect on the screen that shows\n"
                    "them: fire / blood / burn set the alarm, die / dead / death blink\n"
                    "the tube, break / crash / fall glitch it, dark / apagar go dark\n"
@@ -426,7 +432,7 @@ DEFAULTS = {
         "chroma": 0.6, "bloom": 1.0, "noise": 0.22, "roll": 0.5, "vignette": 0.9,
         "composite": 0.5, "persistence": 0.35, "tension": 1.0, "dirt": 1.0, "mov_speed": 1.0,
         "burnin": 0.5,
-        "beat_lock": True, "word_fx": True,
+        "beat_lock": True, "word_fx": True, "beat_offset": 0,
     },
 }
 

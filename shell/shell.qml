@@ -147,6 +147,11 @@ ShellRoot {
     // (`rollPhaseFor`). Sin compás medido (`bpmLive`) todo sigue como antes.
     property bool crtBeatLock: true
     onCrtBeatLockChanged: console.log("crt: beat_lock " + crtBeatLock)
+    // tanda 8, "todo al ritmo" (`crt.beat_offset`, ms): cuánto se corre TODA la grilla de tiempos.
+    // La latencia del análisis ya la resta el daemon (`BEAT_LATENCY_S`); esto es la del lado de
+    // acá (compositor + pantalla), que depende del equipo. + = los efectos caen más tarde.
+    property real crtBeatOffset: 0
+    onCrtBeatOffsetChanged: { console.log("crt: beat_offset " + crtBeatOffset); beatSync(); }
     // tanda 7, corrida 5b: unas pocas palabras (`motifWords`, entradas con `fx`) disparan un
     // efecto suelto en la pantalla que las muestra (`Crt.qml`, `fxFire`)
     property bool crtWordFx: true
@@ -601,12 +606,17 @@ ShellRoot {
     // de este lado es "hace tanto fue el último golpe" — con eso se ancla.
     property real bpm: 0
     property real bpmConf: 0
-    property double lastBeatAt: 0
+    // la grilla ES esto: el ancla que manda el daemon (`beatAnchorRaw`) + el corrimiento del
+    // usuario. Todo lo que va al ritmo la lee por acá (`msToNextBeat`, `beatTick`): ningún
+    // efecto tiene un reloj de tiempos propio.
+    property double beatAnchorRaw: 0
+    readonly property double lastBeatAt: beatAnchorRaw + crtBeatOffset
     property double bpmAt: 0
     readonly property real beatMs: bpm > 0 ? 60000 / bpm : 0
     // debajo de 0.6 el número es una adivinanza: todo sigue moviéndose con la
-    // letra, como antes de que existiera esto
-    readonly property bool bpmLive: crtOn && bpm > 0 && bpmConf > 0.6
+    // letra, como antes de que existiera esto. En pausa la grilla se apaga (la música no
+    // suena, pero el daemon la sigue extrapolando unos segundos).
+    readonly property bool bpmLive: crtOn && bpm > 0 && bpmConf > 0.6 && posPlaying
         && (liveTick, Date.now() - bpmAt < 15000)
     // Cuantizar = redondear a un número ENTERO de tiempos, no reemplazar por un
     // tiempo: el compás acomoda lo que ya pasaba, no lo hace pasar más seguido.
@@ -615,25 +625,69 @@ ShellRoot {
             return ms;
         return Math.max(1, Math.round(ms / beatMs)) * beatMs;
     }
-    // El pulso del compás. Es un poll de 25 ms y no un Timer con el intervalo
-    // del tiempo: un Timer hay que restart()earlo en cada re-anclaje de fase, y
-    // eso le rompe el binding de `running` (queda prendido con el tubo apagado).
-    // Acá el reloj es la resta contra `lastBeatAt`, así que re-anclar es asignar
-    // una property y listo.
+    // ms desde `now` hasta el próximo tiempo de la grilla (0 < r <= beatMs). La ÚNICA cuenta de
+    // "cuándo cae el próximo tiempo": `hit()`, el pulso y los motifs preguntan por acá.
+    function msToNextBeat(now) {
+        const b = beatMs;
+        return b - (((now - lastBeatAt) % b) + b) % b;
+    }
+    // Un Timer de QML es de los GRUESOS (Qt::CoarseTimer, ±5 % del intervalo): para llegar a
+    // una marca se acerca en pasos que nunca se pasan (85 % de lo que falta) y sólo el último,
+    // corto (< 40 ms, donde Qt es preciso), llega a ella. `left` = ms que faltan; devuelve el
+    // intervalo del próximo paso.
+    function beatStepAim(left) {
+        return Math.max(1, Math.round(left > 40 ? left * 0.85 : left));
+    }
+    // El pulso del compás: un Timer APUNTADO al próximo tiempo de la grilla (no un poll de 25 ms,
+    // que llegaba hasta 25 ms tarde y a veces 2 veces seguidas con cada re-anclaje). `beatDueAt`
+    // es la marca; `beatLateMs` cuánto se pasó al disparar (los motifs lo descuentan de su
+    // `tickAt`). El Timer no lleva binding de `running`: restart() lo rompe (queda prendido con
+    // el tubo apagado); `beatSync()` lo arranca/para a mano en cada cambio de grilla.
     property int beatTick: 0
-    property int lastBeatIndex: -1
+    property double beatDueAt: 0
+    property double beatFiredAt: 0
+    property real beatLateMs: 0
+    property real beatLateSum: 0
+    property real beatLateMax: 0
+    function beatSync() {
+        if (!(crtOn && bpmLive)) {
+            beatTimer.stop();
+            beatDueAt = 0;
+            return;
+        }
+        // próxima marca de la grilla (re-anclada), sin repetir la que acaba de sonar
+        const now = Date.now();
+        const t0 = Math.max(now + 10, beatFiredAt + beatMs * 0.5);
+        beatDueAt = t0 + msToNextBeat(t0);
+        beatTimer.interval = beatStepAim(beatDueAt - now);
+        beatTimer.restart();
+    }
     Timer {
-        interval: 25
-        repeat: true
-        running: root.crtOn && root.bpmLive
+        id: beatTimer
+        repeat: false
         onTriggered: {
-            const n = Math.floor((Date.now() - root.lastBeatAt) / root.beatMs);
-            if (n !== root.lastBeatIndex) {
-                root.lastBeatIndex = n;
+            if (!(root.crtOn && root.bpmLive))
+                return;
+            const now = Date.now();
+            if (now >= root.beatDueAt - 1) {
+                root.beatLateMs = Math.max(0, now - root.beatDueAt);
+                root.beatFiredAt = now;
                 root.beatTick++;
+                // el chequeo de deriva: cada 32 tiempos, cuánto se pasó el pulso de su marca
+                root.beatLateSum += root.beatLateMs;
+                root.beatLateMax = Math.max(root.beatLateMax, root.beatLateMs);
+                if (root.beatTick % 32 === 0) {
+                    console.log("crt: beat tick late avg " + (root.beatLateSum / 32).toFixed(1)
+                                + "ms max " + root.beatLateMax.toFixed(1) + "ms (bpm "
+                                + root.bpm.toFixed(1) + ")");
+                    root.beatLateSum = 0;
+                    root.beatLateMax = 0;
+                }
             }
+            root.beatSync();
         }
     }
+    onBpmLiveChanged: beatSync()
 
     // T3.8: ¿suena algo AHORA? No es lo mismo que haya letra: en un
     // instrumental la pantalla tiene que estar viva, no decir "NO SIGNAL".
@@ -3898,7 +3952,7 @@ ShellRoot {
         crt_bloom: "crtBloom", crt_noise: "crtNoise", crt_roll: "crtRoll",
         crt_composite: "crtComposite", crt_tube: "crtTube",
         crt_persistence: "crtPersistence", crt_tension: "crtTensionAmount", crt_dirt: "crtDirtAmount", crt_mov_speed: "crtMovAmount", crt_burnin: "crtBurnin",
-        crt_beat_lock: "crtBeatLock", crt_word_fx: "crtWordFx",
+        crt_beat_lock: "crtBeatLock", crt_beat_offset: "crtBeatOffset", crt_word_fx: "crtWordFx",
         crt_vignette: "crtVignette", crt_intensity: "crtIntensity", crt_chrome: "crtChrome",
         crt_director: "crtDirector", crt_focus: "crtFocusMode", crt_scene: "crtSceneMode",
         crt_set: "crtSetMode", crt_intro: "crtIntro", crt_screen_off: "crtScreenOff", crt_testcard: "crtTestcard", crt_maze_eggs: "crtMazeEggs", crt_intro_card: "crtIntroCard",
@@ -4014,7 +4068,8 @@ ShellRoot {
                             root.bpmConf = ev.conf;
                             root.bpmAt = Date.now();
                             // ver bpmPhase: llega la EDAD del último golpe
-                            root.lastBeatAt = Date.now() - (ev.phase || 0) * 1000;
+                            root.beatAnchorRaw = Date.now() - (ev.phase || 0) * 1000;
+                            root.beatSync();
                         } else if (ev.cmd === "cue") {
                             root.audComing = ev.kind;
                             root.audComingAt = Date.now();

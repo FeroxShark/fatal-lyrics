@@ -2607,14 +2607,14 @@ ShellRoot {
     // hasta que cambie el tema. `crt.set = "off"` (crtSetOn === false) apaga
     // esto entero y vuelve al pool parejo de siempre.
     //
-    // Los 28 motivos en tres grupos, por temperamento (la corrida 3 les
+    // Los 31 motivos en tres grupos, por temperamento (la corrida 3 les
     // cambia las cuotas según el mood; sin mood: 2 calm + 1 hot + 1 neutral).
     readonly property var motifGroups: ({
         calm:    ["dunes", "ocean", "pond", "eye", "scope", "rorschach",
-                  "harmonograph"],
+                  "harmonograph", "julia", "vitral"],
         hot:     ["plasma", "tunnel", "stars", "ekg", "static", "radar",
                   "pipes", "vector", "mystify", "maze", "membrana", "cintas", "pixelsort", "estela"],
-        neutral: ["textsea", "eyes", "rain", "swarm", "defrag", "giroscopio", "cascada"],
+        neutral: ["textsea", "eyes", "rain", "swarm", "defrag", "giroscopio", "cascada", "truchet"],
     })
     // Familias de entradas para cuando hay set puesto (el wiring adentro de
     // `crtEntriesFor`/`crtPickEntry` es un paso aparte; acá sólo se define
@@ -2997,7 +2997,9 @@ ShellRoot {
                                        // los de golpe físico (previews/crt-motifs, 2026-10-19)
                                        "membrana", "cintas", "giroscopio",
                                        // los de ventanas de Win95 (2026-10-22)
-                                       "cascada", "estela", "pixelsort"]
+                                       "cascada", "estela", "pixelsort",
+                                       // fractal, baldosas y vidrio (2026-10-22)
+                                       "julia", "truchet", "vitral"]
 
     // Un motivo puede no tener con qué dibujarse. El filtro NO mira la pantalla
     // a propósito: `crtMotifFor` garantiza que dos pantallas apagadas nunca
@@ -3171,6 +3173,9 @@ ShellRoot {
         cascada:      { e: 0.55, b: 0.65, t: 0.60 },
         estela:       { e: 0.60, b: 0.60, t: 0.65 },
         pixelsort:    { e: 0.75, b: 0.50, t: 0.75 },
+        julia:        { e: 0.45, b: 0.40, t: 0.45 },
+        truchet:      { e: 0.55, b: 0.55, t: 0.60 },
+        vitral:       { e: 0.35, b: 0.45, t: 0.40 },
     })
     // cuántas veces salió cada kind en este tema (se vacía con el tema nuevo)
     property var crtMotifUsed: ({})

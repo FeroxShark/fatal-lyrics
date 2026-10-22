@@ -21,7 +21,7 @@ Item {
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
     // | static | textsea | eyes | ekg | rorschach | plasma | tunnel
     // | swarm | splitflap | maze | pipes | defrag | mystify | vector | harmonograph
-    // | membrana | cintas | giroscopio | cascada | estela | pixelsort | none
+    // | membrana | cintas | giroscopio | cascada | estela | pixelsort | julia | truchet | vitral | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -341,6 +341,9 @@ Item {
             : motif.kind === "cascada" ? cascadaC
             : motif.kind === "estela" ? estelaC
             : motif.kind === "pixelsort" ? pixelsortC
+            : motif.kind === "julia" ? juliaC
+            : motif.kind === "truchet" ? truchetC
+            : motif.kind === "vitral" ? vitralC
             : null
     }
 
@@ -1830,6 +1833,123 @@ Item {
         id: pixelsortC
 
         Pixelsort {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // julia: las curvas de nivel de un conjunto de Julia que respira con el bombo (`julia.frag`).
+    Component {
+        id: juliaC
+
+        Julia {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // truchet: baldosas de arcos que giran de a un cuarto de vuelta al compás, con una onda por golpe (`truchet.frag`).
+    Component {
+        id: truchetC
+
+        Truchet {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // vitral: vidrio de Voronoi emplomado; el bombo empuja los vidrios y los agudos prenden facetas (`vitral.frag`).
+    Component {
+        id: vitralC
+
+        Vitral {
             colour: motif.colour
             hot: motif.hot
             bg: motif.bg

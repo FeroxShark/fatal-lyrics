@@ -127,3 +127,12 @@ Tres motivos más sobre `ThumpBase`, ya en el sorteo (`motifKinds`/`motifGroups`
 `cascada` (pila de diálogos de error, una por tiempo), `estela` (ventana colgada arrastrada con
 eco) y `pixelsort` (shader: tiras de ventanas ordenadas por brillo). `./sync-shell.sh` los copia;
 `LC_ALL=C ./sheet.sh cascada 1,3.4,6,9`. La receta para sumar uno está en `docs/MAPA.md`.
+
+## Fractal, baldosas y vidrio (2026-10-22): julia, truchet, vitral
+
+Tres motivos de shader sobre `ThumpBase`, ya en el sorteo. `julia` (calm): curvas de nivel de un
+conjunto de Julia cuyo parámetro respira con el bombo y cuya órbita salta un paso por compás.
+`truchet` (neutral): baldosas de arcos, cada una gira un cuarto de vuelta cada 1/2/4/8 tiempos y
+cada bombo manda una onda que las empuja. `vitral` (calm): vidrio de Voronoi emplomado; el bombo
+empuja los vidrios, los agudos prenden facetas y cada compás sortea cuáles se encienden.
+`LC_ALL=C ./sheet.sh julia 1,3.4,6,9` (ídem `truchet`, `vitral`).

@@ -1,4 +1,4 @@
-"""Las tres animaciones de ventanas de Win95 (2026-10-22): cascada, estela, pixelsort.
+"""Los motivos de 2026-10-22: cascada, estela, pixelsort (ventanas de Win95) y julia, truchet, vitral.
 
 No corren la placa: miran que cada una esté registrada en todos los lugares que pide la receta
 de CLAUDE.md ("Cómo se agrega una animación") y que el .qsb de pixelsort sea de su .frag."""
@@ -11,7 +11,8 @@ import unittest
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 SHELL = os.path.join(ROOT, "shell")
 QSB = "/usr/lib/qt6/bin/qsb"
-KINDS = ("cascada", "estela", "pixelsort")
+KINDS = ("cascada", "estela", "pixelsort", "julia", "truchet", "vitral")
+SHADERS = ("pixelsort", "julia", "truchet", "vitral")
 
 
 def read(path):
@@ -48,18 +49,26 @@ class TestRegistro(unittest.TestCase):
             self.assertIsNone(re.search(r"^\s*Canvas\s*\{", src, re.M))
 
 
-class TestPixelsort(unittest.TestCase):
+class TestShaders(unittest.TestCase):
     def test_el_qsb_existe(self):
-        self.assertTrue(os.path.exists(os.path.join(SHELL, "pixelsort.frag.qsb")))
+        for k in SHADERS:
+            self.assertTrue(os.path.exists(os.path.join(SHELL, f"{k}.frag.qsb")), k)
 
     @unittest.skipUnless(os.path.exists(QSB), "qsb de Qt no instalado")
     def test_el_qsb_es_de_la_version_del_frag(self):
-        with tempfile.TemporaryDirectory() as d:
-            out = os.path.join(d, "p.qsb")
-            subprocess.run([QSB, "--glsl", "100 es,120,150", "-o", out,
-                            os.path.join(SHELL, "pixelsort.frag")], check=True, capture_output=True)
-            with open(out, "rb") as a, open(os.path.join(SHELL, "pixelsort.frag.qsb"), "rb") as b:
-                self.assertEqual(a.read(), b.read(), "recompilar: pixelsort.frag.qsb está viejo")
+        for k in SHADERS:
+            with tempfile.TemporaryDirectory() as d:
+                out = os.path.join(d, "p.qsb")
+                subprocess.run([QSB, "--glsl", "100 es,120,150", "-o", out,
+                                os.path.join(SHELL, f"{k}.frag")], check=True, capture_output=True)
+                with open(out, "rb") as a, open(os.path.join(SHELL, f"{k}.frag.qsb"), "rb") as b:
+                    self.assertEqual(a.read(), b.read(), f"recompilar: {k}.frag.qsb está viejo")
+
+    def test_el_reloj_de_compas_no_se_hashea_crudo(self):
+        # beatN llega en los miles: sin mod() el seno del hash pierde la precisión y da 0
+        for k in ("julia", "truchet", "vitral"):
+            src = read(f"shell/{k}.frag")
+            self.assertIn("mod(", src, k)
 
 
 if __name__ == "__main__":

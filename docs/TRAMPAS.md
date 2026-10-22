@@ -1491,3 +1491,8 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 - **Scanlines y máscara no pueden tener la misma profundidad sobre el texto que sobre el fondo:** el haz engorda con el brillo (`beam`), así el texto queda sólido (peine ~17 % en blanco brillante) y el fondo oscuro conserva la línea fina. Con 0.55 el peine del texto caía a ~8 % y el tubo parecía apagado.
 - **Sin dither el degradé del halo hace bandas en 8 bits:** dither triangular de 1/255 (grano a 30 Hz, apagado en negro puro). Banco: `previews/crt-calidad/render.py` (`--tag`, `--ss`, `--tubes`, `--size`; sale a `out/`, no se commitea). Sus `ms` NO son confiables (`grabWindow` no re-renderiza una escena quieta).
 - `tests/test_carteles.py::test_the_bell_writes_the_knob` falla en la base (594f4e4, bucle de la bandeja), no por el CRT.
+
+## beatN llega en los miles: no se hashea crudo (2026-10-22)
+
+- El reloj del tubo arranca en 3000 s, así que `beatN` vale miles. `sin(bn*3.17)` en fp32 pierde la precisión y los hashes (`fract(sin(..)*43758)`) dan 0 siempre: en `vitral` todas las baldosas salían "encendidas" y el motivo era un naranja parejo. Siempre `mod(bn, N)` (251, 4, 2...) ANTES de hashear o de usarlo de ángulo. Aplicado en `julia.frag`, `truchet.frag` y `vitral.frag`.
+- `ShaderEffect` + GLSL ES 100: los bucles necesitan cota constante (`julia.frag` itera hasta 56 y corta con `maxIt`).

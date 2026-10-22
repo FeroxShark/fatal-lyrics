@@ -40,6 +40,20 @@ ShellRoot {
     // en sí, eso sólo elige entre estos tres)
     property string cascadeMode: "age"
     property bool karaokeOn: false
+    // `[display] song_color`: el color sigue a la canción (cartelitos/tone.py,
+    // docs/CONCEPTOS.md "El color"). `toneWarm`/`toneShift` llegan del evento
+    // `tone` (ya suavizados, 2 por segundo como mucho); `songWarm`/`songShift`
+    // son los que se APLICAN: 0 con la perilla apagada.
+    property bool songColorOn: true
+    property real toneWarm: 0
+    property real toneShift: 0
+    readonly property real songWarm: songColorOn ? toneWarm : 0
+    readonly property real songShift: songColorOn ? toneShift : 0
+    // la barra de título del modo normal y el texto karaoke: el azul de Win95
+    // corrido por el tono, con la MISMA luminancia (la letra blanca se lee igual)
+    readonly property string barColorA: Faces.toneHex("#000080", songWarm, songShift)
+    readonly property string barColorB: Faces.toneHex("#1084d0", songWarm, songShift)
+    readonly property string karaokeColor: Faces.toneHex("#000080", songWarm, songShift, 3)
     // `[display] dialogs`: el interruptor de TODO el modo normal. Apagado no
     // nace ningún cartel, la funda y el rótulo de teclas se callan y los que
     // estaban vivos se van por su muerte de siempre (shouldDie). El tubo no
@@ -1569,7 +1583,8 @@ ShellRoot {
         let hex = [];
         for (let i = 0; i < artColors.length; i++)
             hex.push(Qt.color(artColors[i]).toString());
-        const f = Faces.albumFaces(hex, (crtMoodLocked || crtMood).energy);
+        const f = Faces.albumFaces(hex, (crtMoodLocked || crtMood).energy,
+                                   { warm: songWarm, shift: songShift });
         if (!f)
             return null;
         return { key: "album", a: qtFace(f.a), b: qtFace(f.b), c: qtFace(f.c) };
@@ -1825,14 +1840,16 @@ ShellRoot {
     property real pitchAtPal: 0.5
     property double pitchChangedAt: 0
 
-    // fósforo según el registro: grave → amarillo/rojo (dragons), agudo →
-    // celeste (ado). El rojo "critical" queda reservado para los golpes de línea.
+    // fósforo según el registro (sin tapa): grave → índigo y celeste (vapor, ado),
+    // agudo brillante → ámbar y fuego (bone, dragons) — la misma regla que el
+    // tono de la tapa (`Faces.toneHue`). El rojo "critical" queda reservado para
+    // los golpes de línea.
     function palForPitch(p) {
-        if (p < 0.22) return 0;        // dragons
-        if (p < 0.42) return 3;        // bloodline
-        if (p < 0.60) return 5;        // bone
-        if (p < 0.78) return 2;        // poison
-        return 1;                      // ado
+        if (p < 0.20) return 4;        // vapor: índigo
+        if (p < 0.40) return 1;        // ado: celeste
+        if (p < 0.60) return 2;        // poison
+        if (p < 0.80) return 5;        // bone: ámbar
+        return 0;                      // dragons: fuego
     }
 
     // Se evalúa sólo al empezar una línea, con salto mínimo de tono y un mínimo
@@ -4019,7 +4036,7 @@ ShellRoot {
         effects_on_current: "effectsOnCurrent", tearing: "tearingOn",
         death_age_min: "deathAgeMin", death_age_max: "deathAgeMax", max_lifetime: "maxLifetime",
         click_through: "clickThrough", troll_no: "trollNo", burn_in: "burnIn",
-        cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn", dialogs: "dialogsOn",
+        cascade: "cascadeDeath", cascade_style: "cascadeStyle", karaoke: "karaokeOn", dialogs: "dialogsOn", song_color: "songColorOn",
         mirror: "mirrorOn",
         np_corner: "npCorner", np_margin: "npMargin", np_vinyl: "npVinyl",
         sing: "singMode",
@@ -4174,6 +4191,9 @@ ShellRoot {
                             if (ev.id === undefined || ev.id === null || root.artTrackId === ""
                                     || String(ev.id) === root.artTrackId)
                                 root.artColors = ev.colors || [];
+                        } else if (ev.cmd === "tone") {
+                            root.toneWarm = +ev.warm || 0;
+                            root.toneShift = +ev.shift || 0;
                         } else if (ev.cmd === "aud") {
                             root.audLevel = ev.l;
                             root.audLevel2s = root.audLevel2s * 0.95 + ev.l * 0.05;
@@ -4473,7 +4493,7 @@ ShellRoot {
                     function karaokeHtml(words, cut) {
                         let out = "";
                         if (cut > 0)
-                            out = '<font color="#000080">' + htmlEsc(words.slice(0, cut).join(" ")) + "</font>";
+                            out = '<font color="' + root.karaokeColor + '">' + htmlEsc(words.slice(0, cut).join(" ")) + "</font>";
                         if (cut > 0 && cut < words.length)
                             out += " ";
                         if (cut < words.length)
@@ -4892,8 +4912,8 @@ ShellRoot {
                                     // que no respondía
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
-                                        GradientStop { position: 0.0; color: win.hung ? "#5a5a5a" : "#000080" }
-                                        GradientStop { position: 1.0; color: win.hung ? "#9a9a9a" : "#1084d0" }
+                                        GradientStop { position: 0.0; color: win.hung ? "#5a5a5a" : root.barColorA }
+                                        GradientStop { position: 1.0; color: win.hung ? "#9a9a9a" : root.barColorB }
                                     }
 
                                     // barrido blanco al nacer, como un reflejo cruzando el vidrio

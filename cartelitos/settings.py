@@ -83,6 +83,8 @@ GROUPS = [
         _toggle("display", "dialogs", "Show dialogs",
                 "off = none appear (sleeve too); the CRT tube is separate"),
         _toggle("display", "karaoke", "Karaoke", "the current line paints word by word"),
+        _toggle("display", "song_color", "Song colour",
+                "the colour follows the song: bright = warm, deep = cold"),
         _slider("display", "scale", "Size", "all dialogs", 0.5, 3.0, 0.1),
         _slider("display", "current_scale", "Current line", "extra size", 0.5, 3.0, 0.1),
         _count("display", "max_dialogs", "At once", "0 = no limit", 0, 50),

@@ -15,6 +15,7 @@ import traceback
 from . import config
 from . import ipc
 from . import mood
+from .tone import ToneTracker
 from .util import FIELD_SEP, log
 
 # --------------------------------------------------------- perfil del tema
@@ -1873,6 +1874,7 @@ def _capture_loop():
             continue
         log("audio: reacting to what's playing")
         an = AudioAnalyzer()
+        tone = ToneTracker()
         last = 0.0
         last_wave = 0.0
         last_sec = 0.0
@@ -1918,6 +1920,10 @@ def _capture_loop():
                 ev = an.feed(mono, now, pct=cur_pct)
                 if not ev:
                     continue
+                # el color sigue a la canción (tone.py): se mide siempre, se manda si la perilla está
+                tmsg = tone.feed(ev, now, an.peak)
+                if tmsg and config.CFG["display"]["song_color"]:
+                    ipc.send_soft(tmsg)
                 if not light and now - last_wave >= 1.0 / WAVE_HZ:
                     last_wave = now
                     wave = wave_points(left, right, an.peak)
@@ -1969,6 +1975,7 @@ def _capture_loop():
                     # tema nuevo: el compás anterior no dice nada del que
                     # arranca, pero el del perfil (si ya se escuchó) sí
                     bpm.reset()
+                    tone.reset()
                     bpm.seed(prof.bpm, prof.conf)
                     # el carácter también: con perfil guardado arranca en su
                     # valor; sin perfil, desde el medio, y lo va armando la música
@@ -2030,6 +2037,8 @@ def _capture_loop():
                         log(f"coming: {nxt}")
                         ipc.send_soft({"cmd": "cue", "kind": nxt, "in": CUE_AHEAD})
         finally:
+            # sin captura no hay música que seguir: el color vuelve a la tapa pelada
+            ipc.send_soft({"cmd": "tone", "warm": 0.0, "shift": 0.0})
             proc.terminate()
             try:
                 proc.wait(timeout=1)

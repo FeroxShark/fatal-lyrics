@@ -36,6 +36,11 @@ _CONFIG_COMMENTS = {
         "current_scale": "extra size factor for the current-line dialog",
         "spawn_area": "full | top | bottom | left | right | edges (leaves the center clear)",
         "karaoke": "current line paints word by word (estimated timing)",
+        "song_color": "the colour follows the SONG, not only the cover: high bright\n"
+                      "sounds lean warm and luminous (amber), deep dark ones cold and\n"
+                      "darker (deep blue), and a lasting change of mood (chorus, drop,\n"
+                      "breakdown) slides the hue. The cover stays the base. Dialog title\n"
+                      "bars and the tube both follow it; needs the audio capture",
         "dialogs": "false = no error dialogs (nor sleeve): the app stays on without them.\n"
                    "The CRT tube is separate. Switch it from anywhere with:\n"
                    "fatal carteles on | off | toggle",
@@ -146,10 +151,10 @@ _CONFIG_COMMENTS = {
         "audio": "react to what's actually playing (captures the sound card's\n"
                  "monitor with pw-record/parec — no extra packages). Only while\n"
                  "the tube is up. false = everything follows the lyric clock",
-        "color_from_pitch": "the phosphor leans on the register of what's playing:\n"
-                             "high voices go cyan/blue, low ones amber/red. Only used when\n"
-                             "the cover gives no colours — with art, the palette is the\n"
-                             "album's and doesn't move for the whole track",
+        "color_from_pitch": "no cover colours: the preset leans on the register of what's\n"
+                             "playing — bright high sounds pick the warm ones (amber, red),\n"
+                             "deep low ones the cold ones (indigo, cyan). With a cover the\n"
+                             "palette is the album's and `display.song_color` moves it",
         "color_hold": "seconds a colour has to stay before it may change again. It\n"
                       "is a floor, not a licence: a colour change also has to land\n"
                       "on a peak of the song, so it happens two or three times a\n"
@@ -394,7 +399,7 @@ def _render_default_config(defaults):
 DEFAULTS = {
     "display": {
         "screen": "auto", "max_dialogs": 0, "scale": 1.0,
-        "current_scale": 1.3, "spawn_area": "full", "karaoke": False,
+        "current_scale": 1.3, "spawn_area": "full", "karaoke": False, "song_color": True,
         "dialogs": True,
     },
     "effects": {

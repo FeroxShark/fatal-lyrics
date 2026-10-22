@@ -90,26 +90,93 @@ function lightFor(h, s, target, lo, hi) {
     return (lo + hi) / 2;
 }
 
+// ------------------------------------------------------------ el tono
+// El color también sigue a la CANCIÓN, no sólo a la tapa (`cartelitos/tone.py`
+// mide, esto aplica). `warm` -1..1 es el registro: agudo y brillante tira a
+// ámbar y a más luz, grave y oscuro tira a azul hondo y a menos luz. `shift`
+// -1..1 es el mood: una sección que sube o baja corre el tono de la tapa.
+// La tapa sigue siendo la base: el tono se TIRA hacia el polo (una fracción del
+// arco más corto, `TONE_PULL_MAX`), no se reemplaza. El polo cálido es ámbar —
+// nunca violeta — y el frío un azul profundo entre el índigo y el petróleo.
+// La luz de cada cara se corre dentro de un margen donde el contraste de la
+// letra sigue valiendo (lo mide `tests/test_tono.py` en toda la rueda).
+const TONE_POLE_WARM = 0.105;       // ámbar
+const TONE_POLE_COOL = 0.58;        // azul profundo
+const TONE_PULL_MAX = 0.55;         // cuánto del camino al polo, a ±1
+const TONE_SHIFT_MAX = 0.09;        // vuelta de la rueda a ±1 de mood (32°)
+const TONE_LUM_DOWN = 0.5;          // cuánta luz pierde una cara a -1 (la prendida, de 0.5 a 0.25)
+const TONE_LUM_UP = 0.3;            // y cuánta gana a +1
+const TONE_LUM_MID = 0.25;          // la media, a +1; a -1 baja casi tanto como la prendida (0.45): vive entre las otras dos y la prendida ya no baja de LIT_Y_MIN
+const LIT_Y_MIN = 0.2;              // la prendida no baja de acá: más oscura y la letra negra no llega a 4.5
+const INK_Y_MIN = 0.2;              // ni la letra encendida de la oscura
+// la luminancia `y0` corrida por el registro `t`; nunca por debajo de `floor`
+// (si ya estaba abajo, se queda) ni por encima de 0.9
+function toneY(y0, t, floor) {
+    if (!t)
+        return y0;
+    if (t < 0)
+        return Math.min(y0, Math.max(floor, y0 * (1 + TONE_LUM_DOWN * t)));
+    return Math.min(0.9, Math.max(y0, y0 * (1 + TONE_LUM_UP * t)));
+}
+
+// El tono `h` (0..1) después del mood y del registro.
+function toneHue(h, warm, shift) {
+    warm = clamp01((warm + 1) / 2) * 2 - 1;
+    shift = clamp01((shift + 1) / 2) * 2 - 1;
+    const rot = h + shift * TONE_SHIFT_MAX;
+    const pole = warm >= 0 ? TONE_POLE_WARM : TONE_POLE_COOL;
+    const d = ((pole - rot + 1.5) % 1 + 1) % 1 - 0.5;      // el arco corto hacia el polo, -0.5..0.5
+    return ((rot + d * Math.abs(warm) * TONE_PULL_MAX) % 1 + 1) % 1;
+}
+// Un color suelto (la barra de título del modo normal): el tono corre, la
+// LUMINANCIA se queda — es lo que la mantiene legible con letra blanca encima.
+// `yMul` (opcional) la sube o baja: el texto karaoke del modo normal, que es
+// casi negro, necesita un poco de luz para que el color se note.
+function toneHex(hex, warm, shift, yMul) {
+    const hsl = rgbToHsl(hexToRgb(hex));
+    if (hsl[1] < 0.05 || (!warm && !shift))
+        return hex;
+    const y = luminance(hex) * (yMul || 1);
+    const h = toneHue(hsl[0], warm, shift);
+    return hslToHex(h, hsl[1], lightFor(h, hsl[1], y));
+}
+
 // ------------------------------------------------------------ las caras
 // Cada cara: { bg, ink, hot, dim, tint } en hex. `tint` es el color del
 // fósforo (halo del bloom, barra que rueda, rotura); `shell.qml` lo pasa a vec3.
 // Los L de base son los de la cara de siempre (`faceFromColor`, tanda 2); sólo
-// se corren cuando ese tono no llega al contraste.
-function faceLit(h, s) {
-    const l = Math.max(0.58, lightFor(h, s, 0.27));
+// se corren cuando ese tono no llega al contraste. `t` (-1..1) es el registro:
+// sin él (0) las caras son las de siempre, byte por byte.
+const LIT_Y = 0.27;
+const INK_MIN_C = 5.0;     // contraste que se le exige a la letra de la prendida (la regla del test es 4.5)
+// la letra más clara de L0 hacia abajo que llegue a `minC` contra `bg`
+function inkOn(h, s, bg, l0, minC) {
+    let l = l0;
+    while (l > 0 && contrast(hslToHex(h, s, l), bg) < minC)
+        l = Math.max(0, l - 0.01);
+    return hslToHex(h, s, l);
+}
+function faceLit(h, s, t) {
+    t = t || 0;
+    const l0 = Math.max(0.58, lightFor(h, s, LIT_Y));
+    const l = t ? lightFor(h, s, toneY(luminance(hslToHex(h, s, l0)), t, LIT_Y_MIN)) : l0;
     const dim = hslToHex(h, s, 0.34);
+    const bg = hslToHex(h, s, l);
+    const inkS = Math.min(s + 0.15, 1);
     return {
-        bg: hslToHex(h, s, l),
-        ink: hslToHex(h, Math.min(s + 0.15, 1), 0.15),
-        hot: hslToHex(h, 1, 0.07),
+        bg: bg,
+        ink: t < 0 ? inkOn(h, inkS, bg, 0.15, INK_MIN_C) : hslToHex(h, inkS, 0.15),
+        hot: t < 0 ? inkOn(h, 1, bg, 0.07, 3.5) : hslToHex(h, 1, 0.07),
         dim: dim,
         tint: dim,
     };
 }
-function faceDark(h, s) {
-    const ink = hslToHex(h, s, Math.max(0.66, lightFor(h, s, 0.30)));
+function faceDark(h, s, t) {
+    t = t || 0;
+    const ink0 = hslToHex(h, s, Math.max(0.66, lightFor(h, s, 0.30)));
+    const ink = t ? hslToHex(h, s, lightFor(h, s, toneY(luminance(ink0), t, INK_Y_MIN))) : ink0;
     return {
-        bg: hslToHex(h, s * 0.9, 0.07),
+        bg: hslToHex(h, s * 0.9, 0.07 + 0.015 * t),
         ink: ink,
         hot: hslToHex(h, 0.4, 0.92),
         dim: hslToHex(h, s, Math.max(0.40, lightFor(h, s, 0.09))),
@@ -119,11 +186,12 @@ function faceDark(h, s) {
 // La media: el fondo apunta a una luminancia entre las otras dos (lejos del
 // blanco de `a` y del negro de `b`), la letra casi blanca del mismo tono.
 const MID_Y = 0.11;
-function faceMid(h, s) {
+function faceMid(h, s, t) {
+    t = t || 0;
     const sat = Math.max(s, 0.55);
     const dim = hslToHex(h, sat, lightFor(h, sat, 0.30, 0.3, 0.97));
     return {
-        bg: hslToHex(h, sat, lightFor(h, sat, MID_Y, 0.05, 0.6)),
+        bg: hslToHex(h, sat, lightFor(h, sat, MID_Y * (1 + (t < 0 ? 0.45 : TONE_LUM_MID) * t), 0.05, 0.6)),
         ink: hslToHex(h, 0.9, 0.94),
         hot: "#ffffff",
         dim: dim,
@@ -140,7 +208,7 @@ const ALBUM_SAT_HARD = 0.6;
 // uno que ya está no cuenta como otro: se busca el siguiente y, si no hay, se
 // DERIVA del arco más grande que dejan los que hay (split-complementario), no
 // se sortea. null si la tapa no tiene color (gris, blanco y negro).
-function albumFaces(colors, energy) {
+function albumFaces(colors, energy, tone) {
     let usable = [];
     for (let i = 0; i < (colors || []).length; i++) {
         const hsl = rgbToHsl(hexToRgb(colors[i]));
@@ -173,10 +241,15 @@ function albumFaces(colors, energy) {
     const e = Math.min(Math.max(energy === undefined || energy === null ? 1 : energy, 0), 1);
     const floor = ALBUM_SAT_CALM + (ALBUM_SAT_HARD - ALBUM_SAT_CALM) * e;
     function sat(p) { return Math.min(Math.max(p[1], floor), 1); }
+    // El tono se aplica DESPUÉS de elegir: quién es la prendida, la oscura y la
+    // media sale de la tapa pelada y no salta cuando el registro se mueve.
+    const warm = tone && tone.warm ? tone.warm : 0;
+    const shift = tone && tone.shift ? tone.shift : 0;
+    function hue(p) { return warm || shift ? toneHue(p[0], warm, shift) : p[0]; }
     return {
-        a: faceLit(picked[0][0], sat(picked[0])),
-        b: faceDark(picked[1][0], sat(picked[1])),
-        c: faceMid(picked[2][0], sat(picked[2])),
+        a: faceLit(hue(picked[0]), sat(picked[0]), warm),
+        b: faceDark(hue(picked[1]), sat(picked[1]), warm),
+        c: faceMid(hue(picked[2]), sat(picked[2]), warm),
     };
 }
 

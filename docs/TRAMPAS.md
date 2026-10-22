@@ -1470,3 +1470,13 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 | golpe del bajo, destello de agudos | reactivo al onset real | igual (a propósito) |
 | aro, salto, cámara, entradas de letra | posición de Spotify / eventos del daemon | igual |
 | glitches modo normal | timers al azar | igual (sin audio en ese modo) |
+
+## Calidad del tubo: texturas, vidrio y tonos (2026-10-22)
+
+- **`stageTex`/`signalTex` son RGBA16F y, con `crtQuality >= 0.999`, se supermuestrean ×2 (`texSS`/`superS` en `Crt.qml`).** El vidrio las lee con un Catmull-Rom de 5 taps (`bicubic()` en `crt.frag`); antes leía vecino-más-cercano a través de la curvatura y los bordes del texto salían en escalera. A calidad < 1 `texSS` vuelve a 1 (el resize pasa por el mismo paso doble de "Cambio de calidad"). Si el overlay real no aceptara `RGBA16F`, el síntoma sería tubo negro: bajar a `ShaderEffectSource.RGBA8`.
+- **`texRes` del vidrio tiene que ser el `textureSize` REAL de la textura** (con `texQuality` y `texSS`): el bicúbico apoya los taps en los centros de texel, y con un tamaño equivocado el texto se ve borroso. Los bancos (`crt-motifs/Stage.qml`, `reaccion/Bench.qml`, `shader-check/Check.qml`) también lo declaran.
+- **`pow()` de un negativo da NaN y dibuja rayitas blancas en el borde del tubo** (la viñeta `16*x*y*(1-x)*(1-y)` cruza 0 afuera de la pantalla): `max(..., 0.0)` adentro del `pow`. Pasó al agregar el hombro de tonos, que amplifica el NaN a blanco.
+- **El bloom por anillos de 6 taps dibuja halos escalonados (contorno de calcomanía) y ahueca los glifos.** Ahora son discos girasol de 16 taps (`disk16`) y sólo suma el derrame (`max(glow - col, 0)`), menos donde el texto ya está encendido (`lit`).
+- **Scanlines y máscara no pueden tener la misma profundidad sobre el texto que sobre el fondo:** el haz engorda con el brillo (`beam`), así el texto queda sólido (peine ~17 % en blanco brillante) y el fondo oscuro conserva la línea fina. Con 0.55 el peine del texto caía a ~8 % y el tubo parecía apagado.
+- **Sin dither el degradé del halo hace bandas en 8 bits:** dither triangular de 1/255 (grano a 30 Hz, apagado en negro puro). Banco: `previews/crt-calidad/render.py` (`--tag`, `--ss`, `--tubes`, `--size`; sale a `out/`, no se commitea). Sus `ms` NO son confiables (`grabWindow` no re-renderiza una escena quieta).
+- `tests/test_carteles.py::test_the_bell_writes_the_knob` falla en la base (594f4e4, bucle de la bandeja), no por el CRT.

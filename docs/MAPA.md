@@ -7,7 +7,7 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   (`sync show|reset` y `crt motif` NO necesitan el daemon; `crt motif` habla con el overlay).
 - `shell/shell.qml` — reparte qué dibuja cada pantalla.
 - `shell/Crt.qml` — el tubo, en DOS pasadas: `signal.frag` (la señal, perilla `crt.composite`) →
-  `crt.frag` (el vidrio: fósforo, scanlines, rotura, estela). `crtTubeTable` (`shell.qml`, perilla
+  `crt.frag` (el vidrio: bicúbico, bloom por discos, fósforo, scanlines, rotura, estela, dither; texturas ×2 y RGBA16F: TRAMPAS "Calidad del tubo"). `crtTubeTable` (`shell.qml`, perilla
   `crt.tube`) define el tubo por tema; default `auto` (`crtSetFor`), `custom` = look de siempre.
   Detalle de las dos pasadas y la estela: `docs/TRAMPAS.md` ("Detalle movido: mapa técnico").
 - `crtTension`/`crtClimaxT` (`shell.qml`, `crt.tension`) — la tensión sube con la repetición de la

@@ -47,6 +47,7 @@ de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` s
   golpe escala por CARÁCTER del tema (`crtCharacter`: `char` del daemon, o BPM + energía del
   mood): tema lento = pulso chico y lento, agitado = grande y seco. Un número de amplitud o de
   frecuencia nuevo va a la TABLA: repartido en ternarios, `wild` deja de ser verificable.
+- **Calidad del tubo:** `stageTex`/`signalTex` son RGBA16F y ×2 a `crtQuality` 1; `texRes` = su tamaño real. Ver TRAMPAS.
 - **Casi todo lo raro tiene una razón medida.** Los gotchas caros están documentados EN EL CÓDIGO.
   Leerlos antes de "optimizar" algo que parece raro.
 

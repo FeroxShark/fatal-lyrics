@@ -63,6 +63,32 @@ el shader sigue la misma cuenta de antes (`S = res.y`, `yy = uv.y`).
   tres en las copias (si no, cada instancia anima en tiempo real y la comparación no es
   cuadro a cuadro: una diferencia de ~1 px que crecía hacia abajo era la arena levitando).
 
+## Los dos motivos de la fase 2 (stars, tunnel)
+
+Los dos no heredan de `MotifBase`: son hijos de `shell/WallItem.qml` (base mínima: `wall`, `wallCam`,
+`wallT`, `walled`, `wallWin`, `wallPx`, `wallFocus`, `span`, `wallNow()`), que da lo mismo que la receta
+de abajo sin traer el feed de ritmo. Una pantalla sola: igual que antes (el túnel con el shader viejo
+y los mismos uniforms da 0 de diferencia en apaisado y vertical; las estrellas hacen las mismas
+cuentas con `k = 1`).
+
+- **stars**: `shell/Stars.qml` (salió de `Motif.qml`). El campo es UNO y sale del foco (la letra):
+  `reach` llega a la esquina más lejana del lienzo, `k = reach / (span·1,05)` es cuántas veces más
+  largo es el radio que en una pantalla. La fase avanza `1/k` de rápido (una estrella recorre los
+  mismos px/s que en una pantalla sola) y el número de estrellas crece con `k^1,5` (tope 900: son
+  ítems por pantalla, y las que caen fuera de la ventana no se pintan). La distancia viajada vive en
+  `wall.share.stars`.
+- **tunnel**: `tunnel.frag` gana `win` (ventana en px de lienzo), `foc` (el punto de fuga = el foco, o
+  sea el túnel se ve desde adentro con la letra en el centro) y `spn` (la medida del anillo). Sin pared
+  son `(0,0,res)`, `res/2` y `min(res)`: la misma cuenta de antes. El pixel de filtro sale de la
+  ventana (`pxq`), no de la textura. El estado (`travel/clock/roll`, la luz que corre) vive en
+  `wall.share.tun`; la luz es UNA para toda la pared y cada pantalla la recalcula al plantarse
+  (`wallLightSync`), así que el orden en que les llegan las señales no importa.
+- **Supuestos**: en pared el empujón de brillo del golpe no se suma (dura un cuadro y cada copia se
+  lo sumaría): si la luz ya corre, el golpe no planta otra. Un golpe y un tiempo en el mismo cuadro
+  plantan la luz más fuerte.
+- **Bench**: el reloj externo (`wall.now()` = `pared.t`) manda los pasos (`wallT` → `wallStep`) y apaga
+  los `Behavior` y la `FrameAnimation`: el túnel y las estrellas salen deterministas.
+
 ## Hacer un motif extensible (receta)
 
 1. El motif ya hereda de `MotifBase`/`ThumpBase`: con `wall` puesto trae `walled`, `wallArea`
@@ -98,10 +124,16 @@ peor 0,17. Pantalla sola: el camino sin pared del shader es idéntico por constr
 shader sólo agrega ramas con `wcfg.x`); `render.py` no sirve para compararlo a píxel porque los
 pisotones y piedras de una pantalla sola salen de `Math.random` y el reloj de tiempo real.
 
+Resultado fase 2 (2026-10-22): stars 0,00 en los 4 layouts, con y sin `--cam 1.06 --zoom 1.04`. Tunnel
+0,00 casi siempre; queda una mancha de brillo en el instante t=2 s de algunos layouts (hasta ~3 de
+media, p99,5 ≤ 23), que es la luz recién plantada: el banco entrega las señales de golpe y tiempo
+a cada instancia en orden distinto, y la luz toma `low` de ese instante. En el equipo real es un
+cuadro de 900 ms: no se ve. A ojo (3-stars, 2-stars, 3-tunnel) el campo sale de la pantalla de la
+letra y sigue de una pantalla a la otra.
+
 ## Supuestos (fase 1) y lo que sigue
 
 - El mundo sigue por detrás de la pantalla de la letra (no se re-encuadra el lienzo sin ella).
 - Una cámara con `camS` distinta por pantalla no se corrige: la pared se ve continua cuando todas
   laten igual (el golpe ya es de pared). DP-1 participa.
-- Fase 3: más motifs extensibles (stars, tunnel son los candidatos naturales), verlo con música
-  real en el equipo, y decidir si el sorteo debería preferir la pared.
+- Siguiente: verlo con música real en el equipo (con todos los motifs de la fase 2) y decidir si el sorteo debería preferir la pared.

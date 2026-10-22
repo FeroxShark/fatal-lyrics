@@ -32,6 +32,36 @@ letra en el medio tiene que verse armónico. Una pantalla sola: nada cambia. Per
   glitch (`motifBridge`), nunca a mitad de un dibujo. `fatal crt motif <kind> --screen all` con un
   kind de pared muestra la pared.
 
+## La pantalla de la letra (Ferox 2026-10-22)
+
+La pantalla que tiene la letra NO lleva la pared debajo: queda limpia, como en el modo por
+pantalla (sólo la letra y su fondo, `pal.bg`). Vale también con el dibujo forzado
+(`fatal crt motif <kind> --screen all`): en pared el forzado ya no pinta debajo del verso. Las
+otras pantallas comparten el dibujo y cada motivo declara cómo (`wallFit`, en su `.qml`; default
+`"behind"` en `MotifBase`/`WallBase`/`WallItem`; la cuenta es `Wall.fit`):
+
+- **`"behind"` (detrás)**: el mundo sigue por detrás de la pantalla de la letra como si fuera una
+  ventana opaca; lo que sale por un lado reaparece por el otro con la geometría real. Es el lienzo
+  de siempre: la letra no cambia ninguna ventana. Lo usan los de movimiento con dirección:
+  **mystify, pipes, dunes, ocean**.
+- **`"mirror"` (espejo)**: el lado CORTO (el que menos se aleja del centro de la pantalla de la
+  letra) se espeja sobre ese eje y se da vuelta (`Scale` -1 en `motifFrame`): las dos alas
+  muestran el mismo dibujo, enmarcando la letra. El reflejo del lado corto cae dentro del lado
+  largo, así que el lienzo, el reloj y el estado compartido no cambian; el pivote de la cámara y el
+  foco también se reflejan (lo que se ve es el reflejo de la pared entera escalando sobre su
+  pivote). El eje es x si las demás pantallas están a los costados, y si no y (pantallas apiladas).
+  Lo usan los campos que salen del foco: **truchet, pond, stars, tunnel**.
+- **`wallEcho`** (0..1, default 0): un eco muy tenue y desenfocado (`MultiEffect`, blur) detrás de
+  la letra. Ningún motivo lo usa: rompe "una animación por pantalla" y no quedó mejor en ninguno.
+
+Sin letra (instrumental), con la letra en un borde, o con una pantalla sola: todas dibujan su
+rectángulo del lienzo, como antes. **Transiciones:** en pared el dibujo de la pantalla que recibe
+la letra se va con `Motion.exitMs` (InQuad) y vuelve con `Motion.enterMs` (OutExpo) cuando la
+letra se va (`wallShow`); la pantalla espejada que cambia de lado (la letra salta, o se va) lo
+hace en el PUENTE (`motifBridge`), con la letra de partida enganchada en `motifWall.text`. Si la
+ventana de una pantalla no cambia, el cambio es mudo. La letra la dice el root: `crtWallText`
+(-1 sin letra).
+
 ## Los motivos de la fase 1
 
 - **truchet**: el shader recibe `view` (ventana en unidades de `span`), `foc` (el foco) y `wallK`;
@@ -101,6 +131,9 @@ cuentas con `k = 1`).
    todas las pantallas). Nada de estado propio que no esté en `wall.share`.
 3. `Motif.qml`: en su bloque, `wall: motif.wall` y `wallCam: motif.wallCam`.
 4. `shell.qml`: sumar el kind a `motifWall`.
+4b. En el `.qml` del motivo, `wallFit: "behind"` (mundo con dirección: sigue por detrás de la letra)
+   o `"mirror"` (campo simétrico o que sale del foco: alas espejadas). Si el dibujo tiene texto
+   propio, `"behind"` (el espejo lo daría vuelta). `wallEcho` sólo si de verdad queda mejor.
 5. Banco: sumarlo a `KINDS` de `previews/crt-motifs/pared.py` y correr `./pared.py --check` (y
    `--cam 1.06 --zoom 1.04`): la media por pantalla contra la referencia tiene que dar < 0,5.
 6. Test: sumarlo a `WALL_KINDS` de `tests/test_pared.py`.
@@ -111,7 +144,11 @@ cuentas con `k = 1`).
 ## Banco (offscreen, `previews/crt-motifs/pared.py`)
 
 Layouts: `2` (DP-2 vertical + HDMI-A-1, instrumental), `3` (el equipo de Ferox, letra en el medio),
-`3i` (el mismo, instrumental), `3h` (tres 1920×1080, letra en el medio). Cada pantalla con su
+`3i` (el mismo, instrumental), `3h` (tres 1920×1080, letra en el medio), `2t` (DP-2 + HDMI-A-1, letra
+en HDMI-A-1: borde), `3e` (el equipo, letra en DP-2: borde), `3v` (tres 1920×1080 apiladas, letra en el
+medio: espejo en y). El `wallFit` sale del `.qml` del motivo (`--fit` lo pisa). Una pantalla espejada
+se mide contra el recorte reflejado y dado vuelta de la referencia; con cámara, contra
+`--ref --ref-mirror` (la referencia escalando sobre el pivote reflejado). Cada pantalla con su
 instancia contra UNA instancia que dibuja el lienzo entero (`--ref`).
 
 Resultado 2026-10-22 (media por pantalla 0..255, recorte contra la referencia): sin cámara, peor
@@ -131,9 +168,19 @@ a cada instancia en orden distinto, y la luz toma `low` de ese instante. En el e
 cuadro de 900 ms: no se ve. A ojo (3-stars, 2-stars, 3-tunnel) el campo sale de la pantalla de la
 letra y sigue de una pantalla a la otra.
 
+Pantalla de la letra limpia + detrás/espejo (2026-10-22, 7 layouts × 8 motivos): sin cámara, peor
+0,01 fuera del túnel en t=2; con `--cam 1.06 --zoom 1.04`, peor 0,31 (3v pipes). Las espejadas dan
+lo mismo que las otras (3-truchet, 3h-stars, 3v-pond con la ala dada vuelta: ≤ 0,02). El túnel en
+t=2 s sigue con la mancha de la luz recién plantada, y es **no determinista**: el commit anterior
+(`5e2cbc9`, sin estos cambios) da entre 0,3 y 16 de media corriendo tres veces lo mismo (3h). En
+t=6,5 s: ≤ 0,2 en todos (2-tunnel con cámara 0,75). A ojo (3-truchet, 3-tunnel, 3-mystify, 3v-pond,
+2t-dunes, 3e-ocean, 3h-stars, 3-pipes): la letra limpia, las alas del espejo simétricas sobre ella y
+el "detrás" sigue de una pantalla a la otra saltando la de la letra.
+
 ## Supuestos (fase 1) y lo que sigue
 
-- El mundo sigue por detrás de la pantalla de la letra (no se re-encuadra el lienzo sin ella).
+- El mundo sigue por detrás de la pantalla de la letra (no se re-encuadra el lienzo sin ella), o se
+  espeja (`wallFit`); la pantalla de la letra nunca lo muestra.
 - Una cámara con `camS` distinta por pantalla no se corrige: la pared se ve continua cuando todas
   laten igual (el golpe ya es de pared). DP-1 participa.
 - Siguiente: verlo con música real en el equipo (con todos los motifs de la fase 2) y decidir si el sorteo debería preferir la pared.

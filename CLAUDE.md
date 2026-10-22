@@ -41,12 +41,16 @@ de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` s
   `crt.beat_offset`. Los golpes del bajo siguen al onset real a propósito. `docs/TRAMPAS.md`.
 - **REGLA: los eventos tienen PRESUPUESTO, y es la perilla `pace`** (`calm | normal | wild`,
   default `normal`, tabla `crtPaceTable` en `shell.qml`). No es una velocidad: nada se mueve más
-  despacio. Es cuántas cosas pueden pasar por minuto — cuánto dura el dibujo de una
-  pantalla (12 s), cada cuánto cambia de canal la pared (20 s), cada cuánto se rompe una pantalla
-  (4 s), y qué tan grande es el latido de cámara y motivo. `wild` devuelve los números de la tanda 3 (salvo `kick*`). El
-  golpe escala por CARÁCTER del tema (`crtCharacter`: `char` del daemon, o BPM + energía del
-  mood): tema lento = pulso chico y lento, agitado = grande y seco. Un número de amplitud o de
-  frecuencia nuevo va a la TABLA: repartido en ternarios, `wild` deja de ser verificable.
+  despacio. Es cuántas cosas pueden pasar por minuto (dibujo de una pantalla 12 s, cambio de
+  canal 20 s, rotura de pantalla 4 s, tamaño del latido). `wild` devuelve los números de la
+  tanda 3 (salvo `kick*`). El golpe escala por CARÁCTER del tema (`crtCharacter`): lento = pulso
+  chico, agitado = grande y seco. Un número de amplitud o frecuencia nuevo va a la TABLA, no a
+  ternarios: `wild` deja de ser verificable.
+- **REGLA: el color sigue a la CANCIÓN, la tapa es la base** (Ferox 2026-10-22). `tone.py` saca de
+  `aud` dos números lentos en el evento `tone`: `warm` (agudo claro = ámbar, grave = azul hondo y
+  oscuro) y `shift` (mood sostenido ≥5 s con histéresis). `Faces.js` (`toneHue`/`albumFaces`) corre
+  la paleta hasta 55 % hacia el polo y cuida luz y contraste. Perilla `display.song_color`.
+  El mood usa rms CRUDO (`l * an.peak`), no `l`. Ver CONCEPTOS/TRAMPAS.
 - **Calidad del tubo:** `stageTex`/`signalTex` son RGBA16F y ×2 a `crtQuality` 1; `texRes` = su tamaño real. Ver TRAMPAS.
 - **Casi todo lo raro tiene una razón medida.** Los gotchas caros están documentados EN EL CÓDIGO.
   Leerlos antes de "optimizar" algo que parece raro.

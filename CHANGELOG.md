@@ -5,6 +5,15 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/), grouped
 by theme rather than by individual commit. This project doesn't cut versioned
 releases (AUR tracks `-git`), so entries are dated instead of numbered.
 
+## 2026-10-22 — The colour follows the song
+
+- The cover palette is still the base, but the hue now drifts with the music: bright
+  highs lean warm amber, deep lows lean cold deep blue and darker, and a sustained
+  change of section (chorus, drop, breakdown) slides the tone further, with
+  hysteresis so a short burst does nothing. Transitions take seconds.
+- Works in the CRT and, as the title bar and karaoke colour, in normal mode.
+  Text contrast is kept. Toggle: Settings → Dialogs → Song colour (`display.song_color`).
+
 ## 2026-10-09 — Every option in the Settings window
 
 - The Settings window now holds every option, in five tabs (Dialogs, Behavior,

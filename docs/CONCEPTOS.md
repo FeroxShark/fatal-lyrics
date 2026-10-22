@@ -54,3 +54,13 @@ Movido textual desde `CLAUDE.md` (2026-10-07). Las tres REGLAS (una animación p
 - **La letra va en el idioma en que se canta.** Cadena de proveedores (`lrclib` exacto →
   `lrclib` búsqueda → `NetEase`), título original y después el limpio, gana el primer `ok`.
   De NetEase `lrc`, **nunca** `tlyric` (traducción al chino). Ningún campo de traducción.
+
+## El color sigue a la canción
+
+La tapa del disco elige las tres caras de la paleta (`Faces.albumFaces`); eso es la identidad. Encima, `cartelitos/tone.py` (`ToneTracker`, puro, con el tiempo por parámetro) mide con las señales que ya calcula `AudioAnalyzer` y manda el evento `tone {warm, shift}` (≈2 Hz como mucho, latido cada 2 s; el overlay lo da por vivo; al terminar la captura se manda 0/0):
+
+- **`warm` (registro, -1..1):** brillo = 0.75·centroide + 0.25·agudos. Pivote 0.30 (la mediana real de 29 perfiles; con 0.5 todo sería frío). 60 % absoluto + 40 % relativo al propio tema (ref. de 25 s), zona muerta 0.08, suavizado de 2.5 s. Agudo = ámbar luminoso (nunca violeta); grave = azul profundo y más oscuro. En silencio >3 s vuelve a 0.
+- **`shift` (mood, -1..1):** mezcla de volumen (rms crudo en dBFS), densidad (`mov`) y brillo. El mood "de ahora" (1.5 s) menos el del tema (40 s) tiene que pasar de ±0.10 durante 5 s seguidos para correr; se suelta al volver a ±0.04 durante 5 s. Un golpe de 2 s no lo mueve.
+- **Aplicación (`Faces.js`):** `toneHue` rota hasta 0.09 de rueda por `shift` y tira por el arco corto hasta el 55 % hacia el polo por `|warm|`; `toneY` modula la luminancia objetivo (`lightFor`); `inkOn` mantiene la tinta ≥ 5:1 sobre la cara clara. Con `warm=shift=0` todo es idéntico a antes. Presets con nombre fijo no derivan. Sin tapa, el fallback de `palForPitch` ahora es agudo = cálido.
+- **Modo normal:** sólo la barra de título (`barColorA/B`) y el color del karaoke se mueven, conservando la luz para que el texto blanco se lea. El azul Win95 es la base.
+- Perilla `display.song_color` (Ajustes → Dialogs; default activo). Tests: `tests/test_tono.py`.

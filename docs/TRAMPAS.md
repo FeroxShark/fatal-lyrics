@@ -1496,3 +1496,11 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 
 - El reloj del tubo arranca en 3000 s, así que `beatN` vale miles. `sin(bn*3.17)` en fp32 pierde la precisión y los hashes (`fract(sin(..)*43758)`) dan 0 siempre: en `vitral` todas las baldosas salían "encendidas" y el motivo era un naranja parejo. Siempre `mod(bn, N)` (251, 4, 2...) ANTES de hashear o de usarlo de ángulo. Aplicado en `julia.frag`, `truchet.frag` y `vitral.frag`.
 - `ShaderEffect` + GLSL ES 100: los bucles necesitan cota constante (`julia.frag` itera hasta 56 y corta con `maxIt`).
+
+## Color por canción: `l` del `aud` no sirve para medir volumen (2026-10-22)
+
+- **`l` está normalizado contra un pico que decae**: tras un estribillo fuerte, una estrofa normal da `l` bajo hasta que el pico se olvida, y eso se leía como un bajón de mood que no existió. `tone.py` usa el rms CRUDO (`l * an.peak`, en dBFS: -45 = 0, -15 = 1). Dentro de un tema el volumen de escucha no cambia, por eso sirve.
+- **El mood necesita histéresis Y tiempo**: con umbral único o sin los 5 s de sostén, un golpe de 2 s mueve el color. Y la base lenta (40 s) arranca con tau adaptativo (`min(tau, elapsed)`), o el primer cuadro del tema queda clavado como "el mood del tema".
+- **El brillo neutro es 0.30, no 0.5**: los centroides reales tienen mediana 0.29. Con pivote 0.5 el tubo vivía frío.
+- **Luminancia del tinte**: un piso fijo de L hace no monótono el par cálido/frío; se modula el objetivo de luz (`toneY`) y la cara media cae más rápido en frío (0.45) para no bajar de 1.7 de distinción con el fondo.
+- **En modo normal el `tone` fluye por el modo `light` de `audio.py`** (captura sólo para la grilla de tiempos, con cartelitos y música): `tone.feed` corre antes del `if not light`, así la barra de título del modo normal también sigue a la canción.

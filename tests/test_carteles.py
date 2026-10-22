@@ -96,7 +96,8 @@ class TestFatalCarteles(unittest.TestCase):
         try:
             with mock.patch.object(config.time, "sleep", fake_sleep), \
                     mock.patch.object(config, "set_option", lambda *a: calls.append(a)), \
-                    mock.patch.object(config, "CARTELES_PATH", bell):
+                    mock.patch.object(config, "CARTELES_PATH", bell), \
+                    mock.patch.dict(config.CFG["display"], {"dialogs": True}):
                 with self.assertRaises(KeyboardInterrupt):
                     config.watch_carteles()
         finally:

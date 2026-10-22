@@ -120,3 +120,10 @@ Salidas: `out/<kind>-<temper>.mp4` y `out/<kind>-tira.png` (8 cuadros por carác
 Al integrar: `thump` NO existe todavía en el overlay; se ata al detector de bombo
 del frente "golpe de bajo". La costura del loop no es exacta (la deriva se acumula):
 en el overlay no hay loop, así que no importa.
+
+## Ventanas de Win95 (2026-10-22): cascada, estela, pixelsort
+
+Tres motivos más sobre `ThumpBase`, ya en el sorteo (`motifKinds`/`motifGroups`/`motifFit`):
+`cascada` (pila de diálogos de error, una por tiempo), `estela` (ventana colgada arrastrada con
+eco) y `pixelsort` (shader: tiras de ventanas ordenadas por brillo). `./sync-shell.sh` los copia;
+`LC_ALL=C ./sheet.sh cascada 1,3.4,6,9`. La receta para sumar uno está en `docs/MAPA.md`.

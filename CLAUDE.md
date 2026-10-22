@@ -75,6 +75,10 @@ docs/plans/motif-force.py dunes DP-2 10 --shot t4-dunes   # + captura, y deja to
 son OBSOLETOS). El forzado pisa pool, hold, filtro y
 palabra clave, y se ve sin música. Kinds: `fatal crt motif --help`. `splitflap` y `testcard` sólo forzados.
 
+**Agregar un motif:** `shell/<Kind>.qml` sobre `ThumpBase` (mismo feed de ritmo), `Component` + línea
+del Loader en `Motif.qml`, kind en `motifKinds`/`motifGroups`/`motifFit` (`shell.qml`). Receta larga:
+`docs/MAPA.md`; banco: `previews/crt-motifs`.
+
 Hyprland: binds y `no_anim` de las capas viven en `packaging/hyprland.lua` (`dofile` desde
 `~/.config/hypr/hyprland.lua`). Autostart: **UNO solo**, la unit de usuario
 `packaging/fatal-lyrics.service` (`fatal run`); `fatal on|off|restart` pasan por `systemctl --user`.

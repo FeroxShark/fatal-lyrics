@@ -10,9 +10,13 @@
 //   · `bp` — cuánto va del tiempo actual (0..1), desde el último `tick`.
 //   · `dropAmt` — 0..1 con el snap de entrada (OutExpo 320 ms) y la salida
 //     rápida (InQuad 140 ms) de Motion.qml.
+//   · PARED (`wall`, `docs/PARED.md`): con `wall` puesto el motivo dibuja UN lienzo que cruza
+//     todas las pantallas y ésta muestra su recorte. Reloj, `movOff`, tiempos (`beatN`) y la
+//     física de ThumpBase salen de un objeto que comparten todas las instancias de la pared.
 import QtQuick
 import "Ease.js" as E
 import "Speed.js" as Speed
+import "Wall.js" as Wall
 
 Item {
     id: base
@@ -30,7 +34,7 @@ Item {
     property real tubeClock: -1
     property real clock: 0
     property real clockAcc: 0
-    onTubeClockChanged: if (Math.abs(clock - tubeClock) > 0.25) clock = tubeClock
+    onTubeClockChanged: if (!wallClocked && Math.abs(clock - tubeClock) > 0.25) clock = tubeClock
     // Tanda 8, slice movimiento: el ritmo de la música (`rate`, 1 = el de siempre) NO
     // escala `clock` — es el reloj real, y el re-anclaje de arriba lo compara contra el
     // del tubo: escalado, se despegaría y saltaría un cuarto de segundo cada rato. Lo que
@@ -45,12 +49,90 @@ Item {
         onTriggered: {
             base.clockAcc += frameTime;
             if (base.clockAcc >= base.stepMin - 0.001) {
-                base.movOff = Speed.advance(base.movOff, base.clockAcc, base.rate);
-                base.clock += base.clockAcc;
+                if (base.wallClocked) {
+                    base.wallStep();
+                } else {
+                    base.movOff = Speed.advance(base.movOff, base.clockAcc, base.rate);
+                    base.clock += base.clockAcc;
+                }
                 base.clockAcc = 0;
             }
         }
     }
+
+    // ---- PARED (`Wall.js`, `docs/PARED.md`). `wall` lo arma Crt.qml (null = la pantalla
+    // sola, como siempre), todo en px: la esquina de esta pantalla en el lienzo (`x`, `y`), el
+    // lienzo (`cw`, `ch`), `span`, el pivote de pared (`px`, `py`, px de lienzo), el origen de
+    // la cámara de este tubo (`ox`, `oy`, px de la pantalla), `epoch` (ms) y `share`.
+    // `wallCam` = (tirón propio del dibujo, factor de la cámara del tubo, foco x, foco y): el
+    // foco es la pantalla con la letra (o el centro), en px de lienzo.
+    //
+    // `share` es UN objeto JS para todas las instancias de la pared (lo cambia el root cuando
+    // se forma una pared nueva). Se muta sin avisar: la primera instancia que corre en un
+    // cuadro avanza lo acumulado (`movOff`, el contador de tiempos, la física de ThumpBase) y
+    // las demás lo leen. Integrando cada una lo suyo, una pantalla que entra tarde (la que
+    // tenía la letra) arrancaría de cero y el dibujo se partiría en la costura.
+    property var wall: null
+    property vector4d wallCam: Qt.vector4d(1, 1, 0, 0)
+    readonly property bool walled: !!wall
+    readonly property bool wallShared: walled && !!wall.share
+    // en el banco (`tubeClock` -1) el reloj llega de afuera, el mismo para todas las rebanadas
+    readonly property bool wallClocked: walled && tubeClock >= 0
+    function wallNow() {
+        return wallClocked ? (Date.now() - wall.epoch) / 1000 : clock;
+    }
+    function wallStep() {
+        const t = wallNow(), S = wall.share;
+        if (S.movAt === undefined) {
+            S.movAt = t;
+            S.mov = 0;
+        }
+        if (t > S.movAt) {
+            S.mov = Speed.advance(S.mov, t - S.movAt, rate);
+            S.movAt = t;
+        }
+        movOff = S.mov;
+        clock = t;
+    }
+    // el contador de tiempos de la pared: el `tick` del root, y si no llega, el de 1,5 tiempos
+    // de abajo — uno solo para todas
+    property int wallN: 0
+    function wallBeat() {
+        const S = wall.share;
+        if (S.beatN === undefined) {
+            S.beatN = 0;
+            S.tick = tick;
+            S.tickAt = clock;
+            S.own = false;
+        }
+        if (S.tick !== tick) {
+            S.tick = tick;
+            S.beatN++;
+            S.tickAt = clock;
+            S.own = false;
+        } else if (clock - S.tickAt >= beatS * (S.own ? 1 : 1.5)) {
+            S.own = true;
+            S.tickAt = clock;
+            S.beatN++;
+        }
+        wallN = S.beatN;
+        tickAt = S.tickAt;
+    }
+    Component.onCompleted: if (wallClocked) wallStep()
+    // el recorte de ESTA pantalla en px de lienzo; sin pared, la pantalla entera
+    readonly property var wallWin: walled
+        ? Wall.view({ x: wall.x, y: wall.y }, { w: width, h: height }, { x: wall.px, y: wall.py },
+                    { x: wall.ox, y: wall.oy }, wallCam.y, wallCam.x)
+        : ({ x: 0, y: 0, w: width, h: height })
+    readonly property vector2d wallArea: walled ? Qt.vector2d(wall.cw, wall.ch) : Qt.vector2d(width, height)
+    // para los shaders en px de lienzo: p = wallPx.xy + qt_TexCoord0 · wallPx.zw
+    readonly property vector4d wallPx: Qt.vector4d(wallWin.x, wallWin.y, wallWin.w, wallWin.h)
+    // en unidades de `span` desde el centro del lienzo: uv = wallView.xy + qt_TexCoord0 · wallView.zw
+    // (sin pared es el `(qt_TexCoord0 - 0.5) · res / min(res)` de siempre)
+    readonly property vector4d wallView: Qt.vector4d((wallWin.x - wallArea.x / 2) / span,
+        (wallWin.y - wallArea.y / 2) / span, wallWin.w / span, wallWin.h / span)
+    readonly property vector2d wallFocus: walled ? Qt.vector2d(wallCam.z, wallCam.w)
+                                                 : Qt.vector2d(width / 2, height / 2)
     property real level: 0.35
     property real low: 0.4
     property real high: 0.3
@@ -89,7 +171,9 @@ Item {
     property real paintedAt: -1e6
     signal frame()
     onClockChanged: {
-        if (tickAt < -1e5) {
+        if (wallShared) {
+            wallBeat();
+        } else if (tickAt < -1e5) {
             tickAt = clock;       // el primer cuadro sólo arma el reloj
         } else if (clock - tickAt >= beatS * (ownBeat ? 1 : 1.5)) {
             ownBeat = true;
@@ -106,8 +190,8 @@ Item {
     }
 
     readonly property real loopS: 15
-    readonly property real span: Math.min(width, height)
-    readonly property bool portrait: height > width
+    readonly property real span: walled ? wall.span : Math.min(width, height)
+    readonly property bool portrait: walled ? wall.ch > wall.cw : height > width
     readonly property real lt: E.wrap(clock + movOff, loopS)
     readonly property real beatS: Math.max(beatMs, 1) / 1000
 
@@ -118,10 +202,14 @@ Item {
     // el motivo cuenta solo cada `beatMs` hasta que vuelva el de verdad — lo
     // mismo que hace el túnel con su luz.
     property int ownN: 0
-    readonly property int beatN: tick + ownN
+    readonly property int beatN: wallShared ? wallN : tick + ownN
     property real tickAt: -1e6
     property bool ownBeat: false
     onTickChanged: {
+        if (wallShared) {
+            wallBeat();
+            return;
+        }
         ownBeat = false;
         tickAt = clock;
     }
@@ -129,11 +217,11 @@ Item {
     readonly property real bp: E.clamp01(sinceTick / beatS)
 
     property real kickAt: -1e6
-    onKickChanged: kickAt = clock
+    onKickChanged: kickAt = wallNow()
     readonly property real sinceKick: Math.max(0, clock - kickAt)
 
     property real dropAt: -1e6
-    onDropChanged: dropAt = clock
+    onDropChanged: dropAt = wallNow()
     readonly property real dropAmt: drop ? E.outExpo(E.prog(clock, dropAt, 0.32))
                                          : 1 - E.inQuad(E.prog(clock, dropAt, 0.14))
 }

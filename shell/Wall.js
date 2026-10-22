@@ -75,3 +75,43 @@ function local(rect, pv) {
 
 // Dónde cae un punto de la pantalla (px locales) tras escalar `s` sobre `origin`.
 function scaleAbout(p, origin, s) { return origin + s * (p - origin); }
+
+// ---- El LIENZO de pared (los motivos extendidos, `docs/PARED.md`). Un motivo "de pared" no
+// dibuja su pantalla: dibuja UN mundo del tamaño de la caja que envuelve todas las pantallas
+// del tubo, y cada pantalla muestra su recorte. Los huecos entre monitores (DP-2 asoma 370 px
+// por arriba de HDMI-A-1) son mundo que nadie ve, igual que la pantalla que tiene la letra.
+
+// La caja de todas las pantallas, en coordenadas del compositor, y `span`: el lado corto de la
+// pantalla más chica, la medida de los trazos (un trazo de pared mide lo mismo que en una
+// pantalla sola, y lo mismo en todas).
+function canvas(rects) {
+    if (!rects || rects.length === 0)
+        return { x: 0, y: 0, w: 1, h: 1, span: 1 };
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, sp = Infinity;
+    for (let i = 0; i < rects.length; i++) {
+        const r = rects[i];
+        x0 = Math.min(x0, r.x);
+        y0 = Math.min(y0, r.y);
+        x1 = Math.max(x1, r.x + r.w);
+        y1 = Math.max(y1, r.y + r.h);
+        sp = Math.min(sp, r.w, r.h);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, span: Math.max(sp, 1) };
+}
+
+// Qué recorte del lienzo dibuja una pantalla: {x, y, w, h} en px de lienzo.
+//   off — la esquina de la pantalla en el lienzo; size — {w, h} de la pantalla
+//   pv  — el pivote de pared en px de lienzo (`pivot` menos la esquina del lienzo)
+//   o   — el origen de SU cámara (`local`, px de la pantalla); s — el factor de su cámara
+//   z   — el tirón propio del dibujo (el golpe), que en pared no puede ir por el Scale del
+//         item: sobre su centro partiría la costura, y sobre el pivote dejaría asomar el fondo
+// Lo que se ve queda como si TODA la pared escalara `s·z` sobre el pivote verdadero: `local`
+// ata el origen de la cámara al rectángulo (una pantalla que no toca el pivote escala sobre su
+// borde), y `d` corre el recorte lo que esa diferencia de origen desplaza.
+function view(off, size, pv, o, s, z) {
+    const sz = Math.max(s, 0.05), zz = Math.max(z, 0.05);
+    const dx = (o.x - (pv.x - off.x)) * (1 - 1 / sz);
+    const dy = (o.y - (pv.y - off.y)) * (1 - 1 / sz);
+    return { x: pv.x + (off.x - dx - pv.x) / zz, y: pv.y + (off.y - dy - pv.y) / zz,
+             w: size.w / zz, h: size.h / zz };
+}

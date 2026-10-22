@@ -56,14 +56,18 @@ MotifBase {
         if (thumpSeen < 0)
             return;
         const t = hitT.slice(1), a = hitA.slice(1), s = hitS.slice(1);
-        t.push(clock);
+        t.push(wallNow());
         a.push(E.clamp01(thumpAmt) * phys.gain);
-        s.push(E.hash(hitN * 7.31 + seed * 13.0));
+        // en pared, la semilla sale del contador del overlay: `hitN` es de cada instancia, y
+        // una pantalla que entró tarde lo tiene corrido
+        s.push(E.hash((wallShared ? thump : hitN) * 7.31 + seed * 13.0));
         hitT = t; hitA = a; hitS = s;
         hitN++;
     }
     // edades de los 4 golpes (el más viejo primero), para los shaders
-    readonly property vector4d hitAge: Qt.vector4d(clock - hitT[0], clock - hitT[1], clock - hitT[2], clock - hitT[3])
+    // (en pared el golpe se anota con la hora de la pared, que puede ir un cuadro delante de `clock`)
+    readonly property vector4d hitAge: Qt.vector4d(Math.max(0, clock - hitT[0]), Math.max(0, clock - hitT[1]),
+                                                   Math.max(0, clock - hitT[2]), Math.max(0, clock - hitT[3]))
     readonly property vector4d hitAmp: Qt.vector4d(hitA[0], hitA[1], hitA[2], hitA[3])
     readonly property vector4d hitSeed: Qt.vector4d(hitS[0], hitS[1], hitS[2], hitS[3])
     // la física para el shader: (w, wd, zeta·w, 1/rise) y la normalización
@@ -78,6 +82,10 @@ MotifBase {
     Connections {
         target: tb
         function onClockChanged() {
+            if (tb.wallShared) {
+                tb.wallThump();
+                return;
+            }
             const dt = tb.clock - tb.lastClock;
             tb.lastClock = tb.clock;
             if (!(dt > 0) || dt > 0.5)
@@ -90,5 +98,33 @@ MotifBase {
             }
             tb.drift += dt * tb.phys.drift * (0.75 + 0.6 * tb.dens);
         }
+    }
+    // PARED (MotifBase): la misma cuenta de arriba, pero sobre el objeto que comparten todas las
+    // instancias — la primera que corre en el cuadro avanza, las demás leen. Así la deriva y la
+    // densidad son UNA para el lienzo entero, también en la pantalla que se suma tarde.
+    function wallThump() {
+        const S = wall.share;
+        if (S.dAt === undefined) {
+            S.dAt = clock;
+            S.dens = 0;
+            S.drift = 0;
+            S.temper = -1;
+        }
+        const dt = clock - S.dAt;
+        if (dt > 0) {
+            S.dAt = clock;
+            if (dt <= 0.5) {
+                S.dens = T.follow(S.dens, densTarget, dt, 0.7, 2.5);
+                if (character >= 0) {
+                    const tt = temperTarget, cur = S.temper < 0 ? tt : S.temper;
+                    S.temper = Math.abs(tt - cur) < 0.003 ? tt : T.follow(cur, tt, dt, 1.5, 1.5);
+                }
+                S.drift += dt * phys.drift * (0.75 + 0.6 * S.dens);
+            }
+        }
+        dens = S.dens;
+        drift = S.drift;
+        if (character >= 0 && S.temper >= 0)
+            temperSmooth = S.temper;
     }
 }

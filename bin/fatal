@@ -42,6 +42,8 @@ SYNCF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sync"
 # es sólo el timbre — el estado vive en la perilla `[behavior] sing` del TOML,
 # que es lo que el daemon manda al overlay y lo que sobrevive al reinicio
 SINGF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-sing"
+# `fatal carteles`: lo mismo para los carteles del modo normal ([display] dialogs)
+CARTF="${XDG_RUNTIME_DIR:-/run/user/$UID}/cartelitos-carteles"
 
 # El binario de Quickshell: `qs` en Arch, `quickshell` en las distros que sólo traen ese nombre.
 qs_bin() {
@@ -221,6 +223,8 @@ status_line() {
     # el modo karaoke cambia lo que se ve entero (todo apagado hasta que
     # cantás): si está puesto, tiene que decirlo — si no, parece que se rompió
     echo "sing: $(sing_state)"
+    # sin carteles el modo normal no dibuja nada: también tiene que decirlo
+    echo "dialogs: $(carteles_state)"
     echo "crt: $(crt_state)"
     # qué falta instalar y qué función se pierde por cada cosa: no imprime nada
     # si está todo. Sin esto, media app apagada parecía un bug.
@@ -310,7 +314,7 @@ stop() {
     rm -f "$LYRICS"                   # sin daemon no hay letra de la que informar
     printf '0' > "$CRT" 2>/dev/null   # que no quede el tubo prendido en el archivo
     rm -f "$CRT_SETUP"                # ni los números de pantalla de la sesión pasada
-    rm -f "$SINGF"                    # ni el timbre del karaoke
+    rm -f "$SINGF" "$CARTF"           # ni el timbre del karaoke ni el de los carteles
 
     echo "fatal OFF"
 }
@@ -522,6 +526,34 @@ sing_lyrics() {
     echo "sing $1"
 }
 
+# Los carteles del modo normal: la perilla `[display] dialogs` del TOML (ausente
+# = prendidos, el default). Mismo mecanismo que `sing`: el timbre es un archivo y
+# lo aplica el daemon (config.watch_carteles), que es quien escribe el TOML.
+carteles_state() {
+    grep -qE '^[[:space:]]*dialogs[[:space:]]*=[[:space:]]*false' "$CONFIG" 2>/dev/null \
+        && echo OFF || echo ON
+}
+
+carteles() {
+    local want="${1:-toggle}"
+    case "$want" in
+        on|off|toggle) ;;
+        status) carteles_state; return 0 ;;
+        *) echo "usage: fatal carteles [on|off|toggle|status]" >&2; exit 1 ;;
+    esac
+    if ! running "$D_PID" "$DAEMON"; then
+        echo "fatal-lyrics isn't running — start it with: fatal on" >&2
+        exit 1
+    fi
+    # `toggle` se resuelve acá, con la perilla de ahora: dos toques seguidos
+    # antes de que el daemon relea no se anulan entre sí
+    if [ "$want" = toggle ]; then
+        [ "$(carteles_state)" = ON ] && want=off || want=on
+    fi
+    printf '%s' "$want" > "$CARTF.tmp" && mv "$CARTF.tmp" "$CARTF"
+    echo "carteles $want"
+}
+
 demo() {
     if running "$D_PID" "$DAEMON"; then
         kill -USR1 "$(cat "$D_PID")"
@@ -566,6 +598,7 @@ usage: fatal [command]
   crt rare <kind> [--screen <name|idx|all>]
   sync + | - | show | reset [<artist>|all]  lyric timing
   sing on | off | toggle | status           karaoke mode
+  carteles on | off | toggle | status       the error dialogs (the CRT stays as it is)
   help                                      this text
 EOF
 }
@@ -585,6 +618,7 @@ case "${1:-toggle}" in
     crt)       shift; crt "$@" ;;
     sync)      sync_lyrics "$2" "$3" ;;
     sing)      sing_lyrics "$2" ;;
+    carteles|dialogs) carteles "$2" ;;
     # todas las opciones viven en la ventana de Ajustes: `config` y `setup`
     # (el menú de terminal que había antes) abren la ventana
     ajustes|settings|config|setup|tune|sliders) settings ;;

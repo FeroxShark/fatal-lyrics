@@ -57,3 +57,49 @@ class TestShellApaga(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFatalCarteles(unittest.TestCase):
+    """`fatal carteles on|off|toggle|status`: el timbre que levanta el daemon."""
+    fatal = read("bin", "fatal")
+
+    def test_help_lists_it_and_the_case_routes_it(self):
+        out = subprocess.run([os.path.join(ROOT, "bin", "fatal"), "--help"],
+                             capture_output=True, text=True).stdout
+        self.assertRegex(out, r"carteles on \| off \| toggle \| status")
+        self.assertRegex(self.fatal, r"carteles\|dialogs\) carteles \"\$2\" ;;")
+
+    def test_toggle_is_decided_from_the_knob_and_the_status_line_shows_it(self):
+        self.assertRegex(self.fatal, r'\[ "\$\(carteles_state\)" = ON \] && want=off \|\| want=on')
+        self.assertIn('echo "dialogs: $(carteles_state)"', self.fatal)
+        self.assertRegex(self.fatal, r"dialogs\[\[:space:\]\]\*=\[\[:space:\]\]\*false")
+
+    def test_the_bell_file_matches_the_one_the_daemon_watches(self):
+        name = os.path.basename(config.CARTELES_PATH)
+        self.assertEqual(name, "cartelitos-carteles")
+        self.assertIn('/%s"' % name, self.fatal)
+        self.assertIn("watch_carteles", read("cartelitos", "daemon.py"))
+
+    def test_the_bell_writes_the_knob(self):
+        calls, ticks = [], []
+        bell = os.path.join(os.environ.get("TMPDIR", "/tmp"), "carteles-test-%d" % os.getpid())
+
+        def fake_sleep(_):
+            ticks.append(1)
+            if len(ticks) == 1:
+                with open(bell, "w") as f:
+                    f.write("off")
+            elif len(ticks) == 3:
+                raise KeyboardInterrupt
+
+        from unittest import mock
+        try:
+            with mock.patch.object(config.time, "sleep", fake_sleep), \
+                    mock.patch.object(config, "set_option", lambda *a: calls.append(a)), \
+                    mock.patch.object(config, "CARTELES_PATH", bell):
+                with self.assertRaises(KeyboardInterrupt):
+                    config.watch_carteles()
+        finally:
+            if os.path.exists(bell):
+                os.remove(bell)
+        self.assertEqual(calls, [("dialogs", "display", False)])

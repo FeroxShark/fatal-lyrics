@@ -21,7 +21,7 @@ Item {
     // eye | scope | radar | rain | stars | testcard | ocean | pond | dunes
     // | static | textsea | eyes | ekg | rorschach | plasma | tunnel
     // | swarm | splitflap | maze | pipes | defrag | mystify | vector | harmonograph
-    // | membrana | cintas | giroscopio | none
+    // | membrana | cintas | giroscopio | cascada | estela | pixelsort | none
     property string kind: "eye"
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
@@ -338,6 +338,9 @@ Item {
             : motif.kind === "membrana" ? membranaC
             : motif.kind === "cintas" ? cintasC
             : motif.kind === "giroscopio" ? giroscopioC
+            : motif.kind === "cascada" ? cascadaC
+            : motif.kind === "estela" ? estelaC
+            : motif.kind === "pixelsort" ? pixelsortC
             : null
     }
 
@@ -1702,6 +1705,123 @@ Item {
         id: giroscopioC
 
         Giroscopio {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // cascada: diálogos de error que se apilan en cascada, uno por tiempo, hasta que el 12º revienta y vuelve a empezar (`Cascada.qml`).
+    Component {
+        id: cascadaC
+
+        Cascada {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // estela: una ventana colgada que el cursor arrastra dejando el efecto de "Not Responding" (`Estela.qml`).
+    Component {
+        id: estelaC
+
+        Estela {
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
+        }
+    }
+
+    // pixelsort: la silueta de ventanas ordenada por brillo en tiras, estilo glitch (`pixelsort.frag`).
+    Component {
+        id: pixelsortC
+
+        Pixelsort {
             colour: motif.colour
             hot: motif.hot
             bg: motif.bg

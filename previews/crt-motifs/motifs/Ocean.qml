@@ -11,9 +11,13 @@
 // tarda en llegar a cada punto. Eso es lo que hace que el ritmo se vea como
 // agua moviéndose y no como una pantalla titilando — la lección cara de las
 // pasadas anteriores del modo CRT.
+//
+// PARED (`docs/PARED.md`): con lienzo común el mar es UNO para todas las pantallas (cada una
+// dibuja su ventana, `wallView`, con un solo horizonte), el reloj y las piedras salen de la
+// pared (`WallBase`: azar de la semilla compartida, no `Math.random`).
 import QtQuick
 
-Item {
+WallBase {
     id: sea
 
     property color colour: "#4fe8ff"     // color base del punto
@@ -24,7 +28,7 @@ Item {
     // Igual que en Motif: el nivel llega a 14 Hz. Atado directo a nada que se
     // vea, eso es titileo; suavizado, es el mar que se levanta cuando el tema
     // sube.
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: 0; easing.type: Easing.OutQuad } }
     property real low: 0.4               // graves → el oleaje largo
     property real high: 0.3              // agudos → el picadito de la superficie
     property int beat: 0                 // contador de golpes
@@ -45,15 +49,19 @@ Item {
     property real clock: 0
     property real pending: 0
     FrameAnimation {
-        running: sea.running && sea.visible
+        running: sea.running && sea.visible && !sea.clockExternal
         onTriggered: {
             sea.pending += frameTime;
             if (sea.pending >= sea.stepMin) {
-                sea.clock += sea.pending * sea.rate;
+                if (sea.wallClocked)
+                    sea.clock = sea.wallTime(sea.rate);
+                else
+                    sea.clock += sea.pending * sea.rate;
                 sea.pending = 0;
             }
         }
     }
+    Component.onCompleted: if (wallClocked) clock = wallTime(rate)
 
     // Dos piedras a la vez: con una sola, dos golpes seguidos cortaban la onda
     // anterior de golpe y se notaba el corte.
@@ -65,15 +73,23 @@ Item {
             return;
         // cae lejos y a un costado: si siempre cayera en el centro, el mar
         // entero respiraría al mismo tiempo y volvemos al parpadeo
-        const x = (Math.random() * 2 - 1) * 2.6;
-        const z = 1.8 + Math.random() * 5.5;
-        const drop = Qt.vector4d(x, z, sea.clock,
-                                 (0.5 + 0.9 * sea.level) * sea.beatAmt);
-        if (ripSlot === 0)
+        // en pared el sitio sale de la semilla y el golpe (igual en todas las pantallas) y
+        // se reparte por todo el ancho del lienzo
+        let x = (Math.random() * 2 - 1) * 2.6;
+        let z = 1.8 + Math.random() * 5.5;
+        let t0 = sea.clock, slot = ripSlot;
+        if (walled) {
+            x = (wallHash(beat * 3 + 1) * 2 - 1) * 2.9 * Math.max(1, wallArea.x / span / 2);
+            z = 1.8 + wallHash(beat * 3 + 2) * 5.5;
+            t0 = wallStamp(beat, sea.clock);
+            slot = beat & 1;
+        }
+        const drop = Qt.vector4d(x, z, t0, (0.5 + 0.9 * sea.level) * sea.beatAmt);
+        if (slot === 0)
             rip1 = drop;
         else
             rip2 = drop;
-        ripSlot = 1 - ripSlot;
+        ripSlot = 1 - slot;
     }
 
     ShaderEffect {
@@ -94,6 +110,8 @@ Item {
         property variant res: Qt.vector2d(Math.max(width, 1), Math.max(height, 1))
         property variant rip1: sea.rip1
         property variant rip2: sea.rip2
+        property vector4d view: sea.wallView
+        property vector4d wcfg: sea.wallCfg
         property variant ink: Qt.vector3d(sea.colour.r, sea.colour.g, sea.colour.b)
         property variant hot: Qt.vector3d(sea.crest.r, sea.crest.g, sea.crest.b)
 

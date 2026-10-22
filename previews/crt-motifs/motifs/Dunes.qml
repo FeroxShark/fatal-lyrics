@@ -10,9 +10,13 @@
 // `motifGen` de la pared cruzado con el número de pantalla) las lomas están en
 // otro lado, y como los tres períodos del paneo no se dividen entre sí, la
 // toma no vuelve nunca a un cuadro que ya mostró.
+//
+// PARED (`docs/PARED.md`): con lienzo común la cámara es UNA para todas las pantallas (cada una
+// dibuja su ventana del mismo panorama, `wallView`), el reloj y los pisotones salen de la pared
+// (`WallBase`: azar de la semilla compartida, no `Math.random`) y el horizonte es una sola raya.
 import QtQuick
 
-Item {
+WallBase {
     id: sand
 
     property color colour: "#4fe8ff"     // color del grano
@@ -22,13 +26,12 @@ Item {
     property real level: 0.35            // volumen 0..1
     // Igual que en el mar: el nivel llega a 14 Hz y atado directo a algo que se
     // ve es titileo, no respiración.
-    Behavior on level { NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
+    Behavior on level { NumberAnimation { duration: 0; easing.type: Easing.OutQuad } }
     property real high: 0.3              // agudos → cuánto vibra la arena suspendida
     property int beat: 0                 // contador de golpes
     property real beatAmt: 1             // lo gradúa `flicker`: 0 = nadie pisa
     property real energy: 1.0            // parte del tema: la velocidad del paneo
     property real quality: 1.0           // `crt.quality`: tope de granos
-    property real seed: 0                // 0..1, re-sorteada en cada aparición
     property real dim: 1.0
     property bool running: true
     // El drop llega como un booleano y NO como un umbral sobre `energy`: la
@@ -46,15 +49,19 @@ Item {
     property real clock: 0
     property real pending: 0
     FrameAnimation {
-        running: sand.running && sand.visible
+        running: sand.running && sand.visible && !sand.clockExternal
         onTriggered: {
             sand.pending += frameTime;
             if (sand.pending >= sand.stepMin) {
-                sand.clock += sand.pending * sand.rate;
+                if (sand.wallClocked)
+                    sand.clock = sand.wallTime(sand.rate);
+                else
+                    sand.clock += sand.pending * sand.rate;
                 sand.pending = 0;
             }
         }
     }
+    Component.onCompleted: if (wallClocked) clock = wallTime(rate)
 
     // La arena que levita: sube con rampa y cae JUNTA, más rápido y acelerando
     // (InQuad, que es lo que hace una piedra). Dos animaciones y no un
@@ -63,7 +70,7 @@ Item {
     onDropChanged: {
         liftAnim.stop();
         liftAnim.to = drop ? 1 : 0;
-        liftAnim.duration = drop ? 900 : 620;
+        liftAnim.duration = 0;
         liftAnim.easing.type = drop ? Easing.OutQuad : Easing.InQuad;
         liftAnim.start();
     }
@@ -84,15 +91,23 @@ Item {
         // cae en cualquier lado del campo, no siempre en el centro: si el
         // pisotón fuera siempre el mismo punto, el desierto entero respiraría
         // al mismo tiempo y volvemos al parpadeo
-        const x = (Math.random() * 2 - 1) * 2.4;
-        const z = 1.6 + Math.random() * 4.5;
-        const step = Qt.vector4d(x, z, sand.clock,
-                                 (0.6 + 0.8 * sand.level) * sand.beatAmt);
-        if (jumpSlot === 0)
+        // en pared el sitio sale de la semilla y el golpe (igual en todas las pantallas) y
+        // se reparte por todo el ancho del lienzo
+        let x = (Math.random() * 2 - 1) * 2.4;
+        let z = 1.6 + Math.random() * 4.5;
+        let t0 = sand.clock, slot = jumpSlot;
+        if (walled) {
+            x = (wallHash(beat * 3 + 1) * 2 - 1) * 2.7 * Math.max(1, wallArea.x / span / 2);
+            z = 1.6 + wallHash(beat * 3 + 2) * 4.5;
+            t0 = wallStamp(beat, sand.clock);
+            slot = beat & 1;
+        }
+        const step = Qt.vector4d(x, z, t0, (0.6 + 0.8 * sand.level) * sand.beatAmt);
+        if (slot === 0)
             jump1 = step;
         else
             jump2 = step;
-        jumpSlot = 1 - jumpSlot;
+        jumpSlot = 1 - slot;
     }
 
     ShaderEffect {
@@ -111,6 +126,8 @@ Item {
         property variant res: Qt.vector2d(Math.max(width, 1), Math.max(height, 1))
         property variant jump1: sand.jump1
         property variant jump2: sand.jump2
+        property vector4d view: sand.wallView
+        property vector4d wcfg: sand.wallCfg
         property variant ink: Qt.vector3d(sand.colour.r, sand.colour.g, sand.colour.b)
         property variant hot: Qt.vector3d(sand.crest.r, sand.crest.g, sand.crest.b)
 

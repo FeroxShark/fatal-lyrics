@@ -26,6 +26,10 @@
 //   · in a drop the whole field lifts and HOVERS, jittering a pixel or two at
 //     high frequency, and comes down together when the drop ends.
 //
+// WALL (docs/PARED.md): with `wcfg.x` set, the camera is ONE for the whole canvas — each screen
+// draws its window of the same panorama (`view`), the horizon is a single line across the canvas
+// (30 % down it) and the unit is `span`, not this screen's height. Alone it is what it was.
+//
 // Build:  qsb --glsl "100 es,120,150" -o dunes.frag.qsb dunes.frag
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -47,6 +51,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 jump2;     // a second one, so two beats can overlap
     vec3 ink;       // grain colour
     vec3 hot;       // crest colour
+    vec4 view;      // WALL: uv = view.xy + qt_TexCoord0 · view.zw, in units of `span` from the canvas centre
+    vec4 wcfg;      // WALL: x = 1 on the wall, y = px per unit, z = top of the canvas in units
 };
 
 // --------------------------------------------------------------- the camera
@@ -150,14 +156,25 @@ float footstep(vec2 p, vec4 j) {
 }
 
 void main() {
+    bool wall = wcfg.x > 0.5;
     vec2 uv = qt_TexCoord0;
-    float aspect = res.x / max(res.y, 1.0);
+    float aspect = wall ? 1.0 : res.x / max(res.y, 1.0);
     float sx = (uv.x - 0.5) * aspect;
+    // `S` px per unit of height, `yy` the vertical coordinate, both in the units the horizon uses
+    float S = wall ? wcfg.y : res.y;
+    float yy = uv.y;
+    if (wall) {
+        vec2 w = view.xy + uv * view.zw;
+        sx = w.x;
+        yy = w.y - wcfg.z;
+    }
     // T4.3b: en la pantalla vertical el horizonte a 0.30 deja 576 px de cielo
     // vacío arriba y la arena arranca a media pantalla. Sube a 0.22 cuando el
     // monitor es más alto que ancho.
     float HORIZON = res.y > res.x ? 0.22 : 0.30;
-    float dy = uv.y - HORIZON;
+    if (wall)
+        HORIZON = 0.30 * -2.0 * wcfg.z;      // 30 % down the canvas, one line for every screen
+    float dy = yy - HORIZON;
 
     // The drift. Three periods that do not line up: the shot never repeats.
     float tt = t * max(speed, 0.35);
@@ -252,7 +269,7 @@ void main() {
                 float ifl = sx * Z / DX - stagger;
                 int i0 = int(floor(ifl));
 
-                float rad = clamp(GRAINR / Z * res.y, 0.7, res.y * 0.010) * mix(0.55, 1.0, fade);
+                float rad = clamp(GRAINR / Z * S, 0.7, S * 0.010) * mix(0.55, 1.0, fade);
                 if (rad < 0.3)
                     continue;
 
@@ -260,7 +277,7 @@ void main() {
                     int i = i0 + di;
                     float X = (float(i) + stagger) * DX;
                     float px = X / Z;
-                    float dx = (sx - px) * res.y;
+                    float dx = (sx - px) * S;
                     if (abs(dx) > rad + 1.0)
                         continue;
 
@@ -284,7 +301,7 @@ void main() {
                     h += lift * sin(t * 38.0 + own * 6.283) * 0.0035 * (0.4 + high);
 
                     float py = HORIZON + (camY - h) / Z;
-                    vec2 d = vec2(dx, (uv.y - py) * res.y);
+                    vec2 d = vec2(dx, (yy - py) * S);
                     float g = smoothstep(rad, rad * 0.3, length(d));
                     if (g <= 0.001)
                         continue;

@@ -38,7 +38,8 @@ LAYOUTS = {
     "3h": ([{"x": 0, "y": 0, "w": 1920, "h": 1080}, {"x": 1920, "y": 0, "w": 1920, "h": 1080},
             {"x": 3840, "y": 0, "w": 1920, "h": 1080}], 1),
 }
-KINDS = {"truchet": "ado", "mystify": "bloodline", "pipes": "poison"}
+KINDS = {"truchet": "ado", "mystify": "bloodline", "pipes": "poison",
+         "dunes": "bloodline", "ocean": "ado", "pond": "poison"}
 SC = 0.4
 
 

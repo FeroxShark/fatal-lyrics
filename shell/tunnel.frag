@@ -84,6 +84,27 @@
 // ring the kick used to plant — a hoop flying at you and a light running away
 // from you, both on the same beat, read as a fault and not as a pulse.
 //
+// DETAIL AND FILTERING (tanda 9: "mucho más detallado"). The wall used to be one
+// flat tone per brick with a fixed-width smoothstep for every edge, and the
+// brickwork faded out at a fixed depth to hide the aliasing. Now:
+//   · every edge is filtered by the REAL pixel footprint (`fpV`, `fpU`: how much
+//     of the brick one pixel covers, from `dz` and the screen size), so a joint
+//     is a box-filtered line at any distance instead of a crawling one, and
+//     each detail layer fades out on its own once it is smaller than a pixel —
+//     the brick lives out to depth ~30 where it used to die at 15,
+//   · each brick is a chamfered slab: a profile of distance-to-edge gives a
+//     joint, a bevel and a flat face. The bevel is lit like a surface (the
+//     camera lamp from the near side of each course, a second light from a
+//     fixed screen corner against the brick's angular side), and the joint has
+//     ambient occlusion. Every 4th course is a rib: wider bevel, brighter,
+//   · inside the face: an inset panel line, four rivets, grain and vertical
+//     scuffs (value noise in brick units, so it travels with the wall), and
+//     about one brick in thirty is a lamp: its panel glows `hot`,
+//   · a faint haze toward the far end and an interleaved-gradient dither at the
+//     end, because the dark gradients are where an 8-bit pipeline bands.
+// Precision: the course index and its fraction are kept apart (`ti`, `tf`) so
+// the pattern does not shimmer after hours of uptime, when `t` is thousands.
+//
 // Build:  qsb --glsl "100 es,120,150" -o tunnel.frag.qsb tunnel.frag
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -113,21 +134,49 @@ layout(std140, binding = 0) uniform buf {
 // to infinity and the middle of the picture turns to noise.
 const float ZCAP = 12.0;
 
-// one number per brick: a hash of (course, brick). `sin` of a big argument is
-// the cheapest hash there is and this one only has to look uneven.
-float brickTone(vec2 v) {
-    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
+// bricks in a turn, and the brick's world proportions: the tube has radius 2
+// (that is what `dz = 2 / r` means), so a brick is 2π·2/12 wide and 1 deep. The
+// 12 has to stay an integer (see the seam note in `wallAt`).
+const float BRICKS = 12.0;
+const float BW = 6.2831853 * 2.0 / BRICKS;
+
+// hash without `sin`: the argument stays small, so it does not degrade with the
+// course index. Only has to look uneven.
+float h21(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
-// The wall at a depth and an angle. It is a function because the drop samples
-// it twice; outside the drop the second sample lands on the same place.
-// `soft` widens every edge (the smear), `detail` fades the brickwork out with
-// distance so it does not alias into noise.
-float wallAt(float depth, float a, float detail, float soft, float sd) {
-    float course = floor(depth);
-    float v = fract(depth);
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x),
+               mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// a filtered step: 0 below `e - w`, 1 above `e + w`, linear-ish between. `w` is
+// the pixel footprint, which is what makes the edge antialiased.
+float fstep(float e, float w, float x) {
+    return smoothstep(e - w, e + w, x);
+}
+
+// The wall at a point. `x` is depth past the nearest course boundary (its
+// fraction `tf` already added, `ti` kept apart), `a` the turn, `wp` the pixel
+// footprint in world units (a brick is 1 deep), `tl` how far this side of the
+// tube faces the corner light. Returns
+//   .x  surface luminance          .y  how much of it is hot (glints)
+//   .z  lamp emission
+// It is a function because the drop samples it twice. `soft` widens every edge
+// (the smear); outside the drop it is 0.
+vec3 wallAt(float x, float ti, float a, float wp, float tl, float soft, float sd) {
+    float cf = floor(x);
+    float v = x - cf;
+    float course = cf + ti;
+    float cm = mod(course, 1024.0);
     // running bond: half a brick of offset on every other course
-    float ab = a * 12.0 + 0.5 * mod(course, 2.0);
+    float ab = a * BRICKS + 0.5 * mod(course, 2.0);
     // The index is taken MOD the bricks in a turn. `ang` comes out of `atan`,
     // which wraps from +0.5 to -0.5 turns along the negative x axis: `ab` jumps
     // by exactly 12 there, and `fract(ab)` does not notice, but a bare
@@ -135,34 +184,88 @@ float wallAt(float depth, float a, float detail, float soft, float sd) {
     // indices, so two different tones, and the wall showed a horizontal seam
     // at mid-height on the left (tanda 8). 12 has to stay an integer (and the
     // same one as in `a * 12.0`) or the seam comes back.
-    float brick = mod(floor(ab), 12.0);
-    float u = fract(ab);
+    float fb = floor(ab);
+    float brick = mod(fb, BRICKS);
+    float u = ab - fb;
+    float hb = h21(vec2(brick, cm) + sd);
 
-    // the joint around each brick: dark mortar, the brick face inside it
-    float face = smoothstep(0.0, 0.045 + soft, u) * (1.0 - smoothstep(0.955 - soft, 1.0, u))
-               * smoothstep(0.0, 0.075 + soft, v) * (1.0 - smoothstep(0.925 - soft, 1.0, v));
-    // and three hairlines inside the brick, so the scale reads at the mouth too
-    float fine = fract(ab * 3.0);
-    float hair = 1.0 - 0.22 * detail * (1.0 - smoothstep(0.0, 0.05 + soft, fine));
+    float w = wp + 0.5 * soft;                  // the filter width, world units
+    float rib = step(mod(course, 4.0), 0.5);    // every 4th course is a rib
 
-    // Every brick its own tone. `detail` does not switch the texture off, it
-    // FLATTENS it: far away every brick is worth the average and the wall is
-    // one even tone, instead of going dark and leaving a hole in the picture.
-    float lum = 0.20 + 0.17 * brickTone(vec2(brick, course) + sd);
-    lum = mix(lum, mix(0.045, lum, face), detail) * hair;
+    // distance to the nearest side of the slab, in world units: a profile of
+    // joint (dark) / bevel (lit) / face
+    float du = min(u, 1.0 - u) * BW;
+    float dv = min(v, 1.0 - v);
+    float dE = min(du, dv);
+    float g = 0.035 + 0.012 * rib;              // half-joint
+    float bw = 0.085 + 0.075 * rib;             // bevel width
+    float joint = 1.0 - fstep(g, w, dE);
+    float bev = fstep(g, w, dE) * (1.0 - fstep(g + bw, w, dE));
 
-    // the near edge of the course lights up: THAT is what reads as a ring, and
-    // it is even all the way round — modulated by the brick it turned into a
-    // ring of bright dashes and the wall read as a machine, not as masonry
-    float d0 = abs(v - 0.5) * 2.0;
-    return lum + smoothstep(0.74 - soft, 1.0, d0) * 0.40;
+    // which way the bevel faces. Near side of the course (v small) looks at the
+    // camera lamp; the angular sides catch the corner light by how the wall at
+    // this angle is turned toward it. Sign flips at the middle of the brick, so
+    // `fstep` there is just a way to keep it continuous across the face.
+    float sv = 1.0 - 2.0 * fstep(0.5, w, v);            // +1 near side, -1 far
+    float su = 2.0 * fstep(0.5, w / BW, u) - 1.0;       // +1 / -1 angular sides
+    float side = (dv < du) ? sv : su * tl;              // sign of the face we are on
+    float lit = 1.0 + bev * (dv < du ? 0.85 * sv : 0.95 * side);
+
+    // ambient occlusion in the creases: the face darkens as it nears a joint
+    float ao = mix(0.62, 1.0, smoothstep(g, g + 0.30, dE));
+
+    // brick tone, then everything that lives on the face
+    float tone = 0.25 + 0.18 * hb;
+    float lod = 1.0 - smoothstep(0.10, 0.34, w);        // sub-pixel stuff leaves
+    // grain: two octaves, in brick units so it travels with the wall
+    vec2 gp = vec2(ab * BW, x + ti);
+    float gr = vnoise(gp * 7.0 + hb * 40.0) * 0.6 + vnoise(gp * 19.0 + 3.7) * 0.4;
+    // vertical scuffs: stretched along the tube, a mean of 0 over the brick
+    float sc = vnoise(vec2(ab * BW * 5.0 + hb * 17.0, (x + ti) * 0.55));
+    tone *= 1.0 + lod * (0.26 * (gr - 0.5) + 0.34 * (sc - 0.5) * (1.0 - rib));
+
+    // inset panel line on the face, and four rivets at its corners
+    float inset = g + bw + 0.085;
+    float pl = 1.0 - smoothstep(0.0, 0.012 + w, abs(dE - inset));
+    pl *= (1.0 - rib) * step(inset, min(du, dv) + 0.5) * lod;
+    vec2 q4 = vec2(abs(u - 0.5) * BW, abs(v - 0.5));
+    vec2 rc = vec2(0.5 * BW - 0.21, 0.5 - 0.20);
+    vec2 rd = q4 - rc;
+    float rr = length(rd);
+    float rivet = (1.0 - fstep(0.042, w, rr)) * (1.0 - rib) * (1.0 - smoothstep(0.012, 0.045, w));
+    // the rivet is a dome: lit on the side that faces the light
+    float dome = clamp(0.55 + 0.9 * dot(rd / max(rr, 0.001), vec2(-0.55 * tl, -0.8)), 0.0, 1.4);
+
+    // lamps: one brick in thirty glows inside its panel
+    float lampBrick = step(0.965, hb);
+    float lamp = lampBrick * (1.0 - rib) * fstep(inset - 0.02, w, min(du, dv));
+
+    float lum = tone * lit * ao * mix(0.35, 1.0, 1.0 - joint);
+    lum *= 1.0 - 0.30 * pl;
+    lum += rivet * (0.10 + 0.28 * dome);
+    // a rib is a raised band: brighter, and its bevel catches the lamp
+    lum *= 1.0 + 0.30 * rib;
+
+    float hot = bev * (dv < du ? max(sv, 0.0) : 0.25 * max(side, 0.0)) * (0.55 + 0.45 * rib)
+              + rivet * 0.30 * dome;
+
+    // far away the structure averages out instead of going to noise
+    float mean = 0.27 * (1.0 + 0.30 * rib) * 0.80;
+    float keep = 1.0 - smoothstep(0.35, 0.95, w);
+    return vec3(mix(mean, lum, keep), hot * keep, lamp * keep);
+}
+
+// interleaved gradient noise: a cheap, even dither with no visible pattern
+float ign(vec2 p) {
+    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
 }
 
 void main() {
     vec2 uv = qt_TexCoord0;
     // normalised by the SHORT side: the short edge runs -0.5..0.5 and the long
     // one overflows, so the same ring is the same size on every screen
-    vec2 q = (uv - 0.5) * (res / max(min(res.x, res.y), 1.0));
+    float minres = max(min(res.x, res.y), 1.0);
+    vec2 q = (uv - 0.5) * (res / minres);
 
     // 1/r is the depth. Never divide by nothing: at the exact centre that is a
     // NaN, and a NaN is a hole punched in the picture.
@@ -188,16 +291,26 @@ void main() {
     // barely two and a half between the mouth and the far end, which with a
     // thin edge profile leaves a black field with a couple of hoops in it.
     float dz = 2.0 / r;
-    float depth = dz + t;
+    // `t` split in integer and fraction: the pattern is a function of the course
+    // number (integer, exact) and the fraction (small), never of one big float
+    float ti = floor(t);
+    float x = dz + (t - ti);
+    float depth = dz + t;               // only for the running light
     // the wring grows with depth: the far end turns more than the mouth. It
     // rides on `dz` and NOT on `depth`, which carries `t`: `t` is hundreds by
     // then, so a change of pitch would multiply it and spin every ring at once.
     float a = ang + roll + twist * dz * 0.03;
 
-    // Past twelve deep a brick is thinner than a pixel: the brickwork fades out
-    // and what is left is the course edge. Without this the middle of the
-    // picture crawls.
-    float detail = smoothstep(15.0, 5.0, dz);
+    // The pixel footprint in world units (a brick is 1 deep, BW wide): radially
+    // one pixel is `dz²/2` of a course over the short side, round the tube it is
+    // `dz` of a brick width. The larger of the two is the filter.
+    float fpR = dz * dz * 0.5 / minres;
+    float fpC = dz / minres;
+    float wp = max(fpR, fpC);
+    // the corner light: which way this side of the wall turns toward the top
+    // left of the screen. The tangent is perpendicular to the radius.
+    float tl = clamp(dot(vec2(-sin(ang * 6.283185), cos(ang * 6.283185)), vec2(-0.6, 0.8)) * 1.6, -1.0, 1.0);
+
     // THE DROP (T5.4): the tube speeds up and the wall SMEARS along the way it
     // is travelling. Two samples a fraction of a course apart, averaged, plus
     // every edge widened: what was one course of bricks becomes two ghosts of
@@ -205,18 +318,18 @@ void main() {
     // and not a loop — one evaluation per pixel is the budget, and outside the
     // drop the second one lands on the same place and costs the same.
     float soft = 0.11 * blur;
-    float wall = mix(wallAt(depth, a, detail, soft, seed * 31.7),
-                     wallAt(depth - 0.55 * blur, a, detail, soft, seed * 31.7),
-                     0.45 * blur);
-    float d0 = abs(fract(depth) - 0.5) * 2.0;
-    float edge = smoothstep(0.72, 1.0, d0);
+    float sd = seed * 31.7;
+    vec3 w0 = wallAt(x, ti, a, wp, tl, soft, sd);
+    vec3 w1 = (blur > 0.002) ? wallAt(x - 0.55 * blur, ti, a, wp, tl, soft, sd) : w0;
+    vec3 wl = mix(w0, w1, 0.45 * blur);
+    float wall = wl.x;
 
     // The far end goes dark, and it gets there smoothly: an exponential has no
     // knee, so there is no ring where "the fog starts". It is measured from the
     // nearest thing on screen (the corners, at depth 2), so the mouth is not
     // already dimmed before anything has happened.
     float za = max(dz - 2.0, 0.0);
-    float fog = exp(-za * 0.17);
+    float fog = exp(-za * 0.125);
     // and the mouth has a light of its own: the near wall is the brightest
     // thing in the picture, which is what says the hole goes AWAY
     float mouth = 1.0 + 0.75 * exp(-za * 0.45);
@@ -232,11 +345,18 @@ void main() {
     // The smear costs brightness by construction: averaging two samples halves
     // any highlight only one of them has, and measured, the drop came out
     // DARKER than the verse — which is backwards. The gain pays it back.
-    float lum = wall * fog * mouth * vig * (0.55 + 0.80 * level) * (1.0 + 0.75 * blur)
-              + lite * fog * 0.85;
+    float gain = (0.55 + 0.80 * level) * (1.0 + 0.75 * blur);
+    // haze: the air in the tube scatters the lamp, so the far end is not a hole
+    // cut in the screen but a faint glow you are flying into
+    float haze = 0.075 * exp(-r * 6.0) * (0.6 + 0.8 * level);
+    float lum = wall * fog * mouth * vig * gain
+              + wl.z * 0.34 * fog * (0.7 + 0.5 * level)
+              + lite * fog * 0.85
+              + haze;
 
-
-    vec3 col = mix(ink, hot, clamp(edge * 0.70 + lite, 0.0, 1.0)) * lum;
+    // hot: the lit chamfers, the rivets, the lamps and the running light
+    float hotw = clamp(wl.y * 0.9 + wl.z * 0.35 + lite, 0.0, 1.0);
+    vec3 col = mix(ink, hot, hotw) * lum;
     // Alpha-composited like every other motif: what is far away has no
     // brightness, so it hands the picture back to the tube. Two things that do
     // NOT work were tried here and are worth not trying again: painting the far
@@ -252,5 +372,11 @@ void main() {
     // takes, and it is in CHECKS-VISUALES to be looked at.
     float alpha = clamp(lum * 0.95 * dim, 0.0, 1.0);
     col = clamp(col * dim, 0.0, 1.6);
-    fragColor = vec4(col * alpha, alpha) * qt_Opacity;   // premultiplied
+    vec3 pm = col * alpha;
+    // dither: ±1/255 on the premultiplied result, kept under the alpha so it
+    // never turns black bed into grey
+    float dth = (ign(gl_FragCoord.xy) - 0.5) * (1.0 / 255.0);
+    alpha = clamp(alpha + dth, 0.0, 1.0);
+    pm = clamp(pm + dth * ink, vec3(0.0), vec3(alpha));
+    fragColor = vec4(pm, alpha) * qt_Opacity;   // premultiplied
 }

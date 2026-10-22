@@ -2938,15 +2938,25 @@ PanelWindow {
     // cuesta tener tres pantallas enteras corriendo. Las dos texturas van a la
     // misma resolución (texel a texel), así que con `composite = 0` la pasada
     // del medio es un passthrough exacto.
+    //
+    // Calidad (tanda 9, 2026-10-22). Las dos texturas son SUPERMUESTREADAS (`superS`: la
+    // letra y los motivos se dibujan a `superS` veces la resolución del monitor, y el vidrio
+    // los baja con un filtro bicúbico: bordes sin escalón, texto nítido, líneas finas que no
+    // parpadean) y en media precisión (`RGBA16F`: un fondo oscuro suave no se parte en
+    // escalones de 8 bits antes de llegar al dither del vidrio). `smooth: true` es lo que
+    // deja al vidrio muestrear entre texels; antes era nearest y a través de la curvatura
+    // eso rompía los bordes en escalones. El formato se fija al crear y no cambia nunca: lo
+    // que se redimensiona en vivo es el tamaño, como siempre (TRAMPAS: "Cambio de calidad").
     ShaderEffectSource {
         id: stageTex
         sourceItem: stage
         hideSource: true
         visible: false
-        smooth: false   // como el `layer` de antes: sin filtro al muestrear
+        smooth: true
+        format: ShaderEffectSource.RGBA16F
         live: crt.visible && !crt.tubeIdle
-        textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.texQuality)),
-                             Math.max(1, Math.round(crt.height * crt.texQuality)))
+        textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.texQuality * crt.texSS)),
+                             Math.max(1, Math.round(crt.height * crt.texQuality * crt.texSS)))
     }
 
     // Cambiar la calidad NUNCA redimensiona y conmuta `recursive` en el mismo cuadro:
@@ -2956,6 +2966,10 @@ PanelWindow {
     // en dos tiempos: al bajar, la estela se apaga YA y la textura achica `qualityStepMs`
     // después; al subir, la textura crece YA y la estela vuelve `qualityStepMs` después.
     property real texQuality: ctl.crtQuality
+    // El supermuestreo sólo con la pantalla sana: apenas `crtQuality` baja (la placa va lenta) se
+    // va primero. Cambia junto con `texQuality`, en el mismo escalón de dos tiempos de abajo.
+    readonly property real superS: 2.0
+    property real texSS: ctl.crtQuality >= 0.999 ? superS : 1.0
     property bool trailQ: ctl.crtQuality >= 0.999
     readonly property int qualityStepMs: 150
     Connections {
@@ -2964,6 +2978,7 @@ PanelWindow {
             const q = crt.ctl.crtQuality;
             if (q < 0.999) crt.trailQ = false;
             if (q > crt.texQuality) crt.texQuality = q;
+            if (q >= 0.999 && crt.texSS < crt.superS) crt.texSS = crt.superS;
             qualityStepTimer.restart();
         }
     }
@@ -2972,6 +2987,7 @@ PanelWindow {
         interval: crt.qualityStepMs
         onTriggered: {
             crt.texQuality = crt.ctl.crtQuality;
+            crt.texSS = crt.ctl.crtQuality >= 0.999 ? crt.superS : 1.0;
             crt.trailQ = crt.ctl.crtQuality >= 0.999;
         }
     }
@@ -3274,7 +3290,8 @@ PanelWindow {
         id: signalTex
         sourceItem: signalPass
         visible: false
-        smooth: false
+        smooth: true
+        format: ShaderEffectSource.RGBA16F
         recursive: crt.trailOn
         live: crt.visible && !crt.tubeIdle
         textureSize: stageTex.textureSize
@@ -3351,6 +3368,9 @@ PanelWindow {
         // 0 = nada, 1 = sólo las pares, 2 = sólo las impares
         property real interlacePhase: crt.interlacePhase
         property variant res: Qt.vector2d(Math.max(crt.width, 1), Math.max(crt.height, 1))
+        // tamaño de `src` en texels: el filtro bicúbico del vidrio lo necesita
+        property variant texRes: Qt.vector2d(Math.max(stageTex.textureSize.width, 1),
+                                             Math.max(stageTex.textureSize.height, 1))
         // el tubo elegido (`crt.tube`, tanda 7 corrida 2): máscara y fósforo mono.
         // Un tubo monocromo pisa el `tint` de la paleta con el color de su fósforo.
         property real maskType: crt.ctl.tubeMaskType

@@ -139,6 +139,7 @@ Item {
         property real grain: stage.after ? React.grain(stage.dirt, stage.pump, stage.pace.grainMove) : 0
         property real grainPhase: stage.after ? stage.phaseAt(stage.t) : 0
         property variant res: Qt.vector2d(width, height)
+        property variant texRes: Qt.vector2d(width, height)
         fragmentShader: stage.dir + "/crt.frag.qsb"
     }
 

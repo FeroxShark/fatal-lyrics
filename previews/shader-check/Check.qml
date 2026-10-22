@@ -107,6 +107,7 @@ Item {
         property variant tint: stage.color3(stage.tb.mono > 0.5 ? stage.tb.monoTint : "#ffb457")
         property real degauss: 0
         property variant res: Qt.vector2d(width, height)
+        property variant texRes: Qt.vector2d(width, height)
         fragmentShader: stage.dir + "/crt.frag.qsb"
     }
 

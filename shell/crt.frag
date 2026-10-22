@@ -6,6 +6,15 @@
 // cathode ray tube: barrel glass, phosphor bloom, aperture grille, scanlines
 // with a rolling bar, RGB misalignment, torn signal bands and static.
 //
+// Tanda 9 (calidad): the picture arrives supersampled and in half floats, and the
+// glass reads it with a bicubic (Catmull-Rom) filter instead of a nearest-texel
+// copy, so a curved, shifted or minified lookup stays razor sharp and has no
+// staircase; the bloom is a real three-ring blur (spill only where the
+// neighbourhood is brighter than the pixel: no hollow letters, no wash on a
+// flat field); the beam fattens on bright text (thin comb on dark, solid on
+// letters: a comb, not a veil); highlights go through a soft shoulder instead
+// of a hard clip; and the last step dithers the 8-bit output (triangular, 1 LSB).
+//
 // Build:  /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' -o crt.frag.qsb crt.frag
 // qsb is not on PATH; those are the three targets the committed crt.frag.qsb
 // carries, next to the SPIR-V qsb always emits. Rebuilding is only needed if
@@ -54,6 +63,7 @@ layout(std140, binding = 0) uniform buf {
     float grain;      // 0..1: la suciedad que MUEVE la estática (bandas, deriva, rayas)
     float grainPhase; // vueltas de las franjas, 0..64, acumuladas en QML (`React.grainAdvance`)
     vec2 res;         // surface size in pixels
+    vec2 texRes;      // size of `src` in texels: `res` x crtQuality x the supersample (tanda 9)
     vec3 tint;        // phosphor colour of this screen
     vec3 monoTint;    // color del fósforo del tubo monocromo
 };
@@ -95,6 +105,65 @@ vec3 hueTurn(vec3 c, float a) {
 // the corners and a star in the middle.
 float keepAt(float f) {
     return 1.0 - smoothstep(0.36, 0.48, f);
+}
+
+// Catmull-Rom bicubic through FIVE bilinear taps (the corners of the 4x4 are
+// dropped: their weight is ~1 %). `src` must be filtered (`smooth: true`). On a
+// texel centre this is the texel exactly (the weights collapse to 1,0,0), so the
+// flat middle of the screen is a bit-exact copy; anywhere the glass or the chroma
+// shift lands between texels it keeps the edge crisp, where bilinear smears it and
+// nearest breaks it into steps. Negative lobes are clamped: they would otherwise
+// carve a dark rim around a bright glyph.
+vec3 bicubic(vec2 uv) {
+    vec2 pos = uv * texRes;
+    vec2 c = floor(pos - 0.5) + 0.5;
+    vec2 f = pos - c;
+    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    vec2 w3 = f * f * (-0.5 + 0.5 * f);
+    vec2 w12 = w1 + w2;
+    vec2 it = 1.0 / texRes;
+    vec2 t12 = (c + w2 / w12) * it;
+    vec2 t0 = (c - 1.0) * it;
+    vec2 t3 = (c + 2.0) * it;
+    vec3 r = texture(src, t12).rgb * (w12.x * w12.y)
+           + texture(src, vec2(t0.x, t12.y)).rgb * (w0.x * w12.y)
+           + texture(src, vec2(t3.x, t12.y)).rgb * (w3.x * w12.y)
+           + texture(src, vec2(t12.x, t0.y)).rgb * (w12.x * w0.y)
+           + texture(src, vec2(t12.x, t3.y)).rgb * (w12.x * w3.y);
+    float ws = w12.x * w12.y + w0.x * w12.y + w3.x * w12.y + w12.x * w0.y + w12.x * w3.y;
+    return max(r / ws, 0.0);
+}
+
+// A disk of sixteen bilinear taps (a sunflower spiral, so no direction is
+// favoured and the halo has no star or step contours), `r` screen pixels wide,
+// weighted so the edge of the disk fades instead of cutting.
+vec3 disk16(vec2 uv, float r) {
+    vec2 px = r / res;
+    vec3 s = vec3(0.0);
+    float ws = 0.0;
+    for (int i = 0; i < 16; i++) {
+        float fi = float(i);
+        float rr = sqrt((fi + 0.5) * 0.0625);
+        float an = fi * 2.3999632;
+        float w = 1.0 - 0.85 * rr * rr;
+        s += w * texture(src, uv + vec2(cos(an), sin(an)) * (rr * px)).rgb;
+        ws += w;
+    }
+    return s / ws;
+}
+
+// Soft shoulder: identity up to `k`, then it bends toward 1 with the same slope
+// (C1 at the knee) instead of clipping. Highlights that overshoot (the pulse, the
+// back flash, the bloom stacked on a white word) roll off and keep their hue; the
+// ones past 1 also lean to white, as an overdriven phosphor does.
+vec3 shoulder(vec3 c) {
+    const float k = 0.80;
+    float peak = max(max(c.r, c.g), c.b);
+    c += max(peak - 1.0, 0.0) * 0.22;
+    vec3 over = max(c - k, 0.0);
+    return min(c, k) + (1.0 - k) * (1.0 - exp(-over / (1.0 - k)));
 }
 
 void main() {
@@ -172,37 +241,34 @@ void main() {
     float ca = chroma * 0.0016 * conv + glitch * 0.007;
     float cav = chroma * 0.0016 * 0.22 * cq.y * conv;
     vec3 col;
-    col.r = texture(src, uv + vec2(ca, cav)).r;
-    col.g = texture(src, uv).g;
-    col.b = texture(src, uv - vec2(ca, cav)).b;
+    col.r = bicubic(uv + vec2(ca, cav)).r;
+    col.g = bicubic(uv).g;
+    col.b = bicubic(uv - vec2(ca, cav)).b;
 
     // Phosphor bleed. It has to work both ways round: bright letters on a dark
     // tube (the glyph spills light outwards) and a lit screen with dark letters
     // (the background eats into the glyph and a warm halo hugs its border, which
-    // is what a real tube does and what the video looks like). A plain additive
-    // glow only does the first: on a lit screen it just washes the picture out.
+    // is what a real tube does and what the video looks like).
+    //
+    // Tanda 9: the spill is `max(blur - pixel, 0)`: the light the neighbourhood
+    // has and this pixel does not. It is zero on a flat field (a lit screen does
+    // not wash out), zero INSIDE a thick stroke (it used to mix the pixel toward
+    // an eight-tap blur and add an `edge` ring, which dimmed the middle of every
+    // letter and drew a bright inner contour: hollow, doubled glyphs) and it is
+    // positive in a skirt around the border. Three disks (3 / 9 / 22 px) make a
+    // soft gaussian-ish falloff with a long faint tail instead of two boxes.
+    // On a lit face the spill into the dark ink is held down, as before.
     if (bloom > 0.001) {
-        vec3 glow = vec3(0.0);
-        vec2 px = (2.6 / res) * (1.0 + glitch);
-        glow += texture(src, uv + vec2( px.x,  0.0)).rgb;
-        glow += texture(src, uv + vec2(-px.x,  0.0)).rgb;
-        glow += texture(src, uv + vec2( 0.0,  px.y)).rgb;
-        glow += texture(src, uv + vec2( 0.0, -px.y)).rgb;
-        vec2 px2 = px * 2.7;
-        glow += texture(src, uv + vec2( px2.x,  px2.y)).rgb;
-        glow += texture(src, uv + vec2(-px2.x,  px2.y)).rgb;
-        glow += texture(src, uv + vec2( px2.x, -px2.y)).rgb;
-        glow += texture(src, uv + vec2(-px2.x, -px2.y)).rgb;
-        glow *= 0.125;                     // media de las ocho muestras
-        float lum = dot(col, vec3(0.3, 0.6, 0.1));
-        float glum = dot(glow, vec3(0.3, 0.6, 0.1));
-        float edge = abs(glum - lum);      // fuerte sólo cerca del borde del glifo
-        // El sangrado va del lado CLARO. Si se reparte parejo, en una pantalla
-        // prendida la luz se mete adentro de la letra oscura y se pierde el
-        // contraste: el texto queda del color del fondo, apenas más apagado.
-        float bright = step(glum, lum);
-        col = mix(col, glow, 0.22 * bloom * bright);
-        col += tint * edge * bloom * (0.22 + 0.85 * bright);
+        float gl = 1.0 + glitch;
+        vec3 gA = disk16(uv, 3.0 * gl);
+        vec3 gB = disk16(uv, 9.0 * gl);
+        vec3 gC = disk16(uv, 22.0 * gl);
+        vec3 glow = 0.34 * gA + 0.42 * gB + 0.24 * gC;
+        float lit = smoothstep(0.30, 0.62, dot(gB, vec3(0.3, 0.6, 0.1)));
+        vec3 spill = max(glow - col, 0.0);
+        float sl2 = dot(spill, vec3(0.3, 0.6, 0.1));
+        col += spill * bloom * mix(0.46, 0.18, lit);
+        col += tint * sl2 * bloom * mix(0.34, 0.10, lit);
     }
 
     // degauss: los anillos de pureza (el tinte rota según la distancia al centro, como el
@@ -246,7 +312,15 @@ void main() {
     // comb vanishes.
     float sy = qt_TexCoord0.y * res.y;
     float sl = 0.5 + 0.30 * cos((sy - 0.5) * 3.14159265);
-    col *= 1.0 - scanline * 0.55 * sl;
+    // Tanda 9: the beam is wider where it is brighter (it is a gaussian whose
+    // width grows with the drive), so the dark gap closes on the letters and
+    // stays full on the dark face between them: a fine comb in the field and
+    // solid, crisp strokes, instead of one veil of the same depth over both.
+    // The mean over the picture is lifted back (`ret`) so the knob keeps its
+    // old overall level.
+    float beam = smoothstep(0.30, 0.95, dot(col, vec3(0.299, 0.587, 0.114)));
+    col *= 1.0 - scanline * 0.55 * sl * (1.0 - 0.34 * beam);
+    col *= 1.0 + scanline * 0.055;
 
     // La máscara del vidrio: RGB triads, the reason CRT text never looks clean.
     // Tres tubos distintos (`maskType`): la rejilla de apertura de siempre
@@ -310,7 +384,7 @@ void main() {
         mask = 0.82 + 0.13 * keepAt(fd) * dots;   // dots va de -1.5 a 3
     }
     // un tubo monocromo tiene un solo fósforo: no hay tríadas
-    col *= mix(vec3(1.0), mask, 0.55 * (1.0 - mono));
+    col *= mix(vec3(1.0), mask, 0.55 * (1.0 - mono) * (1.0 - 0.18 * beam));
 
     // The interlaced entrance (T3.1): a tube fed a half frame draws every
     // other scanline and leaves the rest dark, and the picture only settles
@@ -409,7 +483,9 @@ void main() {
     // the border. The reflections come last and die with `cutDim`, so the dry
     // cut still goes to black; they sit on the SCREEN (not on the warped uv),
     // so they stay put when the picture shakes.
-    float v = pow(16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y), 0.22);
+    // (max: out past the unit square the product goes negative and pow() of that is NaN,
+    // which the shoulder below would turn into a white tick along the edge)
+    float v = pow(max(16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y), 0.0), 0.22);
     col *= mix(1.0, v, vignette);
     float bevW = 0.013 * sSide;
     float bev = 1.0 - smoothstep(0.0, bevW, rimD);
@@ -424,5 +500,15 @@ void main() {
               + tint * 0.03 * rim;
     col += refl * (1.0 - cutDim) * tubeCut;
 
+    // Tanda 9: the highlights roll off (`shoulder`) instead of clipping, and the
+    // 8-bit output gets triangular dither of one level (two uniform hashes that
+    // change at 30 Hz, like the grain): the dark gradients of the faces and the
+    // vignette stop banding. Held to zero in the black (a dead tube stays dead),
+    // and applied before `qt_Opacity` so a fade does not drag it along.
+    col = shoulder(col);
+    vec2 dp = floor(qt_TexCoord0 * res);
+    float df = floor(t * 30.0) * 1.618;
+    float dn = hash21(dp + df) + hash21(dp * 1.37 + 19.19 + df) - 1.0;
+    col += dn * (1.0 / 255.0) * smoothstep(0.0, 0.03, dot(col, vec3(0.333)));
     fragColor = vec4(col, 1.0) * qt_Opacity;
 }

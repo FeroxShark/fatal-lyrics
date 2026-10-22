@@ -168,7 +168,7 @@ Item {
         id: signalTex
         sourceItem: signalPass
         visible: false
-        smooth: false
+        smooth: true
         live: true
     }
     ShaderEffect {
@@ -202,6 +202,7 @@ Item {
         property variant tint: stage.tb.mono > 0.5 ? stage.color3(stage.tb.monoTint) : stage.color3(stage.pal.ink)
         property real degauss: 0
         property variant res: Qt.vector2d(stage.width, stage.height)
+        property variant texRes: Qt.vector2d(stage.width, stage.height)  // tanda 9: filtro bicúbico del vidrio
         fragmentShader: "../../shell/crt.frag.qsb"
     }
 

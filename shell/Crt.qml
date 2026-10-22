@@ -103,6 +103,7 @@ PanelWindow {
     Component.onCompleted: {
         tubeOn = ctl.crtOn;
         // el dibujo de arranque no pasa por el puente: no hay de qué venir
+        wallLatch();
         motifShown = motifKind;
     }
 
@@ -247,13 +248,43 @@ PanelWindow {
         // así que el ScriptAction del cambio caería con el dibujo viejo todavía
         // a media luz. `swap` no tiene Behavior: lo que se ve es exactamente
         // la curva de acá.
-        if (motifShown === "")
+        if (motifShown === "") {
+            wallLatch();
             motifShown = motifKind;      // el primero no tiene de qué venir
-        else
+        } else {
             motifBridge.restart();
+        }
     }
     property string motifShown: ""
     property real motifSwap: 1
+
+    // ---- PARED (`docs/PARED.md`): esta pantalla muestra su recorte del dibujo de pared del root
+    // (`crtWallKind`). Se engancha en el PUENTE, igual que `motifShown`: el reloj, el estado y la
+    // semilla de la pared (`motifWall`) se toman en el cambio, con la pantalla a negro — si se
+    // leyeran en vivo, el dibujo que se está yendo saltaría a la pared nueva mientras se apaga.
+    readonly property bool wallWants: ctl.crtWallKind !== "" && motifKind === ctl.crtWallKind
+    property var motifWall: null
+    readonly property bool motifWalled: motifWall !== null
+    function wallLatch() {
+        motifWall = wallWants ? { epoch: ctl.crtWallEpoch, share: ctl.crtWallShare, seed: ctl.crtWallSeed }
+                              : null;
+    }
+    // el mismo dibujo pasa a pared o vuelve a la pantalla sola: también lleva puente
+    onWallWantsChanged: {
+        if (motifShown !== "" && motifShown === motifKind && wallWants !== motifWalled)
+            motifBridge.restart();
+    }
+    // el lienzo para Motif/MotifBase, todo en px (`Wall.view`)
+    readonly property var wallSpec: motifWalled ? {
+        x: scr.x - ctl.crtWallCanvas.x, y: scr.y - ctl.crtWallCanvas.y,
+        cw: ctl.crtWallCanvas.w, ch: ctl.crtWallCanvas.h, span: ctl.crtWallCanvas.span,
+        px: ctl.crtWallPivot.x - ctl.crtWallCanvas.x, py: ctl.crtWallPivot.y - ctl.crtWallCanvas.y,
+        ox: camOrigin.x, oy: camOrigin.y,
+        epoch: motifWall.epoch, share: motifWall.share
+    } : null
+    // los colores del dibujo de pared son los de UNA pantalla (`crtWallRef`): con la cara de
+    // cada una, el lienzo se partiría en la costura
+    readonly property var motifPal: motifWalled && ctl.crtWallRef >= 0 ? ctl.crtFace(ctl.crtWallRef, false) : pal
     // ¿esta pantalla dibuja el motivo ahora? (la misma condición del `visible` de `motifFrame`)
     readonly property bool motifSeen: (idle || instrumental || motifForced)
         && !tubeDark && !introHere && !rareNoSignalOn
@@ -269,6 +300,11 @@ PanelWindow {
         }
         ScriptAction {
             script: {
+                // pared <-> pantalla sola: el dibujo vuelve a nacer (otro reloj, otro estado)
+                if (crt.wallWants !== crt.motifWalled
+                        || (crt.motifWalled && crt.motifWall.share !== crt.ctl.crtWallShare))
+                    crt.motifShown = "";
+                crt.wallLatch();
                 crt.motifShown = crt.motifKind;
                 if (crt.motifSeen)
                     crt.hit(0.4, "motif", true);
@@ -311,7 +347,7 @@ PanelWindow {
     // es tomar el color de la enfocada durante el aviso (T4.3): el color del
     // destino lo muda `infect_lead` cuando la frase llega de verdad, y las dos
     // cosas juntas eran el mismo cambio contado dos veces.
-    property color motifColour: pal.ink
+    property color motifColour: motifPal.ink
     Behavior on motifColour { ColorAnimation { duration: Motion.cameraMs; easing.type: Easing.OutQuad } }
 
     // A dónde mira la pared: a la pantalla enfocada, y durante el aviso del
@@ -1688,7 +1724,7 @@ PanelWindow {
         Rectangle {
             id: stageBg
             anchors.fill: parent
-            color: crt.pal.bg
+            color: crt.motifWalled && crt.motifSeen ? crt.motifPal.bg : crt.pal.bg
             // El contagio se ve, pero no se dispara. Las dos caras de la paleta
             // son una clara y una oscura: cambiar de cara es dar vuelta la
             // pantalla entera, y en 190 ms eso no se lee como que el color se
@@ -2093,9 +2129,10 @@ PanelWindow {
                     kind: crt.motifShown
                     // el destino acelera (×1.6 al final de la línea), las otras
                     // apagadas se aquietan (×0.7) y bajan a 0.75 de opacidad
-                    energy: crt.ctl.sectionEnergy
-                        * (crt.foreTarget ? 1 + 0.25 * crt.foreRamp : 1)
-                        * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1)
+                    // (en pared, la misma en todas: el aviso partiría el lienzo)
+                    energy: crt.ctl.sectionEnergy * (crt.motifWalled ? 1
+                        : (crt.foreTarget ? 1 + 0.25 * crt.foreRamp : 1)
+                        * (crt.foreOther ? 1 - 0.3 * crt.foreRamp : 1))
                     // A5: con el aro contando en esta pantalla el motivo se
                     // apaga entero. Dos animaciones a la vez en la misma
                     // pantalla no se leen como una cosa esperando la frase:
@@ -2105,7 +2142,7 @@ PanelWindow {
                     // motivo — pero en un instrumental sí, y ahí el número
                     // quedaba encima del dibujo y sin contraste contra él.
                     dim: (crt.ringShows || syncHint.opacity > 0.01) ? 0
-                        : (crt.foreOther ? 1 - 0.25 * crt.foreRamp : 1)
+                        : (crt.foreOther && !crt.motifWalled ? 1 - 0.25 * crt.foreRamp : 1)
                     // T4.3: la amplitud del latido, de la tabla de `pace`
                     opaMin: crt.ctl.pace.motifOpaMin
                     opaSpan: crt.ctl.pace.motifOpaSpan
@@ -2123,7 +2160,11 @@ PanelWindow {
                     // dibujo y no con el reloj de los motivos: con el hold
                     // puesto, ese reloj sigue corriendo debajo de un dibujo que
                     // se queda, y el paisaje se re-sembraba solo cada 25 s
-                    seed: crt.ctl.crtMotifSeeds[crt.idx] || 0
+                    seed: crt.motifWalled ? crt.motifWall.seed : (crt.ctl.crtMotifSeeds[crt.idx] || 0)
+                    // PARED: el lienzo, la cámara de este tubo y el foco (px de lienzo)
+                    wall: crt.wallSpec
+                    wallCamS: crt.motifWalled ? crt.camS : 1
+                    wallFocus: crt.motifWalled ? Qt.point(crt.ctl.crtWallFx, crt.ctl.crtWallFy) : Qt.point(0, 0)
                     quality: crt.ctl.crtQuality
                     // el compás y el verso: la estática forma algo una vez por
                     // compás, y lo que forma sale de la línea que viene
@@ -2160,7 +2201,7 @@ PanelWindow {
                     // captura, y el laguito tiembla en un tono medio
                     pitch: crt.live ? crt.ctl.audCentroid : 0.5
                     colour: crt.motifColour
-                    hot: crt.pal.hot
+                    hot: crt.motifPal.hot
                     level: crt.pump
                     low: crt.live ? crt.ctl.audLo : 0.4
                     high: crt.live ? crt.ctl.audHi : 0.3
@@ -2189,7 +2230,7 @@ PanelWindow {
                     // miden el compás, los golpes y el re-anclaje de los de loop
                     rate: crt.ctl.crtMovRate
                     movOff: crt.movOff
-                    bg: crt.pal.bg
+                    bg: crt.motifPal.bg
                     spinning: crt.visible && (crt.idle || crt.instrumental || crt.motifForced)
                 }
             }

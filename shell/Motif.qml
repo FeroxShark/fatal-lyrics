@@ -1482,6 +1482,14 @@ Item {
             linesSynced: motif.linesSynced
             fontFamily: motif.fontFamily
             running: motif.spinning
+            hf: motif.hf
+            // el golpe físico (`Pipes.qml` es un ThumpBase): bombo, agudos, densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
         }
     }
     Component {

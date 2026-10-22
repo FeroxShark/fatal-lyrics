@@ -100,9 +100,13 @@ WallItem {
             // UNA luz para toda la pared: el primero que llega la planta y las demás pantallas,
             // que reciben el mismo tiempo en el mismo cuadro, la ven ya plantada
             const T = wallState(), t = wallNow();
+            const peak = Math.min(1.0, gain * (0.45 + 0.9 * Math.max(0, low - 0.30)));
             if (t - T.lightAt >= 0.14) {
                 T.lightAt = t;
-                T.lightPeak = Math.min(1.0, gain * (0.45 + 0.9 * Math.max(0, low - 0.30)));
+                T.lightPeak = peak;
+            } else if (t === T.lightAt && peak > T.lightPeak) {
+                // el mismo cuadro: gana la señal más fuerte, venga primero la pantalla que venga
+                T.lightPeak = peak;
             }
             wallLightSync();
             return;

@@ -1,4 +1,4 @@
-// fatal-lyrics — motivo `membrana` (testeo 2026-10-19, NO está en el sorteo).
+// fatal-lyrics — motivo `membrana` (testeo 2026-10-19; ya está en el sorteo, grupo `hot` de `motifGroups`).
 //
 // El parche de un bombo en perspectiva, malla de fósforo. Qué hace con cada señal:
 //   · bombo (`thump`)  — le pega al parche en un punto: la onda baja, se pasa, vuelve

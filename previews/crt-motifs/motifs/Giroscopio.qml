@@ -1,4 +1,4 @@
-// fatal-lyrics — motivo `giroscopio` (testeo 2026-10-19, NO está en el sorteo).
+// fatal-lyrics — motivo `giroscopio` (testeo 2026-10-19; ya está en el sorteo, grupo `neutral` de `motifGroups`).
 //
 // Un giróscopo de aros anidados (cardán) en 3D, raymarch. Qué hace con cada señal:
 //   · bombo (`thump`)  — cada golpe es un impulso de giro: el aro de ADENTRO (liviano)

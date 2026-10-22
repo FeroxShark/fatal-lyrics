@@ -297,7 +297,7 @@ void main() {
                     vec3 nrm = normalize(vec3(-SLOPEK * dn.y, 1.0, -SLOPEK * dn.z));
                     float crest = clamp((dot(nrm, sun) - sun.y) * 1.6 + 0.5, 0.0, 1.0);
                     vec3 c = mix(ink, hot, crest * crest);
-                    float bright = (0.30 + 0.95 * crest) * fade;
+                    float bright = (0.36 + 0.90 * crest) * fade;
                     // la niebla: el grano lejano se va HACIA el color del cielo
                     // en función de la DISTANCIA, no del |dy|. Así no hay
                     // ninguna línea: la arena se disuelve en el aire.

@@ -44,7 +44,7 @@ class TestVidrioDelTubo(unittest.TestCase):
     def test_convergence_grows_outwards_and_follows_the_knob(self):
         f = self.f
         self.assertIn("float conv = 0.3 + 0.7 * 0.5 * dot(cq, cq);", f)
-        self.assertIn("chroma * 0.0016 * conv + glitch * 0.007", f)
+        self.assertIn("chroma * 0.0016 * conv + glitch * 0.0035", f)
         # en pantalla, no en el uv deformado: las bandas del glitch no la arrastran
         self.assertIn("cq = qt_TexCoord0 * 2.0 - 1.0", f)
 

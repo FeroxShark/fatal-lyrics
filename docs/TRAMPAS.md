@@ -1504,3 +1504,16 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 - **El brillo neutro es 0.30, no 0.5**: los centroides reales tienen mediana 0.29. Con pivote 0.5 el tubo vivía frío.
 - **Luminancia del tinte**: un piso fijo de L hace no monótono el par cálido/frío; se modula el objetivo de luz (`toneY`) y la cara media cae más rápido en frío (0.45) para no bajar de 1.7 de distinción con el fondo.
 - **En modo normal el `tone` fluye por el modo `light` de `audio.py`** (captura sólo para la grilla de tiempos, con cartelitos y música): `tone.feed` corre antes del `if not light`, así la barra de título del modo normal también sigue a la canción.
+
+## Pared de motivos (2026-10-22)
+
+- **Una propiedad de ShaderEffect no se puede llamar `focus`**: es FINAL en Item y el componente no
+  carga ("Cannot override FINAL property"). El foco del truchet es `foc`. Test en `tests/test_pared.py`.
+- **`crtWallShare` es un objeto JS mutable compartido**: las instancias de MotifBase/ThumpBase lo
+  escriben sin avisar (no dispara bindings, a propósito: es estado, no señal). Se reemplaza entero
+  con cada pared nueva (`onCrtWallKindChanged`); la semilla vive adentro (`seed`) para que la
+  pantalla que se suma tarde tome la misma.
+- **La pared se engancha en el puente** (`Crt.wallLatch`), nunca en caliente: cambiar `wall` a mitad
+  de un dibujo lo hace saltar de ventana y de reloj.
+- **En el banco, las pantallas van SIN redondear** (`Pared.qml`): redondear 247·0,4 corría DP-1 medio
+  píxel y daba 3,5 de diferencia contra la referencia en vez de 0,01.

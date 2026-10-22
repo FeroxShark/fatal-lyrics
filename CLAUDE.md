@@ -82,7 +82,7 @@ palabra clave, y se ve sin música. Kinds: `fatal crt motif --help`. `splitflap`
 
 **Agregar un motif:** `shell/<Kind>.qml` sobre `ThumpBase` (mismo feed de ritmo), `Component` + línea
 del Loader en `Motif.qml`, kind en `motifKinds`/`motifGroups`/`motifFit` (`shell.qml`). Receta larga:
-`docs/MAPA.md`; banco: `previews/crt-motifs`.
+`docs/MAPA.md`; banco: `previews/crt-motifs`. **Que cruce toda la pared** (perilla `crt.wall`): receta en `docs/PARED.md`.
 
 Hyprland: binds y `no_anim` de las capas viven en `packaging/hyprland.lua` (`dofile` desde
 `~/.config/hypr/hyprland.lua`). Autostart: **UNO solo**, la unit de usuario
@@ -95,6 +95,7 @@ No reintroducir un segundo (`docs/TRAMPAS.md`).
 
 - `docs/CONCEPTOS.md` — Cómo pensarlo: dos procesos, config con hot-reload, interruptor del CRT, línea siguiente, salto, motivos, entradas, sync, foco y idioma de la letra.
 - `docs/MAPA.md` — Mapa del código: qué hace cada archivo, propiedad y perilla, y dónde están los cachés.
+- `docs/PARED.md` — La pared de motivos: un lienzo entre pantallas, banco y receta.
 - `docs/TRAMPAS.md` — Bugs que ya pasaron y por qué. Antes de diagnosticar algo raro, buscá acá. Cada trampa nueva va acá.
 - `docs/NUMEROS-MEDIDOS.md` — Mediciones de CPU/latencia y cómo se tomaron. Los números nuevos van acá.
 - `docs/PENDIENTES.md` — Backlog vivo. Leerlo al planear una tanda.

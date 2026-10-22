@@ -136,3 +136,10 @@ conjunto de Julia cuyo parámetro respira con el bombo y cuya órbita salta un p
 cada bombo manda una onda que las empuja. `vitral` (calm): vidrio de Voronoi emplomado; el bombo
 empuja los vidrios, los agudos prenden facetas y cada compás sortea cuáles se encienden.
 `LC_ALL=C ./sheet.sh julia 1,3.4,6,9` (ídem `truchet`, `vitral`).
+
+## La pared (`pared.py`, `Pared.qml`)
+
+Varias pantallas en sus posiciones reales, cada una con su instancia del motivo, contra UNA
+instancia que dibuja el lienzo entero. `./pared.py --check` (y `--cam 1.06 --zoom 1.04`) mide la
+costura por pantalla; `./pared.py 3 truchet --stills 2,6.5` deja cuadros en `out/pared/`. Ver
+`docs/PARED.md`.

@@ -3,6 +3,10 @@
 Backlog vivo. Leerlo al planear una tanda.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
+**Pared de motivos, fase 1 (2026-10-22, `docs/PARED.md`):** truchet, mystify y pipes cruzan toda la pared (perilla `crt.wall`).
+Falta: verla con música real en el equipo; fase 2 con más motifs extensibles (dunes, ocean, pond, stars, tunnel); corregir
+una `camS` distinta por pantalla; decidir si el sorteo prefiere la pared.
+
 **Decisión de Ferox 2026-09-28: ninguna pantalla finge estar apagada.** Perilla `crt.screen_off` (default `false`): el intro de tema
 (apagado/degauss/estática/tarjeta) y la escena por secciones (`crt.scene`) quedan inertes; `true` los devuelve. No toca el dip del
 corte seco (tanda 8), `fatal crt dark` a mano ni los raros. Sin línea en su config: el default ya apaga todo eso.

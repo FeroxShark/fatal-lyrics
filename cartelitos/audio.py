@@ -1823,11 +1823,37 @@ def audio_loop():
             time.sleep(5)
 
 
+LIGHT_GRACE_S = 20.0       # pausa corta en modo normal: la captura (y la grilla) siguen
+_light = {"playing_at": 0.0}
+
+
+def beat_wanted():
+    """¿Hace falta la grilla de tiempos en el modo NORMAL (cartelitos, sin tubo)? Sólo si hay
+    carteles, glitch prendido, el "aterrizar en el tiempo" prendido y música sonando (o recién
+    pausada: una pausa corta no tira la grilla, `LIGHT_GRACE_S`). Pausa larga o sin música:
+    la captura se cierra y el costo vuelve a cero."""
+    cfg = config.CFG
+    if (not cfg["display"]["dialogs"] or cfg["effects"]["glitch"] == "off"
+            or not cfg["crt"]["beat_lock"]):
+        return False
+    now = time.monotonic()
+    if ipc._song_pos() is not None:
+        _light["playing_at"] = now
+        return True
+    return now - _light["playing_at"] < LIGHT_GRACE_S
+
+
+def capture_wanted():
+    """El tubo prendido, o la grilla del modo normal (`beat_wanted`)."""
+    return config.CFG["crt"]["audio"] and (config.crt_on() or beat_wanted())
+
+
 def _capture_loop():
-    """Graba y manda eventos mientras el tubo esté prendido. Fuera del modo CRT
-    no se abre ni el proceso: cero consumo cuando no se ve."""
+    """Graba y manda eventos mientras el tubo esté prendido o, en modo normal, mientras haya
+    cartelitos con música (`beat_wanted`: sólo la grilla de tiempos, ver `light` abajo). Sin
+    ninguna de las dos no se abre ni el proceso: cero consumo cuando no se ve."""
     while True:
-        if not (config.CFG["crt"]["audio"] and config.crt_on()):
+        if not capture_wanted():
             time.sleep(0.5)
             continue
         cur_sink = _default_sink()
@@ -1871,11 +1897,15 @@ def _capture_loop():
         cur_gain = _capture_gain(config.CFG["behavior"]["player"])
         warned = False
         try:
-            while config.CFG["crt"]["audio"] and config.crt_on():
+            while capture_wanted():
                 chunk = proc.stdout.read(AUDIO_FRAME)
                 if not chunk or len(chunk) < AUDIO_FRAME:
                     break     # se cayó la captura (cambio de salida, sink muerto)
                 now = time.monotonic()
+                # `light`: sin tubo, sólo la grilla de tiempos (compás + seek/pausa). No se
+                # mandan `aud`/`wave` ni se arma el mapa del tema: nadie los dibuja y es lo
+                # que cuesta
+                light = not config.crt_on()
                 if now - last_sink_check > SINK_CHECK_EVERY:
                     last_sink_check = now
                     if sink_changed(cur_sink, _default_sink):
@@ -1888,7 +1918,7 @@ def _capture_loop():
                 ev = an.feed(mono, now, pct=cur_pct)
                 if not ev:
                     continue
-                if now - last_wave >= 1.0 / WAVE_HZ:
+                if not light and now - last_wave >= 1.0 / WAVE_HZ:
                     last_wave = now
                     wave = wave_points(left, right, an.peak)
                     if wave:
@@ -1913,7 +1943,7 @@ def _capture_loop():
                             last_bpm_logged = msg["v"]
                             log(f"tempo: {msg['v']:.0f} BPM (conf {msg['conf']:.0%})")
                         ipc.send_soft(msg)
-                if gate.hit(now, ev["b"] == 1, ev["h"] == 1, cur_pct):
+                if not light and gate.hit(now, ev["b"] == 1, ev["h"] == 1, cur_pct):
                     ev["pk"] = 1
                     # queda en el log: si algún día "no late nunca" o "late todo
                     # el tiempo", esto dice cuántos picos hubo y en qué momento
@@ -1922,8 +1952,8 @@ def _capture_loop():
                            else " (no map yet)"))
                 # los eventos de UN bloque (golpe, bombo, agudo, corte, tendencia)
                 # salen siempre: si caen en un bloque salteado, se pierden
-                if (ev["b"] or ev["cutf"] or ev["k"] or ev["ht"] or ev["rise"]
-                        or ev["fall"] or now - last >= AUDIO_MIN_SEND):
+                if not light and (ev["b"] or ev["cutf"] or ev["k"] or ev["ht"] or ev["rise"]
+                                  or ev["fall"] or now - last >= AUDIO_MIN_SEND):
                     last = now
                     ipc.send_soft(ev)
 
@@ -1956,13 +1986,13 @@ def _capture_loop():
                 prof.gain = cur_gain
                 # se guarda cada tanto, no sólo al cambiar de tema: si el daemon
                 # se cae en la mitad, el mapa de lo escuchado no se pierde
-                if now - last_char >= CHAR_EVERY:
+                if not light and now - last_char >= CHAR_EVERY:
                     last_char = now
                     msg = char.step(char_target(bpm.bpm, bpm.conf, _char_energy(prof),
                                                 an.onset_rate()), now)
                     if msg:
                         ipc.send_soft(msg)
-                if now - last_save > PROFILE_SAVE_EVERY:
+                if not light and now - last_save > PROFILE_SAVE_EVERY:
                     last_save = now
                     prof.save()
                 pos = ipc._song_pos()
@@ -1977,6 +2007,8 @@ def _capture_loop():
                     log("tempo: position jump, relocking the beat grid")
                     bpm.grid.unlock()
                 last_pos = (pos, now)
+                if light:
+                    continue
                 rms = ev["l"] * an.peak      # el rms crudo, sin la normalización
                 prof.record(pos, rms, ev["c"])
                 kind, pct, changed = prof.update(pos, rms, now)

@@ -305,6 +305,9 @@ _CONFIG_COMMENTS = {
                      "lap but rounds it to whole bars, so it stays in phase with the\n"
                      "beat. Glitches tied to something else (the jump ray, the ring,\n"
                      "the channel change, the camera) still land at once.\n"
+                     "In the normal mode (no tube) the dialogs' own glitch bursts\n"
+                     "land on the beat too, with the music playing (the daemon then\n"
+                     "listens for the tempo only: no waveform, no song map).\n"
                      "Without a tempo nothing changes. false = as before",
         "beat_offset": "ms to shift every beat-timed effect: the glitches that land on\n"
                        "the beat, the beat tick of the drawings, the rolling bar. The\n"

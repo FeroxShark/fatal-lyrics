@@ -133,6 +133,7 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   `~/.config/systemd/user` y habilita; `fatal on|off|restart` pasan por `systemctl --user` si
   existe); `PKGBUILD`. Pantallas de Ferox hoy: DP-2 · HDMI-A-1 (carteles) · DP-1 (widgets, fuera del CRT).
 - `audio.BeatGrid` / `BEAT_LATENCY_S` / `bpm.event()` (`audio.py`) + `beatAnchorRaw`/`lastBeatAt`/`msToNextBeat`/`beatStepAim`/`beatSync`/`beatTick`/`beatLateMs`/`crtBeatOffset` (`shell.qml`) — la grilla única de tiempos y su reloj; ver TRAMPAS "Todo al ritmo". Perilla `crt.beat_offset`. Test: `tests/test_ritmo.py`.
+- `audio.capture_wanted()`/`beat_wanted()` (modo `light` de `_capture_loop`) + `shell/BeatBurst.qml` (reloj de los glitches del cartel, sobre la grilla) — el ritmo en el modo normal, sin tubo. Test: `tests/test_ritmo_normal.py`.
 - `audio.downmix_stereo` + `wave_points` + evento `wave {l,r}` (`audio.py`/`Motif.qml`) — la captura
   estéreo se baja a mono ANTES de `AudioAnalyzer.feed` (no descalibra perfiles viejos); el scope
   dibuja Lissajous L/R real. Detalle y números: `docs/TRAMPAS.md` / `docs/NUMEROS-MEDIDOS.md`.

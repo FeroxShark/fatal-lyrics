@@ -1457,8 +1457,19 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 - **Se queda reactivo A PROPÓSITO:** golpe del bajo (`bassHit`: pulsa en el bombo real, no en la
   grilla — un bombo fuera de grilla se ve fuera de grilla, que es lo que se oye), aro/salto/cambio
   de canal (atados a la letra o al daemon, no al compás), y los glitches con `urgent`.
-- **Fuera de alcance:** los glitches del modo normal (cartelitos) son timers al azar y no hay
-  grilla — la captura de audio sólo corre con el CRT. Prenderla para el modo normal es decisión de rumbo.
+- **Modo normal (cartelitos) también va al compás** (Ferox, 2026-10-22). Antes sus glitches eran
+  timers al azar porque la captura sólo corría con el tubo. Ahora `audio.capture_wanted()` =
+  tubo prendido **o** `beat_wanted()` (carteles + glitch no `off` + `crt.beat_lock` + música; pausa
+  de hasta `LIGHT_GRACE_S` = 20 s no tira la grilla, más larga cierra pw-record: costo cero). Sin
+  tubo el loop corre en modo `light`: sólo `an.feed` + `BpmTracker` + seek/pausa; NO manda
+  `aud`/`wave`, no arma el mapa del tema (`prof.record`), ni carácter/pico/cue. En el overlay
+  `bpmLive` ya no pide `crtOn` y `liveTick` corre mientras `bpmLive` (si no, el vencimiento de
+  15 s nunca se re-evalúa sin tubo). El reloj de cada cartel es `shell/BeatBurst.qml`: un
+  intento por tiempo (uno cada dos si < 300 ms), apuntado con `msToNextBeat`/`beatStepAim`;
+  sin compás, o si se pierde a mitad de la espera, el azar de siempre. El `burst` de
+  `onCurrentChanged` y la sacudida al pico siguen reactivos. Test: `tests/test_ritmo_normal.py`
+  (corre `BeatBurst` en `qml6` y mide el desfase contra la grilla: ≤ 1 ms medido; necesita
+  `QT_FORCE_STDERR_LOGGING=1` para ver `console.log`).
 
 | animación | antes | ahora |
 |---|---|---|

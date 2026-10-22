@@ -616,7 +616,7 @@ ShellRoot {
     // debajo de 0.6 el número es una adivinanza: todo sigue moviéndose con la
     // letra, como antes de que existiera esto. En pausa la grilla se apaga (la música no
     // suena, pero el daemon la sigue extrapolando unos segundos).
-    readonly property bool bpmLive: crtOn && bpm > 0 && bpmConf > 0.6 && posPlaying
+    readonly property bool bpmLive: bpm > 0 && bpmConf > 0.6 && posPlaying
         && (liveTick, Date.now() - bpmAt < 15000)
     // Cuantizar = redondear a un número ENTERO de tiempos, no reemplazar por un
     // tiempo: el compás acomoda lo que ya pasaba, no lo hace pasar más seguido.
@@ -702,7 +702,9 @@ ShellRoot {
     Timer {
         interval: 1000
         repeat: true
-        running: root.crtOn
+        // `bpmLive` (la grilla del modo normal, sin tubo) también necesita el empujón para
+        // vencerse a los 15 s; una vez vencida el Timer se apaga solo
+        running: root.crtOn || root.bpmLive
         onTriggered: root.liveTick++
     }
     readonly property bool musicLive: {
@@ -4632,16 +4634,17 @@ ShellRoot {
                         onTriggered: win.holoOpacity = 1 - Math.random() * (0.16 + 0.1 * win.glitchiness) * root.gStr
                     }
 
-                    // bursts de glitch espontáneos y frecuentes
-                    Timer {
-                        running: !win.dying && win.fx && root.gProb > 0
-                        repeat: true
-                        interval: 400
-                        onTriggered: {
-                            interval = 160 + Math.random() * (550 - 380 * win.glitchiness);
-                            if (Math.random() < (0.55 + 0.4 * win.glitchiness) * root.gProb)
-                                win.doBurst((0.6 + win.glitchiness) * root.gStr);
-                        }
+                    // bursts de glitch espontáneos y frecuentes. Con compás medido caen sobre un
+                    // tiempo de la grilla (`BeatBurst`, igual que `hit()` en el tubo); sin él, al azar
+                    BeatBurst {
+                        active: !win.dying && win.fx && root.gProb > 0
+                        locked: root.crtBeatLock && root.bpmLive
+                        beatMs: root.beatMs
+                        msToNext: root.msToNextBeat
+                        stepAim: root.beatStepAim
+                        glitchiness: win.glitchiness
+                        gProb: root.gProb
+                        onBurst: win.doBurst((0.6 + win.glitchiness) * root.gStr)
                     }
 
                     // vida máxima: que no queden flotando infinito si la música se paró

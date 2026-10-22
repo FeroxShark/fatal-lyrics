@@ -103,7 +103,7 @@ class TestFacesJs(unittest.TestCase):
         self.assertGreaterEqual(v["bgMin"], BG_MIN)
         self.assertNotEqual(v["calmBg"], v["hardBg"])
         self.assertEqual(v["noEnergyBg"], v["hardBg"])     # sin energía = el piso de antes
-        self.assertIn("albumFaces(hex, (crtMoodLocked || crtMood).energy)", read("shell.qml"))
+        self.assertIn("albumFaces(hex, (crtMoodLocked || crtMood).energy,", read("shell.qml"))
 
     def test_a_grey_cover_gives_no_palette(self):
         self.assertIsNone(self.js('albumFaces(["#808080", "#1a1a1a", "#f0f0f0"])'))

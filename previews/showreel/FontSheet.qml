@@ -19,7 +19,7 @@ Rectangle {
         ["plex", "IBMPlexMono-Bold.ttf", "IBM Plex Mono Bold", "typed · soft", true],
         ["space", "SpaceMono-Bold.ttf", "Space Mono Bold", "hard · burn", true],
         ["chakra", "ChakraPetch-Bold.ttf", "Chakra Petch Bold", "hard · burn", true],
-        ["syne", "SyneMono-Regular.ttf", "Syne Mono (sólo Regular)", "soft", false],
+        ["syne", "SyneMono-Regular.ttf", "Syne Mono (sólo Regular)", "fuera del sorteo", false],
         ["vt323", "VT323-Regular.ttf", "VT323 (sólo Regular)", "typed · burn", false],
         ["share", "ShareTechMono-Regular.ttf", "Share Tech Mono (sólo Regular)", "typed · soft", false],
         ["dot", "DotGothic16-Regular.ttf", "DotGothic16 (sólo Regular)", "CJK", false],

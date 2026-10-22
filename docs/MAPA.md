@@ -78,8 +78,8 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   plano. Detalle: `docs/TRAMPAS.md` ("Detalle movido: motivos y set").
 - `crtFontPools` + `crtFontTraits` + `crtFontPick` (`shell.qml`) — mazo de fuentes por familia de
   entrada, sorteado con el mismo dado que la fuente del set pero PONDERADO: peso base × cercanía del
-  mood (energía/valencia) a la `e`/`v` de cada fuente (sin Press Start 2P, no le gustaba). Quince:
-  plex, space, chakra, syne, vt323, share, departure, anon, b612, sarpanch, wallpoet, nova, xanh,
+  mood (energía/valencia) a la `e`/`v` de cada fuente (sin Press Start 2P, no le gustaba). Catorce (sin Syne Mono, Ferox 2026-10-22):
+  plex, space, chakra, vt323, share, departure, anon, b612, sarpanch, wallpoet, nova, xanh,
   glitch (raro, `w` .4), system; `crtFontBold` dice cuáles van en Bold real. Perilla nueva = fila en
   `crtFontTraits`. Créditos: `shell/fonts/LICENSE-*.txt`. Banco con el vidrio real:
   `previews/fuentes-crt/render.py` (lee los FontLoader de `shell.qml`; muestras en

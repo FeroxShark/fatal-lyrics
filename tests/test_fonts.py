@@ -22,7 +22,7 @@ def _block(qml, name):
 class TestCrtFonts(unittest.TestCase):
     def test_every_font_loader_points_to_a_bundled_file(self):
         srcs = re.findall(r'FontLoader \{ id: \w+; source: Qt\.resolvedUrl\("fonts/([^"]+)"\)', _qml())
-        self.assertGreaterEqual(len(srcs), 7)
+        self.assertGreaterEqual(len(srcs), 6)
         for name in srcs:
             self.assertTrue(os.path.isfile(os.path.join(FONTS, name)), name)
 

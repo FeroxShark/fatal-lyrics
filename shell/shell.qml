@@ -2657,7 +2657,8 @@ ShellRoot {
     FontLoader { id: fontPlex; source: Qt.resolvedUrl("fonts/IBMPlexMono-Bold.ttf") }
     FontLoader { id: fontSpace; source: Qt.resolvedUrl("fonts/SpaceMono-Bold.ttf") }
     FontLoader { id: fontChakra; source: Qt.resolvedUrl("fonts/ChakraPetch-Bold.ttf") }
-    FontLoader { id: fontSyne; source: Qt.resolvedUrl("fonts/SyneMono-Regular.ttf") }
+    // Syne Mono salió de la rotación (Ferox 2026-10-22): sin FontLoader ni clave acá;
+    // el .ttf y su licencia quedan en shell/fonts/.
     FontLoader { id: fontDot; source: Qt.resolvedUrl("fonts/DotGothic16-Regular.ttf") }
     // tanda fuentes 2: ocho más (OFL, `shell/fonts/LICENSE-*.txt`). Departure Mono es
     // un pixel mono fino y limpio (nada de bloques: Ferox descartó Press Start); el
@@ -2673,7 +2674,7 @@ ShellRoot {
     FontLoader { id: fontGlitch; source: Qt.resolvedUrl("fonts/RubikGlitch-Regular.ttf") }
     readonly property var crtFontFamilies: ({
         vt323: fontVt323.name, share: fontShare.name, plex: fontPlex.name,
-        space: fontSpace.name, chakra: fontChakra.name, syne: fontSyne.name,
+        space: fontSpace.name, chakra: fontChakra.name,
         departure: fontDeparture.name, anon: fontAnon.name, b612: fontB612.name,
         sarpanch: fontSarpanch.name, wallpoet: fontWallpoet.name, nova: fontNova.name,
         xanh: fontXanh.name, glitch: fontGlitch.name,
@@ -2688,7 +2689,7 @@ ShellRoot {
         typed: ["vt323", "plex", "share", "departure", "anon"],
         hard:  ["chakra", "space", "system", "sarpanch", "wallpoet", "b612"],
         burn:  ["space", "vt323", "chakra", "departure", "sarpanch", "wallpoet", "glitch"],
-        soft:  ["syne", "share", "plex", "system", "xanh", "nova", "anon", "b612"],
+        soft:  ["share", "plex", "system", "xanh", "nova", "anon", "b612"],
     })
     // Carácter de cada fuente, para que el sorteo del mazo NO sea parejo
     // (`crtFontPick`): e = energía del tema donde se luce (0 calmo .. 1 agitado),
@@ -2701,7 +2702,6 @@ ShellRoot {
         plex:      { e: 0.50, v:  0.10, w: 1.0 },
         space:     { e: 0.75, v:  0.00, w: 1.0 },
         chakra:    { e: 0.80, v: -0.20, w: 1.0 },
-        syne:      { e: 0.25, v: -0.10, w: 1.0 },
         departure: { e: 0.55, v:  0.20, w: 1.0 },
         anon:      { e: 0.30, v: -0.10, w: 1.0 },
         b612:      { e: 0.55, v:  0.30, w: 1.0 },
@@ -2713,12 +2713,12 @@ ShellRoot {
         system:    { e: 0.50, v:  0.00, w: 0.6 },
     })
     // ¿La letra va en `bold`? Sólo donde hay archivo Bold (Plex, Space, Chakra, Anonymous, B612, Sarpanch) o
-    // la fuente de sistema: VT323, Share Tech Mono, Syne Mono y DotGothic16 sólo
+    // la fuente de sistema: VT323, Share Tech Mono y DotGothic16 sólo
     // traen Regular, y pedirles `bold` hace que Qt las engorde en sintético (en
     // una fuente pixel corre los trazos y desalinea la grilla). Clave que falta
     // = true (el `override` tipeado por Ferox conserva el peso de siempre).
     readonly property var crtFontBold: ({
-        vt323: false, share: false, syne: false, dot: false,
+        vt323: false, share: false, dot: false,
         departure: false, wallpoet: false, nova: false, xanh: false, glitch: false,
         plex: true, space: true, chakra: true, anon: true, b612: true, sarpanch: true,
         system: true,
@@ -2764,7 +2764,7 @@ ShellRoot {
     // de la fuente (campana; piso 0.08 para que ninguna sea imposible). Sin
     // mood: energía .5, valencia 0 (el set arranca antes del primer verso).
     // Pura: mismo `r` + mismo mood → misma fuente. Un mood lento y triste
-    // reparte entre Xanh/Syne/Anonymous; uno agitado, entre Sarpanch/Wallpoet/
+    // reparte entre Xanh/Anonymous; uno agitado, entre Sarpanch/Wallpoet/
     // Chakra, y sólo ahí asoma `glitch`.
     function crtFontPick(pool, r, mood) {
         const e = mood ? mood.energy : 0.5;

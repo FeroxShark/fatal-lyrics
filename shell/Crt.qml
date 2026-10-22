@@ -12,6 +12,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Effects
 import "React.js" as React
 import "Speed.js" as Speed
 import "Rows.js" as Rows
@@ -275,7 +276,31 @@ PanelWindow {
         const sh = ctl.crtWallShare;
         if (sh.seed === undefined)
             sh.seed = ctl.crtWallSeed;
-        motifWall = { epoch: ctl.crtWallEpoch, share: sh, seed: sh.seed };
+        motifWall = { epoch: ctl.crtWallEpoch, share: sh, seed: sh.seed, text: ctl.crtWallText };
+    }
+    // ---- la pantalla de la LETRA no lleva la pared (`Wall.fit`): esta pantalla dibuja su
+    // rectángulo o, si el motivo pide espejo y le toca el lado corto, el reflejo dado vuelta. La
+    // letra de la que se parte también se engancha (`motifWall.text`): el espejo cambia de lado
+    // en un PUENTE, nunca a mitad de un dibujo; si la ventana no cambia (detrás, o la letra en un
+    // borde), el cambio es mudo.
+    function wallFitFor(text) {
+        return Wall.fit(ctl.crtWallRects, text, motifView.wallFit);
+    }
+    function wallFitKey(f) {
+        const m = f.s[idx];
+        return m ? [m.x, m.y, m.fx, m.fy, m.fx || m.fy ? f.at : 0].join(",") : "";
+    }
+    readonly property var wallFit: motifWalled ? wallFitFor(motifWall.text) : null
+    readonly property var wallMine: wallFit && wallFit.s[idx] ? wallFit.s[idx]
+        : { x: scr.x, y: scr.y, fx: false, fy: false }
+    readonly property int wallTextWants: ctl.crtWallText
+    onWallTextWantsChanged: {
+        if (!motifWalled || motifWall.text === wallTextWants)
+            return;
+        if (motifSeen && wallFitKey(wallFitFor(motifWall.text)) !== wallFitKey(wallFitFor(wallTextWants)))
+            motifBridge.restart();
+        else
+            motifWall = Object.assign({}, motifWall, { text: wallTextWants });
     }
     // el mismo dibujo pasa a pared o vuelve a la pantalla sola: también lleva puente
     onWallWantsChanged: {
@@ -283,18 +308,48 @@ PanelWindow {
             motifBridge.restart();
     }
     // el lienzo para Motif/MotifBase, todo en px (`Wall.view`)
+    // (espejada: el pivote y el origen de la cámara también se reflejan — lo que se ve es el
+    // reflejo de la pared entera escalando sobre su pivote)
+    readonly property var wallPivotMine: wallFit ? Wall.mirror(ctl.crtWallPivot, wallMine.fx || wallMine.fy ? wallFit : { ax: "" })
+                                                 : ctl.crtWallPivot
     readonly property var wallSpec: motifWalled ? {
-        x: scr.x - ctl.crtWallCanvas.x, y: scr.y - ctl.crtWallCanvas.y,
+        x: wallMine.x - ctl.crtWallCanvas.x, y: wallMine.y - ctl.crtWallCanvas.y,
         cw: ctl.crtWallCanvas.w, ch: ctl.crtWallCanvas.h, span: ctl.crtWallCanvas.span,
-        px: ctl.crtWallPivot.x - ctl.crtWallCanvas.x, py: ctl.crtWallPivot.y - ctl.crtWallCanvas.y,
-        ox: camOrigin.x, oy: camOrigin.y,
+        px: wallPivotMine.x - ctl.crtWallCanvas.x, py: wallPivotMine.y - ctl.crtWallCanvas.y,
+        ox: wallMine.fx ? scr.width - camOrigin.x : camOrigin.x,
+        oy: wallMine.fy ? scr.height - camOrigin.y : camOrigin.y,
         epoch: motifWall.epoch, share: motifWall.share
     } : null
+    // el foco (px de lienzo) como lo ve esta pantalla: reflejado si está espejada
+    readonly property point wallFocusMine: {
+        if (!motifWalled)
+            return Qt.point(0, 0);
+        const cv = ctl.crtWallCanvas;
+        if (!(wallMine.fx || wallMine.fy))
+            return Qt.point(ctl.crtWallFx, ctl.crtWallFy);
+        const m = Wall.mirror({ x: ctl.crtWallFx + cv.x, y: ctl.crtWallFy + cv.y }, wallFit);
+        return Qt.point(m.x - cv.x, m.y - cv.y);
+    }
+    // la pantalla de la letra queda limpia, también con el dibujo forzado (`--screen all`); el
+    // dibujo entra y sale con la gramática de `Motion` (no de un cuadro al otro), y si el motivo
+    // declara eco (`wallEcho`) queda muy tenue y desenfocado detrás de la letra
+    readonly property bool wallEchoOn: motifWalled && showsText && motifView.wallEcho > 0
+        && !tubeDark && !introHere && !rareNoSignalOn
+    readonly property real wallShowTo: motifSeen ? 1 : wallEchoOn ? motifView.wallEcho : 0
+    readonly property bool wallShowUp: wallShowTo >= 0.5
+    property real wallShow: wallShowTo
+    Behavior on wallShow {
+        enabled: crt.motifWalled
+        NumberAnimation {
+            duration: crt.wallShowUp ? Motion.enterMs : Motion.exitMs
+            easing.type: crt.wallShowUp ? Easing.OutExpo : Easing.InQuad
+        }
+    }
     // los colores del dibujo de pared son los de UNA pantalla (`crtWallRef`): con la cara de
     // cada una, el lienzo se partiría en la costura
     readonly property var motifPal: motifWalled && ctl.crtWallRef >= 0 ? ctl.crtFace(ctl.crtWallRef, false) : pal
     // ¿esta pantalla dibuja el motivo ahora? (la misma condición del `visible` de `motifFrame`)
-    readonly property bool motifSeen: (idle || instrumental || motifForced)
+    readonly property bool motifSeen: (idle || instrumental || (motifForced && !(wallWants && showsText)))
         && !tubeDark && !introHere && !rareNoSignalOn
     // tanda 8 (r4): el cambio de dibujo es un PUENTE de glitch (`bridgeMs`), no un fundido a negro
     // de 460 ms repetido ~14 veces por minuto: medio puente a negro, el golpe de tubo EN el swap
@@ -2123,13 +2178,29 @@ PanelWindow {
                 // tanda 6, corrida 5: con el intro corriendo esta pantalla
                 // no dibuja motivo — es la estática o la tarjeta, nunca
                 // las dos cosas a la vez ("una animación por pantalla")
-                visible: crt.motifSeen
+                visible: crt.motifWalled ? crt.wallShow > 0.002 : crt.motifSeen
+                opacity: crt.motifWalled ? crt.wallShow : 1
+                // la pared espejada (`Wall.fit`): el dibujo dado vuelta sobre el centro
+                transform: Scale {
+                    origin.x: motifFrame.width / 2
+                    origin.y: motifFrame.height / 2
+                    xScale: crt.wallMine.fx ? -1 : 1
+                    yScale: crt.wallMine.fy ? -1 : 1
+                }
+                // el eco detrás de la letra, desenfocado
+                layer.enabled: crt.wallEchoOn && !crt.motifSeen
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blur: 1
+                    blurMax: 64
+                }
                 // con el dibujo forzado esta caja puede coexistir con la letra,
                 // y está declarada DESPUÉS del verso: sin bajarla, el motivo
                 // taparía justo lo que se quiere ver encima de él
-                z: crt.motifForced ? -1 : 0
+                z: crt.motifForced || crt.wallEchoOn ? -1 : 0
 
                 Motif {
+                    id: motifView
                     anchors.fill: parent
                     dark: crt.tubeDark
                     // lo que se ve es el dibujo YA cambiado, que va un puente
@@ -2172,7 +2243,7 @@ PanelWindow {
                     // PARED: el lienzo, la cámara de este tubo y el foco (px de lienzo)
                     wall: crt.wallSpec
                     wallCamS: crt.motifWalled ? crt.camS : 1
-                    wallFocus: crt.motifWalled ? Qt.point(crt.ctl.crtWallFx, crt.ctl.crtWallFy) : Qt.point(0, 0)
+                    wallFocus: crt.wallFocusMine
                     quality: crt.ctl.crtQuality
                     // el compás y el verso: la estática forma algo una vez por
                     // compás, y lo que forma sale de la línea que viene

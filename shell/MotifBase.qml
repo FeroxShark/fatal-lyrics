@@ -74,6 +74,11 @@ Item {
     // tenía la letra) arrancaría de cero y el dibujo se partiría en la costura.
     property var wall: null
     property vector4d wallCam: Qt.vector4d(1, 1, 0, 0)
+    // cómo reparte la pared cuando una pantalla tiene la letra (`Wall.fit`, `docs/PARED.md`):
+    // "behind" (el mundo sigue por detrás) o "mirror" (alas espejadas). Cada motivo de pared
+    // declara el suyo. `wallEcho` (0..1): un eco tenue y desenfocado detrás de la letra; 0 = sin eco.
+    property string wallFit: "behind"
+    property real wallEcho: 0
     readonly property bool walled: !!wall
     readonly property bool wallShared: walled && !!wall.share
     // en el banco (`tubeClock` -1) el reloj llega de afuera, el mismo para todas las rebanadas

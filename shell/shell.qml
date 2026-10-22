@@ -3647,8 +3647,9 @@ ShellRoot {
     // acá, lo que comparten: el lienzo, el tipo, la semilla, el reloj, el estado y el foco.
     property bool crtWall: true
     readonly property var motifWall: ["truchet", "mystify", "pipes", "dunes", "ocean", "pond", "stars", "tunnel"]
-    readonly property var crtWallCanvas: Wall.canvas(activeCrtScreens.map(
-        s => ({ x: s.x, y: s.y, w: s.width, h: s.height })))
+    readonly property var crtWallRects: activeCrtScreens.map(
+        s => ({ x: s.x, y: s.y, w: s.width, h: s.height }))
+    readonly property var crtWallCanvas: Wall.canvas(crtWallRects)
     // las pantallas que muestran el dibujo de pared ahora (el del sorteo, o el forzado de
     // `fatal crt motif <kind> --screen all`): las vivas con el mismo dibujo de pared, si son
     // dos o más. [] = no hay pared.
@@ -3675,7 +3676,7 @@ ShellRoot {
     readonly property int crtWallRef: {
         const ids = crtWallIds;
         for (let j = 0; j < ids.length; j++)
-            if (ids[j] !== crtShot.focus || crtLine.text === "")
+            if (ids[j] !== crtWallText)
                 return ids[j];
         return ids.length > 0 ? ids[0] : -1;
     }
@@ -3692,9 +3693,12 @@ ShellRoot {
     onCrtWallChanged: crtMotifRefresh(true)
     // el foco en px de lienzo: el centro de la pantalla con la letra (de ahí salen las ondas del
     // truchet y el aro de los caños); sin letra, el centro del lienzo. Se mueve como la cámara.
+    // la pantalla con la letra (-1: no hay letra). Esa pantalla no lleva la pared debajo y las
+    // demás la reparten según el motivo (`Wall.fit`: detrás o espejo)
+    readonly property int crtWallText: crtLine.text === "" || !activeCrtScreens[crtShot.focus] ? -1 : crtShot.focus
     readonly property point crtWallFocusTo: {
-        const cv = crtWallCanvas, f = crtShot.focus, s = activeCrtScreens[f];
-        if (crtLine.text === "" || !s)
+        const cv = crtWallCanvas, f = crtWallText, s = activeCrtScreens[f];
+        if (f < 0)
             return Qt.point(cv.w / 2, cv.h / 2);
         return Qt.point(s.x - cv.x + s.width / 2, s.y - cv.y + s.height / 2);
     }

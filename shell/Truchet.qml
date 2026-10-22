@@ -20,6 +20,8 @@ import "Thump.js" as T
 
 ThumpBase {
     id: m
+    // pared con la letra en una pantalla: campo que sale del foco: las alas espejadas enmarcan la letra (`Wall.fit`)
+    wallFit: "mirror"
 
     ShaderEffect {
         anchors.fill: parent

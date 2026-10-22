@@ -297,6 +297,10 @@ Item {
     property real wallCamS: 1
     property point wallFocus: Qt.point(0, 0)
     readonly property vector4d wallCam: Qt.vector4d(zoomNow, wallCamS, wallFocus.x, wallFocus.y)
+    // lo que declara el dibujo para la pantalla de la letra (`Wall.fit`): Crt.qml arma con eso
+    // la ventana espejada y el eco
+    readonly property string wallFit: drawing.item && drawing.item.wallFit !== undefined ? drawing.item.wallFit : "behind"
+    readonly property real wallEcho: drawing.item && drawing.item.wallEcho !== undefined ? drawing.item.wallEcho : 0
     transform: Scale {
         origin.x: motif.width / 2
         origin.y: motif.height / 2
@@ -318,6 +322,7 @@ Item {
     // radar, la lluvia, el hiperespacio y la carta de ajuste estaban SIEMPRE
     // instanciados, seis dibujos por pantalla con cinco invisibles.
     Loader {
+        id: drawing
         anchors.fill: parent
         clip: true
         active: !motif.dark

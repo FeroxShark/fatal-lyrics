@@ -115,3 +115,66 @@ function view(off, size, pv, o, s, z) {
     return { x: pv.x + (off.x - dx - pv.x) / zz, y: pv.y + (off.y - dy - pv.y) / zz,
              w: size.w / zz, h: size.h / zz };
 }
+
+// ---- La pantalla de la LETRA (Ferox 2026-10-22): no lleva la pared debajo, queda limpia como
+// en el modo por pantalla. Las otras comparten el dibujo según lo que declara el motivo
+// (`wallFit`):
+//   "behind" — el mundo sigue por detrás de la pantalla de la letra, como si fuera una ventana
+//              opaca: lo que sale por un lado reaparece por el otro (el lienzo de siempre).
+//   "mirror" — el lado CORTO se espeja sobre el eje de la pantalla de la letra: las dos alas
+//              muestran el mismo dibujo dado vuelta y la enmarcan. El reflejo del lado corto cae
+//              dentro del lado largo, así que el lienzo no cambia (ni el estado compartido).
+// Devuelve {ax: "x"|"y"|"", at, s: [{x, y, fx, fy}]}: el eje del espejo (coordenada global; ""
+// = nadie se espeja) y, por pantalla, la esquina global que DIBUJA y si se da vuelta. Sin letra
+// (`t` -1), con la letra en un borde o en "behind", todas dibujan su rectángulo.
+function fit(rects, t, mode) {
+    const out = { ax: "", at: 0, s: [] };
+    for (let i = 0; i < (rects ? rects.length : 0); i++)
+        out.s.push({ x: rects[i].x, y: rects[i].y, fx: false, fy: false });
+    if (mode !== "mirror" || t < 0 || t >= out.s.length || out.s.length < 2)
+        return out;
+    const T = rects[t], cx = T.x + T.w / 2, cy = T.y + T.h / 2;
+    // el eje: las demás pantallas están a los costados (espejo en x) o arriba y abajo (en y)
+    let sx = 0, sy = 0;
+    for (let i = 0; i < rects.length; i++) {
+        if (i === t) continue;
+        sx += Math.abs(rects[i].x + rects[i].w / 2 - cx);
+        sy += Math.abs(rects[i].y + rects[i].h / 2 - cy);
+    }
+    const ax = sx >= sy, c = ax ? cx : cy;
+    const lo = [], hi = [];
+    let elo = 0, ehi = 0;
+    for (let i = 0; i < rects.length; i++) {
+        if (i === t) continue;
+        const r = rects[i], a = ax ? r.x : r.y, l = ax ? r.w : r.h;
+        if (a + l / 2 < c) {
+            lo.push(i);
+            elo = Math.max(elo, c - a);
+        } else {
+            hi.push(i);
+            ehi = Math.max(ehi, a + l - c);
+        }
+    }
+    if (lo.length === 0 || hi.length === 0)
+        return out;
+    out.ax = ax ? "x" : "y";
+    out.at = c;
+    for (const i of (elo <= ehi ? lo : hi)) {
+        const r = rects[i];
+        if (ax) {
+            out.s[i].x = 2 * c - (r.x + r.w);
+            out.s[i].fx = true;
+        } else {
+            out.s[i].y = 2 * c - (r.y + r.h);
+            out.s[i].fy = true;
+        }
+    }
+    return out;
+}
+
+// Un punto global {x, y} reflejado por el eje de `fit` (la pantalla espejada ve el mundo así).
+function mirror(p, f) {
+    if (f.ax === "x") return { x: 2 * f.at - p.x, y: p.y };
+    if (f.ax === "y") return { x: p.x, y: 2 * f.at - p.y };
+    return { x: p.x, y: p.y };
+}

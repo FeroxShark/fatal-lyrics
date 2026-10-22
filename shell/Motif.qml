@@ -1156,6 +1156,11 @@ Item {
         id: oceanC
 
         Ocean {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
+            tubeClock: motif.clock
+            seed: motif.seed
             colour: motif.colour
             rate: motif.rate
             crest: motif.hot
@@ -1180,6 +1185,10 @@ Item {
         id: dunesC
 
         Dunes {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
+            tubeClock: motif.clock
             colour: motif.colour
             rate: motif.rate
             crest: motif.hot
@@ -1340,6 +1349,11 @@ Item {
         id: pondC
 
         Pond {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
+            tubeClock: motif.clock
+            seed: motif.seed
             colour: motif.colour
             rate: motif.rate
             crest: motif.hot

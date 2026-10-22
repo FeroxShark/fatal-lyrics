@@ -36,6 +36,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 rip2;      // a second one, so two beats can be crossing at once
     vec3 ink;       // dot colour
     vec3 hot;       // crest colour
+    vec4 view;      // WALL: uv = view.xy + qt_TexCoord0 · view.zw, in units of `span` from the canvas centre
+    vec4 wcfg;      // WALL: x = 1 on the wall, y = px per unit, z = top of the canvas in units
 };
 
 // --------------------------------------------------------------- the camera
@@ -89,10 +91,23 @@ float waterAt(vec2 lat, vec2 p) {
 }
 
 void main() {
+    // WALL (docs/PARED.md): the camera is ONE for the whole canvas, each screen draws its window
+    // of the same panorama and the horizon is a single line across it (34 % down). Alone: as ever.
+    bool wall = wcfg.x > 0.5;
     vec2 uv = qt_TexCoord0;
     float aspect = res.x / max(res.y, 1.0);
     float sx = (uv.x - 0.5) * aspect;      // screen x in units of screen HEIGHT
-    float dy = uv.y - HORIZON;
+    float S = res.y;                       // px per unit of height
+    float yy = uv.y;
+    float HZ = HORIZON;
+    if (wall) {
+        vec2 w = view.xy + uv * view.zw;   // in units of `span`
+        sx = w.x;
+        yy = w.y - wcfg.z;
+        S = wcfg.y;
+        HZ = HORIZON * -2.0 * wcfg.z;
+    }
+    float dy = yy - HZ;
 
     vec3 col = vec3(0.0);
     float a = 0.0;
@@ -105,7 +120,7 @@ void main() {
     // against the water — and the SAME haze carries on below the horizon and
     // fades down with a `smoothstep`, whose derivative is zero at dy = 0. No
     // derivative, no edge, no band.
-    float skyT = clamp(1.0 - max(-dy, 0.0) / max(HORIZON, 0.001), 0.0, 1.0);
+    float skyT = clamp(1.0 - max(-dy, 0.0) / max(HZ, 0.001), 0.0, 1.0);
     skyT = skyT * skyT;
     vec3 hazeCol = mix(ink, hot, 0.25) * (0.16 + 0.14 * level);
     vec3 skyCol = mix(ink * 0.03, hazeCol, skyT);
@@ -145,7 +160,7 @@ void main() {
 
             // techo al radio: sin él, la fila más cercana son manchones de
             // 20 px y deja de leerse como puntos sueltos
-            float rad = clamp(DOTR / Z * res.y, 0.85, res.y * 0.011);
+            float rad = clamp(DOTR / Z * S, 0.85, S * 0.011);
 
             for (int di = -1; di <= 1; di++) {
                 int i = i0 + di;
@@ -155,17 +170,17 @@ void main() {
                 // La altura mueve al punto en VERTICAL y nada más: su x en
                 // pantalla ya se sabe. Descartar por x acá ahorra la ola entera
                 // (y sus dos ondas) en la mayoría de los candidatos.
-                float dx = (sx - px) * res.y;
+                float dx = (sx - px) * S;
                 if (abs(dx) > rad + 1.0)
                     continue;
 
                 vec2 lat = vec2(float(i), float(j));
                 float h = waterAt(lat, vec2(X, Z));
-                float py = HORIZON + (1.0 - h) / Z;
+                float py = HZ + (1.0 - h) / Z;
 
                 // distancia en píxeles, así el punto es redondo en cualquier
                 // relación de aspecto
-                vec2 d = vec2(dx, (uv.y - py) * res.y);
+                vec2 d = vec2(dx, (yy - py) * S);
                 float dotv = smoothstep(rad, rad * 0.28, length(d));
                 if (dotv <= 0.001)
                     continue;

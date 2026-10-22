@@ -24,7 +24,7 @@ from cartelitos import config, ipc, settings  # noqa: E402
 DP2 = "{x: 0, y: -370, w: 1080, h: 1920}"
 HDMI = "{x: 1080, y: 0, w: 1920, h: 1080}"
 DP1 = "{x: 3000, y: 247, w: 1920, h: 1080}"
-WALL_KINDS = ("truchet", "mystify", "pipes")
+WALL_KINDS = ("truchet", "mystify", "pipes", "dunes", "ocean", "pond")
 
 
 def read(name, base=SHELL):

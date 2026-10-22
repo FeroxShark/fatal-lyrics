@@ -37,6 +37,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 rip2;
     vec3 ink;
     vec3 hot;
+    vec4 view;      // WALL: p = view.xy + qt_TexCoord0 · view.zw, in units of `span` from the canvas centre
+    vec4 wcfg;      // WALL: x = 1 on the wall, y = px per unit, z = reach of the water (R)
+    vec2 fo;        // WALL: where the rings come from (the text screen, or the middle), same units
 };
 
 // El agua es TODA la pantalla, mirada de arriba: no hay plato ni borde. El
@@ -110,9 +113,20 @@ void main() {
     float aspect = res.x / max(res.y, 1.0);
     // coordenadas en unidades de ALTO de pantalla, centradas en el plato
     vec2 p = vec2((uv.x - 0.5) * aspect, uv.y - 0.5);
-    vec2 q = p;
     // hasta la esquina: es lo lejos que llega el agua que se ve
     float R = length(vec2(aspect * 0.5, 0.5));
+    float S = res.y;                    // px por unidad
+    vec2 o = vec2(0.0);                 // el centro de los anillos
+    // PARED (docs/PARED.md): UN lienzo. `p` es la ventana de esta pantalla en el lienzo común
+    // (unidades de `span`), la retícula queda anclada al lienzo y los anillos salen del foco
+    // `fo`, que cruzan las pantallas; `R` es lo lejos que llega el agua desde ahí.
+    if (wcfg.x > 0.5) {
+        p = view.xy + uv * view.zw;
+        S = wcfg.y;
+        R = wcfg.z;
+        o = fo;
+    }
+    vec2 q = p;
 
     vec3 col = vec3(0.0);
     float a = 0.0;
@@ -124,26 +138,27 @@ void main() {
             vec2 lat = cell + vec2(float(di), float(dj));
             // filas impares corridas medio paso: agua, no papel cuadriculado
             vec2 qd = vec2((lat.x + 0.5 * mod(lat.y, 2.0)) * STEP, lat.y * STEP);
-            float rd = length(qd);
+            vec2 qo = qd - o;
+            float rd = length(qo);
 
             // la x en pantalla no depende de la altura: descartar por ahí
             // ahorra la superficie entera en la mayoría de los candidatos
-            float dx = (p.x - qd.x) * res.y;
-            float radMax = DOTR * 1.45 * res.y;
+            float dx = (p.x - qd.x) * S;
+            float radMax = DOTR * 1.45 * S;
             if (abs(dx) > radMax + 1.5)
                 continue;
 
-            float ang = atan(qd.y, qd.x);
-            float h = surface(lat, qd, rd, ang, R);
+            float ang = atan(qo.y, qo.x);
+            float h = surface(lat, qo, rd, ang, R);
 
             // la altura levanta el punto en pantalla
             float py = qd.y - h;
-            float dy = (p.y - py) * res.y;
+            float dy = (p.y - py) * S;
 
             float crest = clamp(h * 30.0 + 0.5, 0.0, 1.0);
             // la cresta además ENGORDA el punto: mirando el agua de arriba, la
             // altura se lee por tamaño y brillo, no por cuánto se corrió
-            float rad = DOTR * res.y * (0.72 + 0.62 * crest);
+            float rad = DOTR * S * (0.72 + 0.62 * crest);
 
             float dotv = smoothstep(rad, rad * 0.3, length(vec2(dx, dy)));
             if (dotv <= 0.001)

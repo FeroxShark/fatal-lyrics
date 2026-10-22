@@ -347,3 +347,11 @@ Se mide `now - phase` del evento `bpm` contra el tiempo VERDADERO del bombo (20 
 Sin deriva en 150 s con el tempo del tracker moviéndose 121..124 BPM (primer tercio vs último < 12 ms);
 seek de 210 ms re-engancha en ≤ 8 tiempos; cambio 123 → 100 BPM seguido (σ < 15 ms tras 35 s).
 En la máquina real el chequeo es el log `crt: beat tick late avg/max` (cada 32 tiempos) y `beat+<ms>` de los glitches.
+
+## Túnel con detalle (2026-10-22)
+
+`tunnel.frag` pasó de un tono plano por ladrillo a losas biseladas con luz y oclusión, remaches, panel
+interior, grano, lámparas y filtro por huella de píxel (sin alias a ningún fondo), más neblina y dither.
+Banco: `cd previews/crt-motifs && ./bench.py tunnel --cost --scale 3 --n 120` (shader solo, 5760×3240,
+RTX 3090): **0.5 → 0.9 ms/cuadro**, o sea ~0.05 → ~0.10 ms por pantalla de 1080p. Fuera del drop el
+segundo muestreo de la pared ya no se evalúa (`blur > 0.002`). Antes/después: `out/tunnel-antes-despues.png`.

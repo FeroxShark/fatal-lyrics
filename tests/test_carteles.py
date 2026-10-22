@@ -160,3 +160,45 @@ class TestBandeja(unittest.TestCase):
                     sys.modules.pop(k, None)
                 else:
                     sys.modules[k] = v
+
+
+class TestFranjaRapido(unittest.TestCase):
+    """La franja "Quick" de Ajustes, arriba de las pestañas."""
+    qml = read("shell", "settings.qml")
+
+    def test_every_tile_is_a_real_switch_and_the_set_is_the_agreed_one(self):
+        ids = [i for i, _, _ in settings.QUICK]
+        for i in ids:
+            self.assertTrue(i == "crt" or settings.ROWS[i]["kind"] == "toggle", i)
+        for want in ("display.dialogs", "crt", "behavior.sing", "display.karaoke"):
+            self.assertIn(want, ids)
+        self.assertLessEqual(len(ids), 5)   # más y las fichas dejan de ser grandes
+        self.assertEqual(len(set(l for _, l, _ in settings.QUICK)), len(ids))
+
+    def test_the_snapshot_carries_it(self):
+        from unittest import mock
+        from cartelitos import system
+        with mock.patch.object(system, "_monitors_lr", lambda: []), \
+                mock.patch.object(system, "_players", lambda: []), \
+                mock.patch.object(system, "_daemon_pid", lambda: 0):
+            snap = settings.snapshot()
+        self.assertEqual([q["id"] for q in snap["quick"]], [i for i, _, _ in settings.QUICK])
+
+    def test_the_window_draws_it_before_the_tabs_with_the_same_ids_and_paths(self):
+        qml = self.qml
+        self.assertIn("root.quick = d.quick || [];", qml)
+        strip, tabs = qml.index('title: "Quick"'), qml.index("tabStrip")
+        self.assertLess(strip, tabs)
+        self.assertLess(strip, qml.index("id: sheet"))
+        body = qml[strip:qml.index("id: sheet")]
+        self.assertIn("model: root.quick", body)
+        self.assertIn("root.commit(modelData.id, root.vals[modelData.id] !== true, true)", body)
+        self.assertIn('root.run(["crt", root.crtOn ? "on" : "off"]', body)
+
+    def test_the_tile_does_not_rely_on_colour_alone(self):
+        m = re.search(r"component Tile95: Rectangle \{(.*?)\n    \}\n", self.qml, re.S)
+        self.assertIsNotNone(m)
+        tile = m.group(1)
+        self.assertIn('tile.on ? "ON" : "OFF"', tile)          # la palabra
+        self.assertIn("Bevel { sunken: tile.on", tile)         # el bisel
+        self.assertIn('tile.on ? "#00c800"', tile)             # la luz

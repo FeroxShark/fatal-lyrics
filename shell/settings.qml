@@ -32,6 +32,7 @@ ShellRoot {
     readonly property string runDir: Quickshell.env("XDG_RUNTIME_DIR")
 
     property var tabs: []
+    property var quick: []
     property var groups: []
     property var vals: ({})
     // la prosa larga de cada perilla (el comentario del TOML) y la fila que se
@@ -74,6 +75,7 @@ ShellRoot {
         // los grupos una sola vez: rearmar los Repeater cortaría un arrastre
         if (root.groups.length === 0) {
             root.tabs = d.tabs;
+            root.quick = d.quick || [];
             root.groups = d.groups;
             root.details = d.details || {};
         }
@@ -343,6 +345,66 @@ ShellRoot {
         }
     }
 
+    // interruptor grande de la franja "Quick": un botón Win95 que queda hundido
+    // y con la luz verde mientras está prendido. El estado se lee de tres
+    // maneras (bisel, luz y la palabra ON/OFF): no depende del color.
+    component Tile95: Rectangle {
+        id: tile
+        property string text
+        property string caption
+        property bool on: false
+        signal clicked()
+        implicitHeight: 46
+        color: on ? "#d8d8d8" : "#c0c0c0"
+        Bevel { sunken: tile.on || tileMa.pressed }
+        Rectangle {
+            x: 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: 12
+            height: 12
+            color: tile.on ? "#00c800" : "#808080"
+            Bevel { sunken: true }
+        }
+        Item {
+            x: 32
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: tileMa.pressed ? 1 : 0
+            width: parent.width - 32 - 8
+            height: tileTitle.implicitHeight + tileCaption.implicitHeight
+            Text {
+                id: tileTitle
+                text: tile.text
+                color: "#000000"
+                font.pixelSize: 13
+                font.bold: true
+            }
+            Text {
+                anchors.right: parent.right
+                anchors.baseline: tileTitle.baseline
+                text: tile.on ? "ON" : "OFF"
+                color: tile.on ? "#000000" : "#404040"
+                font.pixelSize: 11
+                font.bold: tile.on
+                font.family: "monospace"
+            }
+            Text {
+                id: tileCaption
+                y: tileTitle.implicitHeight
+                width: parent.width
+                text: tile.caption
+                color: "#404040"
+                font.pixelSize: 11
+                elide: Text.ElideRight
+            }
+        }
+        MouseArea {
+            id: tileMa
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tile.clicked()
+        }
+    }
+
     // el recuadro grabado con el título encima del borde
     component Group95: Item {
         id: group
@@ -499,6 +561,47 @@ ShellRoot {
                 width: frame.width - 24
                 spacing: 12
 
+                // la franja "Quick": lo que más se prende y apaga, antes de las
+                // pestañas. Las mismas perillas que las filas de abajo (mismo
+                // id, mismo camino), sólo que a un click y sin buscarlas
+                Group95 {
+                    id: quickGroup
+                    width: parent.width
+                    title: "Quick"
+                    visible: root.quick.length > 0
+
+                    Row {
+                        spacing: 8
+                        Repeater {
+                            model: root.quick
+
+                            Tile95 {
+                                id: tileItem
+                                required property var modelData
+                                readonly property bool isTube: modelData.id === "crt"
+                                width: (quickGroup.width - 22 - 8 * (root.quick.length - 1)) / root.quick.length
+                                text: modelData.label
+                                caption: isTube && root.keys.crt_toggle
+                                         ? root.keyLabel(root.keys.crt_toggle) : modelData.hint
+                                on: isTube ? root.crtOn : root.vals[modelData.id] === true
+                                // apuntarlo llena el panel de detalle, igual que las filas
+                                HoverHandler {
+                                    onHoveredChanged: if (hovered) root.sel = tileItem.modelData
+                                }
+                                onClicked: {
+                                    if (isTube) {
+                                        root.crtOn = !root.crtOn;
+                                        root.run(["crt", root.crtOn ? "on" : "off"],
+                                                 `CRT mode ${root.crtOn ? "on" : "off"}`);
+                                    } else {
+                                        root.commit(modelData.id, root.vals[modelData.id] !== true, true);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // pestañas y su hoja: la elegida se pega a la hoja, como en
                 // las Propiedades de pantalla de Win95
                 Item {
@@ -522,7 +625,7 @@ ShellRoot {
                             x: 10
                             y: 10
                             width: parent.width - 20
-                            height: Math.min(pages.tallest, (win.screen ? win.screen.height : 1080) - 270)
+                            height: Math.min(pages.tallest, (win.screen ? win.screen.height : 1080) - 360)
                             contentWidth: width
                             contentHeight: pages.tallest
                             clip: true

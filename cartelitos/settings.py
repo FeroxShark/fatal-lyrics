@@ -253,6 +253,17 @@ GROUPS = [
     ]},
 ]
 
+# La franja "Quick" de arriba de las pestañas: los interruptores que más se
+# tocan, grandes y a un click, sin buscar la pestaña. Cada uno repite una fila
+# de GROUPS (o es el tubo, "crt"): el mismo id, el mismo efecto. (id, rótulo, pista corta).
+QUICK = [
+    ("display.dialogs", "Dialogs", "error popups"),
+    ("crt", "CRT tube", "full-screen tube"),
+    ("display.karaoke", "Karaoke", "word by word"),
+    ("behavior.sing", "Sing mode", "listens to the mic"),
+    ("behavior.now_playing", "Album art", "cover sleeve"),
+]
+
 # las filas que son perillas del TOML, por id ("seccion.clave")
 KNOB_KINDS = ("toggle", "choice", "slider", "screens", "order", "text")
 ROWS = {row["id"]: row for group in GROUPS for row in group["rows"]
@@ -413,6 +424,7 @@ def snapshot():
         values[row_id] = cfg[section][key]
     return {
         "tabs": TABS,
+        "quick": [{"id": i, "label": l, "hint": h} for i, l, h in QUICK],
         "groups": GROUPS,
         "values": values,
         "details": {rid: d for rid in ROWS if (d := detail(rid))},

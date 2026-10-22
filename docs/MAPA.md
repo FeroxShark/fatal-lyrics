@@ -107,7 +107,15 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
   Apuntar una fila llena el panel de abajo de la hoja con `details` (el comentario de
   `_CONFIG_COMMENTS`, `settings.detail`; si no hay, el hint), y una fila con `needs: [ids]`
   (`_needs`) se atenúa mientras alguna de esas casillas esté apagada. Los nombres de fila no se
-  repiten ni igualan a un título de grupo (un test lo exige).
+  repiten ni igualan a un título de grupo (un test lo exige). Arriba de las pestañas va la franja
+  **Quick** (`settings.QUICK`, clave `quick` del snapshot, `Tile95` en `settings.qml`): fichas
+  grandes con luz + ON/OFF para Dialogs, CRT, Karaoke, Sing y Album art. Banco offscreen con
+  stubs de Quickshell: `previews/ajustes/render.py`.
+- `[display] dialogs` (`config.py`, `shell.qml` `dialogsOn`) — apaga los cartelitos del modo normal:
+  `pushDialog` no crea nada, los vivos se van con la salida normal, funda y rótulo callan; el CRT
+  no se toca. Se cambia desde Ajustes, la bandeja (ítem con tilde), `fatal carteles on|off|toggle`
+  (timbre `$XDG_RUNTIME_DIR/cartelitos-carteles`, vigila `watch_carteles`, igual que `fatal sing`)
+  o Super+Shift+U (`packaging/hyprland.lua`).
   Reemplazó a `tune.qml`, a los submenús de la bandeja (`tray.py` quedó en Ajustes / CRT /
   karaoke / Quit) y al menú de terminal `setup.py` (borrado 2026-10-09).
 - `[keys] sync_forward` / `sync_back` / `crt_toggle` (`config.py`) + `system.key_bind_commands()` — las

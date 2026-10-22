@@ -54,7 +54,8 @@ de widgets en ws31: el CRT no lo toma). Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` s
 ```bash
 fatal on | off | restart | status
 fatal demo                 # SIGUSR1: carteles falsos, sin música
-fatal ajustes              # ventana Win95 con todas las opciones (la bandeja es corta)
+fatal carteles on|off|toggle  # cartelitos del modo normal; Super+Shift+U
+fatal ajustes              # ventana Win95 con todas las opciones (Quick arriba)
 fatal crt toggle           # también Super+Shift+Y
 fatal sync + | -           # ajuste fino ±0.1s, también Super+Alt+Right/Left o la ventana de Ajustes
 python3 -m unittest discover -s tests
@@ -69,8 +70,8 @@ fatal crt motif off                    # vuelve el sorteo normal
 docs/plans/motif-force.py dunes DP-2 10 --shot t4-dunes   # + captura, y deja todo como estaba
 ```
 
-**NUNCA pescar un motif con palabras clave ni rerollear con `cue drop`** (`drive-motif.py` y
-`motif-hunt.py` son OBSOLETOS: esperaban minutos al sorteo). El forzado pisa pool, hold, filtro y
+**NUNCA pescar un motif con palabras clave ni rerollear con `cue drop`** (`drive-motif.py`/`motif-hunt.py`
+son OBSOLETOS). El forzado pisa pool, hold, filtro y
 palabra clave, y se ve sin música. Kinds válidos: `fatal crt motif --help`. `splitflap` y `testcard`
 (pantallas planas) ya no entran al sorteo; sólo se ven forzados.
 
@@ -81,14 +82,14 @@ No reintroducir un segundo (`docs/TRAMPAS.md`).
 
 ## Dónde está el resto (leer sólo lo que toca)
 
-**Tope de este archivo: ~7.000 caracteres.** Reglas duras + cómo correr + índice. Lo demás va a `docs/`.
+**Tope de este archivo: ~7.000 caracteres.** Reglas duras + cómo correr + índice.
 
 - `docs/CONCEPTOS.md` — Cómo pensarlo: dos procesos, config con hot-reload, interruptor del CRT, línea siguiente, salto, motivos, entradas, sync, foco y idioma de la letra.
 - `docs/MAPA.md` — Mapa del código: qué hace cada archivo, propiedad y perilla, y dónde están los cachés.
 - `docs/TRAMPAS.md` — Bugs que ya pasaron y por qué. Antes de diagnosticar algo raro, buscá acá. Cada trampa nueva va acá.
 - `docs/NUMEROS-MEDIDOS.md` — Mediciones de CPU/latencia y cómo se tomaron. Los números nuevos van acá.
 - `docs/PENDIENTES.md` — Backlog vivo. Leerlo al planear una tanda.
-- `docs/tanda8-estado/` — estado de la tanda 8 por frente.
+- `docs/tanda8-estado/` — estado de la tanda 8.
 - `docs/plans/` — planes y feedback por tanda (gitignored: repo público).
 
 ## Glosario

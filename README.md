@@ -528,6 +528,7 @@ because there is nothing to install.
 | `display`  | `scale`              | Base size for all dialogs                                       | `1.0`       |
 | `display`  | `current_scale`      | Extra size factor for the current-line dialog                   | `1.3`       |
 | `display`  | `spawn_area`         | Spawn zone: `full`/`top`/`bottom`/`left`/`right`/`edges`         | `"full"`   |
+| `display`  | `dialogs`            | Show the error dialogs of the normal mode (`false` = none, sleeve included; the CRT is separate) | `true`      |
 | `display`  | `karaoke`            | Current line paints word by word                                 | `false`     |
 | `effects`  | `glitch`             | Intensity: `off`/`soft`/`normal`/`aggressive`                    | `"normal"`  |
 | `effects`  | `effects_on_current` | The current dialog also vibrates/glitches                        | `false`     |

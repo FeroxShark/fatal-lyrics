@@ -89,7 +89,7 @@ class TestGolpe(unittest.TestCase):
         self.assertIn("bass: crt.ctl.bassGen", crt)
         self.assertIn("hat: crt.live ? crt.ctl.hatLevel : 0", crt)
         mo = read("Motif.qml")
-        self.assertIn("motif.bassAmt * motif.bump", mo)
+        self.assertIn("bassAmt * bump", mo)
         self.assertIn("id: glints", mo)
 
     def test_scope_turns_follow_the_target_not_the_tween(self):

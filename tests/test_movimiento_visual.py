@@ -163,8 +163,8 @@ class TestMovWiring(unittest.TestCase):
         # compás, golpes y la entrada del drop: tiempo real
         self.assertRegex(base, r"readonly property real sinceTick: Math\.max\(0, clock - tickAt\)")
         self.assertRegex(base, r"readonly property real sinceKick: Math\.max\(0, clock - kickAt\)")
-        self.assertRegex(base, r"onDropChanged: dropAt = clock\n")
-        self.assertRegex(base, r"onTubeClockChanged: if \(Math\.abs\(clock - tubeClock\) > 0\.25\) clock = tubeClock\n")
+        self.assertRegex(base, r"onDropChanged: dropAt = wallNow\(\)\n")
+        self.assertRegex(base, r"onTubeClockChanged: if \(!wallClocked && Math\.abs\(clock - tubeClock\) > 0\.25\) clock = tubeClock\n")
 
     def test_what_marks_real_time_does_not_hear_about_the_rate(self):
         # el aro-cronómetro, el lenguaje de movimiento y el reloj del tubo

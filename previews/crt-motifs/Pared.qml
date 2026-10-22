@@ -22,6 +22,12 @@ Rectangle {
     property real sc: 0.4             // px de la imagen por px lógico
     property real camS: 1
     property real zoom: 1
+    // la pantalla de la letra no lleva la pared; las demás la reparten como pide el motivo
+    // (`Wall.fit`: "behind" o "mirror"). `refMirror`: la referencia escala sobre el pivote
+    // reflejado (contra ella se miden las pantallas espejadas con la cámara puesta)
+    property string fitMode: "behind"
+    property bool refMirror: false
+    readonly property var fitting: Wall.fit(rects, textIdx, fitMode)
     readonly property var cv: Wall.canvas(rects)
     readonly property var pv: Wall.pivot(rects)
     width: Math.round(cv.w * sc)
@@ -55,7 +61,19 @@ Rectangle {
             readonly property var r: pared.ref ? { x: pared.cv.x, y: pared.cv.y, w: pared.cv.w, h: pared.cv.h }
                                                : pared.rects[index]
             readonly property bool isText: !pared.ref && index === pared.textIdx
-            readonly property var o: Wall.local(r, pared.pv)
+            readonly property var m: pared.ref ? { x: pared.cv.x, y: pared.cv.y, fx: false, fy: false }
+                                               : pared.fitting.s[index]
+            readonly property bool flipped: m.fx || m.fy
+            // el pivote como lo ve esta pantalla (reflejado si está espejada), y el foco igual
+            readonly property var pm: flipped || (pared.ref && pared.refMirror)
+                ? Wall.mirror(pared.pv, pared.fitting) : pared.pv
+            readonly property var fm: {
+                if (!flipped)
+                    return pared.foco;
+                const q = Wall.mirror({ x: pared.foco.x + pared.cv.x, y: pared.foco.y + pared.cv.y }, pared.fitting);
+                return Qt.point(q.x - pared.cv.x, q.y - pared.cv.y);
+            }
+            readonly property var o: Wall.local(r, pared.ref ? pm : pared.pv)
             // sin redondear: la referencia cae en el mismo medio píxel que la pantalla
             x: (r.x - pared.cv.x) * pared.sc
             y: (r.y - pared.cv.y) * pared.sc
@@ -67,7 +85,7 @@ Rectangle {
                 height: slot.r.h
                 transformOrigin: Item.TopLeft
                 scale: pared.sc
-                Rectangle { anchors.fill: parent; color: slot.isText ? "#000000" : pared.pal.bg }
+                Rectangle { anchors.fill: parent; color: pared.pal.bg }
                 Item {
                     anchors.fill: parent
                     transform: Scale {
@@ -79,6 +97,12 @@ Rectangle {
                     Loader {
                         anchors.fill: parent
                         active: !slot.isText
+                        transform: Scale {
+                            origin.x: slot.r.w / 2
+                            origin.y: slot.r.h / 2
+                            xScale: slot.m.fx ? -1 : 1
+                            yScale: slot.m.fy ? -1 : 1
+                        }
                         source: "motifs/" + pared.kind.charAt(0).toUpperCase() + pared.kind.slice(1) + ".qml"
                         onLoaded: {
                             const it = item;
@@ -89,12 +113,14 @@ Rectangle {
                             if ("hot" in it) it.hot = Qt.binding(() => pared.pal.hot);
                             if ("bg" in it) it.bg = Qt.binding(() => pared.pal.bg);
                             if ("seed" in it) it.seed = 0.37;
-                            it.wallCam = Qt.binding(() => Qt.vector4d(pared.zoom, pared.camS, pared.foco.x, pared.foco.y));
+                            it.wallCam = Qt.binding(() => Qt.vector4d(pared.zoom, pared.camS, slot.fm.x, slot.fm.y));
                             it.wall = {
-                                x: slot.r.x - pared.cv.x, y: slot.r.y - pared.cv.y,
+                                x: slot.m.x - pared.cv.x, y: slot.m.y - pared.cv.y,
                                 cw: pared.cv.w, ch: pared.cv.h, span: pared.cv.span,
-                                px: pared.pv.x - pared.cv.x, py: pared.pv.y - pared.cv.y,
-                                ox: slot.o.x, oy: slot.o.y, epoch: 0, share: pared.share, now: () => pared.t
+                                px: slot.pm.x - pared.cv.x, py: slot.pm.y - pared.cv.y,
+                                ox: slot.m.fx ? slot.r.w - slot.o.x : slot.o.x,
+                                oy: slot.m.fy ? slot.r.h - slot.o.y : slot.o.y,
+                                epoch: 0, share: pared.share, now: () => pared.t
                             };
                             if ("wallT" in it) it.wallT = Qt.binding(() => pared.t);
                         }
@@ -105,7 +131,7 @@ Rectangle {
                     visible: slot.isText
                     anchors.centerIn: parent
                     text: "LA LETRA VA ACÁ"
-                    color: "#7a7a7a"
+                    color: pared.pal.ink
                     font.pixelSize: 96
                     font.family: "monospace"
                 }

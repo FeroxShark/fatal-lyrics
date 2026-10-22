@@ -32,6 +32,8 @@ import "../React.js" as React
 
 MotifBase {
     id: m
+    // pared con la letra en una pantalla: movimiento con dirección: el mundo sigue por detrás de la letra (`Wall.fit`)
+    wallFit: "behind"
 
     readonly property real margin: span * 0.07
     readonly property int echoes: Math.round(E.clamp(8 + 9 * (energy - 0.9) / 0.7 + 4, 10, 22) * quality)

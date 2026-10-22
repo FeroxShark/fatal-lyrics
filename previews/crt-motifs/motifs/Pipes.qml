@@ -45,6 +45,8 @@ import "../Thump.js" as T
 
 ThumpBase {
     id: m
+    // pared con la letra en una pantalla: movimiento con dirección: el mundo sigue por detrás de la letra (`Wall.fit`)
+    wallFit: "behind"
 
     readonly property int steps: 4            // tramos por tiempo
     readonly property int beatsPerPipe: 8

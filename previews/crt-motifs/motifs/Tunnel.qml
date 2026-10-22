@@ -29,6 +29,8 @@ import QtQuick
 
 WallItem {
     id: tube
+    // pared con la letra en una pantalla: campo que sale del foco: las alas espejadas enmarcan la letra (`Wall.fit`)
+    wallFit: "mirror"
 
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"

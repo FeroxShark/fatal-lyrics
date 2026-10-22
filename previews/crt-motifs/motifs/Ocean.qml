@@ -19,6 +19,8 @@ import QtQuick
 
 WallBase {
     id: sea
+    // pared con la letra en una pantalla: movimiento con dirección: el mundo sigue por detrás de la letra (`Wall.fit`)
+    wallFit: "behind"
 
     property color colour: "#4fe8ff"     // color base del punto
     property color crest: "#e2fdff"      // color de la cresta

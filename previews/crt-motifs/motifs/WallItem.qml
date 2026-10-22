@@ -20,6 +20,11 @@ Item {
     // share) y `wallCam` = (tirón propio, factor de la cámara del tubo, foco x, foco y)
     property var wall: null
     property vector4d wallCam: Qt.vector4d(1, 1, 0, 0)
+    // cómo reparte la pared cuando una pantalla tiene la letra (`Wall.fit`, `docs/PARED.md`):
+    // "behind" (el mundo sigue por detrás) o "mirror" (alas espejadas). Cada motivo de pared
+    // declara el suyo. `wallEcho` (0..1): un eco tenue y desenfocado detrás de la letra; 0 = sin eco.
+    property string wallFit: "behind"
+    property real wallEcho: 0
     readonly property bool walled: !!wall
     readonly property bool wallShared: walled && !!wall.share
     // en el banco el reloj llega de afuera (`wall.now()`): las instancias de la pared y la

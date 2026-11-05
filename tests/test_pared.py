@@ -196,7 +196,7 @@ class TestBancoSinDeriva(unittest.TestCase):
     def test_js_and_shader_copies_are_identical(self):
         self.assertEqual(read("Wall.js"), read("Wall.js", BANCO))
         for name in ("truchet.frag", "truchet.frag.qsb", "mystify.frag", "mystify.frag.qsb",
-                     "tunnel.frag", "tunnel.frag.qsb"):
+                     "tunnel.frag", "tunnel.frag.qsb", "stars.frag", "stars.frag.qsb"):
             with open(os.path.join(SHELL, name), "rb") as a, \
                     open(os.path.join(BANCO, "motifs", name), "rb") as b:
                 self.assertEqual(a.read(), b.read(), name)

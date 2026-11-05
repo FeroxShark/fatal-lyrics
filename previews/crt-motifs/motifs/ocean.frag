@@ -1,21 +1,21 @@
 #version 440
 // fatal-lyrics — the sea.
 //
-// A field of individual points floating on water, seen from just above the
-// surface. There is no mesh: every dot is its own particle, projected by hand
-// with a perspective divide, and its height is solved analytically — travelling
-// swell, fine chop, its own idle bob, and a damped ring that arrives late the
-// further away it is. That last part is what makes it read as physics instead
-// of a texture: a beat drops a stone in the water and the disturbance crosses
-// the sea, each dot rising when the front reaches IT and ringing down at its
-// own rate.
+// A sea at night, not a sheet of dots (Ferox 2026-11-05: "no se entiende"). What reads as water:
+//   · waves with sharp crests and wide troughs, many of them in different directions (`waves`),
+//   · the sky mirrored on it, strong at a grazing angle and weak straight down (Fresnel), and that
+//     is where the horizon comes from: nothing draws one,
+//   · the moon's column of glitter, broken by every little facet,
+//   · foam on the crests that are about to fall.
 //
-// Why a shader and not QML items: the wall is three screens, one of them at
-// 200 Hz. A few hundred Rectangles with per-frame bindings is hundreds of
-// thousands of JS evaluations a second. Here the whole sea is one draw call and
-// the dots cost nothing to move.
+// The beat drops a stone: a ring crosses the water, each point rising when the front reaches IT.
+// That delay by distance is what makes it physics and not a lamp; the ring also leaves foam.
 //
-// Build:  qsb --glsl 100es,120,150 --hlsl 50 --msl 12 -o ocean.frag.qsb ocean.frag
+// Same camera as ever: eye one unit above the water, a point at (X, h, Z) lands at x = X / Z,
+// y = HORIZON + (1 - h) / Z. `t` already carries the rhythm of the music (never `t · speed`: it
+// would teleport the sea whenever `speed` changes); `speed` is how rough it gets.
+//
+// Build:  qsb --glsl "100 es,120,150" -o ocean.frag.qsb ocean.frag
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -40,16 +40,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 wcfg;      // WALL: x = 1 on the wall, y = px per unit, z = top of the canvas in units
 };
 
-// --------------------------------------------------------------- the camera
-// Eye one unit above the water, looking flat along it. A point at (X, height,
-// Z) lands at screen y = HORIZON + (1 - height) / Z, x = X / Z. Everything
-// below is that mapping and its inverse.
+// --------------------------------------------------------------- the water
 const float HORIZON = 0.34;
-const float Z0 = 1.42;   // first row of dots that is still on screen
-const float DZ = 0.14;   // row spacing, in world units
-const float DX = 0.17;   // column spacing
-const float DOTR = 0.021; // dot radius in world units
-const float RIPV = 2.4;  // how fast a ring crosses the water
+const float RIPV = 2.4;    // how fast a ring crosses the water
 
 float hash21(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -57,37 +50,49 @@ float hash21(vec2 p) {
     return fract((p3.x + p3.y) * p3.z);
 }
 
-// A ring dropped at `c`: the dot only moves once the front gets there, then it
-// rings down. Delay by distance is the whole trick — without it every dot in
-// the sea jumps on the same beat and the wall pulses like a lamp.
-float ripple(vec2 p, vec4 r) {
-    float age = t - r.z;
-    if (r.w < 0.001 || age < 0.0 || age > 6.0)
-        return 0.0;
-    float dist = distance(p, r.xy);
-    float front = age * RIPV;
-    float d = dist - front;
-    float env = exp(-d * d * 1.6)        // the packet, tight around the front
-              * exp(-age * 0.85)         // the water settling
-              * exp(-dist * 0.10);       // and it loses strength as it spreads
-    return sin(d * 4.2) * env * r.w;
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+               mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
-// Height of ONE dot. `lat` is its lattice index, which is what gives each point
-// a phase and a bob rate of its own instead of the whole sheet moving as one.
-float waterAt(vec2 lat, vec2 p) {
-    float tt = t * speed;
-    float h = sin(p.x * 1.35 + tt * 0.95) * 0.55
-            + sin(p.y * 0.95 - tt * 0.75) * 0.45 * (0.55 + 0.9 * swell);
-    h += sin((p.x * 0.8 + p.y * 1.25) + tt * 1.55) * 0.26;
-    h += sin((p.x * 3.4 - p.y * 2.6) - tt * 2.7) * 0.14 * (0.25 + chop);
+// The ring of a stone: height and its pull on the slope, radial.
+vec3 ring(vec2 p, vec4 r) {
+    float age = t - r.z;
+    if (r.w < 0.001 || age < 0.0 || age > 6.0)
+        return vec3(0.0);
+    vec2 v = p - r.xy;
+    float dist = length(v);
+    float d = dist - age * RIPV;
+    float env = exp(-d * d * 1.6) * exp(-age * 0.85) * exp(-dist * 0.10) * r.w;
+    return vec3(sin(d * 4.2) * env, (v / max(dist, 0.001)) * cos(d * 4.2) * 4.2 * env);
+}
 
-    float own = hash21(lat);
-    h += sin(tt * (1.5 + 1.3 * own) + own * 6.283) * 0.20 * (0.35 + 0.8 * level);
-
-    h *= 0.052 * (0.55 + 0.75 * amp);
-    h += (ripple(p, rip1) + ripple(p, rip2)) * 0.020 * amp;
-    return h;
+// The waves. Each one is exp(sin) - sharp crest, wide trough - and pushes the sample point along
+// its slope before the next one reads it: that is what bunches the small waves on the big ones.
+// `lod` drops the ones too small to see at this distance. Returns (height, d/dx, d/dz).
+vec3 waves(vec2 p, int count, float lod) {
+    float rough = 0.75 + 0.55 * clamp(speed, 0.0, 1.6) + 0.5 * swell;
+    float freq = 0.85;
+    float a = 0.115 * (0.55 + 0.75 * amp) * rough;
+    float tw = t * 0.92;
+    float ang = 0.6;
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < count; i++) {
+        vec2 dir = vec2(sin(ang), cos(ang));
+        float ph = dot(p, dir) * freq + tw * sqrt(freq) * 1.35;
+        float w = exp(sin(ph) - 1.0);
+        float slope = w * cos(ph);
+        float keep = exp(-lod * freq * freq);
+        sum += vec3(w * a, dir * slope * a * freq) * keep;
+        p -= dir * slope * a * 0.55;
+        freq *= 1.27;
+        a *= 0.80 + 0.04 * chop;
+        ang += 2.399;
+    }
+    return sum;
 }
 
 void main() {
@@ -96,111 +101,91 @@ void main() {
     bool wall = wcfg.x > 0.5;
     vec2 uv = qt_TexCoord0;
     float aspect = res.x / max(res.y, 1.0);
-    float sx = (uv.x - 0.5) * aspect;      // screen x in units of screen HEIGHT
-    float S = res.y;                       // px per unit of height
+    float sx = (uv.x - 0.5) * aspect;
     float yy = uv.y;
     float HZ = HORIZON;
     if (wall) {
-        vec2 w = view.xy + uv * view.zw;   // in units of `span`
+        vec2 w = view.xy + uv * view.zw;
         sx = w.x;
         yy = w.y - wcfg.z;
-        S = wcfg.y;
         HZ = HORIZON * -2.0 * wcfg.z;
     }
     float dy = yy - HZ;
+    vec2 scr = vec2(sx, yy);
 
-    vec3 col = vec3(0.0);
-    float a = 0.0;
+    // the moon: straight ahead of the eye, so its column runs down the middle of the canvas
+    // (on the wall not the screen's aspect: every window has to agree on where the moon is)
+    vec2 moonS = vec2(sin(t * 0.009) * 0.08 * (wall ? 1.7 : aspect), HZ - 0.15);
+    vec3 moon = normalize(vec3(moonS.x, HZ - moonS.y, 1.0));
 
-    // ------------------------------------------------------------- the sky
-    // T4.2c/d, same fix the dunes got: the far edge used to be two exponentials
-    // in |dy| — a lit STRIPE across the middle of the picture, which reads as a
-    // drawn horizon and not as distance. A horizon is not drawn: it is where
-    // you stop drawing. So the sky is a vertical gradient — dark up top, warm
-    // against the water — and the SAME haze carries on below the horizon and
-    // fades down with a `smoothstep`, whose derivative is zero at dy = 0. No
-    // derivative, no edge, no band.
-    float skyT = clamp(1.0 - max(-dy, 0.0) / max(HZ, 0.001), 0.0, 1.0);
-    skyT = skyT * skyT;
-    vec3 hazeCol = mix(ink, hot, 0.25) * (0.16 + 0.14 * level);
-    vec3 skyCol = mix(ink * 0.03, hazeCol, skyT);
-    float skyA = mix(0.04, 0.17, skyT) * (0.7 + 0.4 * level);
-    if (dy > 0.0) {
-        skyCol = hazeCol;
-        skyA = 0.17 * (0.7 + 0.4 * level) * (1.0 - smoothstep(0.0, 0.34, dy));
-    }
-    // CAREFUL: the output is premultiplied (`col * a`), so `col` here goes
-    // WITHOUT its own coverage folded in — otherwise the sky comes out with its
-    // alpha squared and is not there at all.
-    col = skyCol;
-    a = skyA;
+    vec3 haze = mix(ink, hot, 0.25) * (0.50 + 0.14 * level);
+    float up = clamp(-dy / max(HZ, 0.05), 0.0, 1.0);
 
-    if (dy > 0.0008) {
-        // the whole field creeps towards the eye; rows slide in from the far
-        // side instead of popping, because the lattice itself is offset
-        float drift = fract(t * speed * 0.055) * DZ;
-        float z = 1.0 / dy;                       // depth of flat water here
-        float jf = (z - Z0 + drift) / DZ;
-        float worldX = sx * z;
-        int j0 = int(floor(jf));
+    vec3 col;
+    float a;
+    if (dy <= 0.0015) {
+        // ------------------------------------------------------------- the sky
+        col = mix(haze, ink * 0.05, smoothstep(0.0, 0.8, up));
+        a = mix(0.92, 0.08, smoothstep(0.0, 0.95, up));
+        float md = distance(scr, moonS);
+        float disc = smoothstep(0.044, 0.040, md);
+        float glow = exp(-md * 8.5) * 0.55 + exp(-md * 2.4) * 0.10;
+        // the disc's grey seas, so it is the moon and not a lamp
+        float seas = vnoise((scr - moonS) * 42.0 + 3.0) * 0.6 + vnoise((scr - moonS) * 96.0) * 0.4;
+        col += hot * glow;
+        a = max(a, clamp(glow * 1.3, 0.0, 1.0));
+        col = mix(col, hot * (0.82 + 0.34 * seas), disc);
+        a = max(a, disc);
+    } else {
+        // ------------------------------------------------------------- the sea
+        float Z = 1.0 / dy;
+        Z = min(Z, 90.0);
+        // the surface is not flat: walk the depth to where the ray meets it
+        float lod = Z * Z * 0.00026;
+        vec3 w0 = waves(vec2(sx * Z, Z), 7, lod);
+        Z = (1.0 - w0.x) / dy;
+        Z = clamp(Z, 0.5, 90.0);
+        vec2 p = vec2(sx * Z, Z);
 
-        for (int dj = -2; dj <= 2; dj++) {
-            int j = j0 + dj;
-            if (j < 0)
-                continue;
-            float Z = Z0 + float(j) * DZ - drift;
-            if (Z < 0.6)
-                continue;
+        vec3 w1 = waves(p, 20, lod);
+        vec3 r1 = ring(p, rip1);
+        vec3 r2 = ring(p, rip2);
+        float rh = (r1.x + r2.x) * 0.20 * (0.4 + amp);
+        vec2 grad = w1.yz + (r1.yz + r2.yz) * 0.20 * (0.4 + amp);
+        vec3 n = normalize(vec3(-grad.x, 1.0, -grad.y));
 
-            // odd rows sit half a step across, so the field reads as water and
-            // not as graph paper
-            float stagger = mod(float(j), 2.0) * 0.5;
-            float ifl = worldX / DX - stagger;
-            int i0 = int(floor(ifl));
+        // looking along the ray; grazing near the horizon, so Fresnel is what lights the far water
+        vec3 eye = normalize(vec3(sx, -dy, 1.0));
+        vec3 refl = reflect(eye, n);
+        float fres = 0.03 + 0.97 * pow(clamp(1.0 + dot(eye, n), 0.0, 1.0), 4.0);
 
-            // techo al radio: sin él, la fila más cercana son manchones de
-            // 20 px y deja de leerse como puntos sueltos
-            float rad = clamp(DOTR / Z * S, 0.85, S * 0.011);
+        // what the water mirrors: the sky, lighter towards the horizon
+        float skyUp = clamp(refl.y, 0.0, 1.0);
+        vec3 skyRefl = mix(haze * 1.15, ink * 0.10, smoothstep(0.0, 0.45, skyUp));
+        // what it holds: dark in the troughs, the colour coming through on a crest lit from behind
+        float crest = clamp(w1.x / (0.20 * (0.55 + 0.75 * amp)) + rh * 3.0, 0.0, 1.2);
+        vec3 deep = ink * (0.075 + 0.20 * level * crest + 0.26 * crest * crest);
+        vec3 c = mix(deep, skyRefl, fres);
 
-            for (int di = -1; di <= 1; di++) {
-                int i = i0 + di;
-                float X = (float(i) + stagger) * DX;
-                float px = X / Z;
+        // the moon's column: a tight highlight and a wide one, broken by every facet
+        float sd = max(dot(refl, moon), 0.0);
+        float gl = pow(sd, 420.0) * 2.4 + pow(sd, 42.0) * 0.20;
+        c += hot * gl * (0.8 + 0.5 * chop);
 
-                // La altura mueve al punto en VERTICAL y nada más: su x en
-                // pantalla ya se sabe. Descartar por x acá ahorra la ola entera
-                // (y sus dos ondas) en la mayoría de los candidatos.
-                float dx = (sx - px) * S;
-                if (abs(dx) > rad + 1.0)
-                    continue;
+        // foam: where the crest is steep and high, torn by noise. The ring leaves its own
+        float stress = dot(grad, grad);
+        // veins, never a patch: foam is a net of thin lines stretched by the wave that carries it
+        float tear = vnoise(p * vec2(2.2, 4.6) + vec2(t * 0.35, -t * 0.2) + w1.yz * 2.0);
+        float vein = 1.0 - abs(tear * 2.0 - 1.0);
+        vein = pow(vein, 5.0) * (0.45 + 0.55 * vnoise(p * 13.0 - t * 0.5));
+        float foam = smoothstep(0.84, 1.12, crest) * smoothstep(0.02, 0.15, stress + rh) * (0.25 + vein);
+        foam += smoothstep(0.018, 0.09, rh) * vein * 1.6;
+        foam *= exp(-Z * 0.045);
+        c = mix(c, mix(ink, hot, 0.7) * (0.75 + 0.3 * level), clamp(foam, 0.0, 0.92));
 
-                vec2 lat = vec2(float(i), float(j));
-                float h = waterAt(lat, vec2(X, Z));
-                float py = HZ + (1.0 - h) / Z;
-
-                // distancia en píxeles, así el punto es redondo en cualquier
-                // relación de aspecto
-                vec2 d = vec2(dx, (yy - py) * S);
-                float dotv = smoothstep(rad, rad * 0.28, length(d));
-                if (dotv <= 0.001)
-                    continue;
-
-                float fade = exp(-(Z - Z0) * haze * 0.10);
-                // Crests catch the light and troughs FADE OUT — they are not
-                // painted darker. A dot darker than the water reads as a hole
-                // punched in the picture, and it breaks on a lit palette too,
-                // where the background is the bright thing.
-                float crest = clamp(h * 22.0 + 0.5, 0.0, 1.0);
-                vec3 c = mix(ink, hot, crest * crest);
-                // el piso no es cero: con el pozo apagado del todo, media
-                // pantalla se quedaba vacía cada vez que pasaba una ola larga y
-                // el mar parecía existir sólo en una franja
-                float bright = (0.45 + 0.75 * crest) * fade;
-
-                col += c * dotv * bright;
-                a = max(a, dotv * bright * 0.92);
-            }
-        }
+        // the distance eats it, into the same haze the sky starts from
+        col = mix(c, haze, smoothstep(14.0, 90.0, Z));
+        a = 1.0;
     }
 
     a = clamp(a * dim, 0.0, 1.0);

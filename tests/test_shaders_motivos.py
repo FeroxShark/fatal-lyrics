@@ -33,9 +33,10 @@ class TestComentariosDelSorteo(unittest.TestCase):
 class TestDunasConLuzRasante(unittest.TestCase):
     def test_el_frag_sombrea_por_pendiente_con_un_sol_por_semilla(self):
         src = read("dunes.frag")
-        self.assertIn("vec3 dune(vec2 p)", src)          # devuelve altura y gradiente
-        self.assertIn("saz = 6.2831853 * fract(seed", src)  # el sol sale de la semilla
-        self.assertNotIn("clamp(h * 6.0 + 0.5", src)       # ya no es un mapa de altura
+        self.assertIn("float dune(vec2 p)", src)         # un relieve de verdad, recorrido por píxel
+        self.assertIn("fract(seed * 3.7)", src)          # de qué lado cae el sol sale de la semilla
+        self.assertIn("float lamb = dot(nrm, sun)", src)  # la luz sale de la pendiente
+        self.assertNotIn("clamp(h * 6.0 + 0.5", src)     # no es un mapa de altura
 
     @unittest.skipUnless(os.path.exists(QSB), "qsb de Qt no instalado")
     def test_el_qsb_es_de_esta_version_del_frag(self):

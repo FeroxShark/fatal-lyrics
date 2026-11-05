@@ -53,7 +53,7 @@ MotifBase {
         const c = 2 * Math.PI * tt / loopS * rc + 0.6 + seed;     // XZ: 0–1, para que no quede de frente
         const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
         const cc = Math.cos(c), sc = Math.sin(c);
-        const s = span * 0.19 * punch * sz;
+        const s = span * 0.31 * punch * sz;
         const out = [];
         for (const p of verts) {
             let x = p[0] * ca - p[3] * sa, w = p[0] * sa + p[3] * ca;
@@ -76,7 +76,7 @@ MotifBase {
         const styles = [], geo = [];
         const beatHot = 1 - E.outQuad(bp);
         const copies = dropAmt > 0.01 ? 3 : 1;
-        const lw = span * (0.0035 + 0.002 * low);
+        const lw = span * (0.0042 + 0.0024 * low);
         const r = lw * (1.2 + 1.6 * beatHot);
         // el DESTELLO de las aristas en el tiempo 1 y el 3 (el 2 y el 4 sólo prenden los
         // vértices): arranca en `hot` y vuelve a `colour` con el mismo decaimiento que el

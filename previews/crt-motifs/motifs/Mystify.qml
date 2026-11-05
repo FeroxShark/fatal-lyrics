@@ -36,8 +36,8 @@ MotifBase {
     wallFit: "behind"
 
     readonly property real margin: span * 0.07
-    readonly property int echoes: Math.round(E.clamp(8 + 9 * (energy - 0.9) / 0.7 + 4, 10, 22) * quality)
-    readonly property real gap: 0.045 * gapMul * (1 + 1.6 * surge + 1.3 * cutK)
+    readonly property int echoes: Math.round(E.clamp(11 + 9 * (energy - 0.9) / 0.7 + 4, 13, 24) * quality)
+    readonly property real gap: 0.06 * gapMul * (1 + 1.6 * surge + 1.3 * cutK)
     // cada aparición es otra: de 3 a 6 vértices y la estela más o menos abierta
     readonly property int nv: 3 + Math.floor(E.hash(seed * 5.13 + 0.7) * 4)
     readonly property real gapMul: 0.7 + 0.8 * E.hash(seed * 2.71 + 0.3)
@@ -130,7 +130,7 @@ MotifBase {
         property real pulse: m.beatHot
         property real high: m.high
         property real hf: React.fizz(m.hf, 1)
-        property real wpx: m.span * (0.0034 + 0.0016 * m.beatHot)
+        property real wpx: m.span * (0.0052 + 0.0022 * m.beatHot)
         property real lead0: m.leadK(0)
         property real lead1: m.leadK(1)
         property real lead2: m.leadK(2)

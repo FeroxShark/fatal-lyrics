@@ -58,8 +58,8 @@ MotifBase {
     function pt(ph, s) {
         const r = ratios[ph];
         const T = 2 * Math.PI * turns * s;
-        const d1 = Math.exp(-1.9 * s), d2 = Math.exp(-2.5 * s);
-        const R = span * 0.44;
+        const d1 = Math.exp(-1.2 * s), d2 = Math.exp(-1.6 * s);
+        const R = span * 0.54;
         return [width / 2 + R * (0.5 * d1 * Math.sin(r.f[0] * T + r.p[0]) + 0.5 * d2 * Math.sin(r.f[1] * T + r.p[1])),
                 height / 2 + R * (0.5 * d2 * Math.sin(r.f[2] * T + r.p[2]) + 0.5 * d1 * Math.sin(r.f[3] * T + r.p[3]))];
     }
@@ -90,7 +90,7 @@ MotifBase {
     function figure(styles, geo, ph, upTo, alpha, hotLine) {
         const P = figurePts(ph);
         const n = Math.max(2, Math.floor(segs * upTo));
-        const lw = span * 0.0022;
+        const lw = span * 0.0031;
         const chunk = 5;
         const paths = [];
         for (let b = 0; b < nk; b++) paths.push([]);

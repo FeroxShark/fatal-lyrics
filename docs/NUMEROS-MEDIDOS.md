@@ -373,3 +373,22 @@ primera ventana cae (49-57/103-132/126-179), compilando el shader: no medida por
 
 Segunda corrida en vivo (04:32, carga 32, GPU al 100 % por otros procesos: **muy contaminada**), con el tubo empujado por el reloj: `sync` 128-133/157-160/58-60
 (stars, ocean), `max` 127/157/58 (stars), `dunes` 57-72/58-71/54-55 con ~60 tirones. En `sync` los swaps NO bajaron a 60: algo más repinta el vidrio. El log ahora trae `pasos=`.
+
+## CRT en vivo, 2026-11-05 05:30 (tercera corrida: carga 6-12, sin juego abierto)
+
+Línea `crt: fps`, ventanas de 10 s; DP-1 60 Hz / HDMI-A-1 144 Hz / DP-2 200 Hz. `pasos` = reloj del tubo.
+
+| modo | motivo | swaps DP-1/HDMI/DP-2 | pasos | tirones |
+|---|---|---|---|---|
+| sync | stars | 60/143/193 | 60 | 0-2 |
+| sync | rain | 60/144/199 | 60 | 0-1 |
+| sync | dunes | 41-51/66-100/64-114 | 59-60 | 23-185 |
+| max | stars | 60/133/150 | = swaps | 1 |
+| max | dunes | 59/129/146, después 40/61/60 | = swaps | hasta 203 |
+
+Sync clava los pasos en 60, pero la ventana sigue intercambiando a sus Hz: los cuadros de más sólo repintan el vidrio. Max sí funciona: los pasos suben con los swaps, y no llega al techo de DP-2 (~150 de 200).
+`dunes` sigue siendo el caro: las tres pantallas juntas no sostienen 60.
+
+`dunes`, terreno sin cresta horneada (lo suave en la textura, `shape()` al leer), `./bench.py dunes --cost --scale 3 --n 120`: 34,9 ms a 7,8 ms por cuadro, misma imagen a ojo contra la versión anterior en la placa real. Falta el número en vivo con las tres pantallas.
+
+En vivo después de ese cambio (carga 37-41, muchas sesiones; DP-1/HDMI-A-1/DP-2, ventanas de 10 s): `dunes` sync 54-57/94-99/98-103, pasos 53-57, 40-76 tirones; max 55-56/84-89/88, pasos = swaps, 44-90 tirones. Antes: 41-51/66-100/64-114. `rain`+`radar` en la misma corrida a carga ~23: 60/144/196-199, 0-1 tirones. Mejora, sin llegar a 60 con esa carga: falta medir con la PC tranquila.

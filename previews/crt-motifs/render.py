@@ -23,7 +23,11 @@ import wave
 HERE = os.path.dirname(os.path.abspath(__file__))
 # ASIGNADO, no setdefault: la sesión de Ferox exporta QT_QPA_PLATFORM=wayland y
 # con setdefault la ventana se abre en su pantalla (docs/TRAMPAS.md).
-os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + os.path.join(HERE, "offscreen.json")
+# `BANCO_WAYLAND=1`: ventana de Wayland que nunca se muestra, con la placa de verdad. El `offscreen`
+# ignora el formato de las texturas (RGBA16F sale de 8 bits, medido 2026-11-05): `dunes` se ve con
+# escalones en el banco y no en vivo.
+os.environ["QT_QPA_PLATFORM"] = ("wayland" if os.environ.get("BANCO_WAYLAND")
+                                 else "offscreen:configfile=" + os.path.join(HERE, "offscreen.json"))
 os.environ["QT_QUICK_BACKEND"] = "rhi"
 os.environ["QSG_RHI_BACKEND"] = "opengl"
 
@@ -113,7 +117,9 @@ class Stage:
                 print(e.toString(), file=sys.stderr)
             sys.exit(1)
         self.view.resize(self.w, self.h)
-        self.view.show()
+        # en Wayland nunca se muestra: abriría una ventana en el escritorio
+        if not os.environ.get("BANCO_WAYLAND"):
+            self.view.show()
         self.root = self.view.rootObject()
         self.root.setProperty("tube", tube)
         self.root.setProperty("scheme", scheme)

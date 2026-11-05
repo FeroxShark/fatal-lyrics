@@ -1541,3 +1541,13 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 `crt.lyric_over` (`auto`, `always`, `off`). El dibujo baja a `overDim` de la tabla de `pace` (más con frases de más de 60
 caracteres) y una banda de `pal.bg` protege el medio. El cambio de dibujo debajo de un verso NO pega `hit`: el glitch caería en la letra.
 Una alarma, el `iown` y el aro siguen siendo de la pantalla entera. Cuesta GPU: la pantalla de la letra ahora también dibuja motivo.
+
+## Dunas horneadas: la textura engaña de tres maneras (2026-11-05)
+
+- **El banco `offscreen` ignora el formato.** Un `RGBA16F` sale de 8 bits y recortado a 1 (medido con una sonda). Dos consecuencias: hornear siempre en 0..1, y las manchas y garabatos de cuantización que se ven en el banco no están en el equipo. Para ver la placa real: `BANCO_WAYLAND=1 python3 render.py dunes --stills 3` (ventana de Wayland que nunca se muestra).
+- **Una vista oculta pierde las capas entre `grabWindow`.** Un `ShaderEffectSource` con `live: false` sale vacío después de la primera captura y el terreno queda plano. Para mirar con `BANCO_WAYLAND`, poné `live: true` sólo en `motifs/Dunes.qml` (la copia del banco); `sync-shell.sh` lo restaura. Con `live: true` el costo medido no sirve.
+- **Normales de una textura:** la pendiente del bilinear es constante por texel (rejilla de bloques), por eso `duneSmooth` usa B-spline. Y los pesos del filtro de la placa tienen 8 bits: una diferencia con `e` menor a ~0,04 muestra esos escalones como rayones finos, sobre todo en la cara en sombra.
+
+## Sumar tinta sobre un fondo claro no dibuja nada (2026-11-05)
+
+Las paletas que salen de la tapa pueden ser tinta oscura sobre fondo claro. Un shader que hace `col = bg + ink * x` satura o no cambia y el dibujo desaparece: el radar quedó como un rectángulo salmón con los textos del HUD. Arreglo en `radar.frag`: sumar `ink - bg`. En el banco: `render.py <kind> --scheme claro`. `cintas`, `giroscopio`, `membrana` y `pond` también suman tinta y no están revisados.

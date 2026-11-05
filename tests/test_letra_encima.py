@@ -40,10 +40,21 @@ class TestTuboEnSync(unittest.TestCase):
 
 
 class TestDunasHorneadas(unittest.TestCase):
-    def test_bake_and_march_share_the_terrain(self):
+    def test_bake_and_march_share_the_scales(self):
+        # The bake stores the smooth part scaled to 0..1 and the march undoes it: out of 0..1 it clips
+        # wherever the texture ends up with 8 bits. The crest is NOT baked, it is a sharp function.
         march, bake = read("shell", "dunes.frag"), read("shell", "dunebake.frag")
-        for fn in ("float dune(vec2 p)", "float profile(float u)", "float pnoise(vec2 p, float per)"):
-            self.assertEqual(march[march.index(fn):].split("\n}\n")[0], bake[bake.index(fn):].split("\n}\n")[0], fn)
+        self.assertIn("vec4(warp / 4.2, amp / 1.2, (swell + 0.1) / 0.4, 1.0)", bake)
+        self.assertNotIn("float profile", bake)
+        for scale in ("b.r * 4.2", "b.g * 1.2", "b.b * 0.4 - 0.1"):
+            self.assertIn(scale, march)
+
+    def test_march_reads_no_noise(self):
+        # one texture read per step: that is the whole point of the bake
+        march = read("shell", "dunes.frag")
+        self.assertNotIn("pnoise", march)
+        shape = march[march.index("float dune(vec2 p)"):].split("\n}\n")[0]
+        self.assertEqual(shape.count("texture("), 1)
 
 
 if __name__ == "__main__":

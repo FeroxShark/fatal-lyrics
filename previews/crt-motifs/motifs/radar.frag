@@ -32,6 +32,11 @@ layout(std140, binding = 0) uniform buf {
     float flash;       // 0..1 el golpe
 };
 
+// Relative to the screen: on a light scheme (dark ink on salmon) adding the ink does nothing and the
+// whole radar vanishes; this way the same sum darkens there and stays a glow on a dark screen.
+#define INK (ink.rgb - bg.rgb)
+#define HOT (hot.rgb - bg.rgb)
+
 const float TAU = 6.2831853;
 const float RAD = 0.455;      // radio del disco, en lados cortos
 
@@ -76,8 +81,8 @@ vec3 contact(vec2 p, vec2 c, vec2 v, float px, float lock) {
     float edge = abs(max(aq.x, aq.y) - box);
     float corner = step(box * 0.45, min(aq.x, aq.y));
     float frame = lock * smoothstep(1.6 * px, 0.6 * px, edge) * corner;
-    return hot.rgb * blip * (0.14 + 1.25 * lit) + ink.rgb * tail * (0.10 + 0.55 * lit)
-         + hot.rgb * frame * 0.75;
+    return HOT * blip * (0.14 + 1.25 * lit) + INK * tail * (0.10 + 0.55 * lit)
+         + HOT * frame * 0.75;
 }
 
 void main() {
@@ -96,7 +101,7 @@ void main() {
     vec2 g = abs(fract(uv / 0.05 + 0.5) - 0.5) * 0.05 * side;
     float dots = exp(-dot(g, g) / 1.6);
     float outside = smoothstep(1.07, 1.09, r);
-    col += ink.rgb * 0.13 * dots * outside;
+    col += INK * 0.13 * dots * outside;
 
     if (r < 1.09) {
         float inside = smoothstep(1.0 + px, 1.0 - px, r);
@@ -105,7 +110,7 @@ void main() {
         float phos = exp(-age * 0.95);
 
         // el fondo del disco, un poco más claro que la cara
-        col += ink.rgb * (0.025 + 0.05 * (1.0 - r)) * inside;
+        col += INK * (0.025 + 0.05 * (1.0 - r)) * inside;
 
         // retornos en bloques polares
         float bins = 150.0;
@@ -131,16 +136,16 @@ void main() {
             }
         }
 
-        vec3 ph = mix(ink.rgb, hot.rgb, 0.25 + 0.55 * dropAmt);
+        vec3 ph = mix(INK, HOT, 0.25 + 0.55 * dropAmt);
         float seen = 0.07 + 0.95 * phos;
-        col += ink.rgb * land * (0.30 + 0.25 * inner) * seen * inside;
+        col += INK * land * (0.30 + 0.25 * inner) * seen * inside;
         col += ph * coast * (0.25 + 1.0 * phos) * inside;
         col += ph * land * ping * 0.9 * inside;
 
         // el mar cerca del centro: retorno que titila, más con agudos
         float sea = h21(vec2(ang * 37.0, rq * 91.0) + floor(sweep * 2.0));
         float seaAmt = (1.0 - smoothstep(0.05, 0.42, r)) * (0.28 + 0.5 * fizz + 0.2 * dens);
-        col += ink.rgb * step(0.80, sea) * seaAmt * (0.06 + 0.8 * phos) * inside;
+        col += INK * step(0.80, sea) * seaAmt * (0.06 + 0.8 * phos) * inside;
 
         // la grilla: anillos de distancia, cruz y marcas de rumbo
         float rings = 0.0;
@@ -151,26 +156,26 @@ void main() {
         // cada anillo con su punteado, cada 10°
         float dash = step(0.38, fract(th / TAU * 72.0));
         float cross = max(smoothstep(1.3 * px, 0.3 * px, abs(p.x)), smoothstep(1.3 * px, 0.3 * px, abs(p.y)));
-        col += ink.rgb * (rings * dash * 0.30 + cross * 0.17) * inside;
+        col += INK * (rings * dash * 0.30 + cross * 0.17) * inside;
 
         // el aro y sus marcas: cada 10°, y cada 30° más largas
         float rim = smoothstep(2.2 * px, 0.6 * px, abs(r - 1.0));
-        col += mix(ink.rgb, hot.rgb, 0.25) * rim * 0.85;
+        col += mix(INK, HOT, 0.25) * rim * 0.85;
         float t10 = abs(fract(th / TAU * 36.0 + 0.5) - 0.5) / 36.0 * TAU * r;
         float t30 = abs(fract(th / TAU * 12.0 + 0.5) - 0.5) / 12.0 * TAU * r;
         float tick10 = smoothstep(1.4 * px, 0.4 * px, t10) * step(1.0, r) * step(r, 1.022);
         float tick30 = smoothstep(1.8 * px, 0.6 * px, t30) * step(1.0, r) * step(r, 1.05);
-        col += ink.rgb * max(tick10 * 0.7, tick30);
+        col += INK * max(tick10 * 0.7, tick30);
 
         // la aguja: línea caliente y un resplandor corto detrás
         float d2 = r * sin(min(age, 1.5));
         float needle = age < 1.2 ? smoothstep(2.4 * px, 0.5 * px, abs(d2)) : 0.0;
         if (TAU - age < 0.02) needle = max(needle, smoothstep(2.4 * px, 0.5 * px, r * sin(TAU - age)));
         col += ph * needle * inside * 1.25;
-        col += ink.rgb * exp(-age * 7.0) * 0.20 * inside;
+        col += INK * exp(-age * 7.0) * 0.20 * inside;
 
         // el pulso se ve también en el agua, tenue
-        col += ink.rgb * ping * 0.22 * inside;
+        col += INK * ping * 0.22 * inside;
 
         // contactos
         vec3 cc = contact(p, c0.xy, v0.xy, px, 1.0)
@@ -183,8 +188,8 @@ void main() {
 
         // el centro: el que mira
         float own = exp(-r * r / 0.0002);
-        col += hot.rgb * own * 0.9;
+        col += HOT * own * 0.9;
     }
 
-    fragColor = vec4(min(col, vec3(1.0)), 1.0) * qt_Opacity;
+    fragColor = vec4(clamp(col, 0.0, 1.0), 1.0) * qt_Opacity;
 }

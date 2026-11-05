@@ -113,8 +113,9 @@ WallBase {
     }
 
     // El terreno horneado una vez por semilla: la marcha lee una textura en vez de sumar ruido en
-    // cada paso (`dunes.frag`). 1024 alcanza porque la última parte de la marcha pregunta la función
-    // real. Con `live: false` sólo se vuelve a sacar la foto cuando cambia la semilla.
+    // cada paso (`dunes.frag`). Se hornea sólo lo suave (fase, alto y loma, en 0..1); la cresta es
+    // filosa y se calcula al leer, por eso 1024 alcanza hasta debajo de la cámara. Con `live: false`
+    // sólo se vuelve a sacar la foto cuando cambia la semilla.
     ShaderEffect {
         id: bake
         width: 1024

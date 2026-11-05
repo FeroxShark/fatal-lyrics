@@ -38,6 +38,8 @@ Item {
         poison: { bg: "#04120a", ink: "#9dff3d", hot: "#e8ffc4" },
         bloodline: { bg: "#12030a", ink: "#ff5c7a", hot: "#ffd6de" },
         vapor: { bg: "#0d0a2b", ink: "#6ff2ff", hot: "#e6ffff" },
+        // claro: tinta oscura sobre fondo claro, como la paleta que sale de algunas tapas
+        claro: { bg: "#b07a66", ink: "#3a1210", hot: "#1c0606" },
         bone: { bg: "#150c05", ink: "#ffb457", hot: "#ffe6c2" },
     })
     // copia de `crtTubeTable` (shell.qml); `custom` con las perillas default

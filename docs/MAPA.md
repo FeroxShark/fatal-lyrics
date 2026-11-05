@@ -16,8 +16,8 @@ Movido textual desde `CLAUDE.md` (2026-10-07).
 - `shell/Motif.qml` — animaciones para las pantallas sin letra: reparte propiedades y elige cuál
   dibuja con **UN solo `Loader`** (dos motivos no pueden estar vivos a la vez). Física propia en
   archivos aparte: `Ocean.qml`, `Pond.qml`, `Dunes.qml`, `Static.qml`, `Rorschach.qml`,
-  `Plasma.qml`, `Tunnel.qml`, `Ekg.qml`, `TextSea.qml`, `Eyes.qml`/`Eye.qml`. El resto (radar,
-  lluvia, hiperespacio, carta de ajuste, osciloscopio) vive adentro de `Motif.qml`.
+  `Plasma.qml`, `Tunnel.qml`, `Ekg.qml`, `TextSea.qml`, `Eyes.qml`/`Eye.qml`, `Radar.qml`, `Rain.qml`,
+  `Scope.qml`, `Stars.qml`. La carta de ajuste vive adentro de `Motif.qml`. `scopegrid.frag` es la rejilla de `scope` y `ekg`.
 - `motifKinds` + `motifWords` + `motifAllowed` (`shell.qml`) — la lista, las palabras de la letra
   que eligen uno a propósito, y el filtro de los que ahora mismo no tienen con qué dibujarse.
 - `cartelitos/motifs.py` + `crtSetForceMotif`/`crtMotifForced` (`shell.qml`) — el forzado de

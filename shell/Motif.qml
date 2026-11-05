@@ -364,7 +364,8 @@ Item {
         Item {
             Eye {
                 anchors.centerIn: parent
-                width: motif.span * 0.78
+                // la misma medida que el ojo grande de `Eyes.qml`
+                width: motif.span * (parent.height > parent.width ? 0.92 : 1.15)
                 height: width * 0.52
                 colour: motif.colour
                 hot: motif.hot
@@ -406,201 +407,47 @@ Item {
     }
 
     // ------------------------------------------------------------ osciloscopio
-    // La figura de Lissajous de un osciloscopio de laboratorio: dos senos, uno
-    // por eje. Lo que se ve no es el dibujo sino la RELACIÓN entre las dos
-    // frecuencias — si es un número redondo la figura se cierra y queda quieta,
-    // y si no, gira y no cierra nunca.
-    //
-    // CORRIDA 7: cuando llega `wave` (el audio real, L/R de la placa) el scope deja de
-    // ser sintético: X = canal izquierdo, Y = derecho, un Lissajous de verdad. Si los
-    // canales son casi lo mismo (|correlación| > 0.98: mono, o casi) L/R da una
-    // diagonal y no una figura, así que pasa a retrato de fase: X = muestra, Y = la
-    // misma muestra atrasada `d` (la que deja más descorrelacionados los ejes, la
-    // cuarta parte del período del tono de turno). Sin `wave` por más de
-    // `waveStaleMs` (captura caída, pausa, silencio) vuelve al dibujo de abajo.
-    //
-    // Con tempo confiable la relación sale de la parte del tema (1 en el
-    // silencio, 3/2 en la estrofa, 4/3 en el puente, 2 en el drop) y la figura
-    // CIERRA: es una figura estable que da una vuelta por compás. Sin tempo la
-    // relación deriva sola y la figura no cierra: caos, que es exactamente lo
-    // que hacía un osciloscopio con una señal que no enganchaba.
-    //
-    // La fase y la deriva se ACUMULAN, no salen de multiplicar el reloj: el
-    // reloj vale miles de segundos y cualquier cambio de tempo pegaría un salto
-    // de la figura entera (la misma trampa del hiperespacio y del túnel).
+    // Un osciloscopio de laboratorio (`Scope.qml`).
     Component {
         id: scopeC
 
-        Item {
-            Canvas {
-                id: scope
-                anchors.centerIn: parent
-                // T4.3b: la figura ocupaba un tercio del ancho de la vertical y
-                // se leía como un garabato en el medio de una pantalla vacía.
-                // La caja es CUADRADA y sale del lado corto: la misma figura en
-                // las tres pantallas, y entra dentro del 92 % en las dos formas.
-                width: motif.span * 0.86
-                height: width
-                renderStrategy: Canvas.Cooperative
-
-                // la relación entre los ejes, por parte del tema; el tween es lo que
-                // hace que la figura se transforme en vez de cambiar de golpe
-                readonly property real target: motif.section === "quiet" ? 1
-                    : motif.section === "build" ? (4 / 3)
-                    : motif.section === "drop" ? 2 : 1.5
-                property real ratio: target
-                Behavior on ratio { NumberAnimation { duration: 600; easing.type: Easing.InOutCubic } }
-
-                // cuántas vueltas hay que dibujar para que cierre: el denominador de la
-                // relación (3/2 cierra en dos, 4/3 en tres)
-                // (de `target` y no de `ratio`: `ratio` viaja 600 ms entre dos valores y en el
-                // camino pasa por otros, así que las vueltas saltaban y la figura se cortaba)
-                readonly property int turns: !motif.bpmLive ? 3
-                    : (Math.abs(target - 1.5) < 0.02 ? 2 : (Math.abs(target - 4 / 3) < 0.02 ? 3 : 1))
-
-                // de dónde sale lo que se dibuja: "synthetic" | "lissajous" | "phase"
-                // (sólo para el log `crt: scope ...` al cambiar)
-                property string source: "synthetic"
-                readonly property real phaseMono: 0.98
-
-                // la traza real, o null si no hay `wave` fresco. Devuelve los puntos
-                // ya en -1..1 como [x0, y0, x1, y1, ...] y el modo.
-                function waveTrace() {
-                    const l = motif.waveL, r = motif.waveR;
-                    const n = l ? l.length : 0;
-                    if (n < 16 || !r || r.length !== n
-                            || Date.now() - motif.waveAt > motif.waveStaleMs)
-                        return null;
-                    let ll = 0, rr = 0, lr = 0;
-                    for (let i = 0; i < n; i++) {
-                        ll += l[i] * l[i];
-                        rr += r[i] * r[i];
-                        lr += l[i] * r[i];
-                    }
-                    const corr = (ll > 0 && rr > 0) ? lr / Math.sqrt(ll * rr) : 1;
-                    const pts = [];
-                    if (Math.abs(corr) <= phaseMono) {
-                        for (let i = 0; i < n; i++)
-                            pts.push(l[i] / 127, r[i] / 127);
-                        return { mode: "lissajous", pts: pts };
-                    }
-                    const s = new Array(n);
-                    let ss = 0;
-                    for (let i = 0; i < n; i++) {
-                        s[i] = (l[i] + r[i]) / 2;
-                        ss += s[i] * s[i];
-                    }
-                    let d = 1, best = 2;
-                    for (let k = 1; k <= 8; k++) {
-                        let a = 0;
-                        for (let i = k; i < n; i++)
-                            a += s[i] * s[i - k];
-                        const c = ss > 0 ? Math.abs(a) / ss : 1;
-                        if (c < best) {
-                            best = c;
-                            d = k;
-                        }
-                    }
-                    for (let i = d; i < n; i++)
-                        pts.push(s[i] / 127, s[i - d] / 127);
-                    return { mode: "phase", pts: pts };
-                }
-
-                property real phase: 0        // el giro de la figura: una vuelta por compás
-                property real wobble: 0       // la deriva de la relación cuando no hay tempo
-
-                Timer {
-                    interval: 33          // 30 Hz: una traza no necesita más
-                    repeat: true
-                    running: scope.visible && motif.spinning
-                    onTriggered: {
-                        const dt = 0.033;
-                        const bar = Math.max(motif.beatMs, 120) * 4 / 1000;
-                        scope.phase = (scope.phase + dt / bar * Math.PI * 2) % (Math.PI * 2);
-                        scope.wobble += dt;
-                        scope.requestPaint();
-                    }
-                }
-
-                onVisibleChanged: if (visible) requestPaint()
-                Component.onCompleted: requestPaint()
-
-                onPaint: {
-                    const c = getContext("2d");
-                    c.reset();
-                    const w = width, h = height;
-                    if (w <= 0 || h <= 0)
-                        return;
-                    const cx = w / 2, cy = h / 2;
-                    const rx = w * 0.42, ry = h * 0.42;
-                    const tr = waveTrace();
-                    const src = tr ? tr.mode : "synthetic";
-                    if (src !== source) {
-                        source = src;
-                        console.log("crt: scope " + src);
-                    }
-                    if (tr) {
-                        // el audio ya viene normalizado contra el pico (audio.py:
-                        // wave_points): acá sólo se deja un margen dentro de la caja
-                        const k = 0.95;
-                        c.strokeStyle = motif.colour;
-                        c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
-                        c.lineJoin = "round";
-                        c.beginPath();
-                        // 64 puntos de un tono agudo se ven como un polígono:
-                        // curvas por los puntos medios, que cuestan lo mismo
-                        const P = tr.pts, np = P.length / 2;
-                        c.moveTo(cx + P[0] * rx * k, cy - P[1] * ry * k);
-                        for (let i = 1; i < np - 1; i++) {
-                            const x = cx + P[i * 2] * rx * k, y = cy - P[i * 2 + 1] * ry * k;
-                            const mx = cx + (P[i * 2] + P[i * 2 + 2]) / 2 * rx * k;
-                            const my = cy - (P[i * 2 + 1] + P[i * 2 + 3]) / 2 * ry * k;
-                            c.quadraticCurveTo(x, y, mx, my);
-                        }
-                        c.lineTo(cx + P[np * 2 - 2] * rx * k, cy - P[np * 2 - 1] * ry * k);
-                        c.stroke();
-                        // el punto del haz: donde termina la traza
-                        const e = tr.pts.length - 2;
-                        c.fillStyle = motif.hot;
-                        c.beginPath();
-                        c.ellipse(cx + tr.pts[e] * rx * k - w * 0.012, cy - tr.pts[e + 1] * ry * k - w * 0.012,
-                                  w * 0.024, w * 0.024);
-                        c.fill();
-                        return;
-                    }
-                    // T4.3b: la amplitud de REPOSO también tiene que llenar la
-                    // caja. Con 0.55 y el player parado (`level` en el piso) la
-                    // figura quedaba a la mitad de su propio marco.
-                    const amp = 0.78 + 0.20 * motif.level;
-                    // sin tempo la relación se va sola: la figura no cierra
-                    const b = ratio + (motif.bpmLive ? 0 : 0.06 * Math.sin(wobble * 0.8));
-                    const steps = Math.max(140, Math.round(240 * turns * Math.max(motif.quality, 0.5)));
-
-                    c.strokeStyle = motif.colour;
-                    c.lineWidth = Math.max(1.5, w * 0.006 * (1 + motif.punch + motif.surge));
-                    c.lineJoin = "round";
-                    c.beginPath();
-                    for (let i = 0; i <= steps; i++) {
-                        const t = i / steps * Math.PI * 2 * turns;
-                        const x = cx + Math.sin(t + phase) * rx * amp;
-                        const y = cy + Math.sin(b * t) * ry * amp;
-                        if (i === 0)
-                            c.moveTo(x, y);
-                        else
-                            c.lineTo(x, y);
-                    }
-                    c.stroke();
-
-                    // el punto del haz, corriendo por la traza
-                    const t2 = (wobble * 1.1 % 1) * Math.PI * 2 * turns;
-                    const px = cx + Math.sin(t2 + phase) * rx * amp;
-                    const py = cy + Math.sin(b * t2) * ry * amp;
-                    c.fillStyle = motif.hot;
-                    c.beginPath();
-                    c.ellipse(px - w * 0.012, py - w * 0.012, w * 0.024, w * 0.024);
-                    c.fill();
-                }
-            }
+        Scope {
+            fontFamily: motif.fontFamily
+            waveL: motif.waveL
+            waveR: motif.waveR
+            waveAt: motif.waveAt
+            waveStaleMs: motif.waveStaleMs
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
         }
     }
 
@@ -1069,16 +916,39 @@ Item {
         id: ekgC
 
         Ekg {
+            fontFamily: motif.fontFamily
+            beatAmt: motif.beatAmt
             colour: motif.colour
             hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
             level: motif.level
-            beat: motif.beat
-            beatAmt: motif.beatAmt
-            tick: motif.tick
-            bpmLive: motif.bpmLive
-            quality: motif.quality
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
             seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
             running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
         }
     }
 

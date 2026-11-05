@@ -72,6 +72,9 @@ TESTEO = {
     "pond": ("trinitron", "vapor"),
     "rain": ("trinitron", "poison"),
     "radar": ("green", "poison"),
+    "scope": ("green", "poison"),
+    "ekg": ("trinitron", "poison"),
+    "eyes": ("trinitron", "bloodline"),
 }
 # el carácter del tema: (bpm, valence, energy del mood)
 TEMPERS = {"calmo": (78, 0.6, 0.2), "agitado": (140, 0.35, 0.9)}

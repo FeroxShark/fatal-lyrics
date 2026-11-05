@@ -11,7 +11,6 @@ import "../Ease.js" as E
 
 ThumpBase {
     id: m
-    property string fontFamily: "monospace"
 
     readonly property real sweep: (m.beatN + m.bp) / 8 * Math.PI * 2
     readonly property int nContacts: 6

@@ -13,7 +13,6 @@ import "../Ease.js" as E
 ThumpBase {
     id: m
     wallFit: "behind"
-    property string fontFamily: "monospace"
 
     readonly property string glyphs: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ#$%&*+=<>/\\|?!@^~{}[]()-_:;."
 

@@ -93,7 +93,7 @@ class TestGolpe(unittest.TestCase):
         self.assertIn("id: glints", mo)
 
     def test_scope_turns_follow_the_target_not_the_tween(self):
-        mo = read("Motif.qml")
+        mo = read("Scope.qml")
         turns = re.search(r"readonly property int turns:(.*?)\n\n", mo, re.S).group(1)
         self.assertIn("Math.abs(target - 1.5)", turns)
         self.assertNotIn("ratio", turns)

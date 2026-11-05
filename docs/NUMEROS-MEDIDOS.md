@@ -363,3 +363,13 @@ Sonda en el equipo, CRT prendido, Spotify en pausa, carga 22 (otras sesiones cor
 código nuevo: 141/188/59 fps en las pantallas de 144/200/60. `stars` y `swarm` en esa corrida no valen (los cuadros se
 frenaron, CPU 0, causa sin confirmar). Falta medir: con música y pocas sesiones, y el costo de los shaders
 nuevos de `dunes`, `ocean`, `pond` y `stars` con `./bench.py <kind> --cost`.
+
+Banco de costo (`./bench.py <kind> --cost --scale 3 --n 120`, 5760x3240, RTX 3090, sesiones corriendo): `ocean` 2,2 ms, `pond` 3,0,
+`stars` 4,0 con nave y planetas, `dunes` 71 ms con ruido en cada paso y ~30 con el terreno horneado (`dunebake.frag`).
+
+En vivo (T.N.T., carga 7-10, ventanas de 10 s, sin otra cosa en pantalla), ventana completa de cada motivo, DP-1/HDMI-A-1/DP-2:
+`pond` 60/143/198, `stars` 60/144/199, `ocean` 60/143/198, `dunes` antes del horneado 55/85/98 con 35-50 tirones. Al cambiar de dibujo la
+primera ventana cae (49-57/103-132/126-179), compilando el shader: no medida por separado.
+
+Segunda corrida en vivo (04:32, carga 32, GPU al 100 % por otros procesos: **muy contaminada**), con el tubo empujado por el reloj: `sync` 128-133/157-160/58-60
+(stars, ocean), `max` 127/157/58 (stars), `dunes` 57-72/58-71/54-55 con ~60 tirones. En `sync` los swaps NO bajaron a 60: algo más repinta el vidrio. El log ahora trae `pasos=`.

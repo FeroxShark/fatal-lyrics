@@ -25,7 +25,7 @@ el CRT toma las tres. Los DP-4/DP-5/DP-6/HDMI-A-2 de `docs/` son del setup viejo
 - **REGLA: una animación por pantalla.** Textual de Ferox: "no quiero que ninguna animación se
   superponga con ninguna". En cada pantalla hay UNA cosa a la vez — o el motivo, o el aro, o la
   letra con su entrada, o el instrumental. Por eso el aro apaga el motivo de su pantalla (`dim` a
-  0 en 220 ms) en vez de contar encima de él. Excepciones: el rayo del salto (va por el BORDE de
+  0 en 220 ms) en vez de contar encima de él. Excepciones: la letra encima del motivo (Ferox 2026-11-05, perilla `crt.lyric_over`; `auto` = sólo los motivos que son un lugar, `crtOverKinds`), el rayo del salto (va por el BORDE de
   la pantalla del medio) y el GOLPE del bajo (Ferox 2026-10-19): cada bombo pulsa cámara, tubo y
   tamaño del motivo de TODA la pared, más un destello chico de agudos; vuelve a 1 solo.
 - **REGLA: hay UN lenguaje de movimiento, y vive en `shell/Motion.qml`.** Lo que entra

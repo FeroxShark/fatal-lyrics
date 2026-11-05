@@ -30,7 +30,7 @@ class TestPuenteDeDibujo(unittest.TestCase):
 
     def test_bridge_glitch_only_when_the_motif_is_on_screen(self):
         b = code(read("Crt.qml"))
-        self.assertRegex(b, r"if \(crt\.motifSeen\)\s*crt\.hit\(0\.4")
+        self.assertRegex(b, r"if \(crt\.motifSeen && !crt\.lyricOver\)\s*crt\.hit\(0\.4")
         # en pared el dibujo entra y sale con `wallShow` (que sigue a `motifSeen`)
         self.assertIn("visible: crt.motifWalled ? crt.wallShow > 0.002 : crt.motifSeen", b)
         self.assertIn("readonly property real wallShowTo: motifSeen ? 1", b)

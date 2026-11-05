@@ -1531,3 +1531,13 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
 - En el banco, `motifs/FrameTick.qml` es un `FrameAnimation` pelado: ahí no hay `Motion`.
 - **Sin verificar en el equipo:** el log `crt: fps <idx> <pantalla> <fps> tirones=<n> peor=<ms> motivo=<kind>`
   sale cada 30 s y es lo que falta mirar con música.
+
+**Seguimiento (2026-11-05, medido en vivo):** en `sync` las ventanas seguían intercambiando a 144/200 Hz. La textura de señal es
+`recursive` y, con `live`, Qt la repinta en cada cuadro de la ventana. Ahora en `sync` las dos texturas del tubo son
+`live: false` y el reloj las empuja (`pushTube`). Ojo: el `crt: frames` del log sale al leer los Hz, no al cambiar de modo.
+
+## La letra encima del motivo (2026-11-05)
+
+`crt.lyric_over` (`auto`, `always`, `off`). El dibujo baja a `overDim` de la tabla de `pace` (más con frases de más de 60
+caracteres) y una banda de `pal.bg` protege el medio. El cambio de dibujo debajo de un verso NO pega `hit`: el glitch caería en la letra.
+Una alarma, el `iown` y el aro siguen siendo de la pantalla entera. Cuesta GPU: la pantalla de la letra ahora también dibuja motivo.

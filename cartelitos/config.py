@@ -169,6 +169,10 @@ _CONFIG_COMMENTS = {
                           "it. The first line of every track always does it, and\n"
                           "so does a change of section; two of them never land\n"
                           "less than 20 s apart. 0 = never",
+        "lyric_over": "the lyric over the animation, instead of on a plain colour:\n"
+                      "  auto   = only over the animations that are a place\n"
+                      "  always = over all of them\n"
+                      "  off    = the lyric screen stays clean",
         "frames": "frames per second of the tube:\n"
                   "  sync = every screen moves together, at the rate of the\n"
                   "         slowest one\n"
@@ -438,7 +442,7 @@ DEFAULTS = {
         "screen_off": False, "testcard": False, "maze_eggs": True, "set": "track", "intro": True, "intro_card": "testcard", "audio": True,
         "face_mode": "song", "color_from_pitch": True, "color_hold": 10,
         "infect_lead": 0.35, "alarm_threshold": 0.87, "channel_switch": 0.08,
-        "pace": "normal", "frames": "sync", "rare": 1, "ghost_ms": 550,
+        "pace": "normal", "frames": "sync", "lyric_over": "auto", "rare": 1, "ghost_ms": 550,
         "iown": True, "foreshadow": True, "ring": True, "ring_gap": 10,
         "hop": "both",
         "motifs": True, "wall": True,

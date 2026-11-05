@@ -174,6 +174,8 @@ GROUPS = [
     {"title": "Pace", "tab": 2, "column": 1, "rows": [
         _choice("crt", "pace", "How busy", "how much may happen per minute (nothing moves slower)", [
             ("Calm", "calm"), ("Normal", "normal"), ("Wild", "wild")]),
+        _choice("crt", "lyric_over", "Lyric over the animation", "or on a plain colour", [
+            ("Auto", "auto"), ("Always", "always"), ("Off", "off")]),
         _choice("crt", "frames", "Frame rate", "together at the slowest screen, or each at its own maximum", [
             ("In sync", "sync"), ("Each at max", "max")]),
         _slider("crt", "rare", "Odd screens", "fake crash, no signal", 0.0, 2.0, 0.05),

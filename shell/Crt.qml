@@ -349,7 +349,15 @@ PanelWindow {
     // cada una, el lienzo se partiría en la costura
     readonly property var motifPal: motifWalled && ctl.crtWallRef >= 0 ? ctl.crtFace(ctl.crtWallRef, false) : pal
     // ¿esta pantalla dibuja el motivo ahora? (la misma condición del `visible` de `motifFrame`)
-    readonly property bool motifSeen: (idle || instrumental || (motifForced && !(wallWants && showsText)))
+    // LA LETRA ENCIMA DEL DIBUJO (Ferox 2026-11-05: el fondo de un color "te quita la inmersión").
+    // Qué dibujos lo admiten lo decide `crtLyricOverOk`; la frase larga baja más el dibujo, porque
+    // cuesta más leerla; una alarma, el `iown` y el aro siguen siendo de la pantalla entera.
+    readonly property bool lyricOver: showsText && !alarmLine && !iownMode && !ringShows
+        && ctl.crtLyricOverOk(motifShown)
+    readonly property real overDimTo: !lyricOver ? 1 : myText.length > 60 ? ctl.pace.overDimLong : ctl.pace.overDim
+    property real overDim: overDimTo
+    Behavior on overDim { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutQuad } }
+    readonly property bool motifSeen: (idle || instrumental || lyricOver || (motifForced && !(wallWants && showsText)))
         && !tubeDark && !introHere && !rareNoSignalOn
     // tanda 8 (r4): el cambio de dibujo es un PUENTE de glitch (`bridgeMs`), no un fundido a negro
     // de 460 ms repetido ~14 veces por minuto: medio puente a negro, el golpe de tubo EN el swap
@@ -369,7 +377,7 @@ PanelWindow {
                     crt.motifShown = "";
                 crt.wallLatch();
                 crt.motifShown = crt.motifKind;
-                if (crt.motifSeen)
+                if (crt.motifSeen && !crt.lyricOver)
                     crt.hit(0.4, "motif", true);
             }
         }
@@ -1615,10 +1623,21 @@ PanelWindow {
     property real frameAvgMs: 1000 / 60
     property real slowSince: -1
     property real healthySince: -1
+    // En `sync` las dos texturas del tubo se redibujan una vez por escalón de la grilla, no por refresco:
+    // la de señal es recursiva y, con `live`, Qt la vuelve a pintar en cada cuadro de la ventana, así que
+    // la de 200 Hz intercambiaba 200 veces por segundo el mismo dibujo (medido, TRAMPAS "Reloj de cuadros").
+    function pushTube() {
+        if (!Motion.framesMax) {
+            stageTex.scheduleUpdate();
+            signalTex.scheduleUpdate();
+        }
+    }
     FrameTick {
         running: crt.visible && !crt.deepSleep && !crt.resting && !crt.tubeIdle
         onTriggered: {
             crt.tubeTime += frameTime;
+            crt.pushTube();
+            fpsMeter.steps++;
             crt.movOff = Speed.advance(crt.movOff, frameTime, crt.ctl.crtMovRate);
             // el IOWN se mueve por cuadro: con el muestreo de 80 ms del reloj
             // del contenido, una palabra cruzando tres pantallas va a saltos.
@@ -1668,6 +1687,8 @@ PanelWindow {
             lastAt = now;
             crt.tubeTime += dt;
             crt.movOff = Speed.advance(crt.movOff, dt, crt.ctl.crtMovRate);
+            if (!crt.tubeIdle)
+                crt.pushTube();
         }
     }
 
@@ -2152,6 +2173,21 @@ PanelWindow {
             // 22 % más grande y recortado, que es exactamente lo que Ferox vio.
             // El `clip` se queda: es lo que garantiza que ningún motivo pinte
             // fuera de su caja.
+            // la banda que asegura que la letra se lea encima del dibujo: más oscura en el medio
+            Rectangle {
+                anchors.fill: parent
+                z: -0.5
+                visible: opacity > 0.005
+                opacity: crt.lyricOver ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Motion.enterMs; easing.type: Easing.OutQuad } }
+                gradient: Gradient {
+                    GradientStop { position: 0.08; color: Qt.alpha(crt.pal.bg, 0) }
+                    GradientStop { position: 0.33; color: Qt.alpha(crt.pal.bg, crt.ctl.pace.overScrim) }
+                    GradientStop { position: 0.67; color: Qt.alpha(crt.pal.bg, crt.ctl.pace.overScrim) }
+                    GradientStop { position: 0.92; color: Qt.alpha(crt.pal.bg, 0) }
+                }
+            }
+
             Item {
                 id: motifFrame
                 anchors.fill: parent
@@ -2162,7 +2198,7 @@ PanelWindow {
                 // no dibuja motivo — es la estática o la tarjeta, nunca
                 // las dos cosas a la vez ("una animación por pantalla")
                 visible: crt.motifWalled ? crt.wallShow > 0.002 : crt.motifSeen
-                opacity: crt.motifWalled ? crt.wallShow : 1
+                opacity: (crt.motifWalled ? crt.wallShow : 1) * crt.overDim
                 // la pared espejada (`Wall.fit`): el dibujo dado vuelta sobre el centro
                 transform: Scale {
                     origin.x: motifFrame.width / 2
@@ -2180,7 +2216,7 @@ PanelWindow {
                 // con el dibujo forzado esta caja puede coexistir con la letra,
                 // y está declarada DESPUÉS del verso: sin bajarla, el motivo
                 // taparía justo lo que se quiere ver encima de él
-                z: crt.motifForced || crt.wallEchoOn ? -1 : 0
+                z: crt.motifForced || crt.wallEchoOn || crt.lyricOver ? -1 : 0
 
                 Motif {
                     id: motifView
@@ -2293,7 +2329,7 @@ PanelWindow {
                     rate: crt.ctl.crtMovRate
                     movOff: crt.movOff
                     bg: crt.motifPal.bg
-                    spinning: crt.visible && (crt.idle || crt.instrumental || crt.motifForced)
+                    spinning: crt.visible && (crt.idle || crt.instrumental || crt.motifForced || crt.lyricOver)
                 }
             }
 
@@ -3057,7 +3093,7 @@ PanelWindow {
         visible: false
         smooth: true
         format: ShaderEffectSource.RGBA16F
-        live: crt.visible && !crt.tubeIdle
+        live: crt.visible && !crt.tubeIdle && Motion.framesMax
         textureSize: Qt.size(Math.max(1, Math.round(crt.width * crt.texQuality * crt.texSS)),
                              Math.max(1, Math.round(crt.height * crt.texQuality * crt.texSS)))
     }
@@ -3132,9 +3168,12 @@ PanelWindow {
     // El medidor de cuadros: lo que de verdad llegó a la pantalla (`frameSwapped`), no lo que
     // marca el reloj de animaciones. `tirones` = huecos de más de 25 ms (bajo 40 fps) en la ventana.
     Connections {
+        id: fpsMeter
         target: crt.contentItem.Window.window
         enabled: crt.visible && crt.ctl.crtOn
         property int swaps: 0
+        // `pasos`: los del reloj del tubo, lo que de verdad cambia el dibujo; `swaps` también cuenta lo que repinta sólo el vidrio
+        property int steps: 0
         property int stalls: 0
         property double worst: 0
         property double last: 0
@@ -3142,7 +3181,7 @@ PanelWindow {
         function onFrameSwapped() {
             const now = Date.now();
             if (since === 0 || now - last > 1000) {
-                since = now; swaps = 0; stalls = 0; worst = 0;
+                since = now; swaps = 0; steps = 0; stalls = 0; worst = 0;
             } else {
                 const gap = now - last;
                 swaps++;
@@ -3150,9 +3189,9 @@ PanelWindow {
                 if (gap > worst) worst = gap;
                 if (now - since >= 30000) {
                     console.log("crt: fps " + crt.idx + " " + crt.scr.name + " "
-                                + (swaps * 1000 / (now - since)).toFixed(1) + " tirones=" + stalls
+                                + (swaps * 1000 / (now - since)).toFixed(1) + " pasos=" + (steps * 1000 / (now - since)).toFixed(1) + " tirones=" + stalls
                                 + " peor=" + worst + "ms motivo=" + crt.motifShown);
-                    since = now; swaps = 0; stalls = 0; worst = 0;
+                    since = now; swaps = 0; steps = 0; stalls = 0; worst = 0;
                 }
             }
             last = now;
@@ -3425,7 +3464,7 @@ PanelWindow {
         smooth: true
         format: ShaderEffectSource.RGBA16F
         recursive: crt.trailOn
-        live: crt.visible && !crt.tubeIdle
+        live: crt.visible && !crt.tubeIdle && Motion.framesMax
         textureSize: stageTex.textureSize
     }
 

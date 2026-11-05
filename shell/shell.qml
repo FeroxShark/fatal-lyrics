@@ -272,6 +272,17 @@ ShellRoot {
     property string crtPace: "normal"
     // Los cuadros: "sync" = todas a los Hz de la pantalla más lenta, "max" = cada una a los suyos.
     property string crtFrames: "sync"
+    // la letra encima del dibujo (`crt.lyric_over`): auto = sólo los dibujos que son un lugar y no
+    // una figura mirando al medio o algo con texto propio (ventanas, lluvia, carta...)
+    property string crtLyricOver: "auto"
+    readonly property var crtOverKinds: ["dunes", "ocean", "pond", "stars", "tunnel", "plasma", "julia",
+        "truchet", "vitral", "membrana", "cintas", "giroscopio", "mystify", "harmonograph", "vector",
+        "maze", "rorschach"]
+    function crtLyricOverOk(kind) {
+        if (crtLyricOver === "off" || kind === "")
+            return false;
+        return crtLyricOver === "always" || crtOverKinds.indexOf(kind) >= 0;
+    }
     property real crtMinHz: 60
     Binding { target: Motion; property: "framesMax"; value: root.crtFrames === "max" }
     Binding { target: Motion; property: "syncHz"; value: root.crtMinHz }
@@ -294,6 +305,7 @@ ShellRoot {
     }
     readonly property var crtPaceTable: ({
         calm: {
+            overDim: 0.70, overDimLong: 0.52, overScrim: 0.34,
             motifHoldMs: 20000, chanGapMs: 30000, hitGapMs: 6000,
             interfMinMs: 30000, interfSpanMs: 30000,
             camBeat: 0.010, camGrid: 0.006,
@@ -347,6 +359,7 @@ ShellRoot {
             dropZoom: 0.10, dropZoomMin: 0.50,
         },
         normal: {
+            overDim: 0.80, overDimLong: 0.60, overScrim: 0.28,
             motifHoldMs: 12000, chanGapMs: 20000, hitGapMs: 4000,
             interfMinMs: 20000, interfSpanMs: 20000,
             camBeat: 0.015, camGrid: 0.008,
@@ -369,6 +382,7 @@ ShellRoot {
         // lo que hacía el tubo hasta la tanda 4: un dibujo por verso, una
         // rotura por golpe y el latido al 3.5 % de la pantalla
         wild: {
+            overDim: 0.88, overDimLong: 0.68, overScrim: 0.22,
             // 3 s y no 0: con el hold en cero, el reloj de un segundo de
             // `crtMotifRefresh` cambiaría el dibujo CADA SEGUNDO, que es peor
             // que lo de la tanda 3 — ahí cambiaba una vez por verso
@@ -4236,7 +4250,7 @@ ShellRoot {
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
         crt_ring_gap: "crtRingGap", crt_hop: "crtHopMode",
-        crt_pace: "crtPace", crt_frames: "crtFrames", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
+        crt_pace: "crtPace", crt_frames: "crtFrames", crt_lyric_over: "crtLyricOver", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
         crt_motifs: "crtMotifs", crt_wall: "crtWall", crt_camera: "crtCamera",
         crt_section_zoom: "crtSectionZoom", crt_quality: "crtQualityCeiling",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",

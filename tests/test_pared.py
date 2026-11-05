@@ -24,7 +24,7 @@ from cartelitos import config, ipc, settings  # noqa: E402
 DP2 = "{x: 0, y: -370, w: 1080, h: 1920}"
 HDMI = "{x: 1080, y: 0, w: 1920, h: 1080}"
 DP1 = "{x: 3000, y: 247, w: 1920, h: 1080}"
-WALL_KINDS = ("truchet", "mystify", "pipes", "dunes", "ocean", "pond", "stars", "tunnel")
+WALL_KINDS = ("truchet", "mystify", "pipes", "dunes", "ocean", "pond", "stars", "tunnel", "rain")
 
 
 def read(name, base=SHELL):
@@ -134,7 +134,7 @@ class TestCableado(unittest.TestCase):
     def test_each_wall_motif_declares_how_it_shares_the_wall_with_the_text(self):
         # campos que salen del foco → espejo; movimiento con dirección → detrás (`Wall.fit`)
         want = {"truchet": "mirror", "pond": "mirror", "stars": "mirror", "tunnel": "mirror",
-                "mystify": "behind", "pipes": "behind", "dunes": "behind", "ocean": "behind"}
+                "mystify": "behind", "pipes": "behind", "dunes": "behind", "ocean": "behind", "rain": "behind"}
         for k in WALL_KINDS:
             self.assertRegex(read(k.capitalize() + ".qml"), r'\n    wallFit: "%s"\n' % want[k], k)
         for base in ("MotifBase.qml", "WallBase.qml", "WallItem.qml"):

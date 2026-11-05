@@ -605,192 +605,87 @@ Item {
     }
 
     // ------------------------------------------------------------------ radar
-    // Barrido de sonar: la aguja gira (puro transform, suavísimo) y los ecos se
-    // encienden con los golpes.
+    // Una pantalla de radar (`Radar.qml`, `radar.frag`).
     Component {
         id: radarC
 
-        Item {
-            Item {
-                id: radar
-                anchors.centerIn: parent
-                width: motif.span * 0.72
-                height: width
-
-                // ángulo de la aguja ACUMULADO (grados): antes era `mclock · velocidad` y
-                // la velocidad (level, drive) cambia con la música, así que a reloj grande
-                // cada cambio teletransportaba la aguja. Integra ritmo (`rate`) y música.
-                property real angle: 0
-                FrameTick {
-                    running: radar.visible && motif.spinning
-                    onTriggered: radar.angle += frameTime * (38 + 22 * motif.level) * motif.drive * motif.rate
-                }
-
-                Repeater {
-                    model: radar.visible ? 4 : 0
-
-                    Rectangle {
-                        required property int index
-                        anchors.centerIn: parent
-                        width: radar.width * (0.25 + index * 0.25)
-                        height: width
-                        radius: width / 2
-                        color: "transparent"
-                        border.width: Math.max(1, radar.width * 0.004)
-                        border.color: motif.colour
-                        opacity: 0.45
-                    }
-                }
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: radar.width
-                    height: Math.max(1, radar.width * 0.003)
-                    color: motif.colour
-                    opacity: 0.35
-                }
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: Math.max(1, radar.width * 0.003)
-                    height: radar.height
-                    color: motif.colour
-                    opacity: 0.35
-                }
-
-                // la aguja y su estela: una cuña de 50° con alfa decreciente DETRÁS de la
-                // aguja (gradiente cónico: 0 = la aguja, sube hacia atrás). Es geometría
-                // estática que gira con la aguja: no cuesta nada por cuadro
-                Item {
-                    anchors.centerIn: parent
-                    width: radar.width
-                    height: radar.height
-                    rotation: radar.angle
-
-                    Shape {
-                        anchors.fill: parent
-                        preferredRendererType: Shape.GeometryRenderer
-                        ShapePath {
-                            strokeWidth: -1
-                            fillGradient: ConicalGradient {
-                                centerX: radar.width / 2
-                                centerY: radar.height / 2
-                                angle: 0
-                                GradientStop { position: 0.0; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0.5) }
-                                GradientStop { position: 0.04; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0.28) }
-                                GradientStop { position: 0.14; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0) }
-                                GradientStop { position: 1.0; color: Qt.rgba(motif.colour.r, motif.colour.g, motif.colour.b, 0) }
-                            }
-                            startX: radar.width / 2
-                            startY: radar.height / 2
-                            PathLine { x: radar.width; y: radar.height / 2 }
-                            PathArc {
-                                x: radar.width / 2 + radar.width / 2 * Math.cos(-50 * Math.PI / 180)
-                                y: radar.height / 2 + radar.width / 2 * Math.sin(-50 * Math.PI / 180)
-                                radiusX: radar.width / 2
-                                radiusY: radar.width / 2
-                                direction: PathArc.Counterclockwise
-                            }
-                            PathLine { x: radar.width / 2; y: radar.height / 2 }
-                        }
-                    }
-
-                    Rectangle {
-                        x: parent.width / 2
-                        y: parent.height / 2 - height / 2
-                        width: parent.width / 2
-                        height: Math.max(2, radar.width * 0.006)
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: motif.hot }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
-                }
-
-                // los ecos se ENCIENDEN cuando la aguja pasa por su ángulo y se apagan en
-                // unos 90° (la memoria del barrido: lo que hace que se lea como radar). El
-                // golpe sólo suma un poco, ya no los prende a todos a la vez
-                Repeater {
-                    model: radar.visible ? 7 : 0
-
-                    Rectangle {
-                        required property int index
-                        readonly property real ang: index * 2.31
-                        readonly property real rad: radar.width * (0.16 + (index % 3) * 0.14)
-                        // grados que lleva la aguja pasada del eco (0 = recién pasó)
-                        readonly property real age: (((radar.angle - ang * 180 / Math.PI) % 360) + 360) % 360
-                        readonly property real lit: age < 90 ? Math.pow(1 - age / 90, 1.6) : 0
-                        x: radar.width / 2 + Math.cos(ang) * rad - width / 2
-                        y: radar.height / 2 + Math.sin(ang) * rad - height / 2
-                        width: radar.width * (0.018 + 0.016 * lit + 0.012 * motif.punch)
-                        height: width
-                        radius: width / 2
-                        color: age < 20 ? motif.hot : motif.colour
-                        opacity: Math.min(1, 0.07 + 0.93 * lit + 0.2 * motif.punch)
-                    }
-                }
-            }
+        Radar {
+            fontFamily: motif.fontFamily
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
         }
     }
 
     // ----------------------------------------------------------------- lluvia
-    // Columnas de caracteres cayendo, como un volcado de datos. Cada columna es
-    // un Text largo que baja: se mueve por binding, no se redibuja el texto.
+    // Lluvia de caracteres (`Rain.qml`, `rain.frag`). Cruza la pared.
     Component {
         id: rainC
 
-        Item {
-            id: rain
-            anchors.fill: parent
-            clip: true
-
-            readonly property int columns: Math.max(6, Math.round(width / (motif.span * 0.09)))
-
-            // dos fases ACUMULADAS (la velocidad de cada columna es base + k·0.12 y las dos
-            // partes siguen a la música): nunca `mclock · speed` (teletransporta al cambiar
-            // level/drive). `base` lleva 0.35 + 0.5·level; `kph` lleva el escalón por columna.
-            property real base: 0
-            property real kph: 0
-            FrameTick {
-                running: rain.visible && motif.spinning
-                onTriggered: {
-                    const k = frameTime * motif.drive * motif.rate;
-                    rain.base += k * (0.35 + 0.5 * motif.level);
-                    rain.kph += k;
-                }
-            }
-
-            Repeater {
-                model: rain.visible ? rain.columns : 0
-
-                Text {
-                    id: drop
-                    required property int index
-                    x: index * rain.width / rain.columns
-                    width: rain.width / rain.columns
-                    text: {
-                        const chars = "01∎▓░╳ΔΣ¥§#*+=<>";
-                        let out = "";
-                        // las chicas llevan más renglones: la columna sigue cubriendo la pantalla
-                        const n = Math.round(22 / (0.66 + 0.34 * ((index * 3) % 5) / 4));
-                        for (let i = 0; i < n; i++)
-                            out += chars[(index * 7 + i * 13) % chars.length] + "\n";
-                        return out;
-                    }
-                    // PROFUNDIDAD: la clase de velocidad (0 = la lenta, 4 = la rápida) es
-                    // también el plano. Las lentas quedan lejos, chicas y tenues; las rápidas
-                    // cerca, grandes y brillantes. Se salteó el orden (index·3 mod 5) para que
-                    // dos columnas vecinas no formen una rampa
-                    readonly property real depth: ((index * 3) % 5) / 4
-                    color: index % 4 === 0 ? motif.hot : motif.colour
-                    opacity: (0.35 + 0.4 * motif.level) * (0.5 + 0.5 * depth)
-                    font.pixelSize: Math.round(motif.span * 0.055 * (0.66 + 0.34 * depth))
-                    font.family: "monospace"
-                    horizontalAlignment: Text.AlignHCenter
-                    lineHeight: 0.95
-                    y: (((rain.base + rain.kph * depth * 4 * 0.12) * motif.span * 0.5) % (implicitHeight + rain.height)) - implicitHeight
-                }
-            }
+        Rain {
+            // pared: el lienzo común y la cámara (ver arriba, `wall`)
+            wall: motif.wall
+            wallCam: motif.wallCam
+            fontFamily: motif.fontFamily
+            colour: motif.colour
+            hot: motif.hot
+            bg: motif.bg
+            tubeClock: motif.clock
+            rate: motif.rate
+            stepMin: motif.stepMin
+            level: motif.level
+            low: motif.low
+            high: motif.high
+            hf: motif.hf
+            pitch: motif.pitch
+            energy: motif.energy
+            surge: motif.surge
+            seed: motif.seed
+            quality: motif.quality
+            drop: motif.drop
+            section: motif.section
+            tick: motif.tick
+            beat: motif.beat
+            kick: motif.kick
+            beatMs: motif.beatMs
+            bpmLive: motif.bpmLive
+            running: motif.spinning
+            // el golpe físico: bombo (con `b` de respaldo, ya resuelto en shell.qml), agudos,
+            // densidad y carácter del tema
+            thump: motif.bass
+            thumpAmt: motif.thumpAmt
+            hat: motif.hat
+            mov: motif.density
+            character: motif.character
+            valence: motif.valence
         }
     }
 

@@ -117,13 +117,14 @@ class TestMovWiring(unittest.TestCase):
         motif = read("Motif.qml")
         for kind in ("Ocean", "Dunes", "Rorschach", "Plasma", "Tunnel", "Static", "TextSea", "Pond",
                      "Swarm", "Splitflap", "Maze", "Pipes", "Defrag", "Mystify", "Vector", "Harmonograph",
-                     "Membrana", "Cintas", "Giroscopio"):
+                     "Membrana", "Cintas", "Giroscopio", "Radar", "Rain"):
             body = re.search(r"\n        %s \{\n(.*?)\n        \}" % kind, motif, re.S)
             self.assertIsNotNone(body, kind)
             self.assertIn("rate: motif.rate", body.group(1), kind)
-        # radar y lluvia dibujan con el reloj de dibujo; las estrellas acumulan con rate
-        self.assertIn("rotation: radar.angle", motif)
-        self.assertIn("rain.base + rain.kph", motif)
+        # el radar gira con la grilla; la lluvia cae con el reloj de ritmo; las estrellas acumulan con rate
+        self.assertIn("(m.beatN + m.bp) / 8", read("Radar.qml"))
+        self.assertIn("m.clock + m.movOff", read("Rain.qml"))
+        self.assertNotIn("dropAmt);\n    float period", read("rain.frag"))
         # (ahora en Stars.qml: acumula con su `rate`, que Motif le pasa)
         self.assertIn("frameTime * stars.speed * stars.rate", read("Stars.qml"))
         self.assertRegex(motif, r"id: starsC\n\s+Stars \{[^}]*rate: motif\.rate|Stars \{[^}]*rate: motif\.rate")

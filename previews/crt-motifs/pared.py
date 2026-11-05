@@ -55,7 +55,7 @@ LAYOUTS = {
 }
 KINDS = {"truchet": "ado", "mystify": "bloodline", "pipes": "poison",
          "dunes": "bloodline", "ocean": "ado", "pond": "poison",
-         "stars": "ado", "tunnel": "dragons"}
+         "stars": "ado", "tunnel": "dragons", "rain": "poison"}
 SC = 0.4
 SHELL = os.path.join(HERE, "..", "..", "shell")
 

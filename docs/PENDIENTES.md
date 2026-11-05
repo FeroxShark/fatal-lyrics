@@ -1,6 +1,8 @@
 # cartelitos — Pendientes
 
 Backlog vivo. Leerlo al planear una tanda.
+
+**Mejoras de motivos y lienzo (2026-11-05):** hechos `dunes`, `ocean`, `pond` y `stars` (reescritos), `vector`, `harmonograph` y `mystify` (más grandes y gruesos), y las dos modalidades de cuadros (`crt.frames`). Falta verlos con música en el equipo; siguen `membrana` y los viejos (`eye`, `eyes`, `radar`, `scope`, `rain`, `defrag`, `ekg`), que parte no está en el banco; las ideas de lienzo van en el tablero.
 Movido tal cual desde `CLAUDE.md` el 2026-09-05.
 
 **Pared de motivos, fase 1 (2026-10-22, `docs/PARED.md`):** truchet, mystify y pipes cruzan toda la pared (perilla `crt.wall`).

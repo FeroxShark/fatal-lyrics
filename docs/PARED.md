@@ -86,8 +86,10 @@ el shader sigue la misma cuenta de antes (`S = res.y`, `yy = uv.y`).
 - **dunes / ocean**: UNA cámara en perspectiva para todo el lienzo: el horizonte es una sola raya
   (30 % / 34 % del alto del lienzo), la unidad es `span` y cada pantalla dibuja su ventana
   (`view`). DP-1 queda con su horizonte en el borde de arriba: es lo que pasa si el lienzo es UNO.
-- **pond**: el agua es una sola; la retícula queda anclada al lienzo y los anillos salen del foco
-  (la pantalla con la letra, o el medio): `fo` y `R = wallReach` (la esquina más lejana).
+- **pond**: el agua es una sola, vista de arriba, y los anillos salen del foco (la pantalla con la
+  letra, o el medio): `fo` y `R = wallReach` (la esquina más lejana).
+- La luna de `ocean` no usa el aspecto de la pantalla en pared: cada ventana tiene que acordar dónde
+  está (con `aspect` el check daba 3,4 de media en la pantalla ancha).
 - Uniforms nuevos (`view`, `wcfg`, `fo`) al FINAL del bloque std140; `.qsb` recompilados.
 - **Banco**: `sync-shell.sh` pone en 0 las duraciones de los `Behavior` y de `liftAnim` de estos
   tres en las copias (si no, cada instancia anima en tiempo real y la comparación no es
@@ -101,12 +103,10 @@ de abajo sin traer el feed de ritmo. Una pantalla sola: igual que antes (el tún
 y los mismos uniforms da 0 de diferencia en apaisado y vertical; las estrellas hacen las mismas
 cuentas con `k = 1`).
 
-- **stars**: `shell/Stars.qml` (salió de `Motif.qml`). El campo es UNO y sale del foco (la letra):
-  `reach` llega a la esquina más lejana del lienzo, `k = reach / (span·1,05)` es cuántas veces más
-  largo es el radio que en una pantalla. La fase avanza `1/k` de rápido (una estrella recorre los
-  mismos px/s que en una pantalla sola) y el número de estrellas crece con `k^1,5` (tope 900: son
-  ítems por pantalla, y las que caen fuera de la ventana no se pintan). La distancia viajada vive en
-  `wall.share.stars`.
+- **stars**: `shell/Stars.qml` + `stars.frag`. El campo es UNO y sale del foco (la letra): el shader
+  trabaja en px de lienzo relativos a `wallFocus`, cada pantalla dibuja su ventana (`wallPx`) y la
+  distancia viajada vive en `wall.share.stars`. Ya no hay `k` ni cantidad por pantalla: la grilla es
+  log-polar, así que el mismo avance se ve igual a cualquier distancia del foco.
 - **tunnel**: `tunnel.frag` gana `win` (ventana en px de lienzo), `foc` (el punto de fuga = el foco, o
   sea el túnel se ve desde adentro con la letra en el centro) y `spn` (la medida del anillo). Sin pared
   son `(0,0,res)`, `res/2` y `min(res)`: la misma cuenta de antes. El pixel de filtro sale de la

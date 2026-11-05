@@ -112,11 +112,37 @@ WallBase {
         jumpSlot = 1 - slot;
     }
 
+    // El terreno horneado una vez por semilla: la marcha lee una textura en vez de sumar ruido en
+    // cada paso (`dunes.frag`). 1024 alcanza porque la última parte de la marcha pregunta la función
+    // real. Con `live: false` sólo se vuelve a sacar la foto cuando cambia la semilla.
+    ShaderEffect {
+        id: bake
+        width: 1024
+        height: 1024
+        visible: false
+        blending: false
+        property real seed: sand.seed
+        fragmentShader: Qt.resolvedUrl("dunebake.frag.qsb")
+    }
+    ShaderEffectSource {
+        id: baked
+        sourceItem: bake
+        hideSource: true
+        live: false
+        visible: false
+        smooth: true
+        wrapMode: ShaderEffectSource.Repeat
+        format: ShaderEffectSource.RGBA16F
+        textureSize: Qt.size(1024, 1024)
+    }
+    onSeedChanged: baked.scheduleUpdate()
+
     ShaderEffect {
         anchors.fill: parent
         blending: true
         visible: sand.width > 0 && sand.height > 0
 
+        property var heightTex: baked
         property real t: sand.clock
         property real seed: sand.seed
         property real level: sand.level

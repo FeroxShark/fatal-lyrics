@@ -29,6 +29,7 @@
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
+layout(binding = 1) uniform sampler2D heightTex;   // `dune()` baked once per seed: dunebake.frag
 
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
@@ -61,6 +62,20 @@ float hash21(vec2 p) {
     return fract((p3.x + p3.y) * p3.z);
 }
 
+// `per`: the noise repeats every `per` cells, so the whole heightfield repeats every 100 units and
+// can be baked into a tiling texture (see `heightTex`). All frequencies below are per-hundred.
+float pnoise(vec2 p, float per) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    vec2 s = vec2(per * 3.17, per * 1.73);
+    float a = hash21(mod(i, per) + s);
+    float b = hash21(mod(i + vec2(1.0, 0.0), per) + s);
+    float c = hash21(mod(i + vec2(0.0, 1.0), per) + s);
+    float d = hash21(mod(i + vec2(1.0, 1.0), per) + s);
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
 float vnoise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -89,16 +104,14 @@ float profile(float u) {
 
 // The heightfield. The domain warp is what bends the crests into long curves, and the height of
 // each one varies along it, so a crest dies out and another one takes over, as they do.
-float duneBig(vec2 p, vec2 o) {
-    float warp = vnoise(p * 0.13 + o) * 3.4 + vnoise(p * 0.37 + o * 1.3) * 0.8;
-    float amp = 0.34 + 0.85 * vnoise(p * 0.09 - o);
-    return profile(p.x * 0.15 + p.y * 0.19 + warp * 0.55) * amp + vnoise(p * 0.06 + o) * 0.28 - 0.1;
-}
-
+// COPIED in `dunebake.frag`: the two have to agree (test_shaders_motivos).
 float dune(vec2 p) {
     vec2 o = vec2(seed * 137.0, seed * 311.0);
+    float warp = pnoise(p * 0.13 + o, 13.0) * 3.4 + pnoise(p * 0.37 + o * 1.3, 37.0) * 0.8;
+    float amp = 0.34 + 0.85 * pnoise(p * 0.09 - o, 9.0);
     // the swell on top is soft on purpose: a second set of sharp crests zebra-striped every slope
-    return duneBig(p, o) + vnoise(p * 0.55 + o * 2.1) * 0.11;
+    return profile(p.x * 0.15 + p.y * 0.19 + warp * 0.55) * amp + pnoise(p * 0.06 + o, 6.0) * 0.28 - 0.1
+         + pnoise(p * 0.55 + o * 2.1, 55.0) * 0.11;
 }
 
 // Wind ripples: a bump only for the light, not for the march. Across the wind, a little wavy, and
@@ -124,6 +137,13 @@ float plume(vec2 s, vec4 j, float horizon, float camY) {
     float n = vnoise(s * 11.0 * z + vec2(-t * 1.8, seed * 90.0)) * 0.65
             + vnoise(s * 27.0 * z + vec2(-t * 2.9, 4.0)) * 0.35;
     return blob * (0.35 + 0.65 * n) * j.w * (1.0 - age / 2.2);
+}
+
+// The terrain at a point `z` away: the real function up close, the baked one past `NEAR_REAL`, where
+// a texel is about the size of a few pixels and twenty hashes per sample buy nothing you can see.
+const float NEAR_REAL = 7.0;
+float terrain(vec2 p, float z) {
+    return z < NEAR_REAL ? dune(p) : texture(heightTex, p * 0.01).r;
 }
 
 void main() {
@@ -183,21 +203,22 @@ void main() {
     float Z = ZNEAR;
     float hitZ = -1.0;
     vec2 seedO = vec2(seed * 137.0, seed * 311.0);
-    // The march only needs the big shape: the small dunes are a fixed bound on top of it (0.11),
-    // and the exact surface comes out of the bisection. Half the noise per step.
+    // The march reads the terrain from a texture baked once per seed (one fetch instead of twenty
+    // hashes per step: 110 steps of noise per pixel cost 71 ms at 3x, Ferox 2026-11-05), and only the
+    // last few steps ask the real function, so the surface stays as sharp as ever.
     if (camY - dy * ZNEAR < HMAX || dy > 0.0) {
         float prev = Z;
         for (int i = 0; i < 110; i++) {
             float ray = camY - dy * Z;
             if (ray > HMAX && dy < 0.0)
                 break;
-            float gap = ray - duneBig(vec2(sx * Z + camX, Z + camZ), seedO) - 0.11;
+            float gap = ray - texture(heightTex, vec2(sx * Z + camX, Z + camZ) * 0.01).r - 0.03;
             if (gap < 0.0 || i == 109) {
-                // the bound can fire above the real surface: walk on from here, on the real thing
+                // the margin can fire above the real surface: walk on from here, on the real thing
                 float lo = prev, hi = Z, zz = Z;
                 bool found = false;
                 for (int k = 0; k < 14; k++) {
-                    if (camY - dy * zz - dune(vec2(sx * zz + camX, zz + camZ)) < 0.0) {
+                    if (camY - dy * zz - terrain(vec2(sx * zz + camX, zz + camZ), zz) < 0.0) {
                         hi = zz; found = true;
                         break;
                     }
@@ -205,9 +226,9 @@ void main() {
                     zz += 0.018 * zz + 0.01;
                 }
                 if (found) {
-                    for (int k = 0; k < 6; k++) {
+                    for (int k = 0; k < 5; k++) {
                         float m = (lo + hi) * 0.5;
-                        if (camY - dy * m - dune(vec2(sx * m + camX, m + camZ)) < 0.0)
+                        if (camY - dy * m - terrain(vec2(sx * m + camX, m + camZ), m) < 0.0)
                             hi = m;
                         else
                             lo = m;
@@ -229,9 +250,9 @@ void main() {
     // ------------------------------------------------------------- the sand
     if (hitZ > 0.0) {
         vec2 wp = vec2(sx * hitZ + camX, hitZ + camZ);
-        float e = 0.012 + hitZ * 0.0016;
-        float h0 = dune(wp);
-        vec3 nrm = normalize(vec3(h0 - dune(wp + vec2(e, 0.0)), e, h0 - dune(wp + vec2(0.0, e))));
+        float e = hitZ < NEAR_REAL ? 0.012 + hitZ * 0.0016 : 0.2;
+        float h0 = terrain(wp, hitZ);
+        vec3 nrm = normalize(vec3(h0 - terrain(wp + vec2(e, 0.0), hitZ), e, h0 - terrain(wp + vec2(0.0, e), hitZ)));
         // the terminator comes from the big shape: with the ripples in it, it frays into claw marks
         float lamb = dot(nrm, sun);
         float lit = smoothstep(0.015, 0.11, lamb);

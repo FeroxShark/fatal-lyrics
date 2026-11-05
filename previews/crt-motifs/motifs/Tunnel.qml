@@ -35,7 +35,7 @@ WallItem {
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     // T4.3: el techo de cuadros que reparte Motif.qml
-    property real stepMin: 1 / 60
+    property real stepMin: 0
     property real pending: 0
     property real level: 0.35
     Behavior on level { enabled: !tube.wallExternal; NumberAnimation { duration: 420; easing.type: Easing.OutQuad } }
@@ -238,7 +238,7 @@ WallItem {
     }
 
     onWallTChanged: if (wallExternal && wallShared && running) wallStep()
-    FrameAnimation {
+    FrameTick {
         running: tube.running && tube.visible && !tube.wallExternal
         onTriggered: {
             if (tube.wallShared) {

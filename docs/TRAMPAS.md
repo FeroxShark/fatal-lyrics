@@ -1517,3 +1517,17 @@ UNA función de consulta (`msToNextBeat`, `shell.qml`).
   de un dibujo lo hace saltar de ventana y de reloj.
 - **En el banco, las pantallas van SIN redondear** (`Pared.qml`): redondear 247·0,4 corría DP-1 medio
   píxel y daba 3,5 de diferencia contra la referencia en vez de 0,01.
+
+## Reloj de cuadros: el proceso tiene UN reloj de animación (2026-11-05)
+
+- **Medido con sonda:** con tres ventanas en 144/200/60 Hz, todo `FrameAnimation` del proceso corre a
+  144 Hz, también en la pantalla de 60. Un tope `1/60` por acumulador se traba en 3 ticks: **48 fps**,
+  no 60. Además el reloj del tubo de las pantallas sin letra iba a 20 Hz y los motivos a 30 en nivel bajo.
+- **Por eso existe `FrameTick`** (misma API que `FrameAnimation`: `running`, `frameTime`, `onTriggered`).
+  `crt.frames = sync`: dispara cuando cambia `floor(ahora · syncHz)`, una grilla ABSOLUTA compartida, con
+  `syncHz` = el refresco más bajo de las pantallas del CRT. `max`: cuelga del `frameSwapped` de su propia
+  ventana y pide el siguiente con `requestUpdate()`, con un `Timer` de 100 ms que lo destraba.
+- **El `Timer` del tubo sólo queda para reposo y sueño.** No volver a poner topes por acumulador.
+- En el banco, `motifs/FrameTick.qml` es un `FrameAnimation` pelado: ahí no hay `Motion`.
+- **Sin verificar en el equipo:** el log `crt: fps <idx> <pantalla> <fps> tirones=<n> peor=<ms> motivo=<kind>`
+  sale cada 30 s y es lo que falta mirar con música.

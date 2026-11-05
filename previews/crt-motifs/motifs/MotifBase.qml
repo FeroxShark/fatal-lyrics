@@ -44,7 +44,7 @@ Item {
     // En el banco (`tubeClock` -1) `movOff` se asigna de afuera, igual que `clock`.
     property real rate: 1
     property real movOff: 0
-    FrameAnimation {
+    FrameTick {
         running: base.running && base.tubeClock >= 0 && base.visible
         onTriggered: {
             base.clockAcc += frameTime;
@@ -171,7 +171,7 @@ Item {
     // volumen). `paintMin` es el techo propio del motivo: los motivos
     // pesados pueden pedir menos. Los motivos repintan en `onFrame`, no en cada
     // `clockChanged`.
-    property real stepMin: 1 / 60
+    property real stepMin: 0
     property real paintMin: 0         // techo propio (0 = el de stepMin)
     property real paintedAt: -1e6
     signal frame()

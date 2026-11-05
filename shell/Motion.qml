@@ -53,6 +53,10 @@ Singleton {
     // siguiente. No es una duración de animación: es el presupuesto.
     readonly property int holdMs: 1500
 
+    // ---- los cuadros (`crt.frames`, los escribe el root; los lee `FrameTick`)
+    property bool framesMax: false              // true = cada pantalla a su refresco
+    property real syncHz: 60                    // false = todas a los Hz de la más lenta
+
     // ---- el glitch PUENTE: dos o tres cuadros entre una escena y la otra. Es
     // el piso de 120 ms de la tanda 3 (nada visible dura menos), y también el
     // techo: un puente que se ve como efecto dejó de ser un puente.

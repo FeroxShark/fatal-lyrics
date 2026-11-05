@@ -1558,19 +1558,9 @@ PanelWindow {
     readonly property string lyricFontKey: ctl.crtFontKeyFor(lineText, myWords.length)
     onLyricFontKeyChanged: if (ctl.crtOn) console.log("crt: font s" + idx + " " + lyricFontKey)
 
-    // Reloj del tubo, y el techo de cuadros del modo.
-    //
-    // Con FrameAnimation esto corría al refresh de cada monitor — 200 Hz en uno
-    // de los de prueba — redibujando tres pantallas enteras con shader para un efecto
-    // que es ruido — plata tirada. Va a 60, que ya no se distingue, y la pantalla
-    // sin letra a 20. Ahí está la mayor parte del ahorro de tener tres tubos.
-    // El tope es de verdad (corrida 8): el `FrameAnimation` sigue al refresh, pero `tubeTime`
-    // sólo avanza cuando juntó `tubeStep` de tiempo real (1 ms menos que un cuadro a 60 Hz, para
-    // que un monitor de 60 con jitter no pierda cuadros): 120 Hz → 60, 144 → 48, 60 → 60.
-    // Avanza por el tiempo REAL juntado, no por un paso fijo: el reloj no se atrasa.
+    // Reloj del tubo. Lo marca `FrameTick` (`crt.frames`): todas juntas a los Hz de la pantalla más
+    // lenta, o cada una a los suyos. Sólo baja en reposo y dormido (el Timer de abajo).
     property real tubeTime: 0
-    property real tubeAccum: 0
-    readonly property real tubeStep: 1 / 60 - 0.001
     // Tanda 8, slice movimiento: lo que el ritmo de la música (`ctl.crtMovRate`) le
     // corrió a los relojes de DIBUJO, acumulado de a `dt` a la misma cadencia que
     // `tubeTime` (`Speed.advance`). El reloj de dibujo es `tubeTime + movOff`: el de la
@@ -1625,16 +1615,11 @@ PanelWindow {
     property real frameAvgMs: 1000 / 60
     property real slowSince: -1
     property real healthySince: -1
-    FrameAnimation {
-        running: crt.visible && (crt.showsText || crt.standby) && !crt.deepSleep && !crt.resting
-            && !crt.tubeIdle
+    FrameTick {
+        running: crt.visible && !crt.deepSleep && !crt.resting && !crt.tubeIdle
         onTriggered: {
-            crt.tubeAccum += frameTime;
-            if (crt.tubeAccum >= crt.tubeStep) {
-                crt.tubeTime += crt.tubeAccum;
-                crt.movOff = Speed.advance(crt.movOff, crt.tubeAccum, crt.ctl.crtMovRate);
-                crt.tubeAccum = 0;
-            }
+            crt.tubeTime += frameTime;
+            crt.movOff = Speed.advance(crt.movOff, frameTime, crt.ctl.crtMovRate);
             // el IOWN se mueve por cuadro: con el muestreo de 80 ms del reloj
             // del contenido, una palabra cruzando tres pantallas va a saltos.
             // songPos() extrapola con el reloj local, así que preguntarle cada
@@ -1668,12 +1653,10 @@ PanelWindow {
         }
     }
     Timer {
-        // el instrumental va por acá (20 fps, que es lo que necesita un motif);
-        // dormido, 5 fps; en pausa con la letra puesta (`resting`), 15 — también en la
-        // pantalla que muestra el texto, que el resto del tiempo va por el FrameAnimation
-        interval: crt.deepSleep || crt.tubeIdle ? 200 : crt.resting ? 66 : 50
+        // dormido, 5 fps; en pausa con la letra puesta (`resting`), 15
+        interval: crt.deepSleep || crt.tubeIdle ? 200 : 66
         repeat: true
-        running: crt.visible && (crt.tubeIdle || ((!crt.showsText || crt.resting) && (!crt.standby || crt.deepSleep)))
+        running: crt.visible && (crt.tubeIdle || crt.deepSleep || crt.resting)
         // tiempo REAL transcurrido, no el nominal: un Timer gruso (±5 %) y la carga de la máquina
         // lo atrasan, y `tubeTime`/`movOff` son el reloj de dibujo de los motifs (`MotifBase.bp`):
         // contando `interval` se les iba de la música. Tope 0.25 s para que un tirón no salte.
@@ -3144,6 +3127,35 @@ PanelWindow {
                 crt.trailDt = Math.max(0.002, Math.min((now - since) / 1000 / swaps, 0.1));
                 since = now; swaps = 0;
             }
+        }
+    }
+    // El medidor de cuadros: lo que de verdad llegó a la pantalla (`frameSwapped`), no lo que
+    // marca el reloj de animaciones. `tirones` = huecos de más de 25 ms (bajo 40 fps) en la ventana.
+    Connections {
+        target: crt.contentItem.Window.window
+        enabled: crt.visible && crt.ctl.crtOn
+        property int swaps: 0
+        property int stalls: 0
+        property double worst: 0
+        property double last: 0
+        property double since: 0
+        function onFrameSwapped() {
+            const now = Date.now();
+            if (since === 0 || now - last > 1000) {
+                since = now; swaps = 0; stalls = 0; worst = 0;
+            } else {
+                const gap = now - last;
+                swaps++;
+                if (gap > 25) stalls++;
+                if (gap > worst) worst = gap;
+                if (now - since >= 30000) {
+                    console.log("crt: fps " + crt.idx + " " + crt.scr.name + " "
+                                + (swaps * 1000 / (now - since)).toFixed(1) + " tirones=" + stalls
+                                + " peor=" + worst + "ms motivo=" + crt.motifShown);
+                    since = now; swaps = 0; stalls = 0; worst = 0;
+                }
+            }
+            last = now;
         }
     }
     // cara clara = tinta más oscura que el fondo: la estela gira (min en vez de max)

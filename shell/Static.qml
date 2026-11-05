@@ -48,7 +48,7 @@ Item {
     property real rate: 1
     property real clock: 0
     property real pending: 0
-    FrameAnimation {
+    FrameTick {
         running: snow.running && snow.visible
         onTriggered: {
             snow.pending += frameTime;

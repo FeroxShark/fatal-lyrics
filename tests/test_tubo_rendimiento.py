@@ -20,7 +20,7 @@ class TuboRendimiento(unittest.TestCase):
     def test_tubo_apagado_frena_reloj_textura_y_estela(self):
         # r1.1: oscuro Y con el nivel en 0 no se ve más que el 3 % de ruido
         self.assertRegex(self.crt, r"readonly property bool tubeIdle:\s*tubeDark && tubeLevel < 0\.01")
-        frame = re.search(r"FrameAnimation \{\s*running:(.*?)onTriggered", self.crt, re.S).group(1)
+        frame = re.search(r"FrameTick \{\s*running:(.*?)onTriggered", self.crt, re.S).group(1)
         self.assertIn("!crt.tubeIdle", frame)
         timer = re.search(r"interval: crt\.deepSleep \|\| crt\.tubeIdle.*?running:(.*?)\n", self.crt, re.S).group(1)
         self.assertIn("crt.tubeIdle", timer)

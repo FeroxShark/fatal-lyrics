@@ -270,6 +270,28 @@ ShellRoot {
     // en veinte ternarios repartidos por los archivos, porque si no `wild` —
     // que tiene que devolver EXACTAMENTE lo de antes — no se puede verificar.
     property string crtPace: "normal"
+    // Los cuadros: "sync" = todas a los Hz de la pantalla más lenta, "max" = cada una a los suyos.
+    property string crtFrames: "sync"
+    property real crtMinHz: 60
+    Binding { target: Motion; property: "framesMax"; value: root.crtFrames === "max" }
+    Binding { target: Motion; property: "syncHz"; value: root.crtMinHz }
+    Process {
+        id: crtHzProbe
+        running: true
+        command: ["hyprctl", "monitors", "-j"]
+        stdout: StdioCollector { onStreamFinished: root.crtHzRead(text) }
+    }
+    function crtHzRead(text) {
+        let rates = [];
+        try {
+            const names = activeCrtScreens.map(s => s.name);
+            rates = JSON.parse(text).filter(m => names.indexOf(m.name) >= 0).map(m => m.refreshRate);
+        } catch (e) { console.log("crt: frames, hyprctl ilegible: " + e); }
+        if (rates.length) {
+            crtMinHz = Math.max(30, Math.min(...rates));
+            console.log("crt: frames " + crtFrames + " minHz=" + crtMinHz);
+        }
+    }
     readonly property var crtPaceTable: ({
         calm: {
             motifHoldMs: 20000, chanGapMs: 30000, hitGapMs: 6000,
@@ -1742,6 +1764,7 @@ ShellRoot {
         resetFaces();
     }
     onActiveCrtScreensChanged: {
+        crtHzProbe.running = true;
         resetFaces();
         // el reparto guardado habla de pantallas que ya no son las mismas
         crtForget();
@@ -3542,6 +3565,7 @@ ShellRoot {
     // modo viejo hubiera estado corriendo todo el tiempo).
     onCrtOnChanged: {
         if (crtOn) {
+            crtHzProbe.running = true;
             dialogList = [];
             currentLyricSerial = -1;
             // y la pared arranca con un dibujo por pantalla ya repartido
@@ -4212,7 +4236,7 @@ ShellRoot {
         crt_channel_switch: "crtChannelSwitch", crt_iown: "crtIown",
         crt_foreshadow: "crtForeshadow", crt_ring: "crtRing",
         crt_ring_gap: "crtRingGap", crt_hop: "crtHopMode",
-        crt_pace: "crtPace", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
+        crt_pace: "crtPace", crt_frames: "crtFrames", crt_rare: "crtRareMult", crt_ghost_ms: "crtGhostMs",
         crt_motifs: "crtMotifs", crt_wall: "crtWall", crt_camera: "crtCamera",
         crt_section_zoom: "crtSectionZoom", crt_quality: "crtQualityCeiling",
         crt_flicker: "crtFlicker", crt_word_flash: "crtWordFlash",

@@ -355,3 +355,11 @@ interior, grano, lámparas y filtro por huella de píxel (sin alias a ningún fo
 Banco: `cd previews/crt-motifs && ./bench.py tunnel --cost --scale 3 --n 120` (shader solo, 5760×3240,
 RTX 3090): **0.5 → 0.9 ms/cuadro**, o sea ~0.05 → ~0.10 ms por pantalla de 1080p. Fuera del drop el
 segundo muestreo de la pared ya no se evalúa (`blur > 0.002`). Antes/después: `out/tunnel-antes-despues.png`.
+
+## Reloj de cuadros (2026-11-05)
+
+Sonda en el equipo, CRT prendido, Spotify en pausa, carga 22 (otras sesiones corriendo: **contaminado**):
+`FrameAnimation` 144/s en todo el proceso, `frameTime` medio 6,19 ms. Swaps del CRT con `dunes`, con el
+código nuevo: 141/188/59 fps en las pantallas de 144/200/60. `stars` y `swarm` en esa corrida no valen (los cuadros se
+frenaron, CPU 0, causa sin confirmar). Falta medir: con música y pocas sesiones, y el costo de los shaders
+nuevos de `dunes`, `ocean`, `pond` y `stars` con `./bench.py <kind> --cost`.

@@ -261,17 +261,10 @@ Item {
         punchDecay.start();
     }
 
-    // T4.3: cada cuánto tiene DERECHO a moverse un dibujo, en segundos.
-    //
-    // Los motivos con física propia corren con un `FrameAnimation`, que va al
-    // refresh del monitor — 200 Hz en uno de los de prueba. Ya acumulaban el
-    // `frameTime` y sólo escribían su reloj cada 14.2 ms (70 Hz), que es un
-    // número inventado; acá pasa a ser 60 Hz de verdad, y 30 cuando la pantalla
-    // está en el piso de volumen (nadie distingue 30 de 60 en una animación de
-    // fondo que se mueve sola). Cada escritura del reloj es un uniform nuevo
-    // para el shader o un repintado del Canvas: la mitad de escrituras es la
-    // mitad de ese trabajo.
-    readonly property real stepMin: (!spinning || level <= 0.12) ? (1 / 30) : (1 / 60)
+    // Techo propio de cuadros de los motivos: ninguno. Quién marca el paso es `FrameTick`
+    // (`crt.frames`); un techo acá encima se traba en múltiplos del latido (1/60 daba 48 fps) y
+    // el piso de 30 fps con volumen bajo se notaba justo en lo lento.
+    readonly property real stepMin: 0
 
     // El lado corto de la pantalla: la medida de toda figura centrada (el ojo,
     // el osciloscopio, la carta de ajuste). T4.1: el item mide exactamente lo
@@ -628,7 +621,7 @@ Item {
                 // la velocidad (level, drive) cambia con la música, así que a reloj grande
                 // cada cambio teletransportaba la aguja. Integra ritmo (`rate`) y música.
                 property real angle: 0
-                FrameAnimation {
+                FrameTick {
                     running: radar.visible && motif.spinning
                     onTriggered: radar.angle += frameTime * (38 + 22 * motif.level) * motif.drive * motif.rate
                 }
@@ -758,7 +751,7 @@ Item {
             // level/drive). `base` lleva 0.35 + 0.5·level; `kph` lleva el escalón por columna.
             property real base: 0
             property real kph: 0
-            FrameAnimation {
+            FrameTick {
                 running: rain.visible && motif.spinning
                 onTriggered: {
                     const k = frameTime * motif.drive * motif.rate;
@@ -820,6 +813,7 @@ Item {
             colour: motif.colour
             hot: motif.hot
             level: motif.level
+            low: motif.low
             drive: motif.drive
             rate: motif.rate
             drop: motif.drop

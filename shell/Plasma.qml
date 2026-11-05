@@ -26,7 +26,7 @@ Item {
     property color colour: "#4fe8ff"
     property color hot: "#e2fdff"
     // T4.3: el techo de cuadros que reparte Motif.qml
-    property real stepMin: 1 / 60
+    property real stepMin: 0
     property real level: 0.35
     Behavior on level { NumberAnimation { duration: Motion.levelMs; easing.type: Easing.OutQuad } }
     property real low: 0.4            // los graves: abren la burbuja y la estiran
@@ -191,7 +191,7 @@ Item {
     // tanda 8, slice movimiento: el ritmo de la música (`Speed.js`, 1 = el de siempre).
     // Multiplica el `dt` que se ACUMULA, nunca el reloj: cambia la velocidad, no salta.
     property real rate: 1
-    FrameAnimation {
+    FrameTick {
         running: lamp.running && lamp.visible
         onTriggered: {
             lamp.acc += frameTime;

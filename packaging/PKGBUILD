@@ -5,7 +5,7 @@ pkgrel=1
 pkgdesc="Synced Spotify lyrics as glitchy Win95 error dialogs, or a full-screen CRT takeover (Wayland overlay)"
 arch=('any')
 url="https://github.com/FeroxShark/fatal-lyrics"
-license=('MIT')
+license=('GPL-3.0-or-later')
 depends=('quickshell' 'playerctl' 'python')
 optdepends=('gtk3: ícono de bandeja del sistema' 'libayatana-appindicator: ícono de bandeja del sistema'
             'imagemagick: colores de la tapa del álbum (sin él, el tubo usa sus paletas)')

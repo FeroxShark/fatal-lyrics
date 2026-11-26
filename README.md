@@ -690,4 +690,4 @@ Font License 1.1 (full text alongside each font as `LICENSE-<name>.txt`), source
 
 ## License
 
-MIT
+GPL-3.0-or-later, see [LICENSE](LICENSE). Credit is required: any work based on Fatal Lyrics must keep "Based on Fatal Lyrics by Ferox (FeroxShark), https://github.com/FeroxShark/fatal-lyrics" in its README or main documentation (and in its About screen, if it has one), per GPL-3.0 section 7(b). Versions released before this change remain available under the MIT License.
